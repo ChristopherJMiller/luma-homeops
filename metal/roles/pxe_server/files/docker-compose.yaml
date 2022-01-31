@@ -1,0 +1,18 @@
+---
+version: '3.9'
+services:
+  serveos:
+    network_mode: host
+    image: nginx:alpine
+    volumes:
+      - ./data/os:/usr/share/nginx/html:ro
+      - ./nginx:/etc/nginx/templates
+    environment:
+      - NGINX_PORT=8080
+  pxe:
+    network_mode: host
+    volumes:
+      - ./data/os:/image
+    image: pixiecore/pixiecore:master
+    command: boot /image/arch/boot/x86_64/vmlinuz-linux /image/arch/boot/x86_64/initramfs-linux.img --dhcp-no-bind --cmdline='ip=dhcp verify=y net.ifnames=0
+      archisobasedir=arch archiso_http_srv=http://192.168.122.1:8080/'
