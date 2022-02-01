@@ -1,0 +1,6 @@
+---
+  - name: Install Arch
+    hosts: metal
+    gather_facts: false
+    roles:
+      - install_arch

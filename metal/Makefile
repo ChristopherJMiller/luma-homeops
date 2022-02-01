@@ -9,3 +9,8 @@ boot: ~/.ssh/id_ed25519
 	ansible-playbook \
 		--inventory inventories/${env}.yaml \
 		boot.yaml
+
+install: ~/.ssh/id_ed25519
+	ansible-playbook \
+		--inventory inventories/${env}.yaml \
+		install.yaml

@@ -1,5 +1,9 @@
-default: metal
+default: boot
 
-.PHONY: metal
-metal:
-	make -C metal
+.PHONY: boot
+boot:
+	make -C metal boot
+
+.PHONY: arch
+arch:
+	make -C metal install
