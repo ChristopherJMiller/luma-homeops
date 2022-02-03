@@ -14,3 +14,8 @@ install: ~/.ssh/id_ed25519
 	ansible-playbook \
 		--inventory inventories/${env}.yaml \
 		install.yaml
+
+k3s: ~/.ssh/id_ed25519
+	ansible-playbook \
+		--inventory inventories/${env}.yaml \
+		k3s.yaml

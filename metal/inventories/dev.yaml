@@ -3,10 +3,19 @@ metal:
   children:
     controllers:
       hosts:
-        dev0:
-          ansible_host: 192.168.122.208
+        controller0:
+          ansible_host: 192.168.122.57
           ansible_ssh_private_key_file: ~/.ssh/id_ed25519
-          mac: 52:54:00:d9:c3:f2
           network_interface: virbr0
           os_drive: vda
           adapter: enp1s0
+          gateway_address: 192.168.122.1
+        controller1:
+          ansible_host: 192.168.122.213
+          ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+          network_interface: virbr0
+          os_drive: vda
+          adapter: enp1s0
+          gateway_address: 192.168.122.1
+    workers:
+      hosts: {}

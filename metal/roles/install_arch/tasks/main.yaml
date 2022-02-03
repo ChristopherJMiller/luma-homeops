@@ -1,19 +1,14 @@
 ---
-  - name: Render Networking Conf
-    delegate_to: localhost
-    template:
-      src: wired.network.j2
-      dest: '{{ role_path }}/files/20-wired.network'
-      mode: 0644
   - name: Tear Down Remaining PXE Server
     delegate_to: localhost
     docker_compose:
       project_src: '{{ role_path }}/../pxe_server/files'
       state: absent
-  - name: Accept Access
+  - name: Reset .ssh dir
+    shell: sshpass -p "root" ssh root@{{ hostvars[inventory_hostname]['ansible_host'] }} -f 'rm -rf ~/.ssh'
     ignore_errors: yes
-    wait_for_connection:
-      timeout: 5
+    delegate_to: localhost
+    timeout: 5
   - name: Setup .ssh
     shell: sshpass -p "root" ssh root@{{ hostvars[inventory_hostname]['ansible_host'] }} -f 'mkdir -p ~/.ssh'
     ignore_errors: yes
@@ -38,7 +33,7 @@
   - name: Mount Drive
     command: mount /dev/{{ hostvars[inventory_hostname]['os_drive'] }}1 /mnt
   - name: Pacstrap Drive
-    command: pacstrap /mnt base linux linux-firmware grub openssh
+    command: pacstrap /mnt base linux linux-firmware grub openssh python
   - name: Gen fstab
     shell: genfstab -U /mnt >> /mnt/etc/fstab
   - name: Copy pub key into install
@@ -64,16 +59,28 @@
     shell: echo "AuthenticationMethods publickey" >> /mnt/etc/ssh/sshd_config
   - name: Enable Services
     shell: arch-chroot /mnt systemctl enable sshd.service systemd-networkd systemd-resolved
-  - name: Setup DNS
-    shell: ln -rsf /run/systemd/resolve/stub-resolv.conf /mnt/etc/resolv.conf
-  - name: Copy Networking Conf
-    copy:
-      src: '{{ role_path }}/files/20-wired.network'
+  - name: Render Networking Conf
+    template:
+      src: wired.network.j2
       dest: /mnt/etc/systemd/network/20-wired.network
       owner: root
       group: root
       mode: '0644'
-  - name: Reboot system (update ip in inventory)
-    ignore_errors: yes
-    reboot:
-      reboot_timeout: 5
+  - name: Hosts File
+    template:
+      src: hosts.j2
+      dest: /mnt/etc/hosts
+      owner: root
+      group: root
+      mode: '0644'
+  - name: Resolved File
+    template:
+      src: resolved.conf.j2
+      dest: /mnt/etc/systemd/resolved.conf
+      owner: root
+      group: root
+      mode: '0644'
+  - name: Setup DNS
+    shell: ln -rsf /run/systemd/resolve/stub-resolv.conf /mnt/etc/resolv.conf
+  - name: Reboot
+    reboot: {}
