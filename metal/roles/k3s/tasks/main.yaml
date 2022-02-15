@@ -7,6 +7,9 @@
     delegate_to: localhost
     run_once: true
     register: k3s_binary
+  - name: Write nodes to known hosts
+    connection: local
+    shell: ssh-keyscan -H {{ inventory_hostname }} >> ~/.ssh/known_hosts
   - name: Copy k3s binary to nodes
     copy:
       src: '{{ role_path }}/files/bin/k3s'

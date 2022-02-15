@@ -7,15 +7,15 @@ default: boot
 
 boot: ~/.ssh/id_ed25519
 	ansible-playbook \
-		--inventory inventories/${env}.yaml \
+		--inventory inventories/${env}.yaml -K \
 		boot.yaml
 
 install: ~/.ssh/id_ed25519
 	ansible-playbook \
-		--inventory inventories/${env}.yaml \
+		--inventory inventories/${env}.yaml -K \
 		install.yaml
 
 k3s: ~/.ssh/id_ed25519
 	ansible-playbook \
-		--inventory inventories/${env}.yaml \
+		--inventory inventories/${env}.yaml -K \
 		k3s.yaml

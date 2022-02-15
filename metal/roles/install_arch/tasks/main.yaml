@@ -5,12 +5,12 @@
       project_src: '{{ role_path }}/../pxe_server/files'
       state: absent
   - name: Reset .ssh dir
-    shell: sshpass -p "root" ssh root@{{ hostvars[inventory_hostname]['ansible_host'] }} -f 'rm -rf ~/.ssh'
+    shell: sshpass -p "root" ssh root@{{ hostvars[inventory_hostname]['ansible_host'] }} -o 'StrictHostKeyChecking no' -f 'rm -rf ~/.ssh'
     ignore_errors: yes
     delegate_to: localhost
     timeout: 5
   - name: Setup .ssh
-    shell: sshpass -p "root" ssh root@{{ hostvars[inventory_hostname]['ansible_host'] }} -f 'mkdir -p ~/.ssh'
+    shell: sshpass -p "root" ssh root@{{ hostvars[inventory_hostname]['ansible_host'] }} -o 'StrictHostKeyChecking no' -f 'mkdir -p ~/.ssh'
     ignore_errors: yes
     delegate_to: localhost
     timeout: 5
