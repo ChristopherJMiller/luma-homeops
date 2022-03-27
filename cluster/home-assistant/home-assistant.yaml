@@ -47,3 +47,16 @@ spec:
   resources:
     requests:
       storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: home-assistant
+  namespace: home-assistant
+spec:
+  selector:
+    app: home-assistant
+  ports:
+    - protocol: TCP
+      port: 80
+      containerPort: 8123
