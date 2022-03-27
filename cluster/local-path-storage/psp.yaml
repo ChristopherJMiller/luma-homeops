@@ -1,0 +1,68 @@
+---
+apiVersion: policy/v1beta1
+kind: PodSecurityPolicy
+metadata:
+  name: local-path-provisioner
+  annotations:
+    seccomp.security.alpha.kubernetes.io/defaultProfileName: runtime/default
+    seccomp.security.alpha.kubernetes.io/allowedProfileNames: runtime/default
+  labels:
+    addonmanager.kubernetes.io/mode: Reconcile
+spec:
+  privileged: true
+  allowPrivilegeEscalation: true
+  requiredDropCapabilities:
+    - ALL
+  volumes:
+    - configMap
+    - emptyDir
+    - secret
+    - downwardAPI
+    - hostPath
+  allowedHostPaths:
+    - pathPrefix: /opt/local-path-provisioner
+      readOnly: false
+  hostNetwork: false
+  hostIPC: false
+  hostPID: false
+  runAsUser:
+    rule: RunAsAny
+  seLinux:
+    rule: RunAsAny
+  supplementalGroups:
+    rule: MustRunAs
+    ranges:
+      - min: 1
+        max: 65535
+  fsGroup:
+    rule: RunAsAny
+  readOnlyRootFilesystem: false
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: psp:local-path-provisioner
+  namespace: local-path-storage
+rules:
+  - apiGroups:
+      - policy
+    resourceNames:
+      - local-path-provisioner
+    resources:
+      - podsecuritypolicies
+    verbs:
+      - use
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: psp:local-path-provisioner
+  namespace: local-path-storage
+subjects:
+  - kind: ServiceAccount
+    name: local-path-provisioner-service-account
+    namespace: local-path-storage
+roleRef:
+  kind: ClusterRole
+  name: psp:local-path-provisioner
+  apiGroup: rbac.authorization.k8s.io
