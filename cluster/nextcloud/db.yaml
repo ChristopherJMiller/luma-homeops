@@ -1,0 +1,19 @@
+---
+apiVersion: acid.zalan.do/v1
+kind: postgresql
+metadata:
+  name: acid-nextcloud-db
+  namespace: nextcloud
+spec:
+  databases:
+    nextcloud: nextcloud
+  numberOfInstances: 1
+  postgresql:
+    version: '11'
+  teamId: ACID
+  users:
+    nextcloud:
+      - superuser
+      - createdb
+  volume:
+    size: 8Gi
