@@ -59,7 +59,7 @@ spec:
   ports:
     - protocol: TCP
       port: 80
-      containerPort: 8123
+      targetPort: 8123
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
