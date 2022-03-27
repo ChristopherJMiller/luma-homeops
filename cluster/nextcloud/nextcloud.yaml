@@ -1,0 +1,40 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: HelmRepository
+metadata:
+  name: nextcloud
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  url: https://nextcloud.github.io/helm/
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: nextcloud
+  namespace: flux-system
+spec:
+  chart:
+    spec:
+      chart: nextcloud
+      sourceRef:
+        kind: HelmRepository
+        name: nextcloud
+      version: 2.x.x
+  interval: 1m0s
+  releaseName: nextcloud
+  targetNamespace: nextcloud
+  values:
+    externalDatabase:
+      type: psql
+      existingSecret:
+        enabled: true
+        secretName: nextcloud.acid-nextcloud-db.credentials.postgresql.acid.zalan.do
+        usernameKey: username
+        passwordKey: password
+    persistence:
+      enabled: true
+      size: 8Gi
+      nextcloudData:
+        enabled: true
+        size: 200Gi
