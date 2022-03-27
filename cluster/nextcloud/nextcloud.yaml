@@ -32,6 +32,8 @@ spec:
         secretName: nextcloud.acid-nextcloud-db.credentials.postgresql.acid.zalan.do
         usernameKey: username
         passwordKey: password
+    nginx:
+      enabled: true
     persistence:
       enabled: true
       size: 8Gi
