@@ -72,7 +72,7 @@ spec:
   rules:
     - http:
         paths:
-          - path: /
+          - path: /ha
             pathType: Prefix
             backend:
               service:
