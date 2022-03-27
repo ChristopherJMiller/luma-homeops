@@ -58,8 +58,7 @@ spec:
     app: home-assistant
   ports:
     - protocol: TCP
-      port: 80
-      targetPort: 8123
+      port: 8123
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -79,4 +78,4 @@ spec:
               service:
                 name: home-assistant
                 port:
-                  number: 80
+                  number: 8123
