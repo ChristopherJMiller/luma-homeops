@@ -38,6 +38,8 @@ spec:
         passwordKey: password
     nginx:
       enabled: true
+    cronjob:
+      enabled: true
     persistence:
       enabled: true
       size: 8Gi
