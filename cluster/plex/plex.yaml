@@ -1,0 +1,42 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: plex
+  namespace: plex
+  labels:
+    app: plex
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: plex
+  template:
+    metadata:
+      labels:
+        app: plex
+    spec:
+      containers:
+        - name: plex
+          image: lscr.io/linuxserver/plex:1.25.8
+          ports:
+            - containerPort: 8123
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: tv
+              mountPath: /tv
+              subPath: tv
+            - name: movies
+              mountPath: /movies
+              subPath: movies
+          resources:
+            limits:
+              amd.com/gpu: 1
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: plex-data
+        - name: config
+          persistentVolumeClaim:
+            claimName: plex-config
