@@ -5,6 +5,8 @@ metadata:
   name: nextcloud
   namespace: nextcloud
   annotations:
+    nginx.ingress.kubernetes.io/enable-cors: 'true'
+    nginx.ingress.kubernetes.io/cors-allow-headers: X-Forwarded-For
     kubernetes.io/ingress.class: nginx
 spec:
   rules:
