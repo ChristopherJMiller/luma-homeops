@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - https://raw.githubusercontent.com/RadeonOpenCompute/k8s-device-plugin/v1.10/k8s-ds-amdgpu-dp.yaml
   - https://raw.githubusercontent.com/RadeonOpenCompute/k8s-device-plugin/master/k8s-ds-amdgpu-labeller.yaml
+  - service-account.yaml
