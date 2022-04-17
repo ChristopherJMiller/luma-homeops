@@ -19,7 +19,7 @@ spec:
       chart: jellyfin
       sourceRef:
         kind: HelmRepository
-        name: k8s-at-home/jellyfin
+        name: jellyfin
       version: 3.x.x
   interval: 1m0s
   releaseName: jellyfin
