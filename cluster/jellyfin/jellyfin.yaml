@@ -31,10 +31,12 @@ spec:
       config:
         enabled: true
         size: 5Gi
+        accessMode: ReadWriteOnce
       media:
         enabled: true
         size: 250Gi
         retain: true
+        accessMode: ReadWriteOnce
     resources:
       requests:
         amd.com/gpu: 1
