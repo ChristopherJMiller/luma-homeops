@@ -5,3 +5,6 @@ resources:
   - jellyfin.yaml
   - namespace.yaml
   - ingress.yaml
+  - webdav.yaml
+  - webdav-creds.yaml
+  - webdav.yaml

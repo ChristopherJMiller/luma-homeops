@@ -1,0 +1,46 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jellyfin-webdav
+  namespace: jellyfin
+  labels:
+    app: jellyfin-webdav
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jellyfin-webdav
+  template:
+    metadata:
+      labels:
+        app: jellyfin-webdav
+    spec:
+      containers:
+        - name: jellyfin-webdav
+          image: docker.io/bytemark/webdav:2.4
+          ports:
+            - containerPort: 80
+          env:
+            - name: AUTH_TYPE
+              valueFrom:
+                secretKeyRef:
+                  name: jellyfin-webdav-creds
+                  key: AUTH_TYPE
+            - name: USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: jellyfin-webdav-creds
+                  key: USERNAME
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: jellyfin-webdav-creds
+                  key: PASSWORD
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/dav
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: jellyfin-media
