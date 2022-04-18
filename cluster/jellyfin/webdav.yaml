@@ -37,10 +37,43 @@ spec:
                 secretKeyRef:
                   name: jellyfin-webdav-creds
                   key: PASSWORD
+            - name: LOCATION
+              value: /jellydav
           volumeMounts:
             - name: data
-              mountPath: /var/lib/dav
+              mountPath: /var/lib/dav/data
       volumes:
         - name: data
           persistentVolumeClaim:
             claimName: jellyfin-media
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin-webdav
+  namespace: jellyfin
+spec:
+  selector:
+    app: jellyfin-webdav
+  ports:
+    - protocol: TCP
+      port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jellyfin-webdav
+  namespace: jellyfin
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - http:
+        paths:
+          - path: /jellydav
+            pathType: Prefix
+            backend:
+              service:
+                name: jellyfin-webdav
+                port:
+                  number: 80
