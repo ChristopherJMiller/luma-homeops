@@ -12,7 +12,8 @@ spec:
         - luma.chrismiller.xyz
       secretName: luma-tls
   rules:
-    - http:
+    - host: luma.chrismiller.xyz
+      http:
         paths:
           - path: /jellyfin
             pathType: Prefix
