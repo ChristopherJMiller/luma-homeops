@@ -20,7 +20,7 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: jellyfin
-      version: 3.x.x
+      version: 9.x.x
   interval: 1m0s
   releaseName: jellyfin
   targetNamespace: jellyfin
