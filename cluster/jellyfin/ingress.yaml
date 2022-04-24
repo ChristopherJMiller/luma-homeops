@@ -22,6 +22,15 @@ spec:
                 name: jellyfin
                 port:
                   number: 8096
+    - http:
+        paths:
+          - path: /jellyfin
+            pathType: Prefix
+            backend:
+              service:
+                name: jellyfin
+                port:
+                  number: 8096
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
