@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - freshrss.yaml
   - namespace.yaml
+  - ingress.yaml
