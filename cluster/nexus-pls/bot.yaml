@@ -1,0 +1,24 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nexus-pls
+  namespace: nexus-pls
+  labels:
+    app: nexus-pls
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nexus-pls
+  template:
+    metadata:
+      labels:
+        app: nexus-pls
+    spec:
+      containers:
+        - name: nexus-pls
+          image: ghcr.io/christopherjmiller/nexus-pls:v1.0.2
+          envFrom:
+            - secretRef:
+                name: bot-creds

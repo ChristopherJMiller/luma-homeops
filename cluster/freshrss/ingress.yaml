@@ -9,13 +9,13 @@ metadata:
 spec:
   tls:
     - hosts:
-        - luma.chrismiller.xyz
+        - rss.luma.chrismiller.xyz
       secretName: luma-tls
   rules:
-    - host: luma.chrismiller.xyz
+    - host: rss.luma.chrismiller.xyz
       http:
         paths:
-          - path: /rss
+          - path: /
             pathType: Prefix
             backend:
               service:
@@ -33,9 +33,9 @@ spec:
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  commonName: luma.chrismiller.xyz
+  commonName: rss.luma.chrismiller.xyz
   dnsNames:
-    - luma.chrismiller.xyz
+    - rss.luma.chrismiller.xyz
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA
