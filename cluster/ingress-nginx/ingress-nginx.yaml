@@ -27,4 +27,3 @@ spec:
   values:
     controller:
       hostNetwork: true
-      replicaCount: 3
