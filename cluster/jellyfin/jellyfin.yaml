@@ -40,7 +40,7 @@ spec:
     resources:
       requests:
         amd.com/gpu: 1
-        memory: 256Mi
+        memory: 2Gi
       limits:
         amd.com/gpu: 1
         memory: 4Gi
