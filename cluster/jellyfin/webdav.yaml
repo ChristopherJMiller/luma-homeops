@@ -38,7 +38,7 @@ spec:
                   name: jellyfin-webdav-creds
                   key: PASSWORD
             - name: LOCATION
-              value: /jellydav
+              value: /
           volumeMounts:
             - name: data
               mountPath: /var/lib/dav/data
