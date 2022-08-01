@@ -27,3 +27,7 @@ spec:
   values:
     controller:
       hostNetwork: true
+      replicaCount: 2
+      resources:
+        cpu: 500m
+        memory: 256Mi
