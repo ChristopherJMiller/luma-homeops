@@ -70,13 +70,13 @@ metadata:
 spec:
   tls:
     - hosts:
-        - luma.chrismiller.xyz
-      secretName: luma-tls
+        - dav.nas.luma.chrismiller.xyz
+      secretName: dav-nas-luma-tls
   rules:
-    - host: luma.chrismiller.xyz
+    - host: dav.nas.luma.chrismiller.xyz
       http:
         paths:
-          - path: /jellydav
+          - path: /
             pathType: Prefix
             backend:
               service:
@@ -92,3 +92,21 @@ spec:
                 name: jellyfin-webdav
                 port:
                   number: 80
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dav-nas-luma-tls
+  namespace: jellyfin
+spec:
+  secretName: dav-nas-luma-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: dav.nas.luma.chrismiller.xyz
+  dnsNames:
+    - dav.nas.luma.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
