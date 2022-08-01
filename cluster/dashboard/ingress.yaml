@@ -57,7 +57,7 @@ spec:
     - host: prom.luma.chrismiller.xyz
       http:
         paths:
-          - path: /graph
+          - path: /
             pathType: Prefix
             backend:
               service:
