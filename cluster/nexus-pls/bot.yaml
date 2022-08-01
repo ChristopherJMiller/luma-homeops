@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: nexus-pls
-          image: ghcr.io/christopherjmiller/nexus-pls:v1.0.2
+          image: ghcr.io/christopherjmiller/nexus-pls:v1.5.0
           envFrom:
             - secretRef:
                 name: bot-creds

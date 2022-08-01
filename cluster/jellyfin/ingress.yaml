@@ -9,22 +9,13 @@ metadata:
 spec:
   tls:
     - hosts:
-        - luma.chrismiller.xyz
-      secretName: luma-tls
+        - nas.luma.chrismiller.xyz
+      secretName: nas-luma-tls
   rules:
-    - host: luma.chrismiller.xyz
+    - host: nas.luma.chrismiller.xyz
       http:
         paths:
-          - path: /jellyfin
-            pathType: Prefix
-            backend:
-              service:
-                name: jellyfin
-                port:
-                  number: 8096
-    - http:
-        paths:
-          - path: /jellyfin
+          - path: /
             pathType: Prefix
             backend:
               service:
@@ -35,16 +26,16 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: luma-tls
+  name: nas-luma-tls
   namespace: jellyfin
 spec:
-  secretName: luma-tls
+  secretName: nas-luma-tls
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  commonName: luma.chrismiller.xyz
+  commonName: nas.luma.chrismiller.xyz
   dnsNames:
-    - luma.chrismiller.xyz
+    - nas.luma.chrismiller.xyz
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA

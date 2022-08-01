@@ -22,6 +22,8 @@ spec:
   allowedHostPaths:
     - pathPrefix: /opt/local-path-provisioner
       readOnly: false
+    - pathPrefix: /opt/lpp2
+      readOnly: false
   hostNetwork: false
   hostIPC: false
   hostPID: false

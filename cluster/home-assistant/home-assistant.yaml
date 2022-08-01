@@ -68,8 +68,13 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
 spec:
+  tls:
+    - hosts:
+        - ha.luma.chrismiller.xyz
+      secretName: ha-luma-tls
   rules:
-    - http:
+    - host: ha.luma.chrismiller.xyz
+      http:
         paths:
           - path: /
             pathType: Prefix
@@ -78,3 +83,21 @@ spec:
                 name: home-assistant
                 port:
                   number: 8123
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ha-luma-tls
+  namespace: home-assistant
+spec:
+  secretName: ha-luma-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: ha.luma.chrismiller.xyz
+  dnsNames:
+    - ha.luma.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
