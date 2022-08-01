@@ -83,15 +83,6 @@ spec:
                 name: jellyfin-webdav
                 port:
                   number: 80
-    - http:
-        paths:
-          - path: /jellydav
-            pathType: Prefix
-            backend:
-              service:
-                name: jellyfin-webdav
-                port:
-                  number: 80
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
