@@ -1,0 +1,42 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: HelmRepository
+metadata:
+  name: synapse
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  url: https://halkeye.github.io/helm-charts
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: synapse
+  namespace: flux-system
+spec:
+  chart:
+    spec:
+      chart: synapse
+      sourceRef:
+        kind: HelmRepository
+        name: synapse
+      version: 0.8.x
+  interval: 1m0s
+  releaseName: synapse
+  targetNamespace: synapse
+  values:
+    podAnnotations:
+      prometheus.io/path: /_synapse/metrics
+      prometheus.io/port: '9000'
+      prometheus.io/scrape: 'true'
+    resources:
+      limits:
+        cpu: 1
+        memory: 1Gi
+    persistance:
+      enabled: true
+      size: 16Gi
+    homeserver:
+      server_name: chrismiller.xyz
+      public_baseurl: https://synapse.chrismiller.xyz
+      enable_metrics: true
