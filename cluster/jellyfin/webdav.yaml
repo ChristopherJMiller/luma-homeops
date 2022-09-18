@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: jellyfin-webdav
-          image: docker.io/bytemark/webdav:latest
+          image: docker.io/bytemark/webdav:2.4
           ports:
             - containerPort: 80
           env:
