@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: nexus-pls-redis
-          image: docker.io/redis:7-alpine@sha256:52a9a5fdb81c609cb9ae1048d21616340673eff358dcad300647761c05d75df3
+          image: docker.io/redis:7-alpine@sha256:6d39e37e5dc67622c56d0c6287b7ee6baa9de84a3b76742016344a72944f1ae6
           ports:
             - containerPort: 6379
           volumeMounts:
