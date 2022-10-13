@@ -16,9 +16,12 @@ spec:
       labels:
         app: jellyfin-webdav
     spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
       containers:
         - name: jellyfin-webdav
-          image: docker.io/bytemark/webdav:2.4
+          image: docker.io/apachewebdav/apachewebdav:latest
           ports:
             - containerPort: 80
           env:
@@ -39,6 +42,10 @@ spec:
                   key: PASSWORD
             - name: LOCATION
               value: /
+            - name: PUID
+              value: 1000
+            - name: GUID
+              value: 1000
           volumeMounts:
             - name: data
               mountPath: /var/lib/dav/data
