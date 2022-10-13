@@ -16,9 +16,6 @@ spec:
       labels:
         app: jellyfin-webdav
     spec:
-      securityContext:
-        runAsUser: 1000
-        runAsGroup: 1000
       containers:
         - name: jellyfin-webdav
           image: docker.io/apachewebdav/apachewebdav:latest
