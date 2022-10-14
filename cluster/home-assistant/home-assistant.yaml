@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: home-assistant
-          image: docker.io/homeassistant/home-assistant:stable@sha256:81d59cc2be1053740c07da80bab861350f8018a12896b8c849eb3433426d6879
+          image: docker.io/homeassistant/home-assistant:stable@sha256:2a1eaff430eb8422307c1f868fed89d434ddcec8827eedd8e22748fae236306e
           ports:
             - containerPort: 8123
           volumeMounts:
