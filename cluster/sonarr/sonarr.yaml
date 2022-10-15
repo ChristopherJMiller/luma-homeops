@@ -6,7 +6,7 @@ metadata:
   namespace: flux-system
 spec:
   interval: 1m0s
-  url: https://library-charts.truecharts.org/
+  url: https://k8s-at-home.com/charts/
 ---
 apiVersion: helm.toolkit.fluxcd.io/v2beta1
 kind: HelmRelease
@@ -16,11 +16,11 @@ metadata:
 spec:
   chart:
     spec:
-      chart: common
+      chart: sonarr
       sourceRef:
         kind: HelmRepository
         name: sonarr
-      version: 10.x.x
+      version: 16.x.x
   interval: 1m0s
   releaseName: sonarr
   targetNamespace: sonarr
