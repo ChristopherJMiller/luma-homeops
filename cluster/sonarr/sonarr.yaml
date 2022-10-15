@@ -32,3 +32,6 @@ spec:
         enabled: true
         size: 1Gi
         accessMode: ReadWriteOnce
+      media:
+        enabled: true
+        existingClaim: jellyfin-media
