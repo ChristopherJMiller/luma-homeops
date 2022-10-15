@@ -1,0 +1,34 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: HelmRepository
+metadata:
+  name: sonarr
+  namespace: truecharts
+spec:
+  interval: 1m0s
+  url: https://library-charts.truecharts.org/
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: sonarr
+  namespace: torrent
+spec:
+  chart:
+    spec:
+      chart: sonarr
+      sourceRef:
+        kind: HelmRepository
+        name: sonarr
+      version: 10.x.x
+  interval: 1m0s
+  releaseName: sonarr
+  targetNamespace: torrent
+  values:
+    env:
+      TZ: America/Los_Angeles
+    persistence:
+      config:
+        enabled: true
+        size: 1Gi
+        accessMode: ReadWriteOnce
