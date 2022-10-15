@@ -16,7 +16,7 @@ metadata:
 spec:
   chart:
     spec:
-      chart: sonarr/common
+      chart: common
       sourceRef:
         kind: HelmRepository
         name: sonarr
