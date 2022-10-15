@@ -23,7 +23,7 @@ spec:
       version: 10.x.x
   interval: 1m0s
   releaseName: sonarr
-  targetNamespace: torrent
+  targetNamespace: sonarr
   values:
     env:
       TZ: America/Los_Angeles
