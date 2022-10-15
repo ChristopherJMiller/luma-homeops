@@ -23,7 +23,7 @@ spec:
       version: 16.x.x
   interval: 1m0s
   releaseName: sonarr
-  targetNamespace: sonarr
+  targetNamespace: jellyfin
   values:
     env:
       TZ: America/Los_Angeles
