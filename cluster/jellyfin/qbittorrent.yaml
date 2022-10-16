@@ -35,6 +35,7 @@ spec:
       media:
         enabled: true
         existingClaim: jellyfin-media
+        accessMode: ReadWriteOnce
       downloads:
         enabled: true
         size: 45Gi

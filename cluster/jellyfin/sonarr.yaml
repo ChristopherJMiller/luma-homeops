@@ -35,6 +35,7 @@ spec:
       media:
         enabled: true
         existingClaim: jellyfin-media
+        accessMode: ReadWriteOnce
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
