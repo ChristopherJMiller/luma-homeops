@@ -34,6 +34,7 @@ spec:
         accessMode: ReadWriteOnce
       media:
         enabled: true
+        mountPath: /media
         existingClaim: jellyfin-media
         accessMode: ReadWriteOnce
 ---
