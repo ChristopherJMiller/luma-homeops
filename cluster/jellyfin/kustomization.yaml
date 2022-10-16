@@ -8,3 +8,4 @@ resources:
   - webdav-creds.yaml
   - webdav.yaml
   - sonarr.yaml
+  - qbittorrent.yaml
