@@ -9,3 +9,4 @@ resources:
   - webdav.yaml
   - sonarr.yaml
   - qbittorrent.yaml
+  - jackett.yaml
