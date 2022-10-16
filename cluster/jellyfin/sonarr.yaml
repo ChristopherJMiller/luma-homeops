@@ -37,6 +37,9 @@ spec:
         mountPath: /media
         existingClaim: jellyfin-media
         accessMode: ReadWriteOnce
+    podSecurityContext:
+      runAsUser: 82
+      fsGroup: 82
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
