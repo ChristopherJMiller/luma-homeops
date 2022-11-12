@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: jellyfin-webdav
-          image: docker.io/apachewebdav/apachewebdav:latest
+          image: docker.io/apachewebdav/apachewebdav:latest@sha256:0d4aea1eefbc374cf21fd677e09a90df7dca0f5b5d72e5ba534f201f7c03bcea
           ports:
             - containerPort: 80
           env:
