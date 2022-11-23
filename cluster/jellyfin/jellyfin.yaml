@@ -30,6 +30,8 @@ spec:
     persistence:
       config:
         enabled: true
+        size: 5Gi
+        accessMode: ReadWriteOnce
         hostPath:
           path: /os-ssd/jellyfin-config/
           type: Directory
