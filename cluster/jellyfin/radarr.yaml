@@ -1,0 +1,88 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: HelmRepository
+metadata:
+  name: radarr
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  url: https://k8s-at-home.com/charts/
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: radarr
+  namespace: flux-system
+spec:
+  chart:
+    spec:
+      chart: radarr
+      sourceRef:
+        kind: HelmRepository
+        name: radarr
+      version: 16.x.x
+  interval: 1m0s
+  releaseName: radarr
+  targetNamespace: jellyfin
+  values:
+    env:
+      TZ: America/Los_Angeles
+    persistence:
+      config:
+        enabled: true
+        size: 1Gi
+        accessMode: ReadWriteOnce
+      media:
+        enabled: true
+        mountPath: /media
+        existingClaim: jellyfin-media
+        accessMode: ReadWriteOnce
+      downloads:
+        enabled: true
+        mountPath: /downloads
+        existingClaim: qbittorrent-downloads
+        accessMode: ReadWriteOnce
+    podSecurityContext:
+      runAsUser: 0
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: radarr
+  namespace: jellyfin
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - radarr.luma.chrismiller.xyz
+      secretName: radarr-luma-tls
+  rules:
+    - host: radarr.luma.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: radarr
+                port:
+                  number: 7878
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: radarr-luma-tls
+  namespace: jellyfin
+spec:
+  secretName: radarr-luma-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: radarr.luma.chrismiller.xyz
+  dnsNames:
+    - radarr.luma.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
