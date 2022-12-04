@@ -2,8 +2,8 @@
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: external-dns
-  namespace: cloudflareddns-config
+  name: cloudflareddns-config
+  namespace: external-dns
 data:
   PUID: '1000'
   PGID: '1000'
