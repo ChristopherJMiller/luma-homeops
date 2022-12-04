@@ -9,10 +9,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - luma.chrismiller.xyz
+        - dash.luma.chrismiller.xyz
       secretName: luma-tls
   rules:
-    - host: luma.chrismiller.xyz
+    - host: dash.luma.chrismiller.xyz
       http:
         paths:
           - path: /
@@ -26,16 +26,16 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: luma-tls
+  name: dash-luma-tls
   namespace: dashboard
 spec:
-  secretName: luma-tls
+  secretName: dash-luma-tls
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  commonName: luma.chrismiller.xyz
+  commonName: dash.luma.chrismiller.xyz
   dnsNames:
-    - luma.chrismiller.xyz
+    - dash.luma.chrismiller.xyz
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA
