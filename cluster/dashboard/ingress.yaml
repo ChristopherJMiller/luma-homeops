@@ -11,7 +11,7 @@ spec:
   tls:
     - hosts:
         - dash.luma.chrismiller.xyz
-      secretName: luma-tls
+      secretName: dash-luma-tls
   rules:
     - host: dash.luma.chrismiller.xyz
       http:
