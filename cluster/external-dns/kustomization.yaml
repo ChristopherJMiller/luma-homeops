@@ -7,5 +7,7 @@ bases:
 resources:
   - namespace.yaml
   - cloudflare-api-token.yaml
+  - cloudflareddns.yaml
+  - cloudflareddns-config.yaml
 patchesStrategicMerge:
   - external-dns-deployment.yaml
