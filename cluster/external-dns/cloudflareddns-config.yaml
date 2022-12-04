@@ -14,4 +14,4 @@ data:
   LOG_LEVEL: '3'
   CF_HOSTS: luma.chrismiller.xyz;nightly.ipv8.dev
   CF_ZONES: c5cc23ec906d72b94ae6789b946c95ac;81626617decf51cd013b8f578208e6b7
-  CF_RECORDTYPES: A
+  CF_RECORDTYPES: A;A
