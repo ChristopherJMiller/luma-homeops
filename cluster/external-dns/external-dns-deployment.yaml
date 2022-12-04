@@ -1,0 +1,25 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: external-dns
+spec:
+  template:
+    spec:
+      containers:
+        - args:
+            - --source=service
+            - --source=ingress
+            - --registry=txt
+            - --provider=cloudflare
+            - --policy=sync
+            - --txt-owner-id=luma
+          name: external-dns
+          env:
+            - name: CF_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-api-token
+                  key: api-token
+            - name: CF_API_EMAIL
+              value: cmiller548@gmail.com
