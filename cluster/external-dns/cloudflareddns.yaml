@@ -23,7 +23,7 @@ spec:
             - configMapRef:
                 name: cloudflareddns-config
           env:
-            - name: CF_API_TOKEN
+            - name: CF_APITOKEN
               valueFrom:
                 secretKeyRef:
                   name: cloudflare-api-token
