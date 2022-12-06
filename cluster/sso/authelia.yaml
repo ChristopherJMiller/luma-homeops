@@ -46,6 +46,8 @@ spec:
       storage:
         postgres:
           host: postgres
+      access_control:
+        default_policy: one_factor
       authentication_backend:
         password_reset:
           disable: true
