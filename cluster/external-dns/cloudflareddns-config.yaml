@@ -12,6 +12,6 @@ data:
   INTERNAL: '3000'
   DETECTION_MODE: dig-whoami.cloudflare
   LOG_LEVEL: '3'
-  CF_HOSTS: luma.chrismiller.xyz;nightly.ipv8.dev
-  CF_ZONES: c5cc23ec906d72b94ae6789b946c95ac;81626617decf51cd013b8f578208e6b7
+  CF_HOSTS: luma.chrismiller.xyz;nightly.ipv8.dev;werethemille.rs
+  CF_ZONES: c5cc23ec906d72b94ae6789b946c95ac;81626617decf51cd013b8f578208e6b7;820af0c68573859bd1d0b6bd41185188
   CF_RECORDTYPES: A;A
