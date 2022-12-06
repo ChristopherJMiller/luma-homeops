@@ -49,6 +49,14 @@ spec:
       identity_providers:
         oidc:
           enabled: true
+          clients:
+            - id: jellyfin
+              description: Watch Media from Jellyfin
+              # Bruh
+              secret: s3n6cPXLA8!AHwiUz@x5s*NoqW6SjDiR
+              authorization_policy: one_factor
+              redirect_uris:
+                - https://watch.werethemille.rs/sso/OID/r/authelia
       access_control:
         default_policy: one_factor
       authentication_backend:
