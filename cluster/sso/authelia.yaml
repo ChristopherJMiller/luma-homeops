@@ -47,6 +47,7 @@ spec:
       authentication_backend:
         ldap:
           url: ldap://openldap
+          implementation: custom
           username_attribute: uid
           base_dn: DC=werethemille,DC=rs
           additional_users_dn: OU=Users
