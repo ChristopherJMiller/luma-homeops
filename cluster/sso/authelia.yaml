@@ -47,6 +47,8 @@ spec:
         postgres:
           host: postgres
       authentication_backend:
+        password_reset:
+          disable: true
         ldap:
           url: ldap://openldap
           implementation: custom
