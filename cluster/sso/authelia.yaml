@@ -56,6 +56,7 @@ spec:
           group_name_attribute: gidNumber
           base_dn: DC=werethemille,DC=rs
           user: CN=admin,DC=werethemille,DC=rs
+          display_name_attribute: givenName
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
