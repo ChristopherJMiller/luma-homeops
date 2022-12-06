@@ -28,7 +28,7 @@ spec:
     domain: werethemille.rs
     ingress:
       enabled: true
-      annotations: 
+      annotations:
         external-dns.alpha.kubernetes.io/target: werethemille.rs
         kubernetes.io/ingress.class: nginx
       subdomain: sso
@@ -39,6 +39,12 @@ spec:
       identityProviders:
         oidc:
           enabled: true
+    session:
+      redis:
+        host: redis
+    storage:
+      postgres:
+        host: postgres
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate

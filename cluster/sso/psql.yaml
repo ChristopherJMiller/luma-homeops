@@ -6,7 +6,7 @@ metadata:
   namespace: sso
 spec:
   databases:
-    login: authelia
+    authelia: authelia
   numberOfInstances: 1
   spiloRunAsUser: 101
   spiloRunAsGroup: 103
@@ -15,7 +15,7 @@ spec:
     version: '13'
   teamId: acid
   users:
-    login: []
+    authelia: []
   volume:
     size: 4Gi
 ---
