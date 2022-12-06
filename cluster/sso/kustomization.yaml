@@ -5,3 +5,5 @@ resources:
   - namespace.yaml
   - authelia.yaml
   - ldap.yaml
+  - psql.yaml
+  - redis.yaml
