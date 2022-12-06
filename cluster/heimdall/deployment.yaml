@@ -26,6 +26,13 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
+          env:
+            - name: PUID
+              value: '1000'
+            - name: PGID
+              value: '1000'
+            - name: TZ
+              value: 'UTC'
 ---
 apiVersion: v1
 kind: Service
