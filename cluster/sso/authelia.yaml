@@ -49,7 +49,7 @@ spec:
           url: ldap://openldap
           implementation: custom
           users_filter: (&({username_attribute}={input})(objectClass=person))
-          groups_filter: {username: null}
+          groups_filter: (&(uniquemember={dn})(objectclass=groupOfUniqueNames))
           username_attribute: uid
           base_dn: DC=werethemille,DC=rs
           additional_users_dn: OU=Users
