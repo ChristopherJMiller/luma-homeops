@@ -33,6 +33,9 @@ spec:
         kubernetes.io/ingress.class: nginx
       subdomain: sso
     configMap:
+      session:
+        redis:
+          enabled: false
       notifier:
         stmp:
           enabled: false
