@@ -16,9 +16,16 @@ spec:
       labels:
         app: heimdall
     spec:
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: heimdall-pvc
       containers:
         - name: heimdall
           image: lscr.io/linuxserver/heimdall:latest
+          volumeMounts:
+            - name: config
+              mountPath: /config
 ---
 apiVersion: v1
 kind: Service
