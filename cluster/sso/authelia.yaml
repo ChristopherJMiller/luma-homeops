@@ -49,7 +49,7 @@ spec:
           url: ldap://openldap
           base_dn: DC=werethemille,DC=rs
           additional_users_dn: OU=Users
-          user: CN=Chris Miller,DC=werethemille,DC=rs
+          user: CN=admin,DC=werethemille,DC=rs
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
