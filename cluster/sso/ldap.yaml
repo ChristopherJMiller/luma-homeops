@@ -28,3 +28,9 @@ spec:
     global:
       ldapDomain: werethemille.rs
     replicaCount: 2
+    phpldapadmin:
+      ingress:
+        enabled: false
+    ltb-passwd:
+      ingress:
+        enabled: false
