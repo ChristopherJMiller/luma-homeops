@@ -1,0 +1,43 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: heimdall
+  namespace: heimdall
+  annotations:
+    external-dns.alpha.kubernetes.io/target: werethemille.rs
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - werethemille.rs
+      secretName: heimdall-tls
+  rules:
+    - host: werethemille.rs
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: heimdall
+                port:
+                  number: 80
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: heimdall-tls
+  namespace: heimdall
+spec:
+  secretName: heimdall-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: werethemille.rs
+  dnsNames:
+    - werethemille.rs
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
