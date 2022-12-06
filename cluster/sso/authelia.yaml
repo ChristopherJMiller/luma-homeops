@@ -26,6 +26,7 @@ spec:
   targetNamespace: sso
   values:
     domain: werethemille.rs
+    theme: dark
     ingress:
       enabled: true
       annotations:
