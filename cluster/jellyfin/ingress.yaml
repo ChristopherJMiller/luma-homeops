@@ -5,15 +5,15 @@ metadata:
   name: jellyfin
   namespace: jellyfin
   annotations:
-    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
+    external-dns.alpha.kubernetes.io/target: werethemille.rs
     kubernetes.io/ingress.class: nginx
 spec:
   tls:
     - hosts:
-        - nas.luma.chrismiller.xyz
-      secretName: nas-luma-tls
+        - watch.werethemille.rs
+      secretName: watch-tls
   rules:
-    - host: nas.luma.chrismiller.xyz
+    - host: watch.werethemille.rs
       http:
         paths:
           - path: /
@@ -27,16 +27,16 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: nas-luma-tls
+  name: watch-tls
   namespace: jellyfin
 spec:
-  secretName: nas-luma-tls
+  secretName: watch-tls
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  commonName: nas.luma.chrismiller.xyz
+  commonName: watch.werethemille.rs
   dnsNames:
-    - nas.luma.chrismiller.xyz
+    - watch.werethemille.rs
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA
