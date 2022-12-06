@@ -38,15 +38,15 @@ spec:
         disable_startup_check: true
         stmp:
           enabled: false
-      identityProviders:
+      identity_providers:
         oidc:
           enabled: true
-    session:
-      redis:
-        host: redis
-    storage:
-      postgres:
-        host: postgres
+      session:
+        redis:
+          host: redis
+      storage:
+        postgres:
+          host: postgres
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
