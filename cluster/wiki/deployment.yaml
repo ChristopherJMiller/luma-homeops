@@ -26,26 +26,38 @@ spec:
   targetNamespace: wiki
   values:
     ingress:
-      enabled: true
-      annotations:
-        external-dns.alpha.kubernetes.io/target: werethemille.rs
-        kubernetes.io/ingress.class: nginx
-        kubernetes.io/tls-acme: 'true'
-      tls:
-        - hosts:
-            - wiki.werethemille.rs
-          secretName: wiki-tls
-      hosts:
-        - host: wiki.werethemille.rs
-          paths:
-            - path: /
-              pathType: Prefix
+      enabled: false
     postgresql:
       enabled: false
       postgresqlHost: postgres
       postgresqlDatabase: postgres
       existingSecret: postgres.acid-wiki.credentials.postgresql.acid.zalan.do
       existingSecretKey: password
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wiki
+  namespace: wiki
+  annotations:
+    external-dns.alpha.kubernetes.io/target: werethemille.rs
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - wiki.werethemille.rs
+      secretName: wiki-tls
+  rules:
+    - host: wiki.werethemille.rs
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: wiki
+                port:
+                  number: 80
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
