@@ -37,7 +37,8 @@ spec:
       hosts:
         - host: wiki.werethemille.rs
           paths:
-            - /
+            - path: /
+              pathType: Prefix
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
