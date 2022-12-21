@@ -34,6 +34,10 @@ spec:
         - hosts:
             - wiki.werethemille.rs
           secretName: wiki-tls
+      hosts:
+        - host: wiki.werethemille.rs
+          paths:
+            - /
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
