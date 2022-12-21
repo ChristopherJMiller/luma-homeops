@@ -30,7 +30,10 @@ spec:
       annotations:
         external-dns.alpha.kubernetes.io/target: werethemille.rs
         kubernetes.io/ingress.class: nginx
-      tls: wiki-tls
+      tls:
+        - hosts:
+            - wiki.werethemille.rs
+          secretName: wiki-tls
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
