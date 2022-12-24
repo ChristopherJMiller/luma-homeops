@@ -72,7 +72,7 @@ metadata:
     external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
     kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/proxy-buffering: off
-    nginx.ingress.kubernetes.io/proxy-body-size: 0
+    nginx.ingress.kubernetes.io/client-body-buffer-size: 256k
     nginx.ingress.kubernetes.io/http2_max_concurrent_streams: 256
     nginx.ingress.kubernetes.io/use-gzip: true
 spec:
