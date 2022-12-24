@@ -31,6 +31,18 @@ spec:
           env:
             - name: DEBUG
               value: '0'
+            - name: ENABLE_SIGNUP
+              value: '1'
+            - name: HCAPTCHA_SITEKEY
+              valueFrom:
+                secretKeyRef:
+                  name: recipes-secret-key
+                  key: HCAPTCHA_SITEKEY
+            - name: HCAPTCHA_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: recipes-secret-key
+                  key: HCAPTCHA_SECRET
             - name: SECRET_KEY
               valueFrom:
                 secretKeyRef:
