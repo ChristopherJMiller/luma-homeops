@@ -22,9 +22,11 @@ spec:
           ports:
             - containerPort: 80
           volumeMounts:
-            - name: staticfiles
+            - name: pvc
+              subPath: staticfiles
               mountPath: /opt/recipes/staticfiles
-            - name: mediafiles
+            - name: pvc
+              subPath: mediafiles
               mountPath: /opt/recipes/mediafiles
           env:
             - name: SECRET_KEY
@@ -49,14 +51,9 @@ spec:
             - name: POSTGRES_DB
               value: postgres
       volumes:
-        - name: staticfiles
+        - name: pvc
           persistentVolumeClaim:
             claimName: recipes-pvc
-            path: staticfiles
-        - name: mediafiles
-          persistentVolumeClaim:
-            claimName: recipes-pvc
-            path: mediafiles
 ---
 apiVersion: v1
 kind: Service
