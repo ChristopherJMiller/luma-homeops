@@ -29,6 +29,8 @@ spec:
               subPath: mediafiles
               mountPath: /opt/recipes/mediafiles
           env:
+            - name: DEBUG
+              value: '0'
             - name: SECRET_KEY
               valueFrom:
                 secretKeyRef:
