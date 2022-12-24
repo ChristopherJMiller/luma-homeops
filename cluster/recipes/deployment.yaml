@@ -1,0 +1,114 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recipes
+  namespace: recipes
+  labels:
+    app: recipes
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: recipes
+  template:
+    metadata:
+      labels:
+        app: recipes
+    spec:
+      containers:
+        - name: recipes
+          image: docker.io/vabene1111/recipes:latest
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: staticfiles
+              mountPath: /opt/recipes/staticfiles
+            - name: mediafiles
+              mountPath: /opt/recipes/mediafiles
+          env:
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: recipes-secret-key
+                  key: KEY
+            - name: POSTGRES_HOST
+              value: postgres
+            - name: POSTGRES_PORT
+              value: '5432'
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres.acid-recipes.credentials.postgresql.acid.zalan.do
+                  key: username
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres.acid-recipes.credentials.postgresql.acid.zalan.do
+                  key: password
+            - name: POSTGRES_DB
+              value: postgres
+      volumes:
+        - name: staticfiles
+          persistentVolumeClaim:
+            claimName: recipes-pvc
+            path: staticfiles
+        - name: mediafiles
+          persistentVolumeClaim:
+            claimName: recipes-pvc
+            path: mediafiles
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recipes
+  namespace: recipes
+spec:
+  selector:
+    app: recipes
+  ports:
+    - protocol: TCP
+      port: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: recipes
+  namespace: recipes
+  annotations:
+    external-dns.alpha.kubernetes.io/target: werethemille.rs
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - recipes.werethemille.rs
+      secretName: recipes-tls
+  rules:
+    - host: recipes.werethemille.rs
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: recipes
+                port:
+                  number: 80
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: recipes-tls
+  namespace: recipes
+spec:
+  secretName: recipes-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: recipes.werethemille.rs
+  dnsNames:
+    - recipes.werethemille.rs
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384

@@ -1,0 +1,16 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp:
+  name: recipes-secret-key
+  namespace: recipes
+spec:
+  encryptedData:
+    KEY: AgBwKxgEW4PTNzVHRO4SPD8m39Tya1GUj3j/ELNf59jecz0es4y60GvaT7o7zTCXJEranxPZDFGp2hi/eOO4rUWaE5NZGymR3mq/9PFuXlEZzQfcpJN4h4QlhvcxOWOCfZrxZfV3jDZKdel0rr3wA+3+eAAJNmSSm+WkdrBBPHWwBvJ6JyvcyBjo2I12iCgpngcJtx6/O/SsEVsANalik4qW2uJjaJKtKVKiJRufVjeZQjQJKSgx6UtLbVG87RA0vjJheohk8v20X0HUYN7kOIDV1g+NwoIELF0n4Tal6ZCzJFXM1okl/WjK52FSKupchz2EK9a4Qz6lfEUNdPWwnv+JII1ol3TPE458aQBsEF77F8PbvkkppZ0NGwfWbWyYCf+J/9KGmB8u/LkOlHPJK2g70BgS6QsmobQ4SGkpJl0WmOIpPsOy/pxtPyLlCR3vB55qPOlr0ktcCentiOS20VC6YXNxd9dnEp5x/grekeWTuyWjwnIpJSh3Qqr6GPb48Nvz3IIsYtSsCx+KX/q9nBp6NrCJp8tejfgBBq9a261EQK1PGLPMxDFy8vK/dmPaXeRlcvgDOXRpsNiu9vXyx+u0V0cejZGHsXcExa6fFS7+3xShYaC0E0PnYuKzPKXjnKKShL0DkwMCsLPquEXKIpKp8Lbp/qmdT1YUyEJwMfpwI4CBYQ0MR3VWWunla4XZSUoKmX8eHpBkL7nnvLeBnXJ3TQFBGQ/CHRYrrv/LCyAb/OYu6Q02zId6hZo5TE+FZy/NKohXltBNUk7EXMGang4WvHdlJkr3iESh2Qj63ECsCWmcEXZrT0axP4i8xcv5bi4JLtEuphBLMpa54QiCbGxLBUajIVeszTb0GJu7V83LMQ==
+  template:
+    metadata:
+      creationTimestamp:
+      name: recipes-secret-key
+      namespace: recipes
+    type: Opaque
