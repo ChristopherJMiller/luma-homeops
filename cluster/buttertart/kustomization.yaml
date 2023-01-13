@@ -7,5 +7,6 @@ resources:
   - instagrapi.yaml
   - psql.yaml
   - minio.yaml
+  - ingress.yaml
   - backend.yaml
   - web.yaml
