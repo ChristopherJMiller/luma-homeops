@@ -1,0 +1,72 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    app: backend
+    service: web
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        service: web
+    spec:
+      securityContext:
+        runAsUser: 101
+        runAsGroup: 101
+      imagePullSecrets:
+        - name: regcred
+      containers:
+        - name: backend
+          image: ghcr.io/christopherjmiller/buttertart-services/bt-web-backend:0.1.24
+          ports:
+            - containerPort: 3000
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsUser: 101
+            runAsGroup: 101
+          env:
+            - name: DATABASE_DB
+              value: postgres
+            - name: DATABASE_USER
+              value: postgres
+            - name: DATABASE_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: postgres.acid-buttertart.credentials.postgresql.acid.zalan.do
+                  key: password
+            - name: DATABASE_URI
+              value: acid-buttertart:5432
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels:
+    service: web
+spec:
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app: backend
