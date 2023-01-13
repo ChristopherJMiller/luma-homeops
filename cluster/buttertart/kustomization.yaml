@@ -8,5 +8,6 @@ resources:
   - psql.yaml
   - minio.yaml
   - ingress.yaml
+  - ingress-api.yaml
   - backend.yaml
   - web.yaml
