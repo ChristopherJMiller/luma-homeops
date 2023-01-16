@@ -27,7 +27,7 @@ spec:
                     name: story-manager-secrets
               env:
                 - name: S3_ENDPOINT
-                  value: http://minio:9000
+                  value: minio
                 - name: S3_BUCKET
                   value: buttertart
                 - name: API_ENDPOINT
