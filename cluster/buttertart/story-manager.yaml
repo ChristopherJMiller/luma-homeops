@@ -17,7 +17,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: backend
-              image: ghcr.io/christopherjmiller/buttertart-services/bt-story-manager:0.2.1
+              image: ghcr.io/christopherjmiller/buttertart-services/bt-story-manager:0.2.2
               securityContext:
                 readOnlyRootFilesystem: true
                 runAsUser: 101
@@ -27,7 +27,7 @@ spec:
                     name: story-manager-secrets
               env:
                 - name: S3_ENDPOINT
-                  value: minio
+                  value: http://minio:9000
                 - name: S3_BUCKET
                   value: buttertart
                 - name: API_ENDPOINT
