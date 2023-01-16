@@ -68,7 +68,7 @@ spec:
               service:
                 name: readarr
                 port:
-                  number: 7878
+                  number: 8787
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
