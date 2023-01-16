@@ -9,6 +9,7 @@ resources:
   - webdav.yaml
   - sonarr.yaml
   - radarr.yaml
+  - readarr.yaml
   - qbittorrent.yaml
   - jackett.yaml
   - ombi.yaml

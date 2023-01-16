@@ -1,0 +1,89 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: HelmRepository
+metadata:
+  name: readarr
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  url: https://k8s-at-home.com/charts/
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: readarr
+  namespace: flux-system
+spec:
+  chart:
+    spec:
+      chart: readarr
+      sourceRef:
+        kind: HelmRepository
+        name: readarr
+      version: 6.x.x
+  interval: 1m0s
+  releaseName: readarr
+  targetNamespace: jellyfin
+  values:
+    env:
+      TZ: America/Los_Angeles
+    persistence:
+      config:
+        enabled: true
+        size: 1Gi
+        accessMode: ReadWriteOnce
+      media:
+        enabled: true
+        mountPath: /media
+        existingClaim: jellyfin-media
+        accessMode: ReadWriteOnce
+      downloads:
+        enabled: true
+        mountPath: /downloads
+        existingClaim: qbittorrent-downloads
+        accessMode: ReadWriteOnce
+    podSecurityContext:
+      runAsUser: 0
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: readarr
+  namespace: jellyfin
+  annotations:
+    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - readarr.luma.chrismiller.xyz
+      secretName: readarr-luma-tls
+  rules:
+    - host: readarr.luma.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: readarr
+                port:
+                  number: 7878
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: readarr-luma-tls
+  namespace: jellyfin
+spec:
+  secretName: readarr-luma-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: readarr.luma.chrismiller.xyz
+  dnsNames:
+    - readarr.luma.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
