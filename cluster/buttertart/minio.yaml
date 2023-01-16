@@ -53,11 +53,20 @@ spec:
     - port: 9000
       targetPort: 9000
       protocol: TCP
-      name: minio
+  selector:
+    app: minio
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: minio-dashboard
+  labels:
+    service: api
+spec:
+  ports:
     - port: 9001
       targetPort: 9001
       protocol: TCP
-      name: http
   selector:
     app: minio
 ---
