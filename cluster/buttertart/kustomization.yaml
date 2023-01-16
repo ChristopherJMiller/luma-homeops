@@ -11,3 +11,5 @@ resources:
   - ingress-api.yaml
   - backend.yaml
   - web.yaml
+  - story-manager.yaml
+  - story-manager-secrets.yaml

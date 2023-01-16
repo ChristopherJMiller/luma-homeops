@@ -1,0 +1,45 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: story-manager
+spec:
+  schedule: 15 12,0 * * *
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          securityContext:
+            runAsUser: 101
+            runAsGroup: 101
+          imagePullSecrets:
+            - name: regcred
+          restartPolicy: Never
+          containers:
+            - name: backend
+              image: ghcr.io/christopherjmiller/buttertart-services/bt-story-manager:0.2.1
+              securityContext:
+                readOnlyRootFilesystem: true
+                runAsUser: 101
+                runAsGroup: 101
+              envFrom:
+                - secretRef:
+                    name: story-manager-secrets
+              env:
+                - name: S3_ENDPOINT
+                  value: http://minio:9000
+                - name: S3_BUCKET
+                  value: buttertart
+                - name: API_ENDPOINT
+                  value: http://instagrapi:8000
+                - name: DATABASE_DB
+                  value: postgres
+                - name: DATABASE_USER
+                  value: postgres
+                - name: DATABASE_PASS
+                  valueFrom:
+                    secretKeyRef:
+                      name: postgres.acid-buttertart.credentials.postgresql.acid.zalan.do
+                      key: password
+                - name: DATABASE_URI
+                  value: acid-buttertart:5432
