@@ -26,6 +26,10 @@ spec:
               mountPath: /config
             - name: tz-config
               mountPath: /etc/localtime
+            - mountPath: /dev/ttyUSB
+              name: dev-usb0
+          securityContext:
+            privileged: true
       volumes:
         - name: config
           persistentVolumeClaim:
@@ -34,6 +38,9 @@ spec:
           hostPath:
             path: /etc/localtime
             type: File
+        - name: dev-usb0
+          hostPath:
+            path: /dev/ttyUSB0
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
