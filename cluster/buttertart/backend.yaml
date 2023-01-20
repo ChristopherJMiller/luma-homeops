@@ -29,7 +29,7 @@ spec:
         - name: regcred
       containers:
         - name: backend
-          image: ghcr.io/christopherjmiller/buttertart-services/bt-web-backend:0.3.0
+          image: ghcr.io/christopherjmiller/buttertart-services/bt-web-backend:0.4.0
           ports:
             - containerPort: 3000
               protocol: TCP
