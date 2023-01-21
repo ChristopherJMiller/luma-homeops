@@ -81,3 +81,85 @@ spec:
   resources:
     requests:
       storage: 32Gi
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio-dashboard
+  annotations:
+    external-dns.alpha.kubernetes.io/target: buttert.art
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - dash.obj.dev.buttert.art
+      secretName: dash-obj-buttertart-tls
+  rules:
+    - host: dash.obj.dev.buttert.art
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio-dashboard
+                port:
+                  number: 9001
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dash-obj-buttertart-tls
+spec:
+  secretName: dash-obj-buttertart-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: dash.obj.dev.buttert.art
+  dnsNames:
+    - dash.obj.dev.buttert.art
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: minio
+  annotations:
+    external-dns.alpha.kubernetes.io/target: buttert.art
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - obj.dev.buttert.art
+      secretName: obj-buttertart-tls
+  rules:
+    - host: obj.dev.buttert.art
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: minio
+                port:
+                  number: 9000
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: obj-buttertart-tls
+spec:
+  secretName: obj-buttertart-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: obj.dev.buttert.art
+  dnsNames:
+    - obj.dev.buttert.art
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
