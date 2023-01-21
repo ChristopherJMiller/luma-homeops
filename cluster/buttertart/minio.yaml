@@ -37,6 +37,17 @@ spec:
           volumeMounts:
             - name: minio
               mountPath: /data
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: story-manager-secrets
+                  key: S3_ACCESSTOKEN
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: story-manager-secrets
+                  key: S3_SECRETTOKEN
       volumes:
         - name: minio
           persistentVolumeClaim:
