@@ -1,0 +1,35 @@
+---
+apiVersion: source.toolkit.fluxcd.io/v1beta1
+kind: HelmRepository
+metadata:
+  name: navidrome
+  namespace: flux-system
+spec:
+  interval: 1m0s
+  url: https://k8s-at-home.com/charts/
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: navidrome
+  namespace: flux-system
+spec:
+  chart:
+    spec:
+      chart: navidrome
+      sourceRef:
+        kind: HelmRepository
+        name: navidrome
+      version: 9.x.x
+  interval: 1m0s
+  releaseName: navidrome
+  targetNamespace: music
+  values:
+    persistence:
+      config:
+        enabled: true
+        size: 1Gi
+        accessMode: ReadWriteOnce
+      music:
+        enabled: true
+        size: 50Gi

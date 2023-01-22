@@ -1,0 +1,43 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: navidrome
+  namespace: music
+  annotations:
+    external-dns.alpha.kubernetes.io/target: werethemille.rs
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - music.werethemille.rs
+      secretName: music-tls
+  rules:
+    - host: music.werethemille.rs
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: navidrome
+                port:
+                  number: 4533
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: music-tls
+  namespace: music
+spec:
+  secretName: music-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: music.werethemille.rs
+  dnsNames:
+    - music.werethemille.rs
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
