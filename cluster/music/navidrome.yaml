@@ -31,7 +31,10 @@ spec:
       config:
         enabled: true
         size: 1Gi
+        mountPath: /data
         accessMode: ReadWriteOnce
       music:
         enabled: true
         size: 50Gi
+        mountPath: /music
+        accessMode: ReadWriteOnce
