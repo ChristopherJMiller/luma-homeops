@@ -20,7 +20,7 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: navidrome
-      version: 9.x.x
+      version: 3.x.x
   interval: 1m0s
   releaseName: navidrome
   targetNamespace: music
