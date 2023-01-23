@@ -11,5 +11,6 @@ resources:
   - radarr.yaml
   - readarr.yaml
   - qbittorrent.yaml
+  - navidrome.yaml
   - jackett.yaml
   - ombi.yaml
