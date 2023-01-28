@@ -46,7 +46,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: jellyfin
-  namespace: jellyfin
+  namespace: media
   annotations:
     external-dns.alpha.kubernetes.io/target: werethemille.rs
     kubernetes.io/ingress.class: nginx
@@ -71,7 +71,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: watch-tls
-  namespace: jellyfin
+  namespace: media
 spec:
   secretName: watch-tls
   issuerRef:
