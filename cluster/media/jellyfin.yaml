@@ -36,11 +36,9 @@ spec:
         size: 250Gi
     resources:
       requests:
-        amd.com/gpu: 1
         memory: 4Gi
         cpu: 500m
       limits:
-        amd.com/gpu: 1
         memory: 6Gi
         cpu: 2.5
 ---
