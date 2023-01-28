@@ -43,3 +43,46 @@ spec:
         amd.com/gpu: 1
         memory: 6Gi
         cpu: 2.5
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: jellyfin
+  namespace: jellyfin
+  annotations:
+    external-dns.alpha.kubernetes.io/target: werethemille.rs
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - beta.watch.werethemille.rs
+      secretName: watch-tls
+  rules:
+    - host: beta.watch.werethemille.rs
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: jellyfin
+                port:
+                  number: 8096
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: watch-tls
+  namespace: jellyfin
+spec:
+  secretName: watch-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: beta.watch.werethemille.rs
+  dnsNames:
+    - beta.watch.werethemille.rs
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
