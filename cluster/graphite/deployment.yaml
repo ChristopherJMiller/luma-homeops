@@ -25,10 +25,20 @@ spec:
   releaseName: graphite
   targetNamespace: graphite
   values:
-    service:
-      type: ClusterIP
-      externalIPs:
-        - 192.168.1.123
     persistence:
       enabled: true
       storageClass: freenas-nfs-csi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: graphite-expose
+  namespace: graphite
+spec:
+  externalIPs:
+    - 192.168.1.123
+  selector:
+    app.kubernetes.io/name: graphite
+  ports:
+    - protocol: TCP
+      port: 2003
