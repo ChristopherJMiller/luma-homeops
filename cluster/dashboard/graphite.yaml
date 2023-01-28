@@ -27,7 +27,7 @@ spec:
   values:
     persistence:
       enabled: true
-      storageClass: freenas-nfs-csi
+      storageClass: freenas-iscsi-csi
 ---
 apiVersion: v1
 kind: Service
