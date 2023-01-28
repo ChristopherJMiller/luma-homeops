@@ -5,3 +5,4 @@ resources:
   - namespace.yaml
   - prometheus.yaml
   - ingress.yaml
+  - graphite.yaml
