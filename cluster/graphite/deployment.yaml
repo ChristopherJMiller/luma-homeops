@@ -36,7 +36,7 @@ metadata:
   namespace: graphite
 spec:
   externalIPs:
-    - 192.168.1.123
+    - 192.168.1.213
   selector:
     app.kubernetes.io/name: graphite
   ports:
