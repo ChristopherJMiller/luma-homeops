@@ -23,10 +23,12 @@ spec:
             - containerPort: 8080
           volumeMounts:
             - name: config
-              mountPath: /config
+              mountPath: /config/config
             - name: wg-config
-              mountPath: /config
+              mountPath: /config/wireguard
               readOnly: true
+          securityContext:
+            privileged: true
           env:
             - name: PUID
               value: '1000'
@@ -36,6 +38,16 @@ spec:
               value: '002'
             - name: TZ
               value: Etc/UTC
+            - name: VPN_ENABLED
+              value: 'true'
+            - name: VPN_CONF
+              value: wg0
+            - name: VPN_IP_CHECK_DELAY
+              value: '5'
+            - name: VPN_IP_CHECK_EXIT
+              value: 'true'
+            - name: PRIVOXY_ENABLE
+              value: 'false'
       volumes:
         - name: config
           persistentVolumeClaim:
