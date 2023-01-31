@@ -8,3 +8,4 @@ resources:
   - mullvad.yaml
   - sonarr.yaml
   - jackett.yaml
+  - nzbhydra.yaml
