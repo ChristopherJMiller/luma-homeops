@@ -41,6 +41,8 @@ spec:
       limits:
         memory: 6Gi
         cpu: 2.5
+    podSecurityContext:
+      runAsUser: 1000
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
