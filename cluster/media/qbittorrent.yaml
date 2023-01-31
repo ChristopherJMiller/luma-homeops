@@ -30,6 +30,10 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config/config
+            - name: downloads
+              mountPath: /app/qBittorrent/downloads
+            - name: media
+              mountPath: /media
             - name: wg-config
               mountPath: /config/wireguard
               readOnly: true
@@ -58,6 +62,12 @@ spec:
         - name: config
           persistentVolumeClaim:
             claimName: qbittorrent-config
+        - name: downloads
+          persistentVolumeClaim:
+            claimName: qbittorrent-downloads
+        - name: media
+          persistentVolumeClaim:
+            claimName: jellyfin-data
         - name: wg-config
           secret:
             secretName: mullvad
@@ -77,3 +87,16 @@ spec:
   resources:
     requests:
       storage: 1Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qbittorrent-downloads
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: freenas-nfs-csi
+  resources:
+    requests:
+      storage: 1000Gi
