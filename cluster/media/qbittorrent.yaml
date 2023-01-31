@@ -76,6 +76,18 @@ spec:
                 path: wg0.conf
 ---
 apiVersion: v1
+kind: Service
+metadata:
+  name: qbittorrent
+  namespace: media
+spec:
+  selector:
+    app: qbittorrent
+  ports:
+    - protocol: TCP
+      port: 8080
+---
+apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: qbittorrent-config
