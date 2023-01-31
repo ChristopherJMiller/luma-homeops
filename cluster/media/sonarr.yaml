@@ -37,6 +37,8 @@ spec:
               value: '002'
             - name: TZ
               value: Etc/UTC
+          securityContext:
+            fsGroup: 1000
       volumes:
         - name: config
           persistentVolumeClaim:
