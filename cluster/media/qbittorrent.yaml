@@ -67,7 +67,7 @@ spec:
             claimName: qbittorrent-downloads
         - name: media
           persistentVolumeClaim:
-            claimName: jellyfin-data
+            claimName: media
         - name: wg-config
           secret:
             secretName: mullvad
