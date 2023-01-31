@@ -1,0 +1,117 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: radarr
+  namespace: media
+  labels:
+    app: radarr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: radarr
+  template:
+    metadata:
+      labels:
+        app: radarr
+    spec:
+      containers:
+        - name: radarr
+          image: cr.hotio.dev/hotio/radarr
+          ports:
+            - containerPort: 7878
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: downloads
+              mountPath: /downloads
+            - name: media
+              mountPath: /media
+          env:
+            - name: PUID
+              value: '1000'
+            - name: GID
+              value: '1000'
+            - name: UMASK
+              value: '002'
+            - name: TZ
+              value: Etc/UTC
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: radarr-config
+        - name: downloads
+          persistentVolumeClaim:
+            claimName: qbittorrent-downloads
+        - name: media
+          persistentVolumeClaim:
+            claimName: jellyfin-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: radarr-config
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: freenas-nfs-csi
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: radarr
+  namespace: media
+spec:
+  selector:
+    app: radarr
+  ports:
+    - protocol: TCP
+      port: 7878
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: radarr
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - radarr.luma.chrismiller.xyz
+      secretName: radarr-luma-tls
+  rules:
+    - host: radarr.luma.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: radarr
+                port:
+                  number: 7878
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: radarr-luma-tls
+  namespace: media
+spec:
+  secretName: radarr-luma-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: radarr.luma.chrismiller.xyz
+  dnsNames:
+    - radarr.luma.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384

@@ -6,6 +6,9 @@ resources:
   - namespace.yaml
   - qbittorrent.yaml
   - mullvad.yaml
-  - sonarr.yaml
   - jackett.yaml
   - nzbhydra.yaml
+  - sonarr.yaml
+  - radarr.yaml
+  - readarr.yaml
+  - lidarr.yaml

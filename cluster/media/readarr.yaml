@@ -1,0 +1,117 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: readarr
+  namespace: media
+  labels:
+    app: readarr
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: readarr
+  template:
+    metadata:
+      labels:
+        app: readarr
+    spec:
+      containers:
+        - name: readarr
+          image: cr.hotio.dev/hotio/readarr
+          ports:
+            - containerPort: 8787
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: downloads
+              mountPath: /downloads
+            - name: media
+              mountPath: /media
+          env:
+            - name: PUID
+              value: '1000'
+            - name: GID
+              value: '1000'
+            - name: UMASK
+              value: '002'
+            - name: TZ
+              value: Etc/UTC
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: readarr-config
+        - name: downloads
+          persistentVolumeClaim:
+            claimName: qbittorrent-downloads
+        - name: media
+          persistentVolumeClaim:
+            claimName: jellyfin-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: readarr-config
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: freenas-nfs-csi
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: readarr
+  namespace: media
+spec:
+  selector:
+    app: readarr
+  ports:
+    - protocol: TCP
+      port: 8787
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: readarr
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - readarr.luma.chrismiller.xyz
+      secretName: readarr-luma-tls
+  rules:
+    - host: readarr.luma.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: readarr
+                port:
+                  number: 8787
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: readarr-luma-tls
+  namespace: media
+spec:
+  secretName: readarr-luma-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: readarr.luma.chrismiller.xyz
+  dnsNames:
+    - readarr.luma.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
