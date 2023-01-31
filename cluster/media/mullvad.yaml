@@ -1,0 +1,16 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp:
+  name: mullvad
+  namespace: media
+spec:
+  encryptedData:
+    CONFIG: AgBU1jz/9pfuRDElfgVi9KWlhR7DC3RMhT2DKpv94zJ+tN+P6PSSOCJ9+yEe/bjTDUxDXDaqa4+P15LOTZ81cSDurIa4RstKD0gPANdvlU5Yq47ORUF7XA5JIi99bRmmdzLrQUAFU34Gq6o2ywSOvUrWN6UH8BWPWPqMQp53G3OtDi2SjLJbGyWxjiHVKyvA4zEkHE3VB9DPsaO21Y5m/0lkUBBjSivcWtWOBJhYo1ThMWdpmifCYOWbaXcUueNdDqx2XGMdB3SU0JZsngwL1OworClX88WXv5pUCuZ2Kg56Te7lvlnym0K/8UZXeEaWm9Rh4UoyeZ53duws9fG0JrcaZfm16hwaN9xKz5+vnVQC1B0vKyX32DLhHEGglzW1yrnRsmpA0Q8L6fjwDhG1ykwMv/tls6ai3uU/2NiAEuaP6hAGpxX8wJnhZ+GRaHHmlqpbMTWPWe5rYzjmGa833rjYdI6zmu/nA2aKiEGiPShfkiP0dZpDEBWIB32BXpgm1Ixx/i2oEd9RmhfIjkxTDhXOYExHaVzdI7wjRMyuc2cyNq/yvycxVZz8Jp7YqGE+Z+zMWWsMl8aF+lLulSyCnqpGgoY8ddeMh1nn1Fl5NEKjzQya3B6LYTEshO8Fxpk41cq1dK2a//lKb2RD5F0pwDaIB7CCGhumq8p3lIuU/bKHemTX78PCCaMVbmPqUf3JmI7sLBBCtl2mFXOdO8AilD9BR0phJldDEGvXDuseI/9J5XdJiK5Ek0eLmqKWrB3Eqzol59Ig4GpjhAgvt3ZVAr8nBPgfCgrxqIBxPueROXNmxDB2j+gDUxEY0SefDk4qIXpcXig/xh07sIhcipalFWLMjR9N+DQIFsJu+u96yhvzJO31ILzAWjpFlWvk67UpEdUD69TM8QKoAYoZYOklCWVNM87CFsDZKHUbYhJ2Pyxgj7EX1wOvaVMkAg9u9P0D71GHIX5Rp1D/d49Y8zmbLoLN3pz61jLj2Lx2dXQQ0Uj8L8YiQ5RUJ+Qn0s9SLGYRo0oVGlOqBhbFtCkfr1boVfEdlAESfHKCbIpx4ql1/6+o
+  template:
+    metadata:
+      creationTimestamp:
+      name: mullvad
+      namespace: media
+    type: Opaque
