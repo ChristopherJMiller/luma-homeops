@@ -24,6 +24,10 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
+            - name: downloads
+              mountPath: /downloads
+            - name: media
+              mountPath: /media
           env:
             - name: PUID
               value: '1000'
@@ -37,6 +41,12 @@ spec:
         - name: config
           persistentVolumeClaim:
             claimName: sonarr-config
+        - name: downloads
+          persistentVolumeClaim:
+            claimName: qbittorrent-downloads
+        - name: media
+          persistentVolumeClaim:
+            claimName: media-data
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -50,3 +60,58 @@ spec:
   resources:
     requests:
       storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sonarr
+  namespace: media
+spec:
+  selector:
+    app: sonarr
+  ports:
+    - protocol: TCP
+      port: 8989
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sonarr
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - sonarr.luma.chrismiller.xyz
+      secretName: sonarr-luma-tls
+  rules:
+    - host: sonarr.luma.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: sonarr
+                port:
+                  number: 8989
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: sonarr-luma-tls
+  namespace: media
+spec:
+  secretName: sonarr-luma-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: sonarr.luma.chrismiller.xyz
+  dnsNames:
+    - sonarr.luma.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
