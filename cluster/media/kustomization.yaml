@@ -6,3 +6,4 @@ resources:
   - namespace.yaml
   - qbittorrent.yaml
   - mullvad.yaml
+  - sonarr.yaml
