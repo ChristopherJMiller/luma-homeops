@@ -46,7 +46,7 @@ spec:
             claimName: qbittorrent-downloads
         - name: media
           persistentVolumeClaim:
-            claimName: media-data
+            claimName: jellyfin-data
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
