@@ -31,7 +31,7 @@ spec:
             - name: config
               mountPath: /config/config
             - name: downloads
-              mountPath: /app/qBittorrent/downloads
+              mountPath: /downloads
             - name: media
               mountPath: /media
             - name: wg-config
