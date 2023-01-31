@@ -16,6 +16,8 @@ spec:
       labels:
         app: radarr
     spec:
+      securityContext:
+        fsGroup: 1000
       containers:
         - name: radarr
           image: cr.hotio.dev/hotio/radarr
@@ -37,8 +39,6 @@ spec:
               value: '002'
             - name: TZ
               value: Etc/UTC
-          securityContext:
-            fsGroup: 1000
       volumes:
         - name: config
           persistentVolumeClaim:

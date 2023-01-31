@@ -16,6 +16,8 @@ spec:
       labels:
         app: lidarr
     spec:
+      securityContext:
+        fsGroup: 1000
       containers:
         - name: lidarr
           image: cr.hotio.dev/hotio/lidarr
@@ -37,8 +39,6 @@ spec:
               value: '002'
             - name: TZ
               value: Etc/UTC
-          securityContext:
-            fsGroup: 1000
       volumes:
         - name: config
           persistentVolumeClaim:

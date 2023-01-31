@@ -1,46 +1,87 @@
 ---
-apiVersion: source.toolkit.fluxcd.io/v1beta1
-kind: HelmRepository
+apiVersion: apps/v1
+kind: Deployment
 metadata:
-  name: utkuozdemir
-  namespace: flux-system
+  name: jellyfin
+  namespace: media
+  labels:
+    app: jellyfin
 spec:
-  interval: 1m0s
-  url: https://utkuozdemir.org/helm-charts
----
-apiVersion: helm.toolkit.fluxcd.io/v2beta1
-kind: HelmRelease
-metadata:
-  name: jellyfin-network-storage
-  namespace: flux-system
-spec:
-  chart:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jellyfin
+  template:
+    metadata:
+      labels:
+        app: jellyfin
     spec:
-      chart: jellyfin
-      sourceRef:
-        kind: HelmRepository
-        name: utkuozdemir
-      version: 2.x.x
-  interval: 1m0s
-  releaseName: jellyfin
-  targetNamespace: media
-  values:
-    persistence:
-      config:
-        enabled: true
-        storageClass: freenas-nfs-ssd-csi
-        size: 5Gi
-      data:
-        enabled: true
-        storageClass: freenas-nfs-csi
-        size: 250Gi
-    resources:
-      requests:
-        memory: 4Gi
-        cpu: 500m
-      limits:
-        memory: 6Gi
-        cpu: 2.5
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: jellyfin
+          image: cr.hotio.dev/hotio/jellyfin
+          ports:
+            - containerPort: 8096
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: media
+              mountPath: /media
+          env:
+            - name: PUID
+              value: '1000'
+            - name: GID
+              value: '1000'
+            - name: UMASK
+              value: '002'
+            - name: TZ
+              value: Etc/UTC
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: jellyfin-config
+        - name: media
+          persistentVolumeClaim:
+            claimName: jellyfin-data
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-config
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: freenas-nfs-ssd-csi
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: jellyfin-data
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: freenas-nfs-csi
+  resources:
+    requests:
+      storage: 1000Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jellyfin
+  namespace: media
+spec:
+  selector:
+    app: jellyfin
+  ports:
+    - protocol: TCP
+      port: 8096
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
