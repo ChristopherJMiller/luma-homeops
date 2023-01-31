@@ -40,15 +40,15 @@ spec:
       volumes:
         - name: config
           persistentVolumeClaim:
-            claimName: jellyfin-config
+            claimName: media-config
         - name: media
           persistentVolumeClaim:
-            claimName: jellyfin-data
+            claimName: media
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: jellyfin-config
+  name: media-config
   namespace: media
 spec:
   accessModes:
@@ -61,7 +61,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: jellyfin-data
+  name: media
   namespace: media
 spec:
   accessModes:
