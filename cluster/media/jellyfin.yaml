@@ -42,7 +42,8 @@ spec:
         memory: 6Gi
         cpu: 2.5
     podSecurityContext:
-      fsGroup: 911
+      runAsUser: 1000
+      fsGroup: 1000
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
