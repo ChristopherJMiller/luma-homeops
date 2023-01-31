@@ -22,6 +22,8 @@ spec:
           ports:
             - containerPort: 8080
           volumeMounts:
+            - name: config
+              mountPath: /config
             - name: wg-config
               mountPath: /config
               readOnly: true
@@ -33,11 +35,27 @@ spec:
             - name: UMASK
               value: '002'
             - name: TZ
-              value: 'Etc/UTC'
+              value: Etc/UTC
       volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: qbittorrent-config
         - name: wg-config
           secret:
             secretName: mullvad
             items:
-            - key: CONFIG
-              path: wg0.conf
+              - key: CONFIG
+                path: wg0.conf
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qbittorrent-config
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: freenas-nfs-csi
+  resources:
+    requests:
+      storage: 1Gi
