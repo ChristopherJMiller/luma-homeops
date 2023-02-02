@@ -17,6 +17,7 @@ spec:
         app: jellyfin
     spec:
       securityContext:
+        allowPrivilegeEscalation: true
         fsGroup: 1000
       containers:
         - name: jellyfin
