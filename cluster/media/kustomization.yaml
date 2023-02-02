@@ -12,3 +12,4 @@ resources:
   - radarr.yaml
   - readarr.yaml
   - lidarr.yaml
+  - sabnzbd.yaml
