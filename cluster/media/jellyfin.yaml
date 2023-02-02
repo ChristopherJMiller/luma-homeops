@@ -94,10 +94,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - beta.watch.werethemille.rs
-      secretName: watch-tls
+        - watch.werethemille.rs
+      secretName: jellyfin-tls
   rules:
-    - host: beta.watch.werethemille.rs
+    - host: watch.werethemille.rs
       http:
         paths:
           - path: /
@@ -111,16 +111,16 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: watch-tls
+  name: jellyfin-tls
   namespace: media
 spec:
-  secretName: watch-tls
+  secretName: jellyfin-tls
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  commonName: beta.watch.werethemille.rs
+  commonName: watch.werethemille.rs
   dnsNames:
-    - beta.watch.werethemille.rs
+    - watch.werethemille.rs
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA
