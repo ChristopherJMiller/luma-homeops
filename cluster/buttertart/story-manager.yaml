@@ -7,6 +7,7 @@ spec:
   schedule: 0 21,9 * * *
   jobTemplate:
     spec:
+      restartPolicy: Never
       template:
         spec:
           securityContext:
@@ -17,7 +18,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: backend
-              image: ghcr.io/christopherjmiller/buttertart-services/bt-story-manager:0.5.5
+              image: ghcr.io/christopherjmiller/buttertart-services/bt-story-manager:0.6.0
               securityContext:
                 readOnlyRootFilesystem: true
                 runAsUser: 101
@@ -43,3 +44,5 @@ spec:
                       key: password
                 - name: DATABASE_URI
                   value: acid-buttertart:5432
+                - name: REDIS_ENDPOINT
+                  value: redis://buttertart-redis
