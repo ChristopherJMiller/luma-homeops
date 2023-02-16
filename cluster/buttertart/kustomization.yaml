@@ -14,3 +14,5 @@ resources:
   - web.yaml
   - story-manager.yaml
   - story-manager-secrets.yaml
+  - story-analyzer.yaml
+  - story-analyzer-secrets.yaml
