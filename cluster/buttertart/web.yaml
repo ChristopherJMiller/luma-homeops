@@ -35,7 +35,7 @@ spec:
             medium: Memory
       containers:
         - name: web
-          image: ghcr.io/christopherjmiller/buttertart-web:0.5.5
+          image: ghcr.io/christopherjmiller/buttertart-web:0.10.0
           ports:
             - containerPort: 8080
               protocol: TCP
