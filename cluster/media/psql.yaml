@@ -5,15 +5,8 @@ metadata:
   name: acid-arr-configs
   namespace: media
 spec:
-  preparedDatabases:
-    sonarr-main: {}
-    sonarr-log: {}
-    radarr-main: {}
-    radarr-log: {}
-    lidarr-main: {}
-    lidarr-log: {}
-    readarr-main: {}
-    readarr-log: {}
+  databases:
+    postgres: postgres
   numberOfInstances: 1
   spiloRunAsUser: 101
   spiloRunAsGroup: 103
