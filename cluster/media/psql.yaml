@@ -1,0 +1,40 @@
+---
+apiVersion: acid.zalan.do/v1
+kind: postgresql
+metadata:
+  name: acid-arr-configs
+  namespace: media
+spec:
+  databases:
+    radarr-main: postgres
+    radarr-log: postgres
+    lidarr-main: postgres
+    lidarr-log: postgres
+    readarr-main: postgres
+    readarr-log: postgres
+  numberOfInstances: 1
+  spiloRunAsUser: 101
+  spiloRunAsGroup: 103
+  spiloFSGroup: 103
+  postgresql:
+    version: '14'
+  teamId: acid
+  users:
+    postgres: []
+  volume:
+    stoageClass: freenas-nfs-ssd-csi
+    size: 30Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: psql
+  namespace: media
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: psql
+  selector:
+    cluster-name: acid-arr-configs
