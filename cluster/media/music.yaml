@@ -93,7 +93,7 @@ spec:
               service:
                 name: music
                 port:
-                  number: 4533
+                  number: 5082
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
