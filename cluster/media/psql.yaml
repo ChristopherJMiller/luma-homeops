@@ -24,7 +24,7 @@ spec:
   users:
     postgres: []
   volume:
-    stoageClass: freenas-nfs-ssd-csi
+    storageClass: freenas-nfs-ssd-csi
     size: 30Gi
 ---
 apiVersion: v1
