@@ -22,7 +22,9 @@ spec:
     version: '14'
   teamId: acid
   users:
-    postgres: []
+    postgres:
+      - superuser
+      - createdb
   volume:
     storageClass: freenas-nfs-ssd-csi
     size: 30Gi
