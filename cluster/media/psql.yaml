@@ -6,14 +6,14 @@ metadata:
   namespace: media
 spec:
   databases:
-    sonarr-main: postgres
-    sonarr-log: postgres
-    radarr-main: postgres
-    radarr-log: postgres
-    lidarr-main: postgres
-    lidarr-log: postgres
-    readarr-main: postgres
-    readarr-log: postgres
+    sonarr_main: postgres
+    sonarr_log: postgres
+    radarr_main: postgres
+    radarr_log: postgres
+    lidarr_main: postgres
+    lidarr_log: postgres
+    readarr_main: postgres
+    readarr_log: postgres
   numberOfInstances: 1
   spiloRunAsUser: 101
   spiloRunAsGroup: 103
