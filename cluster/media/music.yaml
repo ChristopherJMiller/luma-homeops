@@ -61,7 +61,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: navidrome
+  name: music
   namespace: media
 spec:
   selector:
