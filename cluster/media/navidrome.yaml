@@ -32,7 +32,7 @@ spec:
         enabled: true
         size: 1Gi
         mountPath: /data
-        storageClassName: freenas-nfs-csi
+        storageClass: freenas-nfs-csi
         accessMode: ReadWriteOnce
       music:
         enabled: true
