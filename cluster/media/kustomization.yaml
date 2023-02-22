@@ -14,4 +14,4 @@ resources:
   - lidarr.yaml
   - sabnzbd.yaml
   - psql.yaml
-  - navidrome.yaml
+  - music.yaml
