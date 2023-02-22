@@ -6,6 +6,8 @@ metadata:
   namespace: media
 spec:
   databases:
+    sonarr-main: postgres
+    sonarr-log: postgres
     radarr-main: postgres
     radarr-log: postgres
     lidarr-main: postgres
