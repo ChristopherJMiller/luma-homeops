@@ -17,7 +17,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: backend
-              image: ghcr.io/christopherjmiller/buttertart-services/bt-story-analyzer:0.10.2
+              image: ghcr.io/christopherjmiller/buttertart-services/bt-story-analyzer:0.11.0
               securityContext:
                 readOnlyRootFilesystem: true
                 runAsUser: 101
