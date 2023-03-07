@@ -5,7 +5,6 @@ namespace: external-dns
 bases:
   - github.com/kubernetes-sigs/external-dns/kustomize
 resources:
-  - namespace.yaml
   - cloudflare-api-token.yaml
   - cloudflareddns.yaml
   - cloudflareddns-config.yaml
