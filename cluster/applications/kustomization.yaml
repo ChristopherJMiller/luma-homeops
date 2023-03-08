@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - argocd.yaml
   - applications.yaml
+  - amdgpu-labeler.yaml
   - sealed-secrets.yaml
   - external-dns.yaml
   - cert-manager.yaml
