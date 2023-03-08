@@ -7,8 +7,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/ChristopherJMiller/luma-homeops
-    path: cluster/metallb
+    repoURL: https://github.com/metallb/metallb
+    targetRevision: v0.13.9
+    path: config/native
   destination:
     server: https://kubernetes.default.svc
     namespace: metallb
@@ -20,4 +21,3 @@ spec:
     syncOptions:
       - CreateNamespace=false
       - PrunePropagationPolicy=foreground
-      - PruneLast=true
