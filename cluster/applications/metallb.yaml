@@ -19,5 +19,5 @@ spec:
       selfHeal: true
       allowEmpty: true
     syncOptions:
-      - CreateNamespace=false
+      - CreateNamespace=true
       - PrunePropagationPolicy=foreground
