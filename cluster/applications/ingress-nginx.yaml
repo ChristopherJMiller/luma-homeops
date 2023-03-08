@@ -12,9 +12,6 @@ spec:
     chart: ingress-nginx
     helm:
       releaseName: ingress-nginx
-      values: |
-        controller:
-          hostNetwork: true
   destination:
     server: https://kubernetes.default.svc
     namespace: ingress-nginx
@@ -26,4 +23,3 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground
-      - PruneLast=true
