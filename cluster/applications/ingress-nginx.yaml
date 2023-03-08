@@ -2,27 +2,27 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: sealed-secrets
+  name: ingress-nginx
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://bitnami-labs.github.io/sealed-secrets
-    targetRevision: 1.15.0-r3
-    chart: sealed-secrets
+    repoURL: https://kubernetes.github.io/ingress-nginx
+    targetRevision: 4.x.x
+    chart: ingress-nginx
     helm:
-      releaseName: sealed-secrets
+      releaseName: ingress-nginx
       values: |
-        rbac:
-          pspEnabled: true
+        controller:
+          hostNetwork: true
   destination:
     server: https://kubernetes.default.svc
-    namespace: sealed-secrets
+    namespace: ingress-nginx
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-      allowEmpty: false
+      allowEmpty: true
     syncOptions:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground

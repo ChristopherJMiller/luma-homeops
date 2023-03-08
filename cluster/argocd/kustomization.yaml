@@ -7,3 +7,4 @@ bases:
 resources:
   - namespace.yaml
   - repository.yaml
+  - ingress.yaml

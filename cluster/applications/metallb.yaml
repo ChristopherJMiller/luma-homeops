@@ -2,28 +2,21 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: sealed-secrets
+  name: metallb
   namespace: argocd
 spec:
   project: default
   source:
-    repoURL: https://bitnami-labs.github.io/sealed-secrets
-    targetRevision: 1.15.0-r3
-    chart: sealed-secrets
-    helm:
-      releaseName: sealed-secrets
-      values: |
-        rbac:
-          pspEnabled: true
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops
+    path: cluster/metallb
   destination:
     server: https://kubernetes.default.svc
-    namespace: sealed-secrets
+    namespace: metallb
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-      allowEmpty: false
+      allowEmpty: true
     syncOptions:
-      - CreateNamespace=true
       - PrunePropagationPolicy=foreground
       - PruneLast=true
