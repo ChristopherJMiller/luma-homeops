@@ -4,4 +4,3 @@ kind: Kustomization
 namespace: dashboard
 resources:
   - ingress-grafana.yaml
-  - ingress-alert.yaml
