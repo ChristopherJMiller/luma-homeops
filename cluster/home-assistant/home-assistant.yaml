@@ -31,7 +31,9 @@ spec:
           securityContext:
             privileged: true
         - name: editor
-          image: docker.io/nginx:alpine
+          image: sickp/alpine-sshd
+          ports:
+            - containerPort: 22
           volumeMounts:
             - name: config
               mountPath: /config
