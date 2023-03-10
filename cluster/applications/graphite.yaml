@@ -13,6 +13,8 @@ spec:
     helm:
       releaseName: graphite
       values: |
+        service:
+          type: LoadBalancer
         persistence:
           enabled: true
           storageClassName: freenas-nfs-csi
