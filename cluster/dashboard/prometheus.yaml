@@ -20,7 +20,7 @@ spec:
       sourceRef:
         kind: HelmRepository
         name: prometheus
-      version: 37.2.x
+      version: 45.7.x
   interval: 1m0s
   releaseName: prometheus
   targetNamespace: dashboard
@@ -28,7 +28,7 @@ spec:
     defaultRules:
       create: true
       rules:
-        alertmanager: false
+        alertmanager: true
         etcd: true
         configReloaders: true
         general: true
@@ -53,13 +53,11 @@ spec:
         nodeExporterRecording: true
         prometheus: true
         prometheusOperator: true
-    alertmanager:
-      enabled: false
     prometheus:
       storageSpec:
         volumeClaimTemplate:
           spec:
-            storageClassName: local-path
+            storageClassName: freenas-nfs-csi
             accessModes: [ReadWriteOnce]
             resources:
               requests:
