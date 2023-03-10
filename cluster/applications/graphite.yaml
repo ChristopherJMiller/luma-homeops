@@ -1,0 +1,45 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: graphite
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://kiwigrid.github.io
+    targetRevision: 1.x.x
+    chart: graphite
+    helm:
+      releaseName: graphite
+      values: |
+        alertmanager:
+          alertmanagerSpec:
+            storage:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: freenas-nfs-csi
+                  accessModes: [ReadWriteOnce]
+                  resources:
+                    requests:
+                      storage: 5Gi
+        prometheus:
+          prometheusSpec:
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: freenas-nfs-csi
+                  accessModes: [ReadWriteOnce]
+                  resources:
+                    requests:
+                      storage: 50Gi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dashboard
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
