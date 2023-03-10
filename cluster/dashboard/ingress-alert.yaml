@@ -1,0 +1,41 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana
+  annotations:
+    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - alert.luma.chrismiller.xyz
+      secretName: alert-luma-tls
+  rules:
+    - host: alert.luma.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: alertmanager-operated
+                port:
+                  number: 9093
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: alert-luma-tls
+spec:
+  secretName: alert-luma-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: alert.luma.chrismiller.xyz
+  dnsNames:
+    - alert.luma.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384

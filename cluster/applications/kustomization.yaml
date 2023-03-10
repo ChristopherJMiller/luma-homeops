@@ -10,5 +10,6 @@ resources:
   - cert-manager.yaml
   - ingress-nginx.yaml
   - kube-prometheus-stack.yaml
+  - dashboard-ingresses.yaml
   - metallb.yaml
   - metallb-system.yaml
