@@ -15,13 +15,14 @@ spec:
       values: |
         alertmanager:
           alertmanagerSpec:
-            volumeClaimTemplate:
-              spec:
-                storageClassName: freenas-nfs-csi
-                accessModes: [ReadWriteOnce]
-                resources:
-                  requests:
-                    storage: 5Gi
+            storage:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: freenas-nfs-csi
+                  accessModes: [ReadWriteOnce]
+                  resources:
+                    requests:
+                      storage: 5Gi
         prometheus:
           prometheusSpec:
             storageSpec:
