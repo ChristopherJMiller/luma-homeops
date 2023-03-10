@@ -17,7 +17,7 @@ spec:
           type: LoadBalancer
         persistence:
           enabled: true
-          storageClassName: freenas-nfs-csi
+          storageClassName: freenas-iscsi-csi
         carbon.conf: |-
           [cache]
           # Configure carbon directories.
