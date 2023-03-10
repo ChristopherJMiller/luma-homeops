@@ -30,6 +30,11 @@ spec:
               name: dev-usb0
           securityContext:
             privileged: true
+        - name: editor
+          image: docker.io/alpine:3
+          volumeMounts:
+            - name: config
+              mountPath: /config
       volumes:
         - name: config
           persistentVolumeClaim:
