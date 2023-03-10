@@ -31,7 +31,7 @@ spec:
           securityContext:
             privileged: true
         - name: editor
-          image: docker.io/alpine:3
+          image: docker.io/nginx:alpine
           volumeMounts:
             - name: config
               mountPath: /config
