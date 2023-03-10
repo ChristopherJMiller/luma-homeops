@@ -13,6 +13,15 @@ spec:
     helm:
       releaseName: prometheus
       values: |
+        alertmanager:
+          alertmanagerSpec:
+            volumeClaimTemplate:
+              spec:
+                storageClassName: freenas-nfs-csi
+                accessModes: [ReadWriteOnce]
+                resources:
+                  requests:
+                    storage: 5Gi
         prometheus:
           prometheusSpec:
             storageSpec:
