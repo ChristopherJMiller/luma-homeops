@@ -4,4 +4,3 @@ kind: Kustomization
 namespace: home-assistant
 resources:
   - home-assistant.yaml
-  - namespace.yaml
