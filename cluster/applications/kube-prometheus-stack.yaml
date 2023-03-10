@@ -14,14 +14,15 @@ spec:
       releaseName: prometheus
       values: |
         prometheus:
-          storageSpec:
-            volumeClaimTemplate:
-              spec:
-                storageClassName: freenas-nfs-csi
-                accessModes: [ReadWriteOnce]
-                resources:
-                  requests:
-                    storage: 50Gi
+          prometheusSpec:
+            storageSpec:
+              volumeClaimTemplate:
+                spec:
+                  storageClassName: freenas-nfs-csi
+                  accessModes: [ReadWriteOnce]
+                  resources:
+                    requests:
+                      storage: 50Gi
   destination:
     server: https://kubernetes.default.svc
     namespace: dashboard
