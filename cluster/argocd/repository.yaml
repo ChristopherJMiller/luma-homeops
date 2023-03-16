@@ -20,3 +20,14 @@ metadata:
 stringData:
   type: git
   url: https://github.com/metallb/metallb
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: repository-postgres-operator
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+stringData:
+  type: git
+  url: https://github.com/zalando/postgres-operator
