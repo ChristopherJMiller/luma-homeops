@@ -15,3 +15,4 @@ resources:
   - dashboard-ingresses.yaml
   - metallb.yaml
   - metallb-system.yaml
+  - postgres-operator.yaml
