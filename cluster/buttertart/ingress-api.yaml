@@ -10,10 +10,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - api.dev.buttert.art
+        - api.buttert.art
       secretName: api-buttertart-tls
   rules:
-    - host: api.dev.buttert.art
+    - host: api.buttert.art
       http:
         paths:
           - path: /
@@ -34,9 +34,9 @@ spec:
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  commonName: api.dev.buttert.art
+  commonName: api.buttert.art
   dnsNames:
-    - api.dev.buttert.art
+    - api.buttert.art
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA

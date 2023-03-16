@@ -103,10 +103,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - dash.obj.dev.buttert.art
+        - dash.obj.buttert.art
       secretName: dash-obj-buttertart-tls
   rules:
-    - host: dash.obj.dev.buttert.art
+    - host: dash.obj.buttert.art
       http:
         paths:
           - path: /
@@ -126,9 +126,9 @@ spec:
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  commonName: dash.obj.dev.buttert.art
+  commonName: dash.obj.buttert.art
   dnsNames:
-    - dash.obj.dev.buttert.art
+    - dash.obj.buttert.art
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA
@@ -144,10 +144,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - obj.dev.buttert.art
+        - obj.buttert.art
       secretName: obj-buttertart-tls
   rules:
-    - host: obj.dev.buttert.art
+    - host: obj.buttert.art
       http:
         paths:
           - path: /
@@ -167,9 +167,9 @@ spec:
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  commonName: obj.dev.buttert.art
+  commonName: obj.buttert.art
   dnsNames:
-    - obj.dev.buttert.art
+    - obj.buttert.art
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA
