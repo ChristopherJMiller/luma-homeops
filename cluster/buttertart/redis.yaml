@@ -49,7 +49,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: local-path
+  storageClassName: freenas-nfs-csi
   resources:
     requests:
       storage: 2Gi

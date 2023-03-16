@@ -3,7 +3,6 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: backend
-  namespace: backend
   annotations:
     external-dns.alpha.kubernetes.io/target: buttert.art
     kubernetes.io/ingress.class: nginx
@@ -28,7 +27,6 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: api-buttertart-tls
-  namespace: web
 spec:
   secretName: api-buttertart-tls
   issuerRef:
