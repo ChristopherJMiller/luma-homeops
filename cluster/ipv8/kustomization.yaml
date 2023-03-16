@@ -4,5 +4,3 @@ kind: Kustomization
 namespace: ipv8
 bases:
   - github.com/realliance/ipv8-k8s/overlays/nightly
-resources:
-  - namespace.yaml

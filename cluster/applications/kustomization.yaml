@@ -10,6 +10,7 @@ resources:
   - external-dns.yaml
   - cert-manager.yaml
   - ingress-nginx.yaml
+  - ipv8.yaml
   - home-assistant.yaml
   - kube-prometheus-stack.yaml
   - graphite.yaml
