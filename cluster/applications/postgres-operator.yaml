@@ -7,9 +7,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/zalando/postgres-operator
-    targetRevision: master
-    path: manifests
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops
+    path: cluster/postgres-operator
   destination:
     server: https://kubernetes.default.svc
     namespace: postgres-operator
@@ -19,5 +18,4 @@ spec:
       selfHeal: true
       allowEmpty: true
     syncOptions:
-      - CreateNamespace=true
       - PrunePropagationPolicy=foreground
