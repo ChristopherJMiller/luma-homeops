@@ -2,7 +2,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: buttertart-sentry
+  name: sentry
   namespace: argocd
 spec:
   project: default
@@ -14,12 +14,13 @@ spec:
       releaseName: sentry
   destination:
     server: https://kubernetes.default.svc
-    namespace: buttertart
+    namespace: sentry
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
       allowEmpty: true
     syncOptions:
+      - CreateNamespace=true
       - PrunePropagationPolicy=foreground
       - PruneLast=true
