@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - argocd.yaml
   - buttertart.yaml
+  - buttertart-sentry.yaml
   - applications.yaml
   - amdgpu-labeler.yaml
   - sealed-secrets.yaml
