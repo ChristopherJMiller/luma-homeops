@@ -8,7 +8,7 @@ spec:
   project: default
   source:
     repoURL: https://sentry-kubernetes.github.io/charts
-    targetRevision: 2.7.x
+    targetRevision: 17.x.x
     chart: sentry
     helm:
       releaseName: sentry
