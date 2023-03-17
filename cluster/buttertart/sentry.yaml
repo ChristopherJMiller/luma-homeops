@@ -1,0 +1,25 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: buttertart-sentry
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://sentry-kubernetes.github.io/charts
+    targetRevision: 2.7.x
+    chart: sentry
+    helm:
+      releaseName: sentry
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: buttertart
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
