@@ -19,6 +19,13 @@ spec:
             - 192.168.1.8
         persistance:
           storageClass: freenas-nfs-csi
+        config:
+          graphite:
+            enabled: true
+            database: graphite
+            bind-address: ":2003"
+            protocol: tcp
+            consistency-level: one
   destination:
     server: https://kubernetes.default.svc
     namespace: dashboard
