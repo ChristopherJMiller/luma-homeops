@@ -13,6 +13,10 @@ spec:
     helm:
       releaseName: influxdb
       values: |
+        service:
+          type: LoadBalancer
+          externalIPs:
+            - 192.168.1.8
         persistance:
           storageClass: freenas-nfs-csi
   destination:
