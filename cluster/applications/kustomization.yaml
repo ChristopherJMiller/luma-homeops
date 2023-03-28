@@ -12,9 +12,9 @@ resources:
   - ingress-nginx.yaml
   - ipv8.yaml
   - home-assistant.yaml
-  - kube-prometheus-stack.yaml
-  - graphite.yaml
-  - dashboard-ingresses.yaml
+  #- kube-prometheus-stack.yaml
+  #- graphite.yaml
+  #- dashboard-ingresses.yaml
   - metallb.yaml
   - metallb-system.yaml
   - postgres-operator.yaml
