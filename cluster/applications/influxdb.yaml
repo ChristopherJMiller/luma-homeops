@@ -1,0 +1,27 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: influxdb
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://helm.influxdata.com
+    targetRevision: 4.12.x
+    chart: influxdb
+    helm:
+      releaseName: influxdb
+      values: |
+        persistance:
+          storageClass: freenas-nfs-csi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dashboard
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
