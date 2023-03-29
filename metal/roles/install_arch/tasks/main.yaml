@@ -1,64 +1,64 @@
 ---
-  - name: Tear Down Remaining PXE Server
-    delegate_to: localhost
-    docker_compose:
-      project_src: '{{ role_path }}/../pxe_server/files'
-      state: absent
-  - name: Reset .ssh dir
-    shell: sshpass -p "root" ssh root@{{ hostvars[inventory_hostname]['ansible_host'] }} -o 'StrictHostKeyChecking no' -f 'rm -rf ~/.ssh'
-    ignore_errors: yes
-    delegate_to: localhost
-    timeout: 5
-  - name: Setup .ssh
-    shell: sshpass -p "root" ssh root@{{ hostvars[inventory_hostname]['ansible_host'] }} -o 'StrictHostKeyChecking no' -f 'mkdir -p ~/.ssh'
-    ignore_errors: yes
-    delegate_to: localhost
-    timeout: 5
-  - name: Add Key to Target
-    shell: sshpass -p "root" rsync -aPvzhe ssh ~/.ssh/id_ed25519.pub root@{{ hostvars[inventory_hostname]['ansible_host'] }}:~/.ssh/authorized_keys
-    delegate_to: localhost
-    timeout: 5
-    ignore_errors: yes
-  - name: Ensure Connection is Successful
-    wait_for_connection:
-      timeout: 5
-  - name: Chown Pub
-    command: chown root:root ~/.ssh/authorized_keys
-  - name: Chmod Pub
-    command: chmod 755 ~/.ssh/authorized_keys
-  - name: Create partition
-    shell: echo ',,L,*' | sfdisk /dev/{{ hostvars[inventory_hostname]['os_drive'] }}
-  - name: Create Btrfs
-    command: mkfs.btrfs -L os /dev/{{ hostvars[inventory_hostname]['os_drive'] }}1
-  - name: Mount Drive
-    command: mount /dev/{{ hostvars[inventory_hostname]['os_drive'] }}1 /mnt
-  - name: Pacstrap Drive
-    command: pacstrap /mnt base linux linux-firmware grub openssh python
-  - name: Gen fstab
-    shell: genfstab -U /mnt >> /mnt/etc/fstab
-  - name: Copy pub key into install
-    command: cp -r ~/.ssh /mnt/root/.ssh
-  - name: Configure Timezone
-    command: arch-chroot /mnt ln -sf /usr/share/zoneinfo/{{ timezone }} /etc/localtime
-  - name: Configure hwclock
-    command: arch-chroot /mnt hwclock --systohc
-  - name: Configure locale
-    shell: echo "en_US.UTF-8 UTF-8" > /mnt/etc/locale.gen && arch-chroot /mnt locale-gen
-  - name: Configure locale conf
-    shell: echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
-  - name: Configure Hostname
-    shell: echo {{ inventory_hostname }} > /mnt/etc/hostname
-  - name: Recreate Initramfs
-    command: arch-chroot /mnt mkinitcpio -P
-    ignore_errors: yes
-  - name: Build Grub
-    shell: arch-chroot /mnt grub-install --target=i386-pc /dev/{{ hostvars[inventory_hostname]['os_drive'] }}
-  - name: Make Grub Config
-    shell: arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
-  - name: Configure sshd conf
-    shell: echo "AuthenticationMethods publickey" >> /mnt/etc/ssh/sshd_config
-  - name: Enable Services
-    shell: arch-chroot /mnt systemctl enable sshd.service systemd-networkd systemd-resolved
+  #- name: Tear Down Remaining PXE Server
+  #  delegate_to: localhost
+  #  docker_compose:
+  #    project_src: '{{ role_path }}/../pxe_server/files'
+  #    state: absent
+  #- name: Reset .ssh dir
+  #  shell: sshpass -p "root" ssh root@{{ hostvars[inventory_hostname]['ansible_host'] }} -o 'StrictHostKeyChecking no' -f 'rm -rf ~/.ssh'
+  #  ignore_errors: yes
+  #  delegate_to: localhost
+  #  timeout: 5
+  #- name: Setup .ssh
+  #  shell: sshpass -p "root" ssh root@{{ hostvars[inventory_hostname]['ansible_host'] }} -o 'StrictHostKeyChecking no' -f 'mkdir -p ~/.ssh'
+  #  ignore_errors: yes
+  #  delegate_to: localhost
+  #  timeout: 5
+  #- name: Add Key to Target
+  #  shell: sshpass -p "root" rsync -aPvzhe ssh ~/.ssh/id_ed25519.pub root@{{ hostvars[inventory_hostname]['ansible_host'] }}:~/.ssh/authorized_keys
+  #  delegate_to: localhost
+  #  timeout: 5
+  #  ignore_errors: yes
+  #- name: Ensure Connection is Successful
+  #  wait_for_connection:
+  #    timeout: 5
+  #- name: Chown Pub
+  #  command: chown root:root ~/.ssh/authorized_keys
+  #- name: Chmod Pub
+  #  command: chmod 755 ~/.ssh/authorized_keys
+  #- name: Create partition
+  #  shell: echo ',,L,*' | sfdisk /dev/{{ hostvars[inventory_hostname]['os_drive'] }}
+  #- name: Create Btrfs
+  #  command: mkfs.btrfs -L os /dev/{{ hostvars[inventory_hostname]['os_drive'] }}1
+  #- name: Mount Drive
+  #  command: mount /dev/{{ hostvars[inventory_hostname]['os_drive'] }}1 /mnt
+  #- name: Pacstrap Drive
+  #  command: pacstrap /mnt base linux linux-firmware grub openssh python
+  #- name: Gen fstab
+  #  shell: genfstab -U /mnt >> /mnt/etc/fstab
+  #- name: Copy pub key into install
+  #  command: cp -r ~/.ssh /mnt/root/.ssh
+  #- name: Configure Timezone
+  #  command: arch-chroot /mnt ln -sf /usr/share/zoneinfo/{{ timezone }} /etc/localtime
+  #- name: Configure hwclock
+  #  command: arch-chroot /mnt hwclock --systohc
+  #- name: Configure locale
+  #  shell: echo "en_US.UTF-8 UTF-8" > /mnt/etc/locale.gen && arch-chroot /mnt locale-gen
+  #- name: Configure locale conf
+  #  shell: echo "LANG=en_US.UTF-8" > /mnt/etc/locale.conf
+  #- name: Configure Hostname
+  #  shell: echo {{ inventory_hostname }} > /mnt/etc/hostname
+  #- name: Recreate Initramfs
+  #  command: arch-chroot /mnt mkinitcpio -P
+  #  ignore_errors: yes
+  #- name: Build Grub
+  #  shell: arch-chroot /mnt grub-install --target=i386-pc /dev/{{ hostvars[inventory_hostname]['os_drive'] }}
+  #- name: Make Grub Config
+  #  shell: arch-chroot /mnt grub-mkconfig -o /boot/grub/grub.cfg
+  #- name: Configure sshd conf
+  #  shell: echo "AuthenticationMethods publickey" >> /mnt/etc/ssh/sshd_config
+  #- name: Enable Services
+  #  shell: arch-chroot /mnt systemctl enable sshd.service systemd-networkd systemd-resolved
   - name: Render Networking Conf
     template:
       src: wired.network.j2

@@ -15,4 +15,4 @@ services:
       - ./data/os:/image
     image: pixiecore/pixiecore:master@sha256:8ea5401a9282e8b64ec3aeb8ddf2088b707df05a7f29437ecefa70041f121379
     command: boot /image/arch/boot/x86_64/vmlinuz-linux /image/arch/boot/x86_64/initramfs-linux.img --dhcp-no-bind --cmdline='ip=dhcp verify=y net.ifnames=0
-      archisobasedir=arch archiso_http_srv=http://192.168.1.179:8080/'
+      archisobasedir=arch archiso_http_srv=http://192.168.1.181:8080/'

@@ -2,13 +2,11 @@
 metal:
   children:
     controllers:
-      hosts:
-        controller0:
-          ansible_host: 192.168.1.213
-          ansible_ssh_private_key_file: ~/.ssh/id_ed25519
-          network_interface: enp3s0
-          os_drive: sda
-          adapter: enp5s0
-          gateway_address: 192.168.1.1
-    workers:
       hosts: {}
+    workers:
+      hosts:
+        worker0:
+          ansible_host: 192.168.1.12
+          ansible_ssh_private_key_file: ~/.ssh/id_ed25519
+          os_drive: sda
+          gateway_address: 192.168.1.1

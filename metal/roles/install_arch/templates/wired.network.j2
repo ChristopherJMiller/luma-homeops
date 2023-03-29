@@ -1,6 +1,7 @@
 [Match]
-Name={{ adapter }}
+Type=ether
+Driver=!veth
 
 [Network]
-Address={{ ansible_host }}
+Address=192.168.1.12/24
 Gateway={{ gateway_address }}
