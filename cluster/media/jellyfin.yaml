@@ -18,8 +18,6 @@ spec:
     spec:
       securityContext:
         fsGroup: 1000
-      nodeSelector:
-        beta.amd.com/gpu.cu-count.56: 1
       containers:
         - name: jellyfin
           image: cr.hotio.dev/hotio/jellyfin
