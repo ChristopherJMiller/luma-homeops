@@ -31,7 +31,7 @@ spec:
           securityContext:
             privileged: true
         - name: editor
-          image: sickp/alpine-sshd
+          image: sickp/alpine-sshd@sha256:0f5a58ba5bfc5549a910264f32c337903967bb377d596c91c03611f15b4699ad
           ports:
             - containerPort: 22
           volumeMounts:

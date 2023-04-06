@@ -24,7 +24,7 @@ spec:
             value: '0'
       containers:
         - name: qbittorrent
-          image: cr.hotio.dev/hotio/qbittorrent
+          image: cr.hotio.dev/hotio/qbittorrent@sha256:08dae7e1caefd18427b23de578fde61c7803893756a925bab12a314a3ae88451
           ports:
             - containerPort: 8080
           volumeMounts:

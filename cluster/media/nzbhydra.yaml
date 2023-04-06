@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: nzbhydra
-          image: cr.hotio.dev/hotio/nzbhydra2
+          image: cr.hotio.dev/hotio/nzbhydra2@sha256:e911892b4d2975993321dc367c6256c1a35d30e3ed2c2e881f25d39a516be839
           ports:
             - containerPort: 5076
           volumeMounts:
