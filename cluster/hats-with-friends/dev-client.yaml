@@ -33,7 +33,7 @@ spec:
             medium: Memory
       containers:
         - name: client
-          image: ghcr.io/christopherjmiller/hats-with-friend-client:main
+          image: ghcr.io/christopherjmiller/hats-with-friends-client:main
           ports:
             - containerPort: 8080
               protocol: TCP
@@ -57,7 +57,7 @@ spec:
             runAsUser: 101
             runAsGroup: 101
         - name: server
-          image: ghcr.io/christopherjmiller/hats-with-friend-server:main
+          image: ghcr.io/christopherjmiller/hats-with-friends-server:main
           ports:
             - containerPort: 14191
               protocol: TCP
