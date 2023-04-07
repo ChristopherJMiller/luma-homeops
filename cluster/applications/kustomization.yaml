@@ -21,3 +21,4 @@ resources:
   - media.yaml
   - postgres-operator.yaml
   - sentry.yaml
+  - webrtc-ingress-nginx.yaml
