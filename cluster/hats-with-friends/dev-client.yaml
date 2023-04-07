@@ -61,7 +61,7 @@ spec:
             - name: UDP_WEBRTC
               value: 152.44.247.29:14192
             - name: WEBRTC_PUB_URL
-              value: https://game.hats.luma.chrismiller.xyz:14192
+              value: https://152.44.247.29:14192
           ports:
             - containerPort: 14191
               protocol: TCP
