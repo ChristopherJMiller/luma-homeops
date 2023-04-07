@@ -22,6 +22,11 @@ spec:
             https: 14191
           ingressClassResource:
             name: webrtc-nginx
+            controllerValue: "k8s.io/ingress-webrtc-nginx
+          ingressClass: webrtc-nginx
+          ports:
+            http: 14190
+            https: 14191 
 
   destination:
     server: https://kubernetes.default.svc
