@@ -134,7 +134,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: dev-server-webrtc
+                name: dev-client
                 port:
                   number: 14191
 ---
