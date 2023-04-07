@@ -27,7 +27,6 @@ spec:
             name: webrtc-nginx
             controllerValue: "k8s.io/ingress-webrtc-nginx
           ingressClass: webrtc-nginx
-
   destination:
     server: https://kubernetes.default.svc
     namespace: ingress-nginx
