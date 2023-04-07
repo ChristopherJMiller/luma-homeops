@@ -82,11 +82,39 @@ spec:
     - port: 14191
       targetPort: 14191
       protocol: TCP
-      name: webrtc
+      name: conn
     - port: 14192
       targetPort: 14192
       protocol: TCP
       name: conn
+  selector:
+    app: dev-client
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dev-webrtc
+spec:
+  type: LoadBalancer
+  clusterIP: 192.168.1.7
+  ports:
+    - port: 14192
+      targetPort: 14192
+      protocol: TCP
+  selector:
+    app: dev-client
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dev-webrtc-udp
+spec:
+  type: LoadBalancer
+  clusterIP: 192.168.1.6
+  ports:
+    - port: 14192
+      targetPort: 14192
+      protocol: UDP
   selector:
     app: dev-client
 ---
