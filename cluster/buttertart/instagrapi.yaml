@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: instagrapi
-          image: quay.io/christopherjmiller/instagrapi:latest
+          image: quay.io/christopherjmiller/instagrapi:latest@sha256:303a40bdd2b286f325f1f9aaed506ae5be5e26cdd45c8ef53faabb0d419c4d8a
           ports:
             - containerPort: 8000
               protocol: TCP

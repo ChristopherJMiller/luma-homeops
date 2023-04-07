@@ -20,7 +20,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: radarr
-          image: cr.hotio.dev/hotio/radarr
+          image: cr.hotio.dev/hotio/radarr@sha256:9b59d9349b1526918cf74512b421b52b95c7bac32ffa3ee45dcb5edbb42b10b8
           ports:
             - containerPort: 7878
           volumeMounts:
