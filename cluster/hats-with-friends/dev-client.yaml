@@ -96,7 +96,7 @@ metadata:
   name: dev-webrtc
 spec:
   type: LoadBalancer
-  clusterIP: 192.168.1.7
+  loadBalancerIP: 192.168.1.7
   ports:
     - port: 14192
       targetPort: 14192
@@ -110,7 +110,7 @@ metadata:
   name: dev-webrtc-udp
 spec:
   type: LoadBalancer
-  clusterIP: 192.168.1.6
+  loadBalancerIP: 192.168.1.6
   ports:
     - port: 14192
       targetPort: 14192
