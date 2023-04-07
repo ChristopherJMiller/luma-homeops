@@ -79,49 +79,14 @@ spec:
       targetPort: 8080
       protocol: TCP
       name: http
-  selector:
-    app: dev-client
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: dev-server-webrtc
-spec:
-  ports:
     - port: 14191
       targetPort: 14191
       protocol: TCP
       name: webrtc
-  selector:
-    app: dev-client
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: dev-server
-spec:
-  type: LoadBalancer
-  loadBalancerIP: 192.168.1.7
-  ports:
     - port: 14192
       targetPort: 14192
       protocol: TCP
-      name: rtc
-  selector:
-    app: dev-client
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: dev-server-udp
-spec:
-  type: LoadBalancer
-  loadBalancerIP: 192.168.1.6
-  ports:
-    - port: 14192
-      targetPort: 14192
-      protocol: UDP
-      name: udp-rtc
+      name: conn
   selector:
     app: dev-client
 ---
@@ -155,7 +120,7 @@ metadata:
   name: dev-server
   annotations:
     external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
-    kubernetes.io/ingress.class: webrtc-nginx
+    kubernetes.io/ingress.class: nginx
 spec:
   tls:
     - hosts:
