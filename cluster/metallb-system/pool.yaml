@@ -6,6 +6,7 @@ metadata:
 spec:
   autoAssign: true
   addresses:
+    - 192.168.1.7/32
     - 192.168.1.8/32
     - 192.168.1.9/32
 ---

@@ -82,6 +82,28 @@ spec:
   selector:
     app: dev-client
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dev-server
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 14191
+      targetPort: 14191
+      protocol: TCP
+      name: conn
+    - port: 14192
+      targetPort: 14192
+      protocol: UDP
+      name: udp-rtc
+    - port: 14192
+      targetPort: 14192
+      protocol: TCP
+      name: rtc
+  selector:
+    app: dev-client
+---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -118,6 +140,23 @@ spec:
   commonName: hats.luma.chrismiller.xyz
   dnsNames:
     - hats.luma.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: game-hats-tls
+spec:
+  secretName: game-hats-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: game.hats.luma.chrismiller.xyz
+  dnsNames:
+    - game.hats.luma.chrismiller.xyz
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA
