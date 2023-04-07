@@ -13,6 +13,7 @@ resources:
   - ipv8.yaml
   - home-assistant.yaml
   - kube-prometheus-stack.yaml
+  - hats-with-friends.yaml
   - influxdb.yaml
   - dashboard-ingresses.yaml
   - metallb.yaml
