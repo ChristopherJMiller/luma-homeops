@@ -24,8 +24,6 @@ spec:
       securityContext:
         runAsUser: 101
         runAsGroup: 101
-      imagePullSecrets:
-        - name: regcred
       volumes:
         - name: tmp
           emptyDir:
