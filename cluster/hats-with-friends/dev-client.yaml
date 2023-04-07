@@ -128,6 +128,30 @@ spec:
                 port:
                   number: 8080
 ---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dev-server
+  annotations:
+    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - game.hats.luma.chrismiller.xyz
+      secretName: hats-tls
+  rules:
+    - host: game.hats.luma.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dev-client
+                port:
+                  number: 8080
+---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
