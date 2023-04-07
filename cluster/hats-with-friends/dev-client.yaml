@@ -57,6 +57,11 @@ spec:
             runAsGroup: 101
         - name: server
           image: ghcr.io/christopherjmiller/hats-with-friends-server:main@sha256:c0a60ead570213195b744e53ae5d0330fb38f05d46bf7279359881b03e118861
+          env:
+            - name: UDP_WEBRTC
+              value: game.hats.luma.chrismiller.xyz:14192
+            - name: WEBRTC_PUB_URL
+              value: https://game.hats.luma.chrismiller.xyz:14192
           ports:
             - containerPort: 14191
               protocol: TCP
