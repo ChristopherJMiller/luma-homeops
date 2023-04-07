@@ -89,6 +89,10 @@ metadata:
 spec:
   type: LoadBalancer
   loadBalancerIP: 192.168.1.7
+  tls:
+    - hosts:
+        - game.hats.luma.chrismiller.xyz
+      secretName: game-hats-tls
   ports:
     - port: 14191
       targetPort: 14191
