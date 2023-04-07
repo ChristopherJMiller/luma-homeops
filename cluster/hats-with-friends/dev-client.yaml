@@ -83,10 +83,6 @@ spec:
       targetPort: 14191
       protocol: TCP
       name: conn
-    - port: 14192
-      targetPort: 14192
-      protocol: TCP
-      name: conn
   selector:
     app: dev-client
 ---
