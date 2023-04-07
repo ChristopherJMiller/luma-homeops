@@ -59,7 +59,7 @@ spec:
           image: ghcr.io/christopherjmiller/hats-with-friends-server:main@sha256:f24cdf34b3ef7b93cd0652e25cc0fd0323a4a6c9a3ce2e03e3e4e2f45436a92e
           env:
             - name: UDP_WEBRTC
-              value: game.hats.luma.chrismiller.xyz:14192
+              value: 152.44.247.29:14192
             - name: WEBRTC_PUB_URL
               value: https://game.hats.luma.chrismiller.xyz:14192
           ports:
