@@ -160,7 +160,7 @@ spec:
   tls:
     - hosts:
         - game.hats.luma.chrismiller.xyz
-      secretName: hats-tls
+      secretName: game-hats-tls
   rules:
     - host: game.hats.luma.chrismiller.xyz
       http:
