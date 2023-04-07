@@ -17,7 +17,6 @@ spec:
       app: dev-client
   template:
     metadata:
-      namespace: ipv8
       labels:
         app: dev-client
     spec:
@@ -73,7 +72,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: client
+  name: dev-client
 spec:
   ports:
     - port: 8080
@@ -81,12 +80,12 @@ spec:
       protocol: TCP
       name: http
   selector:
-    app: client
+    app: dev-client
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: client
+  name: dev-client
   annotations:
     external-dns.alpha.kubernetes.io/target: hats.luma.chrismiller.xyz
     kubernetes.io/ingress.class: nginx
@@ -103,7 +102,7 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: client
+                name: dev-client
                 port:
                   number: 8080
 ---
