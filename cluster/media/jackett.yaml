@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: jackett
-          image: cr.hotio.dev/hotio/jackett@sha256:16bcc611dc7025da9a1e4a41e97348052b702f347052bc4a0c2fb33882291e7e
+          image: cr.hotio.dev/hotio/jackett@sha256:a9ac7d7add55e11316df7fc1baa89fb3fb5eabec2aa570255f421f8b42e57928
           ports:
             - containerPort: 9117
           volumeMounts:
