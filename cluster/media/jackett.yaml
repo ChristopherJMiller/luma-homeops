@@ -16,6 +16,7 @@ spec:
       labels:
         app: jackett
     spec:
+      nodeName: luma
       containers:
         - name: jackett
           image: cr.hotio.dev/hotio/jackett@sha256:c37250ce481caced53cde9e42cecec4e2b948ddd336de4ac1daa434cf5f7ab1e
