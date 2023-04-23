@@ -20,4 +20,3 @@ resources:
   - metallb-system.yaml
   - media.yaml
   - postgres-operator.yaml
-  - sentry.yaml
