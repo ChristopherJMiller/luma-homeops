@@ -6,3 +6,4 @@ CREATE DATABASE lidarr_log;
 
 CREATE DATABASE readarr_main;
 CREATE DATABASE readarr_log;
+CREATE DATABASE readarr_cache;
