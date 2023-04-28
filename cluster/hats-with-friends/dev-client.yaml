@@ -32,7 +32,7 @@ spec:
             medium: Memory
       containers:
         - name: client
-          image: ghcr.io/christopherjmiller/hats-with-friends-client:main@sha256:f3e04a4129845a74973a1004b2351285687d0e59d665693f6eae22133329ad50
+          image: ghcr.io/christopherjmiller/hats-with-friends-client:main@sha256:46073d415e051b6b5fad50c9104773da96ca5765c48d8135c0ddb9f1cfff51dd
           ports:
             - containerPort: 8080
               protocol: TCP
