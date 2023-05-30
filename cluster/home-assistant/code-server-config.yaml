@@ -8,5 +8,5 @@ metadata:
 stringData:
   PUID: '1000'
   GUID: '1000'
-  PROXY_DOMAIN: ha.luma.chrismiller.xyz
+  #PROXY_DOMAIN: ha.luma.chrismiller.xyz
   DEFAULT_WORKSPACE: /config
