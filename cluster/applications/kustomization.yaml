@@ -20,4 +20,4 @@ resources:
   - metallb-system.yaml
   - media.yaml
   - postgres-operator.yaml
-  - secrets-generator.yaml
+  #- secrets-generator.yaml
