@@ -48,7 +48,7 @@ spec:
         - name: dev-usb0
           hostPath:
             path: /dev/ttyUSB0
-            type: BlockDevice
+            type: CharDevice
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
