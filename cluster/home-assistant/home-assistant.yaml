@@ -26,8 +26,8 @@ spec:
               mountPath: /config
             - name: tz-config
               mountPath: /etc/localtime
-            - mountPath: /dev/ttyUSB0
-              name: dev-usb0
+            - mountPath: /dev
+              name: dev
           securityContext:
             privileged: true
         - name: editor
@@ -45,10 +45,9 @@ spec:
           hostPath:
             path: /etc/localtime
             type: File
-        - name: dev-usb0
+        - name: dev
           hostPath:
-            path: /dev/ttyUSB0
-            type: CharDevice
+            path: /dev
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
