@@ -16,6 +16,7 @@ spec:
       labels:
         app: home-assistant
     spec:
+      nodeName: luma
       containers:
         - name: home-assistant
           image: docker.io/homeassistant/home-assistant:2023.6@sha256:d1dadb8e6ae23c76875c24b72c7af85cbf0e35fd0f6fbfdb27f6ec56741bb7b9
