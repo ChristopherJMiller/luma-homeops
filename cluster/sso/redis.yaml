@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: redis
-          image: docker.io/redis:7-alpine@sha256:1f27b9eb680ffcf6c68966c0d5f578bb1b030ca7cd8ec4e758c429e7f72005a0
+          image: docker.io/redis:7-alpine@sha256:34c8365c0ccea0b4b79b9a8c5f7a4cb2de665942d15d27ec1572df28f3ab261c
           ports:
             - containerPort: 6379
           volumeMounts:
