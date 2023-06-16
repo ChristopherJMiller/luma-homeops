@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: code-server
-          image: docker.io/linuxserver/code-server:4.13.0
+          image: docker.io/linuxserver/code-server:4.14.0@sha256:ab3504a4c57a21125e89a62cc1c73cf80c0d573ad469480fd2b805189ff68478
           envFrom:
             - secretRef:
                 name: code-server-config
