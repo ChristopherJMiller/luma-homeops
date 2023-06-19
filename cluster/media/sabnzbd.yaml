@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: sabnzbd
-          image: cr.hotio.dev/hotio/sabnzbd@sha256:26ef6192a6f790e74d6810583bd2ea3c7a0ffc574966efa33a75b3475ef399e0
+          image: cr.hotio.dev/hotio/sabnzbd@sha256:fd38719246e94f5d196ea4d7fffe9b9d4103a37f44d818cd15dcc3a06709a712
           ports:
             - containerPort: 8080
           volumeMounts:
