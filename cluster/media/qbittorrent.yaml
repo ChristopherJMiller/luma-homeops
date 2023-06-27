@@ -16,7 +16,7 @@ spec:
       labels:
         app: qbittorrent
     spec:
-      nodeName: luma
+      #nodeName: luma
       securityContext:
         sysctls:
           - name: net.ipv4.conf.all.src_valid_mark
