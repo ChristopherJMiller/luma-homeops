@@ -21,7 +21,7 @@ spec:
         claimName: lidarr-config
   containers:
     - name: config
-      image: docker.io/ubuntu@sha256:dcbd90ebfbcfd693bdf862db527c4403411c830b9c60475031008b5930138c66
+      image: docker.io/ubuntu@sha256:0bced47fffa3361afa981854fcabcd4577cd43cebbb808cea2b1f33a3dd7f508
       command: [sh, -c, echo "Start Editing!" && sleep 3600]
       volumeMounts:
         - name: sonarr-config
