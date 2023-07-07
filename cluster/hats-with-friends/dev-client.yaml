@@ -20,7 +20,7 @@ spec:
       labels:
         app: dev-client
     spec:
-      nodeName: luma
+      nodeName: worker0
       securityContext:
         runAsUser: 101
         runAsGroup: 101
