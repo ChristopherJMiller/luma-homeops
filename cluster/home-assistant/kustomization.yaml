@@ -6,4 +6,3 @@ resources:
   - home-assistant.yaml
   - code-server-config.yaml
   - code-server.yaml
-  - psql.yaml

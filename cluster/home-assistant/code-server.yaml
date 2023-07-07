@@ -26,6 +26,13 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /config
+          livenessProbe:
+            exec:
+              command:
+                - cat
+                - /config/configuration.yaml
+            initialDelaySeconds: 5
+            periodSeconds: 5
       volumes:
         - name: config
           persistentVolumeClaim:
