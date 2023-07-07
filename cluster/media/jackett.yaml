@@ -38,7 +38,7 @@ spec:
             httpGet:
               path: /UI/Dashboard
               port: 9117
-            initialDelaySeconds: 5
+            initialDelaySeconds: 30
             periodSeconds: 5
       volumes:
         - name: config
