@@ -39,6 +39,12 @@ spec:
               value: '002'
             - name: TZ
               value: Etc/UTC
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8686
+            initialDelaySeconds: 5
+            periodSeconds: 5
       volumes:
         - name: config
           persistentVolumeClaim:

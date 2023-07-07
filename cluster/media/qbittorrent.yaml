@@ -59,6 +59,12 @@ spec:
               value: 'true'
             - name: PRIVOXY_ENABLE
               value: 'false'
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
       volumes:
         - name: config
           persistentVolumeClaim:
