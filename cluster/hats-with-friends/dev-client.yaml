@@ -57,7 +57,7 @@ spec:
             runAsUser: 101
             runAsGroup: 101
         - name: server
-          image: ghcr.io/christopherjmiller/hats-with-friends-server:main@sha256:b761d8ebf34bcf7a23636365b2b9c2831a5ff4dae476940bab4d3eeb8afc9eb8
+          image: ghcr.io/christopherjmiller/hats-with-friends-server:main@sha256:0d385e9825bcbb98088ad4df4274506f46f5e7dc10ddb27d3ec03c5f307b329c
           env:
             - name: WEBRTC_PUB_URL
               value: https://game.hats.luma.chrismiller.xyz:14192
