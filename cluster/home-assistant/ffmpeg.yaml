@@ -18,7 +18,7 @@ spec:
       nodeName: worker0
       containers:
         - name: ffmpeg
-          image: ghcr.io/christopherjmiller/docker-curl-ffmpeg:main@sha256:d01bec66ad33fec4a87b05d44f6a08f5794eae5211dffb84054045794f5f4b65
+          image: ghcr.io/christopherjmiller/docker-curl-ffmpeg:main@sha256:8db674284fcbe0c5ffc7494541a9e4ba22fdb18b6f104f893e25e832bb878038
           env:
             - name: USERNAME
               valueFrom:
