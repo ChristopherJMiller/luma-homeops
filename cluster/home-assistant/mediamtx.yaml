@@ -18,7 +18,7 @@ spec:
       nodeName: worker0
       containers:
         - name: mediamtx
-          image: docker.io/bluenviron/mediamtx
+          image: docker.io/bluenviron/mediamtx@sha256:612740bf35943b374073b15ede2eeb676a9fae988ef1367172e5e97cc2c77c84
           env:
             - name: MTX_PROTOCOLS
               value: tcp
