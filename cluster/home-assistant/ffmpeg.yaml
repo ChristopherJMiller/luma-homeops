@@ -19,8 +19,6 @@ spec:
       containers:
         - name: ffmpeg
           image: ghcr.io/christopherjmiller/docker-curl-ffmpeg:main
-          command: [curl]
-          args: [-k, -u, $USERNAME:$PASSWORD, --ignore-content-length, $URL, --output, '-', '|', ffmpeg, -i, '-', -c, copy, -f, rtsp, rtsp://mediamtx:8554/$NAME]
           env:
             - name: USERNAME
               valueFrom:
@@ -34,5 +32,7 @@ spec:
                   key: KASA_PASSWORD
             - name: URL
               value: https://192.168.1.239:19443/https/stream/mixed
+            - name: SERVICE
+              value: mediamtx:8554
             - name: NAME
               value: livingroom
