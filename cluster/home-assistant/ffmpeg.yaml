@@ -19,7 +19,8 @@ spec:
       containers:
         - name: ffmpeg
           image: ghcr.io/christopherjmiller/docker-curl-ffmpeg:main
-          command: [curl, -k, -u, $USERNAME:$PASSWORD, --ignore-content-length, $URL, --output, '-', '|', ffmpeg, -i, '-', -c, copy, -f, rtsp, rtsp://mediamtx:8554/$NAME]
+          command: [curl]
+          args: [-k, -u, $USERNAME:$PASSWORD, --ignore-content-length, $URL, --output, '-', '|', ffmpeg, -i, '-', -c, copy, -f, rtsp, rtsp://mediamtx:8554/$NAME]
           env:
             - name: USERNAME
               valueFrom:
