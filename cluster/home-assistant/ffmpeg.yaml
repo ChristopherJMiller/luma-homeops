@@ -23,14 +23,14 @@ spec:
           env:
             - name: USERNAME
               valueFrom:
-              secretKeyRef:
-                name: ffmpeg-config
-                key: KASA_USERNAME
+                secretKeyRef:
+                  name: ffmpeg-config
+                  key: KASA_USERNAME
             - name: PASSWORD
               valueFrom:
-              secretKeyRef:
-                name: ffmpeg-config
-                key: KASA_PASSWORD
+                secretKeyRef:
+                  name: ffmpeg-config
+                  key: KASA_PASSWORD
             - name: URL
               value: https://192.168.1.239:19443/https/stream/mixed
             - name: NAME
