@@ -18,7 +18,7 @@ spec:
       nodeName: worker0
       containers:
         - name: ffmpeg
-          image: linuxserver/ffmpeg:version-6.0-cli
+          image: jrottenberg/ffmpeg
           command: [curl, -k, -u, $USERNAME:$PASSWORD, --ignore-content-length, $URL, --output, '-', '|', ffmpeg, -i, '-', -c, copy, -f, rtsp, rtsp://mediamtx:8554/$NAME]
           env:
             - name: USERNAME
