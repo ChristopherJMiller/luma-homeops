@@ -1,0 +1,37 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ffmpeg
+  labels:
+    app: ffmpeg
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ffmpeg
+  template:
+    metadata:
+      labels:
+        app: ffmpeg
+    spec:
+      nodeName: worker0
+      containers:
+        - name: ffmpeg
+          image: linuxserver/ffmpeg:version-6.0-cli
+          command: [curl, -k, -u, $USERNAME:$PASSWORD, --ignore-content-length, $URL, --output, '-', '|', ffmpeg, -i, '-', -c, copy, -f, rtsp, rtsp://mediamtx:8554/$NAME]
+          env:
+            - name: USERNAME
+              valueFrom:
+              secretKeyRef:
+                name: ffmpeg-config
+                key: KASA_USERNAME
+            - name: PASSWORD
+              valueFrom:
+              secretKeyRef:
+                name: ffmpeg-config
+                key: KASA_PASSWORD
+            - name: URL
+              value: https://192.168.1.239:19443/https/stream/mixed
+            - name: NAME
+              value: livingroom

@@ -8,3 +8,5 @@ resources:
   - code-server.yaml
   - psql.yaml
   - mediamtx.yaml
+  - ffmpeg-config.yaml
+  - ffmpeg.yaml

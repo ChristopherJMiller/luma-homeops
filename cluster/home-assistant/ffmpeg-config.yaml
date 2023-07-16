@@ -1,0 +1,19 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp:
+  name: ffmpeg-config
+  namespace: home-assistant
+spec:
+  encryptedData:
+    KASA_PASSWORD:
+      AgAfOlkP4QVCzCMbe5ojTcB9g5Q9wG+TV4J59Jct5RrnK9D1MaRVFUgd30ChVCf8iWqtU8y9y4N05Eiy/xOtrphVBYnqBW8YqDzsFn0ACOzv9FOOum1uVWfJiLieI7J8We7l8WkrxqQYkcHU7rtis/HjtvwdxlablkslpjJfq0Y+Ufz3uf+TYYVbvzUuApOd5vaEVWDGke8zWAXwBPBufyre/RxEDdKafgJ1TpFWdxDIzzR8y2bk1vAFi/9qvEGPqzUbZlir6eyq7x2PZEq/MvydPbm0UxtYwCvzYjFtKeIOnE6Iyb2roJjRUBHb91ugcblIsNggyeGsfxHTTbPRIlZOXt+xbvraJ/1X15Mb+OuEyH+K1RNy5eXcUuZKZffgswftxqHU/cLv7+t1w7/RTaoz2zb+xwBbivTNg1PD9LVM5eflG/M5fyVoW8dP0pLZ+gzYx1uibUW9yK9YFFpdS/2L64qOE+xfNaKWHvhT+jSUfBX+nbuc62IiaAxVUSS4TJKRbG3o11X1wpw/zsf4ZGq2MlxQtsJMUAGSHrlBGBQKHwAZl9Gl4+sZetKa0y2q9Oq4pai5h67xPAQ1eWza335vNJ0SzR+eh7Rm3hLK51ZWCGNOcRy6SJrn55jpl5ADgfAWG29HT3VGwihVQMxl3UlvhDhzLcmhZywYsLmXqR2yZljtdrtebJhCXg7+br21o5Id7CRhoC+cU8rvhESJcSbwXoY=
+    KASA_USERNAME:
+      AgA1DwyPQAJGIcTNbTL0FWfpsdFT8j5Q0yolcfEwWF4/S1ST9qYo5UohALkz+my1TqgE2BqKGmRpz3oY5W5TmcDdUqKUhrshn7wbxmOsmpdmlUBcMiP1bMxnhMVS//XHTknb7I4KI6HF3lwIoA9WyGPu/r6R00NL3OkzQCEuteVFYvH7oKoC9XI3m3ZlD3lPSaj68XfAAHlA60HdbsXssmI8YCleOrc1g0pdAwy3+imhyIVUPC40s8CI+fEhvcEjzNQhdnIOeWnGY7vsYrtcdi52bt7GucXBC6yMMzvbGTRJuux0Uo7S0KMf1tkmAGeooasdgNJy/rH7NcXyOC3hCdkW5zo8qm2w5BKSDuVO+RGSHe0k80B7F8joe8kgeCFvOPyJWMf8rlqLrPQXRpb1qzrVt/wPRH7pK7yc/0SLG4/xCmrwjc6hWEOl9bvmlD6PMz6NK1VwF14AGzqATnki8HcsRT2gkXkx13aPDYH2ftQSCTZzGlq/3lXnbSy7vQYBwg/wRtX6mf1NcTC07F/aeXdVaLod0fTCiwoVUSpTRnr0hbkhfMk1hoP/Buoa5+IzSfY/LLVa5Rwp++yxk6SnPnRsDlk5tnHgPLlrRN/JQI3gjBayk1WNgPVeIbYSCSVMazHYWoeGMDj5weOqNC4W7DIclZHisLbosSrZMLDpdiJ/jWSPL+g8CT+qc9pmUsKX1P1gKtthB9zRQ8DubVr/xMjIi9rVvQ==
+  template:
+    metadata:
+      creationTimestamp:
+      name: ffmpeg-config
+      namespace: home-assistant
+    type: Opaque
