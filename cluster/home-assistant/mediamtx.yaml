@@ -15,6 +15,7 @@ spec:
       labels:
         app: mediamtx
     spec:
+      nodeName: luma
       containers:
         - name: mediamtx
           image: docker.io/bluenviron/mediamtx
