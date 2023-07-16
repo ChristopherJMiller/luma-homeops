@@ -1,0 +1,49 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediamtx
+  labels:
+    app: mediamtx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mediamtx
+  template:
+    metadata:
+      labels:
+        app: mediamtx
+    spec:
+      containers:
+        - name: mediamtx
+          image: docker.io/bluenviron/mediamtx
+          env:
+            - name: MTX_PROTOCOLS
+              value: tcp
+          ports:
+            - containerPort: 8554
+            - containerPort: 1935
+            - containerPort: 8888
+            - containerPort: 8889
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediamtx
+spec:
+  selector:
+    app: mediamtx
+  ports:
+    - protocol: TCP
+      port: 8554
+      name: rtsp
+    - protocol: TCP
+      port: 1935
+      name: rtmp
+    - protocol: TCP
+      port: 8888
+      name: hls
+    - protocol: TCP
+      port: 8889
+      name: webrtc

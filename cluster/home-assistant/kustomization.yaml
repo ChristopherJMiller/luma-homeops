@@ -7,3 +7,4 @@ resources:
   - code-server-config.yaml
   - code-server.yaml
   - psql.yaml
+  - mediamtx.yaml
