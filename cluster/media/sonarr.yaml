@@ -20,7 +20,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: sonarr
-          image: cr.hotio.dev/hotio/sonarr:v4@sha256:381f7f007878f2f0481129fcd54383fe6d74aa8293ead0f8b0ab2dceaebaf641
+          image: cr.hotio.dev/hotio/sonarr:v4@sha256:19b2ed10c7d6d77cd1951c9ad4ef865c8c93a3b5de2adb7da42a3260615b9877
           ports:
             - containerPort: 8989
           volumeMounts:
