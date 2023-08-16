@@ -3,7 +3,7 @@ version: '3.9'
 services:
   serveos:
     network_mode: host
-    image: nginx:alpine@sha256:71244078bdb968156c8061d461ba3a79cf229a9bf6cc20fbf9991c289d03fdd8
+    image: nginx:alpine@sha256:cac882be2b7305e0c8d3e3cd0575a2fd58f5fde6dd5d6299605aa0f3e67ca385
     volumes:
       - ./data/os:/usr/share/nginx/html:ro
       - ./nginx:/etc/nginx/templates
