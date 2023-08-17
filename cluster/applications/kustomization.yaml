@@ -12,7 +12,7 @@ resources:
   - ingress-nginx.yaml
   - home-assistant.yaml
   - kube-prometheus-stack.yaml
-  - hats-with-friends.yaml
+  - recipes.yaml
   - influxdb.yaml
   - dashboard-ingresses.yaml
   - metallb.yaml

@@ -2,16 +2,16 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: hats-with-friends
+  name: recipes
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/ChristopherJMiller/luma-homeops
-    path: cluster/hats-with-friends
+    path: cluster/recipes
   destination:
     server: https://kubernetes.default.svc
-    namespace: hats-with-friends
+    namespace: recipes
   syncPolicy:
     automated:
       prune: true
