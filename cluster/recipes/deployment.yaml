@@ -32,7 +32,7 @@ spec:
             - name: DEBUG
               value: '0'
             - name: ENABLE_SIGNUP
-              value: '1'
+              value: '0'
             - name: HCAPTCHA_SITEKEY
               valueFrom:
                 secretKeyRef:
