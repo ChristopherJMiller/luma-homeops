@@ -4,5 +4,7 @@ kind: Secret
 metadata:
   name: nextcloud-creds
   annotations:
-    secret-generator.v1.mittwald.de/autogenerate: USERNAME
     secret-generator.v1.mittwald.de/autogenerate: PASSWORD
+type: Opaque
+stringData:
+  USERNAME: admin
