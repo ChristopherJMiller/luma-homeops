@@ -31,6 +31,7 @@ spec:
         internalDatabase:
           enabled: false
         externalDatabase:
+          type: postgresql
           enabled: true
           database: postgres
           host: psql:5432
