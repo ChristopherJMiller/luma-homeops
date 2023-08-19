@@ -20,6 +20,8 @@ spec:
             secretName: nextcloud-creds
             usernameKey: USERNAME
             passwordKey: PASSWORD
+        redis:
+          enabled: true
         readinessProbe:
           enabled: false
         livenessProbe:
