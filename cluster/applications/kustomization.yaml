@@ -20,3 +20,5 @@ resources:
   - media.yaml
   - postgres-operator.yaml
   - secrets-generator.yaml
+  - cloud.yaml
+  - nextcloud.yaml

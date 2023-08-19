@@ -1,0 +1,55 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nextcloud
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://nextcloud.github.io/helm
+    targetRevision: 27.x.x
+    chart: nextcloud
+    helm:
+      releaseName: nextcloud
+      values: |
+        nextcloud:
+          host: cloud.luma.chrismiller.xyz
+          existingSecret:
+            enabled: true
+            secretName: nextcloud-creds
+            usernameKey: USERNAME
+            passwordKey: PASSWORD
+        redis:
+          enabled: true
+          auth:
+            enabled: false
+        internalDatabase:
+          enabled: false
+        externalDatabase:
+          enabled: true
+          database: postgres
+          host: psql:5432
+          user: postgres
+          existingSecret:
+            enabled: true
+            secretName: postgres.acid-nextcloud.credentials.postgresql.acid.zalan.do
+            passwordKey: password
+        persistence:
+          enabled: true
+          storageClass: freenas-nfs-csi
+          size: 16Gi
+          nextcloudData:
+            enabled: true
+            storageClass: freenas-nfs-ssd-csi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: cloud
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - ServerSideApply=true
+      - PrunePropagationPolicy=foreground
