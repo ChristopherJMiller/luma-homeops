@@ -5,3 +5,4 @@ namespace: cloud
 resources:
   - nextcloud-creds.yaml
   - psql.yaml
+  - ingress.yaml
