@@ -26,6 +26,8 @@ spec:
             enabled: false
         readinessProbe:
           enabled: false
+        livenessProbe:
+          enabled: false
         internalDatabase:
           enabled: false
         externalDatabase:
