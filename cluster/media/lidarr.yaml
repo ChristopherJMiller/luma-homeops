@@ -20,7 +20,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: lidarr
-          image: cr.hotio.dev/hotio/lidarr:testing@sha256:66bf90d07f803406db47f31ce57dbd5503ba67165e15fea58522f6c73e4cf942
+          image: cr.hotio.dev/hotio/lidarr:testing@sha256:416b0f9f2e4b5514057ef94a8071dd8394850843a70ef31d1f1aae410db4433d
           ports:
             - containerPort: 8686
           volumeMounts:
