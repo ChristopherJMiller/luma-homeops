@@ -2,7 +2,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: recipes
+  name: vtt
   namespace: argocd
 spec:
   project: default
@@ -11,7 +11,7 @@ spec:
     path: cluster/vtt
   destination:
     server: https://kubernetes.default.svc
-    namespace: recipes
+    namespace: vtt
   syncPolicy:
     automated:
       prune: true
