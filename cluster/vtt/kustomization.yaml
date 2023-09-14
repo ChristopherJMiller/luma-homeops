@@ -7,3 +7,4 @@ resources:
   - foundry.yaml
   - admin-pass.yaml
   - foundry-creds.yaml
+  - ingress.yaml
