@@ -22,3 +22,4 @@ resources:
   - secrets-generator.yaml
   - cloud.yaml
   - nextcloud.yaml
+  - vtt.yaml

@@ -1,0 +1,70 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: foundry
+  namespace: vtt
+  labels:
+    app: foundry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: foundry
+  template:
+    metadata:
+      labels:
+        app: foundry
+    spec:
+      containers:
+        - name: foundry
+          image: docker.io/felddy/foundryvtt:release
+          ports:
+            - containerPort: 30000
+          volumeMounts:
+            - name: pvc
+              mountPath: /data
+          env:
+            - name: TIMEZONE
+              value: Pacific
+            - name: FOUNDRY_TELEMETRY
+              value: 'true'
+            - name: FOUNDRY_HOSTNAME
+              value: vtt.luma.chrismiller.xyz
+            - name: FOUNDRY_ADMIN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: admin-pass
+                  key: PASSWORD
+            - name: FOUNDRY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: foundry-creds
+                  key: FOUNDRY_USERNAME
+            - name: FOUNDRY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: foundry-creds
+                  key: FOUNDRY_PASSWORD
+            - name: FOUNDRY_PASSWORD_SALT
+              valueFrom:
+                secretKeyRef:
+                  name: foundry-creds
+                  key: FOUNDRY_PASSWORD_SALT
+      volumes:
+        - name: pvc
+          persistentVolumeClaim:
+            claimName: foundry-pvc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: foundry-pvc
+  namespace: vtt
+spec:
+  storageClassName: freenas-nfs-ssd-csi
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 30Gi

@@ -5,5 +5,6 @@ pkgs.mkShell {
     git
     kubectl
     pre-commit
+    kubeseal
   ];
 }
