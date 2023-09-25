@@ -19,7 +19,7 @@ spec:
       nodeName: luma
       containers:
         - name: home-assistant
-          image: docker.io/homeassistant/home-assistant:2023.9@sha256:223c9986ff318eaf35fac70351900cf766c15faf82fbe54150b73b7cfc3c933a
+          image: docker.io/homeassistant/home-assistant:2023.9@sha256:067490d7b65cfa8b9e494a9447b0e5a7876be83ead7ec01738681c55d66e7cfe
           ports:
             - containerPort: 8123
           volumeMounts:
