@@ -118,4 +118,4 @@ spec:
   storageClassName: freenas-nfs-csi
   resources:
     requests:
-      storage: 1000Gi
+      storage: 2000Gi
