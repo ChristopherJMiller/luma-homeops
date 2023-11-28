@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: recipes
-          image: docker.io/vabene1111/recipes:latest@sha256:e42abe737227239ef098ec45ad62ad17ded88c5a8c2694a1daec938d188ef300
+          image: docker.io/vabene1111/recipes:latest@sha256:d8ad1038547501ceaed50471bcc01bf71246694685df255382adcb214c787a35
           ports:
             - containerPort: 8080
           volumeMounts:
