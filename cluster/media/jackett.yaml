@@ -19,7 +19,7 @@ spec:
       nodeName: luma
       containers:
         - name: jackett
-          image: cr.hotio.dev/hotio/jackett@sha256:2eee1c77f6ede46252acd3c43fa5cbc666f81d82dc7a2f28c91dad4cbfe1e80a
+          image: cr.hotio.dev/hotio/jackett@sha256:ad4cc58ecda4a679049d4de2977f18a6797142776a5e3bd405c64647b5202107
           ports:
             - containerPort: 9117
           volumeMounts:
