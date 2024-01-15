@@ -14,17 +14,21 @@ spec:
   clusterIP: None
   type: ClusterIP
 ---
-apiVersion: v1
-kind: Endpoints
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
 metadata:
   name: sonarr
-subsets:
+  labels:
+    kubernetes.io/service-name: external-service
+addressType: IPv4
+ports:
+  - name: sonarr
+    appProtocol: http
+    protocol: TCP
+    port: 8989
+endpoints:
   - addresses:
-      - ip: 192.168.1.11
-    ports:
-      - name: sonarr
-        port: 8989
-        protocol: TCP
+      - 192.168.1.11
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
