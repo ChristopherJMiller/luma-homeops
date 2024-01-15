@@ -1,74 +1,4 @@
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: sonarr
-  namespace: media
-  labels:
-    app: sonarr
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: sonarr
-  template:
-    metadata:
-      labels:
-        app: sonarr
-    spec:
-      securityContext:
-        fsGroup: 1000
-      containers:
-        - name: sonarr
-          image: cr.hotio.dev/hotio/sonarr:v4@sha256:68988025f4ffc41dc90fd6d7efa4ab888eecfbb6c87a4a9fd9905cda2ccbc5f2
-          ports:
-            - containerPort: 8989
-          volumeMounts:
-            - name: config
-              mountPath: /config
-            - name: downloads
-              mountPath: /downloads
-            - name: media
-              mountPath: /media
-          env:
-            - name: PUID
-              value: '1000'
-            - name: GID
-              value: '1000'
-            - name: UMASK
-              value: '002'
-            - name: TZ
-              value: Etc/UTC
-          livenessProbe:
-            httpGet:
-              path: /
-              port: 8989
-            initialDelaySeconds: 5
-            periodSeconds: 5
-      volumes:
-        - name: config
-          persistentVolumeClaim:
-            claimName: sonarr-config
-        - name: downloads
-          persistentVolumeClaim:
-            claimName: qbittorrent-downloads
-        - name: media
-          persistentVolumeClaim:
-            claimName: media
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: sonarr-config
-  namespace: media
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: freenas-nfs-ssd-csi
-  resources:
-    requests:
-      storage: 1Gi
----
 apiVersion: v1
 kind: Service
 metadata:
@@ -78,8 +8,23 @@ spec:
   selector:
     app: sonarr
   ports:
-    - protocol: TCP
+    - name: sonarr
+      protocol: TCP
       port: 8989
+  clusterIP: None
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Endpoints
+metadata:
+  name: sonarr-external-ip
+subsets:
+  - addresses:
+      - ip: 192.168.1.11
+    ports:
+      - name: sonarr-ip
+        port: 8989
+        protocol: TCP
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
