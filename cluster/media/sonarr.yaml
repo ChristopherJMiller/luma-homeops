@@ -22,7 +22,7 @@ subsets:
   - addresses:
       - ip: 192.168.1.11
     ports:
-      - name: sonarr-ip
+      - name: sonarr
         port: 8989
         protocol: TCP
 ---
