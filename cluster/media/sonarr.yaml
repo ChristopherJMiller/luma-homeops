@@ -46,8 +46,9 @@ spec:
           - path: /
             pathType: Prefix
             backend:
-              serviceName: sonarr
-              servicePort: 8989
+              name: sonarr
+              port:
+                name: sonarr
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
