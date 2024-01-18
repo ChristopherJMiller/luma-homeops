@@ -37,7 +37,7 @@ spec:
               service:
                 name: radarr
                 port:
-                  number: radarr
+                  name: radarr
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
