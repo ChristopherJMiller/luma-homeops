@@ -1,74 +1,4 @@
 ---
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: radarr
-  namespace: media
-  labels:
-    app: radarr
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: radarr
-  template:
-    metadata:
-      labels:
-        app: radarr
-    spec:
-      securityContext:
-        fsGroup: 1000
-      containers:
-        - name: radarr
-          image: ghcr.io/hotio/radarr@sha256:d2e2756ca4ec5c92343be7bfcc4feaa5885a991754667ed28f73becb95455ca3
-          ports:
-            - containerPort: 7878
-          volumeMounts:
-            - name: config
-              mountPath: /config
-            - name: downloads
-              mountPath: /downloads
-            - name: media
-              mountPath: /media
-          env:
-            - name: PUID
-              value: '1000'
-            - name: GID
-              value: '1000'
-            - name: UMASK
-              value: '002'
-            - name: TZ
-              value: Etc/UTC
-          livenessProbe:
-            httpGet:
-              path: /
-              port: 7878
-            initialDelaySeconds: 5
-            periodSeconds: 5
-      volumes:
-        - name: config
-          persistentVolumeClaim:
-            claimName: radarr-config
-        - name: downloads
-          persistentVolumeClaim:
-            claimName: qbittorrent-downloads
-        - name: media
-          persistentVolumeClaim:
-            claimName: media
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: radarr-config
-  namespace: media
-spec:
-  accessModes:
-    - ReadWriteOnce
-  storageClassName: freenas-nfs-ssd-csi
-  resources:
-    requests:
-      storage: 1Gi
----
 apiVersion: v1
 kind: Service
 metadata:
@@ -80,6 +10,9 @@ spec:
   ports:
     - protocol: TCP
       port: 7878
+      name: radarr
+  type: ExternalName
+  externalName: 192.168.1.11
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -104,7 +37,7 @@ spec:
               service:
                 name: radarr
                 port:
-                  number: 7878
+                  number: radarr
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
