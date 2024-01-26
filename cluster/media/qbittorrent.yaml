@@ -115,7 +115,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: rook-ceph-block-hdd
+  storageClassName: rook-ceph-fs-hdd
   resources:
     requests:
       storage: 2000Gi
