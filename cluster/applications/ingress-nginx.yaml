@@ -12,6 +12,15 @@ spec:
     chart: ingress-nginx
     helm:
       releaseName: ingress-nginx
+      values: |
+        ingress-nginx:
+          controller:
+            config:
+              enable-brotli: 'true'
+              use-geoip: 'false'
+              use-geoip2: 'false'
+              enable-ocsp: 'true'
+              allow-snippet-annotations: 'true'
   destination:
     server: https://kubernetes.default.svc
     namespace: ingress-nginx
