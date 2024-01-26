@@ -16,7 +16,7 @@ spec:
       labels:
         app: home-assistant
     spec:
-      nodeName: luma
+      nodeName: yoshi
       containers:
         - name: home-assistant
           image: docker.io/homeassistant/home-assistant:2023.12@sha256:8d000332b09b71fd946f596b1f721b0af969263b6f27ebc1d212fdbd13bb1bd8
