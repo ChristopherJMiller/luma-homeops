@@ -6,5 +6,6 @@ pkgs.mkShell {
     kubectl
     pre-commit
     kubeseal
+    k0sctl
   ];
 }
