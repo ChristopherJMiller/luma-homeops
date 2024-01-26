@@ -13,5 +13,4 @@ resources:
   - readarr.yaml
   - lidarr.yaml
   - sabnzbd.yaml
-  - psql.yaml
   - music.yaml
