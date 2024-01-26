@@ -13,10 +13,6 @@ spec:
     helm:
       releaseName: cert-manager
       values: |
-        global:
-          podSecurityPolicy:
-            enabled: true
-            useAppArmor: false
         installCRDs: true
   destination:
     server: https://kubernetes.default.svc
