@@ -65,7 +65,7 @@ metadata:
 spec:
   storageClassName: rook-ceph-fs-ssd
   accessModes:
-    - ReadWriteOnce
+    - ReadWriteMany
   resources:
     requests:
       storage: 5Gi
