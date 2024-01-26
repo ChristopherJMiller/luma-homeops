@@ -21,6 +21,44 @@ spec:
     size: 2
   deviceClass: ssd
 ---
+apiVersion: ceph.rook.io/v1
+kind: CephFilesystem
+metadata:
+  name: hdd-rwx
+  namespace: rook-ceph
+spec:
+  metadataPool:
+    replicated:
+      size: 2
+  dataPools:
+    - name: replicated
+      replicated:
+        size: 2
+  preserveFilesystemOnDelete: true
+  metadataServer:
+    activeCount: 1
+    activeStandby: true
+  deviceClass: hdd
+---
+apiVersion: ceph.rook.io/v1
+kind: CephFilesystem
+metadata:
+  name: ssd-rwx
+  namespace: rook-ceph
+spec:
+  metadataPool:
+    replicated:
+      size: 2
+  dataPools:
+    - name: replicated
+      replicated:
+        size: 2
+  preserveFilesystemOnDelete: true
+  metadataServer:
+    activeCount: 1
+    activeStandby: true
+  deviceClass: ssd
+---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -66,3 +104,37 @@ parameters:
   csi.storage.k8s.io/fstype: ext4
 reclaimPolicy: Retain
 allowVolumeExpansion: true
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: rook-ceph-fs-hdd
+provisioner: rook-ceph.cephfs.csi.ceph.com
+parameters:
+  clusterID: rook-ceph
+  fsName: hdd-rwx
+  pool: hdd-rwx-replicated
+  csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
+  csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+  csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
+  csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+  csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
+  csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+reclaimPolicy: Retain
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: rook-ceph-fs-ssd
+provisioner: rook-ceph.cephfs.csi.ceph.com
+parameters:
+  clusterID: rook-ceph
+  fsName: ssd-rwx
+  pool: ssd-rwx-replicated
+  csi.storage.k8s.io/provisioner-secret-name: rook-csi-cephfs-provisioner
+  csi.storage.k8s.io/provisioner-secret-namespace: rook-ceph
+  csi.storage.k8s.io/controller-expand-secret-name: rook-csi-cephfs-provisioner
+  csi.storage.k8s.io/controller-expand-secret-namespace: rook-ceph
+  csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
+  csi.storage.k8s.io/node-stage-secret-namespace: rook-ceph
+reclaimPolicy: Retain

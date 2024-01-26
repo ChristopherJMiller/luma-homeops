@@ -63,6 +63,7 @@ metadata:
   name: ha-config
   namespace: home-assistant
 spec:
+  storageClass: rook-ceph-fs-ssd
   accessModes:
     - ReadWriteOnce
   resources:
