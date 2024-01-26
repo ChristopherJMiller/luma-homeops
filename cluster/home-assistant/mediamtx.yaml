@@ -15,7 +15,7 @@ spec:
       labels:
         app: mediamtx
     spec:
-      nodeName: worker0
+      nodeName: yoshi
       containers:
         - name: mediamtx
           image: docker.io/bluenviron/mediamtx@sha256:fdf4eed30e8a2515be28dc40e3311693e6b288b2103c03f9c1020eed30dc466a

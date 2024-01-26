@@ -15,7 +15,7 @@ spec:
       labels:
         app: ffmpeg
     spec:
-      nodeName: worker0
+      nodeName: yoshi
       containers:
         - name: ffmpeg
           image: ghcr.io/christopherjmiller/docker-curl-ffmpeg:main@sha256:8db674284fcbe0c5ffc7494541a9e4ba22fdb18b6f104f893e25e832bb878038
