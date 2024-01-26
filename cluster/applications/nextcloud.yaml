@@ -41,11 +41,11 @@ spec:
             passwordKey: password
         persistence:
           enabled: true
-          storageClass: freenas-nfs-csi
+          storageClass: rook-ceph-block-hdd
           size: 16Gi
           nextcloudData:
             enabled: true
-            storageClass: freenas-nfs-ssd-csi
+            storageClass: rook-ceph-block-ssd
   destination:
     server: https://kubernetes.default.svc
     namespace: cloud

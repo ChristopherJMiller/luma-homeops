@@ -5,7 +5,7 @@ metadata:
   name: recipes-pvc
   namespace: recipes
 spec:
-  storageClassName: freenas-nfs-ssd-csi
+  storageClassName: rook-ceph-block-ssd
   accessModes:
     - ReadWriteOnce
   resources:

@@ -18,7 +18,7 @@ spec:
           externalIPs:
             - 192.168.1.8
         persistance:
-          storageClass: freenas-nfs-csi
+          storageClass: rook-ceph-block-hdd
         config:
           graphite:
             enabled: true

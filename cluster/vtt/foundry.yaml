@@ -62,7 +62,7 @@ metadata:
   name: foundry-pvc
   namespace: vtt
 spec:
-  storageClassName: freenas-nfs-ssd-csi
+  storageClassName: rook-ceph-block-ssd
   accessModes:
     - ReadWriteOnce
   resources:

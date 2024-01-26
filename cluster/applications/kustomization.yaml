@@ -19,6 +19,7 @@ resources:
   - metallb-system.yaml
   - media.yaml
   - postgres-operator.yaml
+  - rook.yaml
   - secrets-generator.yaml
   - cloud.yaml
   - nextcloud.yaml

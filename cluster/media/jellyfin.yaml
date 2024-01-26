@@ -68,7 +68,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: freenas-nfs-ssd-csi
+  storageClassName: rook-ceph-block-ssd
   resources:
     requests:
       storage: 10Gi
@@ -81,7 +81,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: freenas-nfs-csi
+  storageClassName: rook-ceph-block-hdd
   resources:
     requests:
       storage: 3000Gi
