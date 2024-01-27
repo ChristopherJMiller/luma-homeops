@@ -16,6 +16,9 @@ spec:
         config:
           existingSecret: oauth2
         proxyVarsAsSecrets: true
+        extraEnv:
+        - name: PROVIDER
+          value: oidc
         redis:
           enabled: true
   destination:
