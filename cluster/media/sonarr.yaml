@@ -90,7 +90,7 @@ metadata:
     external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
     kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/auth-url: |-
-      http://ak-outpost-example.authentik.svc.cluster.local:9000/outpost.goauthentik.io/auth/nginx
+      http://ak-outpost-authentik-embedded-outpost.authentik.svc.cluster.local:9000/outpost.goauthentik.io/auth/nginx
     nginx.ingress.kubernetes.io/auth-signin: |-
       https://id.luma.chrismiller.xyz/outpost.goauthentik.io/start?rd=$escaped_request_uri
     nginx.ingress.kubernetes.io/auth-response-headers: |-
