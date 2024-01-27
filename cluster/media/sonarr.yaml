@@ -51,7 +51,7 @@ spec:
             claimName: sonarr-config
         - name: downloads
           persistentVolumeClaim:
-            claimName: qbittorrent-downloads
+            claimName: downloads
         - name: media
           persistentVolumeClaim:
             claimName: media

@@ -4,8 +4,6 @@ kind: Kustomization
 namespace: media
 resources:
   - jellyfin.yaml
-  - mullvad.yaml
-  - jackett.yaml
   - nzbhydra.yaml
   - sonarr.yaml
   - radarr.yaml

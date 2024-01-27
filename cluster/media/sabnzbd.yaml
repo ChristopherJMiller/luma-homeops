@@ -47,7 +47,7 @@ spec:
             claimName: sabnzbd-config
         - name: downloads
           persistentVolumeClaim:
-            claimName: qbittorrent-downloads
+            claimName: downloads
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -63,6 +63,19 @@ spec:
       storage: 1Gi
 ---
 apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: downloads
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: rook-ceph-fs-hdd
+  resources:
+    requests:
+      storage: 1000Gi
+---
+apiVersion: v1
 kind: Service
 metadata:
   name: sabnzbd
@@ -73,3 +86,48 @@ spec:
   ports:
     - protocol: TCP
       port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sabnzbd
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/auth-url: https://id.luma.chrismiller.xyz/oauth2/auth
+    nginx.ingress.kubernetes.io/auth-signin: https://id.luma.chrismiller.xyz/oauth2/start?rd=$scheme://$host$escaped_request_uri
+spec:
+  tls:
+    - hosts:
+        - sabnzbd.luma.chrismiller.xyz
+      secretName: sabnzbd-luma-tls
+  rules:
+    - host: sabnzbd.luma.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nzbhydra
+                port:
+                  number: 5076
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: sabnzbd-luma-tls
+  namespace: media
+spec:
+  secretName: sabnzbd-luma-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: sabnzbd.luma.chrismiller.xyz
+  dnsNames:
+    - sabnzbd.luma.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
