@@ -52,6 +52,8 @@ spec:
                 secretKeyRef:
                   name: oauth2
                   key: redirect-uri
+            - name: OAUTH2_PROXY_EMAIL_DOMAIN
+              value: '*'
 ---
 apiVersion: v1
 kind: Service
