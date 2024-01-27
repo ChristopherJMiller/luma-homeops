@@ -23,6 +23,10 @@ spec:
           value: https://id.luma.chrismiller.xyz/application/o/luma-oauth/
         - name: OAUTH2_PROXY_CODE_CHALLENGE_METHOD
           value: S256
+        - name: OAUTH2_PROXY_SESSION_STORE_TYPE
+          value: redis
+        - name: OAUTH2_PROXY_COOKIE_DOMAIN
+          value: .luma.chrismiller.xyz
         redis:
           enabled: true
         ingress:
