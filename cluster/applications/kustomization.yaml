@@ -19,7 +19,6 @@ resources:
   - metallb.yaml
   - metallb-system.yaml
   - media.yaml
-  - oauth2-proxy.yaml
   - postgres-operator.yaml
   - rook.yaml
   - secrets-generator.yaml
