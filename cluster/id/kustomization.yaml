@@ -6,4 +6,3 @@ resources:
   - tls.yaml
   - authentik.yaml
   - psql.yaml
-  - outpost.yaml
