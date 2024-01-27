@@ -21,6 +21,8 @@ spec:
           value: oidc
         - name: OAUTH2_PROXY_OIDC_ISSUER_URL
           value: https://id.luma.chrismiller.xyz/application/o/luma-oauth/
+        - name: OAUTH2_PROXY_CODE_CHALLENGE_METHOD
+          value: S256
         redis:
           enabled: true
         ingress:
