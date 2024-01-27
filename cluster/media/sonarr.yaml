@@ -94,8 +94,7 @@ metadata:
     nginx.ingress.kubernetes.io/configuration-snippet: |
       auth_request_set $token $upstream_http_authorization;
       proxy_set_header Authorization $token;
-    nginx.ingress.kubernetes.io/auth-snippet: |
-      proxy_set_header X-Forwarded-Host $http_host;
+      proxy_set_header X-Auth-Request-Redirect $request_uri;
 spec:
   tls:
     - hosts:
