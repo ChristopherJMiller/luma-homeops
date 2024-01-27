@@ -7,3 +7,4 @@ resources:
   - authentik.yaml
   - psql.yaml
   - oauth2.yaml
+  - oauth2-proxy.yaml
