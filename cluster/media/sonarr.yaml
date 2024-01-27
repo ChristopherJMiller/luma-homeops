@@ -90,7 +90,10 @@ metadata:
     external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
     kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/auth-url: https://id.luma.chrismiller.xyz/oauth2/auth
-    nginx.ingress.kubernetes.io/auth-signin: https://id.luma.chrismiller.xyz/oauth2/start?rd=$escaped_request_uri
+    nginx.ingress.kubernetes.io/auth-signin: https://id.luma.chrismiller.xyz/oauth2/start?rd=$host/$escaped_request_uri
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      auth_request_set $token $upstream_http_authorization;
+      proxy_set_header Authorization $token;
     nginx.ingress.kubernetes.io/auth-snippet: |
       proxy_set_header X-Forwarded-Host $http_host;
 spec:
