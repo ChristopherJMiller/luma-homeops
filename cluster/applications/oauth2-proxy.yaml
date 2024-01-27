@@ -24,7 +24,7 @@ spec:
         - name: OAUTH2_PROXY_CODE_CHALLENGE_METHOD
           value: S256
         - name: OAUTH2_PROXY_COOKIE_DOMAIN
-          value: luma.chrismiller.xyz
+          value: *.luma.chrismiller.xyz
         - name: OAUTH2_PROXY_SET_AUTHORIZATION_HEADER
           value: "true"
         ingress:
