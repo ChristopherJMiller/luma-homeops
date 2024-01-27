@@ -110,9 +110,9 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: nzbhydra
+                name: sabnzbd
                 port:
-                  number: 5076
+                  number: 8080
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
