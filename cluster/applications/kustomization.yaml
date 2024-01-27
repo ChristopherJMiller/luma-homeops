@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - argocd.yaml
   - applications.yaml
+  - authentik.yaml
   - amdgpu-labeler.yaml
   - sealed-secrets.yaml
   - external-dns.yaml
@@ -12,6 +13,7 @@ resources:
   - home-assistant.yaml
   - kube-prometheus-stack.yaml
   - recipes.yaml
+  - id.yaml
   - influxdb.yaml
   - dashboard-ingresses.yaml
   - metallb.yaml

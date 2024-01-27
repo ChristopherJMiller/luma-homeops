@@ -1,0 +1,37 @@
+---
+apiVersion: acid.zalan.do/v1
+kind: postgresql
+metadata:
+  name: acid-authentik
+spec:
+  databases:
+    postgres: postgres
+  numberOfInstances: 1
+  spiloRunAsUser: 101
+  spiloRunAsGroup: 103
+  spiloFSGroup: 103
+  postgresql:
+    version: '14'
+  teamId: acid
+  users:
+    postgres: []
+  volume:
+    size: 5Gi
+  patroni:
+    pg_hba:
+      - local     all  all  trust
+      - host      all  all  all  trust
+      - hostnossl all  all  all  trust
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: psql
+spec:
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: psql
+  selector:
+    cluster-name: acid-authentik

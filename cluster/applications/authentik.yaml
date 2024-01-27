@@ -1,0 +1,62 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: authentik
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.goauthentik.io
+    targetRevision: 2023.10.4
+    chart: authentik
+    helm:
+      releaseName: authentik
+      values: |
+        authentik:
+          error_reporting:
+            enabled: false
+        ingress:
+          annotations:
+            nginx.ingress.kubernetes.io/enable-cors: "true"
+          ingressClassName: nginx
+          enabled: true
+          tls:
+            - hosts:
+                - id.luma.chrismiller.xyz
+              secretName: id-tls
+          hosts:
+            - host: id.luma.chrismiller.xyz
+              paths:
+                - path: "/"
+                  pathType: Prefix
+        redis:
+          enabled: true
+        env:
+          AUTHENTIK_POSTGRESQL__HOST: psql
+          AUTHENTIK_POSTGRESQL__NAME: postgres
+        envValueFrom:
+          AUTHENTIK_SECRET_KEY:
+            secretKeyRef:
+              name: authentik
+              key: AUTHENTIK_SECRET_KEY
+          AUTHENTIK_POSTGRESQL__USER:
+            secretKeyRef:
+              name: postgres.acid-authentik.credentials.postgresql.acid.zalan.do
+              key: username
+          AUTHENTIK_POSTGRESQL__PASSWORD:
+            secretKeyRef:
+              name: postgres.acid-authentik.credentials.postgresql.acid.zalan.do
+              key: password
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: id
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - ServerSideApply=true
+      - PrunePropagationPolicy=foreground
