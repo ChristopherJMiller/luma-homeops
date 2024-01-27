@@ -13,12 +13,18 @@ spec:
     helm:
       releaseName: oauth2-proxy
       values: |
-        config:
-          clientID: U8FnlaOgCox0Kxh1wTc00wAHorhXkadT5sJpSZQz
         proxyVarsAsSecrets: false
         redis:
           enabled: true
         extraEnv:
+          - name: CLIENT_ID
+            value: U8FnlaOgCox0Kxh1wTc00wAHorhXkadT5sJpSZQz
+          - name: COOKIE_SECRET
+            valueFrom:
+              secretKeyRef:
+                name: authentik-secret-key
+                key: AUTHENTIK_SECRET_KEY
+          - name:
           - name: OIDC_ISSUER_URL
             value: https://id.luma.chrismiller.xyz/application/o/luma-oauth/
   destination:
