@@ -56,6 +56,8 @@ spec:
                   key: redirect-uri
             - name: OAUTH2_PROXY_EMAIL_DOMAINS
               value: '*'
+            - name: OAUTH2_PROXY_WHITELIST_DOMAINS
+              value: '*.luma.chrismiller.xyz'
 ---
 apiVersion: v1
 kind: Service
