@@ -13,10 +13,9 @@ spec:
     helm:
       releaseName: oauth2-proxy
       values: |
-        proxyVarsAsSecrets: true
-        alphaConfig:
-          enabled: true
+        config:
           existingSecret: oauth2
+        proxyVarsAsSecrets: true
         redis:
           enabled: true
   destination:
