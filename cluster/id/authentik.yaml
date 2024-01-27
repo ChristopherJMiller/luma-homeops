@@ -3,15 +3,15 @@ apiVersion: bitnami.com/v1alpha1
 kind: SealedSecret
 metadata:
   creationTimestamp:
-  name: authentik
+  name: authentik-secret-key
   namespace: id
 spec:
   encryptedData:
     AUTHENTIK_SECRET_KEY:
-      AgAeZMe+T3SYnUopEqw9kgkveqTK8/zOGzOxX3091RzurYp3cgNfUkOHclC8V3qBynK2GKUZkNnI/H0/e5S0FhPX8oSkvTgssHIq5GntCrpmPBzpPayijA0GKnwE5S4YnjrFlqtkU/+bAORjGE8SyvNslrqjIJaCv08yvCBCy2jC2ieq1WKzO2VehO4MT/ILWGbKBW212NopE4zjavVh7obbNePYC69xPmglYejcSVtl1ZTkeWlJ+1BqRJp9i4n+uekfv3w/IVZzJR7pnalmw8pcdL2bVgPGXhwnd7M/tffoXcaZaXBSDuPEninF+O+s4jcdyPwZDfZqpMcgY76Wy2+A0HVdWPyV+0QLNmGS1+gVy/OmhZyw5AO69iQoGu2Pqp9jPGw/2avXMQ5Tnx3YJoW2NJpLD6PgiA0WBrouYsFP8O/19B0EKug6QzRdTMUT8r0NwJWnEOXSDozskZddTtO3es1jYhuNAKQ1K8xUTnLTorpTMm7jLmAsJtUl612xecrWzSVn6dkYodIzLZkuMzbdO3bm6Pgg/9WQOMe/dxijMvpoOmyN7zqfN0xLuIXzYe7O+o70gI3H3I/KtP+spqReZQI7c9bX9rJmROY3LdSw72S2Yh260+03sJkMKhRkHok5UPIrIuZNbk+xyvXbw2RumSsOPwsykvMMfVOrz9Y4+pFIhGkFcSYhN5RARr+J/0/NDuBGsUaqqERlfZYyBdaaSmHTNmyJSRNnuAvWfdobq0NLusYcZBgEtNJ0OcwkrsYBfRWQe4m/IM7dA6XGqACFJ4N286NrUCt3o9NC91ilU6vr9++zLuumRUSfPf8VS9Sp+0u6
+      AgCQ4qLzUNoRzN+heTx3gPLB/gA/V3SgCvpBEnedskm9VSmgpk7J4TlPGfyig/HZd/PD6AJOKzHyp8Gb4B03mVwXot6EVy3rqLYDPiCcMDldQYbk5SP4ujnp5MYB1D4jnhgiuHsjPLACxp8NMVMAM8ij9Z7Mvt36emwBev6M+ExK2588xnxHppNHJggVx1PSs8JCJMhZ/qnXVC/vDo7h2xKWCgI89A1xbkkfn9qjn+HNUK3ih5za800blJ/ELd3JX2pty+Ixzu5mgIX6G5tgIZDMhsZN7OL9PawMFxYW5imtrXB2tPqfka+2La+fH2zW6oA2+k4/30OvOOhh4EMxprnRtgYVeABepPtV84u8t1NUCjMJjrDosYwVE43u4JwI+qk/rQLCE323WZNRBoR0eZvw0IBVOp3VFZ3AcDehZAb0PNL0UbXc+IIXFPJokEVow3W3xBewzXfjnpg2pB5+SMpijvbckONB/7R5HJogldILuwhTCbvwAymQhoji1iqSVgtu6ZV1vn0A4wpz84n6DvTRTRo7HXHmDDJe1RoxykAaJwJN/SO1zl2sj+qpClWeU5jLYmIjQC2sL/+7DTTTXIVoi53R+eyjUtNxtC33HoKjzsuQ3dp5B+egaIVbVHqLWVc/qPbIkY0q5t1vN7SK7TIOzyxkV49aeC68lTeqUXeR9ajQR4HIF5v3etEAwzJiLV6Bxn/55eJVzqakgK5U2/zLk+cg/Z7qb4yhY1HytpyWaNqMixmvZMyVX4YYMTleIO6IAtqWF/STJC6oRIWl73i9y1LBQnjOHwyB8AqJMxtU17I5COyW+sB6UseitI1FeCyiIiFC
   template:
     metadata:
       creationTimestamp:
-      name: authentik
+      name: authentik-secret-key
       namespace: id
     type: Opaque
