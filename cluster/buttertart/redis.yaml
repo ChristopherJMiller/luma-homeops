@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: buttertart-redis
-          image: docker.io/redis:7-alpine@sha256:c41ab869d6bca837ad6812a615ab2162ea23679cd5d671fe61ffe15c535acb12
+          image: docker.io/redis:7-alpine@sha256:771316de17c3eaa0824734099785cf984061f06a0bb765eef5953264fea7f0a9
           ports:
             - containerPort: 6379
           volumeMounts:
