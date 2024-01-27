@@ -23,6 +23,7 @@ spec:
           enabled: true
         ingress:
           enabled: true
+          path: /oauth2
           hosts:
             - id.luma.chrismiller.xyz
           annotations:
