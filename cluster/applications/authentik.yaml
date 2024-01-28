@@ -33,7 +33,7 @@ spec:
                 - path: "/"
                   pathType: Prefix
         redis:
-          enabled: true
+          enabled: false
         env:
           AUTHENTIK_POSTGRESQL__HOST: psql
           AUTHENTIK_POSTGRESQL__NAME: postgres
