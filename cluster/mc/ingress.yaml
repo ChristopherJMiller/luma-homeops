@@ -10,10 +10,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - mc.luma.chrismiller.xyz
+        - map.mc.luma.chrismiller.xyz
       secretName: mc-luma-tls
   rules:
-    - host: mc.luma.chrismiller.xyz
+    - host: map.mc.luma.chrismiller.xyz
       http:
         paths:
           - path: /
@@ -34,9 +34,9 @@ spec:
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  commonName: mc.luma.chrismiller.xyz
+  commonName: map.mc.luma.chrismiller.xyz
   dnsNames:
-    - mc.luma.chrismiller.xyz
+    - map.mc.luma.chrismiller.xyz
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA
