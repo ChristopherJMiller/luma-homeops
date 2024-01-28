@@ -14,6 +14,7 @@ resources:
   - kube-prometheus-stack.yaml
   - recipes.yaml
   - id.yaml
+  - mc.yaml
   - influxdb.yaml
   - dashboard-ingresses.yaml
   - metallb.yaml

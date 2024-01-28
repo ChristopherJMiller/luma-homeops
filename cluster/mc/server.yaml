@@ -1,0 +1,59 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: server
+  namespace: mc
+  labels:
+    app: server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: server
+  template:
+    metadata:
+      labels:
+        app: server
+    spec:
+      nodeName: luma
+      containers:
+        - name: server
+          image: docker.io/itzg/minecraft-server
+          ports:
+            - containerPort: 25565
+            - containerPort: 25575
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          env:
+            - name: TYPE
+              value: FABRIC
+            - name: PACKWIZ_URL
+              value: https://mc.realliance.net/pack.toml
+            - name: VERSION
+              value: 1.20.1
+            - name: FABRIC_LOADER_VERSION
+              value: 0.15.5
+            - name: EULA
+              value: 'true'
+            - name: MEMORY
+              value: 8G
+      volumes:
+        - name: data
+          hostPath:
+            path: /static/mc
+            type: Directory
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: server
+  namespace: mc
+spec:
+  type: LoadBalancer
+  selector:
+    app: server
+  ports:
+    - protocol: TCP
+      port: 25565
