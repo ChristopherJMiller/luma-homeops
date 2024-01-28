@@ -37,6 +37,7 @@ spec:
         env:
           AUTHENTIK_POSTGRESQL__HOST: psql
           AUTHENTIK_POSTGRESQL__NAME: postgres
+          AUTHENTIK_REDIS__HOST: redis
         envValueFrom:
           AUTHENTIK_SECRET_KEY:
             secretKeyRef:
@@ -50,7 +51,6 @@ spec:
             secretKeyRef:
               name: postgres.acid-authentik.credentials.postgresql.acid.zalan.do
               key: password
-          AUTHENTIK_REDIS__HOST: redis
 
   destination:
     server: https://kubernetes.default.svc
