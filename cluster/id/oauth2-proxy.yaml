@@ -78,6 +78,7 @@ metadata:
   namespace: id
   annotations:
     kubernetes.io/ingress.class: nginx
+    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
 spec:
   tls:
     - hosts:
