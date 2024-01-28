@@ -33,8 +33,7 @@ spec:
                 - path: "/"
                   pathType: Prefix
         redis:
-          enabled: true
-          architecture: replication
+          enabled: false
         env:
           AUTHENTIK_POSTGRESQL__HOST: psql
           AUTHENTIK_POSTGRESQL__NAME: postgres
