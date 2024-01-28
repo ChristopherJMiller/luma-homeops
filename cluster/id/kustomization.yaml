@@ -8,3 +8,4 @@ resources:
   - psql.yaml
   - oauth2.yaml
   - oauth2-proxy.yaml
+  - redis.yaml
