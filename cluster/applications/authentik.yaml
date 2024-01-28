@@ -50,6 +50,7 @@ spec:
             secretKeyRef:
               name: postgres.acid-authentik.credentials.postgresql.acid.zalan.do
               key: password
+          AUTHENTIK_REDIS__HOST: redis
 
   destination:
     server: https://kubernetes.default.svc
