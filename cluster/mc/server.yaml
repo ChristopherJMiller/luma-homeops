@@ -54,6 +54,8 @@ kind: Service
 metadata:
   name: server
   namespace: mc
+  annotations:
+    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
 spec:
   type: LoadBalancer
   selector:
