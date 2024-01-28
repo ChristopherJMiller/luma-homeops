@@ -16,6 +16,7 @@ spec:
       labels:
         app: sabnzbd
     spec:
+      nodeName: luma
       containers:
         - name: sabnzbd
           image: ghcr.io/hotio/sabnzbd@sha256:4803553d5bad9d72ddee90929dea6b71fc6092bd8aa2ad89a7de7137ec768c61

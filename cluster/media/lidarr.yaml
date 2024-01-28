@@ -16,6 +16,7 @@ spec:
       labels:
         app: lidarr
     spec:
+      nodeName: luma
       securityContext:
         fsGroup: 1000
       containers:
