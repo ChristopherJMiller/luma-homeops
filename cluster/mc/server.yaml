@@ -39,6 +39,9 @@ spec:
               value: 'true'
             - name: MEMORY
               value: 8G
+          envFrom:
+            - secretRef:
+                name: rcon-secret
       volumes:
         - name: data
           hostPath:

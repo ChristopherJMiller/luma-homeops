@@ -4,3 +4,4 @@ kind: Kustomization
 namespace: mc
 resources:
   - server.yaml
+  - rcon-secret.yaml
