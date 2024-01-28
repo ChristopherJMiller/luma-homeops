@@ -5,3 +5,4 @@ namespace: mc
 resources:
   - server.yaml
   - rcon-secret.yaml
+  - ingress.yaml

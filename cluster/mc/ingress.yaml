@@ -1,0 +1,43 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mc
+  namespace: mc
+  annotations:
+    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
+    kubernetes.io/ingress.class: nginx
+spec:
+  tls:
+    - hosts:
+        - mc.luma.chrismiller.xyz
+      secretName: mc-luma-tls
+  rules:
+    - host: mc.luma.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bluemap
+                port:
+                  number: 8100
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mc-luma-tls
+  namespace: mc
+spec:
+  secretName: mc-luma-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: mc.luma.chrismiller.xyz
+  dnsNames:
+    - mc.luma.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
