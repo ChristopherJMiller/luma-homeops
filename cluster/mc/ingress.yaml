@@ -10,10 +10,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - map.mc.luma.chrismiller.xyz
-      secretName: mc-luma-tls
+        - bluemap.luma.chrismiller.xyz
+      secretName: bluemap-tls
   rules:
-    - host: map.mc.luma.chrismiller.xyz
+    - host: bluemap.chrismiller.xyz
       http:
         paths:
           - path: /
@@ -27,16 +27,16 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: mc-luma-tls
+  name: bluemap-tls
   namespace: mc
 spec:
-  secretName: mc-luma-tls
+  secretName: bluemap-tls
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  commonName: map.mc.luma.chrismiller.xyz
+  commonName: bluemap.luma.chrismiller.xyz
   dnsNames:
-    - map.mc.luma.chrismiller.xyz
+    - bluemap.luma.chrismiller.xyz
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA
