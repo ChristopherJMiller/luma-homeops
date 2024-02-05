@@ -1,0 +1,128 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mylar3
+  namespace: media
+  labels:
+    app: mylar3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mylar3
+  template:
+    metadata:
+      labels:
+        app: mylar3
+    spec:
+      nodeName: luma
+      securityContext:
+        fsGroup: 1000
+      containers:
+        - name: mylar3
+          image: lscr.io/linuxserver/mylar3:latest
+          ports:
+            - containerPort: 8090
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: downloads
+              mountPath: /downloads
+            - name: media
+              mountPath: /comic
+          env:
+            - name: PUID
+              value: '1000'
+            - name: GID
+              value: '1000'
+            - name: UMASK
+              value: '002'
+            - name: TZ
+              value: Etc/UTC
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8090
+            initialDelaySeconds: 15
+            periodSeconds: 5
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: mylar3-config
+        - name: downloads
+          persistentVolumeClaim:
+            claimName: downloads
+        - name: media
+          persistentVolumeClaim:
+            claimName: media
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mylar3-config
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block-ssd
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mylar3
+  namespace: media
+spec:
+  selector:
+    app: mylar3
+  ports:
+    - protocol: TCP
+      port: 8090
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mylar3
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/auth-url: https://id.luma.chrismiller.xyz/oauth2/auth
+    nginx.ingress.kubernetes.io/auth-signin: https://id.luma.chrismiller.xyz/oauth2/start?rd=$scheme://$host$escaped_request_uri
+spec:
+  tls:
+    - hosts:
+        - comics.luma.chrismiller.xyz
+      secretName: comics-luma-tls
+  rules:
+    - host: comics.luma.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mylar3
+                port:
+                  number: 8090
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: comics-luma-tls
+  namespace: media
+spec:
+  secretName: comics-luma-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: comics.luma.chrismiller.xyz
+  dnsNames:
+    - comics.luma.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
