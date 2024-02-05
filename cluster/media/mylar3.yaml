@@ -35,7 +35,7 @@ spec:
           env:
             - name: PUID
               value: '1000'
-            - name: GID
+            - name: PGID
               value: '1000'
             - name: UMASK
               value: '002'
