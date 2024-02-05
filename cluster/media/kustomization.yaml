@@ -11,3 +11,4 @@ resources:
   - lidarr.yaml
   - sabnzbd.yaml
   - music.yaml
+  - mylar3.yaml
