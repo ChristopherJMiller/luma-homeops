@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: cloudflareddns
-          image: ghcr.io/hotio/cloudflareddns@sha256:28f79fa31c4686cbbc4ec138e88823ce4faf82acac649107ad60fe6bc07bbbfe
+          image: ghcr.io/hotio/cloudflareddns@sha256:1a44108cfdab6c85c22aea65b9eb24d995cf5737e5ea1e9053dbe89744609e7a
           envFrom:
             - configMapRef:
                 name: cloudflareddns-config
