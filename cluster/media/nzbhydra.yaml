@@ -19,7 +19,7 @@ spec:
       nodeName: luma
       containers:
         - name: nzbhydra
-          image: ghcr.io/hotio/nzbhydra2@sha256:220af9e8282d0b4bc7f7c2ed51bf188d9aabb4d077df55dd5a1f1151477287c8
+          image: ghcr.io/hotio/nzbhydra2@sha256:9efc4b5843d4671e8b3293654c902fa7477b5121f182155652363a69f5c6e261
           ports:
             - containerPort: 5076
           volumeMounts:
