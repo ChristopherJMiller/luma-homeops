@@ -19,7 +19,7 @@ spec:
       nodeName: luma
       containers:
         - name: sabnzbd
-          image: ghcr.io/hotio/sabnzbd@sha256:9bb4a49ece09303468ce3f60d88e77632a4f2398073e80fb9dce8ce382449d7f
+          image: ghcr.io/hotio/sabnzbd@sha256:75b089fd8c5294b39fdd58876c44d7cceb477f3e2bb325d567665646d367fb1e
           ports:
             - containerPort: 8080
           volumeMounts:
