@@ -21,7 +21,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: jellyfin
-          image: ghcr.io/hotio/jellyfin@sha256:3b1e8b18f3f0b3410860eb99009603024c5ed2013175387f9eb3e4aad0cf982e
+          image: ghcr.io/hotio/jellyfin@sha256:0792adf1bf9d062d57c4f4faee7662054e55a168ad4210a3e6bd969b68bf68ab
           ports:
             - containerPort: 8096
           volumeMounts:
