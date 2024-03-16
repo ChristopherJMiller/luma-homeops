@@ -21,7 +21,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: music
-          image: docker.io/epoupon/lms:3.50.1@sha256:87c4167634fd6de519cbc4e42ddc77da47f4e2730290139e68b95bc59d42a056
+          image: docker.io/epoupon/lms:3.51.0@sha256:27265c6948f88615481805be96e7e3d391e5d7f93c39e804f5e784def5e57f0d
           ports:
             - containerPort: 5082
           volumeMounts:
