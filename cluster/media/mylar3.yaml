@@ -21,7 +21,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: mylar3
-          image: lscr.io/linuxserver/mylar3:latest
+          image: lscr.io/linuxserver/mylar3:latest@sha256:04a2a43f829e615bd15e5eecf2418b7a6606da061cb7149f66e7b571a1870dd2
           ports:
             - containerPort: 8090
           volumeMounts:

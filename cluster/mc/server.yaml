@@ -19,7 +19,7 @@ spec:
       nodeName: luma
       containers:
         - name: server
-          image: docker.io/itzg/minecraft-server
+          image: docker.io/itzg/minecraft-server@sha256:f5b00d8caf9c78bb697a9cc0cd5615e5dfc061d9d395d62a15776990c4a8ebfb
           ports:
             - containerPort: 25565
             - containerPort: 25575
