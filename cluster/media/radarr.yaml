@@ -21,7 +21,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: radarr
-          image: ghcr.io/hotio/radarr
+          image: ghcr.io/hotio/radarr@sha256:56eb3ee8cadfb64e2af427ce70f712189fecfea563eaebfa3905e8f41e84c96d
           ports:
             - containerPort: 7878
           volumeMounts:
