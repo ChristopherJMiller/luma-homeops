@@ -85,7 +85,7 @@ spec:
   storageClassName: rook-ceph-fs-hdd
   resources:
     requests:
-      storage: 3000Gi
+      storage: 4000Gi
 ---
 apiVersion: v1
 kind: Service
