@@ -18,7 +18,7 @@ spec:
       nodeName: yoshi
       containers:
         - name: mediamtx
-          image: docker.io/bluenviron/mediamtx@sha256:93c6fe3dcf5c2f57aa3654b7ec1bf9eec78c20ef612626dbb7d5a121eb649755
+          image: docker.io/bluenviron/mediamtx@sha256:de0970c2838e17ee5486636fa92326b0b076f78dc761465297329b0d61650019
           env:
             - name: MTX_PROTOCOLS
               value: tcp
