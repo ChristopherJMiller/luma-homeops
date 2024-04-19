@@ -21,7 +21,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: readarr
-          image: ghcr.io/hotio/readarr@sha256:e338ed25bbf17c13b7b40ed7cfd0c080a219d04ad4e925fa600181d77917e450
+          image: ghcr.io/hotio/readarr@sha256:943ee5ce4c28ab3ea1e856c46d17cd0c66c646305df11c855cf9414ddd57d13b
           ports:
             - containerPort: 8787
           volumeMounts:
