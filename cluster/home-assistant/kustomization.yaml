@@ -7,6 +7,6 @@ resources:
   - code-server-config.yaml
   - code-server.yaml
   - psql.yaml
-  - mediamtx.yaml
-  - ffmpeg-config.yaml
-  - ffmpeg.yaml
+  #- mediamtx.yaml
+  #- ffmpeg-config.yaml
+  #- ffmpeg.yaml
