@@ -7,5 +7,6 @@ pkgs.mkShell {
     pre-commit
     kubeseal
     k0sctl
+    nodejs_20
   ];
 }
