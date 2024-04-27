@@ -15,6 +15,7 @@ spec:
       values: |
         nextcloud:
           host: cloud.luma.chrismiller.xyz
+          update: 1
           existingSecret:
             enabled: true
             secretName: nextcloud-creds
