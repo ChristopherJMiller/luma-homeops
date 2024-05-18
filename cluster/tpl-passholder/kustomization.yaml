@@ -4,4 +4,6 @@ kind: Kustomization
 namespace: tpl-passholder
 resources:
   - tpl-secrets.yaml
-  - github.com/ChristopherJMiller/tpl-passholder/manifests
+  - redis.yaml
+  - sync.yaml
+  - telegram.yaml

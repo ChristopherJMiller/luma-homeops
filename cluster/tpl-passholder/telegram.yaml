@@ -1,0 +1,42 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telegram
+  labels:
+    app: telegram
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: telegram
+  template:
+    metadata:
+      labels:
+        app: telegram
+    spec:
+      securityContext:
+        runAsUser: 101
+        runAsGroup: 101
+      containers:
+        - name: telegram
+          image: ghcr.io/christopherjmiller/tpl-passholder
+          resources:
+            requests:
+              memory: 100Mi
+              cpu: 100m
+            limits:
+              memory: 100Mi
+              cpu: 100m
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsUser: 101
+            runAsGroup: 101
+          envFrom:
+            - secretRef:
+                name: tpl-secrets
