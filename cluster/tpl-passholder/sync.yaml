@@ -7,9 +7,9 @@ spec:
   schedule: "*/15 * * * *"
   jobTemplate:
     spec:
-      restartPolicy: Never
       template:
         spec:
+          restartPolicy: Never
           securityContext:
             runAsUser: 101
             runAsGroup: 101
