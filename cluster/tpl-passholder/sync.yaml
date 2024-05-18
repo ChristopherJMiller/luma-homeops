@@ -15,7 +15,7 @@ spec:
             runAsGroup: 101
           containers:
             - name: telegram
-              image: ghcr.io/christopherjmiller/tpl-passholder:main@sha256:91579cc54637296e769d2132eee49351501f5ad037f694b85a9fe5613ec137d6
+              image: ghcr.io/christopherjmiller/tpl-passholder:main@sha256:c48be53c16e6af6656fceb1aa82669cf56c38198e82fb29fce348008d023f14b
               resources:
                 requests:
                   memory: 100Mi
