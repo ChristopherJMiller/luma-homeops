@@ -7,3 +7,4 @@ resources:
   - redis.yaml
   - sync.yaml
   - telegram.yaml
+  - redis-config.yaml
