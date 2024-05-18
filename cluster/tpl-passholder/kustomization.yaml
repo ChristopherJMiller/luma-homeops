@@ -4,4 +4,4 @@ kind: Kustomization
 namespace: tpl-passholder
 resources:
   - tpl-secrets.yaml
-  - https://raw.githubusercontent.com/ChristopherJMiller/tpl-passholder/main/manifests
+  - github.com/ChristopherJMiller/tpl-passholder/manifests
