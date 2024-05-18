@@ -4,7 +4,7 @@ kind: CronJob
 metadata:
   name: attraction-sync
 spec:
-  schedule: '*/15 * * * *'
+  schedule: "*/15 * * * *"
   jobTemplate:
     spec:
       template:
@@ -14,7 +14,7 @@ spec:
             runAsGroup: 101
           containers:
             - name: telegram
-              image: ghcr.io/christopherjmiller/tpl-passholder
+              image: ghcr.io/christopherjmiller/tpl-passholder:main
               resources:
                 requests:
                   memory: 100Mi
