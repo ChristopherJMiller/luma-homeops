@@ -13,6 +13,7 @@ resources:
   - home-assistant.yaml
   - kube-prometheus-stack.yaml
   - recipes.yaml
+  - firefly.yaml
   - id.yaml
   - mc.yaml
   - influxdb.yaml

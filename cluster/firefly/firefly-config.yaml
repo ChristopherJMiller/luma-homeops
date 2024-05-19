@@ -1,0 +1,11 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: firefly-config
+data:
+  DB_HOST: mariadb
+  DB_PORT: "3306"
+  DB_CONNECTION: mysql
+  DB_DATABASE: firefly
+  DB_USERNAME: firefly

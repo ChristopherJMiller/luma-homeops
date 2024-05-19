@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: app-key
+  annotations:
+    secret-generator.v1.mittwald.de/autogenerate: APP_KEY
+    secret-generator.v1.mittwald.de/length: 32
+type: Opaque
+stringData: {}

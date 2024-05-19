@@ -1,0 +1,63 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firefly
+  labels:
+    app: firefly
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: firefly
+  template:
+    metadata:
+      labels:
+        app: firefly
+    spec:
+      containers:
+        - name: firefly
+          image: docker.io/fireflyiii/core:latest
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: fileUpload
+              mountPath: /var/www/html/storage/upload
+          envFrom:
+            - secretRef:
+                name: app-key
+            - configMapRef:
+                name: firefly-config
+          env:
+            - name: DB_PASSWORD
+              valueFrom:
+                secretRef:
+                  name: mariadb
+                  key: db-password
+      volumes:
+        - name: fileUpload
+          persistentVolumeClaim:
+            claimName: firefly-uploads
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: firefly-uploads
+spec:
+  storageClassName: rook-ceph-fs-hdd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 25Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: firefly
+spec:
+  selector:
+    app: firefly
+  ports:
+    - protocol: TCP
+      port: 80
