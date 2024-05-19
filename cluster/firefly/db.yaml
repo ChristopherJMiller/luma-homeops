@@ -73,3 +73,20 @@ spec:
   host: "%"
   requeueInterval: 30s
   retryInterval: 5s
+---
+apiVersion: k8s.mariadb.com/v1alpha1
+kind: Grant
+metadata:
+  name: grant-root
+spec:
+  mariaDbRef:
+    name: mariadb
+  privileges:
+    - "ALL PRIVILEGES"
+  database: "*"
+  table: "*"
+  username: root
+  grantOption: true
+  host: "%"
+  requeueInterval: 30s
+  retryInterval: 5s
