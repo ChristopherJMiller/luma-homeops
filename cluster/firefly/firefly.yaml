@@ -32,7 +32,7 @@ spec:
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: mariadb
+                  name: mariadb-password
                   key: password
       volumes:
         - name: file-upload

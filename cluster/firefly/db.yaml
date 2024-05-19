@@ -9,7 +9,7 @@ spec:
     generate: true
   username: mariadb
   passwordSecretKeyRef:
-    name: mariadb
+    name: mariadb-password
     key: password
     generate: true
   database: mariadb
@@ -50,7 +50,7 @@ spec:
   mariaDbRef:
     name: mariadb
   passwordSecretKeyRef:
-    name: mariadb
+    name: mariadb-password
     key: password
   # This field is immutable and defaults to 10
   maxUserConnections: 10
