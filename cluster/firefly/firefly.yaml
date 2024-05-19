@@ -31,7 +31,7 @@ spec:
           env:
             - name: DB_PASSWORD
               valueFrom:
-                secretRef:
+                secretKeyRef:
                   name: mariadb
                   key: password
       volumes:
