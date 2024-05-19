@@ -9,3 +9,4 @@ data:
   DB_CONNECTION: pgsql
   DB_DATABASE: postgres
   DB_USERNAME: postgres
+  AUTHENTICATION_GUARD: remote_user_guard

@@ -1,0 +1,43 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: firefly
+  annotations:
+    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/auth-url: https://id.luma.chrismiller.xyz/oauth2/auth
+    nginx.ingress.kubernetes.io/auth-signin: https://id.luma.chrismiller.xyz/oauth2/start?rd=$scheme://$host$escaped_request_uri
+spec:
+  tls:
+    - hosts:
+        - firefly.luma.chrismiller.xyz
+      secretName: firefly-luma-tls
+  rules:
+    - host: firefly.luma.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: firefly
+                port:
+                  number: 80
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: firefly-luma-tls
+spec:
+  secretName: firefly-luma-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: firefly.luma.chrismiller.xyz
+  dnsNames:
+    - firefly.luma.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384

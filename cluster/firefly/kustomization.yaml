@@ -7,3 +7,4 @@ resources:
   - firefly.yaml
   - firefly-config.yaml
   - psql.yaml
+  - ingress.yaml
