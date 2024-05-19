@@ -13,7 +13,7 @@ spec:
     key: password
     generate: false
   database: mariadb
-  image: mariadb:10.11.7
+  image: mariadb:11.3.2@sha256:f0a6faee9d0e55492f238d1d11ff13d77616ea12d8c38bedf090da2ee05532be
   imagePullPolicy: IfNotPresent
   port: 3306
   storage:
