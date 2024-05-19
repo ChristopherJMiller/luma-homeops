@@ -18,6 +18,7 @@ spec:
   port: 3306
   storage:
     size: 20Gi
+    storageClassName: rook-ceph-fs-ssd
   myCnf: |
     [mariadb]
     bind-address=*
