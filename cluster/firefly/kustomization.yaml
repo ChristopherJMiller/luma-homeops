@@ -7,3 +7,4 @@ resources:
   - app-key.yaml
   - firefly.yaml
   - firefly-config.yaml
+  - mariadb-passowrd.yaml

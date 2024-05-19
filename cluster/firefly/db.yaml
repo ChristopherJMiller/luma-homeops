@@ -11,7 +11,7 @@ spec:
   passwordSecretKeyRef:
     name: mariadb-password
     key: password
-    generate: true
+    generate: false
   database: mariadb
   image: mariadb:10.11.7
   imagePullPolicy: IfNotPresent
