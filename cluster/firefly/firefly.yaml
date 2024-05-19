@@ -30,10 +30,10 @@ spec:
                 name: firefly-config
           env:
             - name: DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: mariadb-password
-                  key: password
+                valueFrom:
+                  secretKeyRef:
+                    name: postgres.acid-firefly.credentials.postgresql.acid.zalan.do
+                    key: password
       volumes:
         - name: file-upload
           persistentVolumeClaim:
