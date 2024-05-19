@@ -21,7 +21,7 @@ spec:
           ports:
             - containerPort: 80
           volumeMounts:
-            - name: fileUpload
+            - name: file-upload
               mountPath: /var/www/html/storage/upload
           envFrom:
             - secretRef:
@@ -35,7 +35,7 @@ spec:
                   name: mariadb
                   key: password
       volumes:
-        - name: fileUpload
+        - name: file-upload
           persistentVolumeClaim:
             claimName: firefly-uploads
 ---
