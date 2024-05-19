@@ -33,7 +33,7 @@ spec:
               valueFrom:
                 secretRef:
                   name: mariadb
-                  key: db-password
+                  key: password
       volumes:
         - name: fileUpload
           persistentVolumeClaim:
