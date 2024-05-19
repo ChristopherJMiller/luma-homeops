@@ -19,6 +19,7 @@ resources:
   - dashboard-ingresses.yaml
   - metallb.yaml
   - metallb-system.yaml
+  - mariadb-operator.yaml
   - media.yaml
   - postgres-operator.yaml
   - rook.yaml
