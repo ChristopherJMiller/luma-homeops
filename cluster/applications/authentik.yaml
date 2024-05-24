@@ -18,8 +18,6 @@ spec:
             enabled: false
         ingress:
           annotations:
-            nginx.ingress.kubernetes.io/enable-cors: "true"
-            nginx.ingress.kubernetes.io/cors-allow-origin: https://*.luma.chrismiller.xyz
             external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
             kubernetes.io/ingress.class: nginx
           ingressClassName: nginx

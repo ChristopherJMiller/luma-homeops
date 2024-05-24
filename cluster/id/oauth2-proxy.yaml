@@ -36,6 +36,8 @@ spec:
               value: 'true'
             - name: OAUTH2_PROXY_SET_XAUTHREQUEST
               value: 'true'
+            - name: OAUTH2_PROXY_SKIP_AUTH_PREFLIGHT
+              value: 'true'
             - name: OAUTH2_PROXY_CLIENT_ID
               valueFrom:
                 secretKeyRef:
