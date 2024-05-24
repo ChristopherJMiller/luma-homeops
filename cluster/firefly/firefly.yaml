@@ -21,7 +21,7 @@ spec:
           lifecycle:
             postStart:
               exec:
-                command: [/bin/sh, -c, echo LimitRequestFieldSize 16384 >> /etc/apache2/apache2.conf]
+                command: [/bin/sh, -c, echo LimitRequestFieldSize 50000 >> /etc/apache2/apache2.conf]
           ports:
             - containerPort: 8080
           volumeMounts:
