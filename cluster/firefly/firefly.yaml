@@ -19,7 +19,7 @@ spec:
         - name: firefly
           image: docker.io/fireflyiii/core:latest
           ports:
-            - containerPort: 80
+            - containerPort: 8080
           volumeMounts:
             - name: file-upload
               mountPath: /var/www/html/storage/upload
@@ -60,4 +60,4 @@ spec:
     app: firefly
   ports:
     - protocol: TCP
-      port: 80
+      port: 8080
