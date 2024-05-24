@@ -18,14 +18,6 @@ spec:
       containers:
         - name: firefly
           image: docker.io/fireflyiii/core:latest
-          lifecycle:
-            postStart:
-              exec:
-                command:
-                  - /bin/sh,
-                  - -c
-                  - echo <IfModule mod_rewrite.c>\n\tRewriteEngine On\n\tRewriteCond %{HTTPS} off\n\tRewriteRule (.*) https://%{HTTP_HOST}%{REQUEST_URI}
-                    [R,L]\n</IfModule> >> /var/www/html/.htaccess
           ports:
             - containerPort: 8080
           volumeMounts:
