@@ -5,6 +5,6 @@ namespace: tpl-passholder
 resources:
   - tpl-secrets.yaml
   - redis.yaml
-  #- sync.yaml
+  - sync.yaml
   - telegram.yaml
   - redis-config.yaml
