@@ -11,6 +11,7 @@ metadata:
     nginx.ingress.kubernetes.io/auth-url: https://id.luma.chrismiller.xyz/oauth2/auth
     nginx.ingress.kubernetes.io/auth-signin: https://id.luma.chrismiller.xyz/oauth2/start?rd=$scheme://$host$escaped_request_uri
     nginx.ingress.kubernetes.io/configuration-snippet: |
+      fastcgi_buffering off;
       more_set_headers "Content-Security-Policy: upgrade-insecure-requests";
 
       auth_request_set $user   $upstream_http_x_auth_request_user;
