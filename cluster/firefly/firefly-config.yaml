@@ -5,8 +5,10 @@ metadata:
   name: firefly-config
 data:
   DB_HOST: psql
-  DB_PORT: "5432"
+  DB_PORT: '5432'
   DB_CONNECTION: pgsql
   DB_DATABASE: postgres
   DB_USERNAME: postgres
   AUTHENTICATION_GUARD: remote_user_guard
+  AUTHENTICATION_GUARD_HEADER: X-User
+  AUTHENTICATION_GUARD_EMAIL: X-Email
