@@ -22,7 +22,7 @@ spec:
             use-geoip2: 'false'
             enable-ocsp: 'true'
             allow-snippet-annotations: 'true'
-            proxy-buffer-size: '16k'
+            proxy-buffer-size: '1M'
   destination:
     server: https://kubernetes.default.svc
     namespace: ingress-nginx
