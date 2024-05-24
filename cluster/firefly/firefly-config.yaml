@@ -13,4 +13,3 @@ data:
   AUTHENTICATION_GUARD_HEADER: X-User
   AUTHENTICATION_GUARD_EMAIL: X-Email
   FIREFLY_III_LAYOUT: v2
-  APP_URL: https://firefly.luma.chrismiller.xyz
