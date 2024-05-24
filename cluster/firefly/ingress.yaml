@@ -11,7 +11,6 @@ metadata:
     nginx.ingress.kubernetes.io/configuration-snippet: |
       fastcgi_buffering off;
       more_set_headers "Content-Security-Policy: upgrade-insecure-requests";
-      proxy_cookie_path / "/; secure; SameSite=none";
 
       auth_request_set $user   $upstream_http_x_auth_request_user;
       auth_request_set $email  $upstream_http_x_auth_request_email;
