@@ -21,7 +21,14 @@ spec:
           lifecycle:
             postStart:
               exec:
-                command: [/bin/sh, -c, echo LimitRequestFieldSize 50000 >> /etc/apache2/apache2.conf]
+                command:
+                  - /bin/sh,
+                  - -c,
+                  - echo <IfModule mod_rewrite.c> >> /var/www/html/.htaccess &&
+                  - echo \tRewriteEngine On >> /var/www/html/.htaccess &&
+                  - echo \tRewriteCond %{HTTPS} off >> /var/www/html/.htaccess &&
+                  - echo \tRewriteRule (.*) https://%{HTTP_HOST}%{REQUEST_URI} [R,L] >> /var/www/html/.htaccess &&
+                  - echo </IfModule>
           ports:
             - containerPort: 8080
           volumeMounts:
