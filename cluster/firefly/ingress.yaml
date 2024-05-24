@@ -16,15 +16,8 @@ metadata:
       auth_request_set $email  $upstream_http_x_auth_request_email;
       proxy_set_header X-User $user;
       proxy_set_header X-Email $email;
-      proxy_set_header Referrer-Policy: same-origin;
-
       proxy_set_header X-Forwarded-Proto $scheme;
-      proxy_set_header X-Forwarded-Host $host;
-      proxy_set_header X-Forwarded-Server $host;
-      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-      client_max_body_size 64M;
-      proxy_read_timeout 300s;
-      proxy_set_header Host $host;
+
 spec:
   tls:
     - hosts:
