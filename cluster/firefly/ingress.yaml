@@ -16,6 +16,7 @@ metadata:
       proxy_set_header X-User $user;
       proxy_set_header X-Email $email;
 
+      proxy_set_header X-Forwarded-Proto $scheme;
 spec:
   tls:
     - hosts:
