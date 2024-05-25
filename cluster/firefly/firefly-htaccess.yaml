@@ -7,4 +7,4 @@ data:
   htaccess: |-
     Options All -Indexes
     Deny from all
-    RequestHeader set "X-Forwarded-Proto" expr=https
+    RequestHeader set X-Forwarded-Proto "https"
