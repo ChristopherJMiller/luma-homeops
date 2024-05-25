@@ -7,4 +7,3 @@ data:
   htaccess: |-
     Options All -Indexes
     Deny from all
-    LimitRequestFieldSize 16384
