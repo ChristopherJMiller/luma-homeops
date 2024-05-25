@@ -30,6 +30,8 @@ spec:
               env:
                 - name: MODE
                   value: REFRESH
+                - name: NOTIFY_URL
+                  value: http://telegram:3000
               envFrom:
                 - secretRef:
                     name: tpl-secrets

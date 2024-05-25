@@ -26,6 +26,8 @@ spec:
       containers:
         - name: telegram
           image: ghcr.io/christopherjmiller/tpl-passholder:main@sha256:20018e52eb814e24782e94ba2c7d712f0e8421ab44f61fd3d1da3c3975296593
+          ports:
+            - containerPort: 3000
           resources:
             requests:
               memory: 100Mi
@@ -42,3 +44,14 @@ spec:
                 name: tpl-secrets
             - configMapRef:
                 name: redis-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: telegram
+spec:
+  selector:
+    app: telegram
+  ports:
+    - protocol: TCP
+      port: 3000
