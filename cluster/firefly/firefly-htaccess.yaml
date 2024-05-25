@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: firefly-htaccess
+data:
+  htaccess: |-
+    Options All -Indexes
+    Deny from all
+    LimitRequestFieldSize 16384

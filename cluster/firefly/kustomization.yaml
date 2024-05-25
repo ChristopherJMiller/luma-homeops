@@ -6,5 +6,6 @@ resources:
   - app-key.yaml
   - firefly.yaml
   - firefly-config.yaml
+  - firefly-htaccess.yaml
   - psql.yaml
   - ingress.yaml

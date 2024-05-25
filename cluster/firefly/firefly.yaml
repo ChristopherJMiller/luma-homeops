@@ -23,6 +23,9 @@ spec:
           volumeMounts:
             - name: file-upload
               mountPath: /var/www/html/storage/upload
+            - name: htaccess
+              mountPath: /var/www/html/.htaccess
+              subPath: htaccess
           envFrom:
             - secretRef:
                 name: app-key
@@ -38,6 +41,12 @@ spec:
         - name: file-upload
           persistentVolumeClaim:
             claimName: firefly-uploads
+        - name: htaccess
+          configMap:
+            name: firefly-htaccess
+            items:
+              - key: htaccess
+                path: htaccess
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
