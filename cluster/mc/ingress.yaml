@@ -13,7 +13,7 @@ spec:
         - bluemap.luma.chrismiller.xyz
       secretName: bluemap-tls
   rules:
-    - host: bluemap.chrismiller.xyz
+    - host: bluemap.luma.chrismiller.xyz
       http:
         paths:
           - path: /
