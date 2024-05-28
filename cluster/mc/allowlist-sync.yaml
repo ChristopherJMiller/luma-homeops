@@ -32,9 +32,9 @@ spec:
                   value: rcon
                 - name: RCON_PASS
                   valueFrom:
-                    secretRef:
-                      name: oidc-secret
+                    secretKeyRef:
+                      name: rcon-password
                       key: RCON_PASSWORD
               envFrom:
                 - secretRef:
-                    name: rcon-password
+                    name: oidc-secret
