@@ -15,7 +15,7 @@ spec:
             runAsGroup: 101
           containers:
             - name: sync
-              image: ghcr.io/realliance/mc-allowlist-sync:main
+              image: ghcr.io/realliance/mc-allowlist-sync:main@sha256:56f8a62c506f57031f570e4d2283246f41ef12d036edc8950aebad91b95fb369
               resources:
                 requests:
                   memory: 100Mi
