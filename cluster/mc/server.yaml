@@ -68,9 +68,8 @@ metadata:
   name: rcon
   namespace: mc
 spec:
-  type: LoadBalancer
   selector:
-    app: rcon
+    app: server
   ports:
     - protocol: TCP
       port: 25575
