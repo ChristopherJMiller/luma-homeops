@@ -30,8 +30,11 @@ spec:
               env:
                 - name: RCON_ADDR
                   value: rcon
+                - name: RCON_PASS
+                  valueFrom:
+                    secretRef:
+                      name: oidc-secret
+                      key: RCON_PASSWORD
               envFrom:
                 - secretRef:
                     name: rcon-password
-                - secretRef:
-                    name: oidc-secret
