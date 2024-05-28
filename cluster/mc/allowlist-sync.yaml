@@ -29,7 +29,7 @@ spec:
                 runAsGroup: 101
               env:
                 - name: RCON_ADDR
-                  value: rcon
+                  value: rcon:25575
                 - name: RCON_PASS
                   valueFrom:
                     secretKeyRef:
