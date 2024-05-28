@@ -1,0 +1,37 @@
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: allowlist-sync
+spec:
+  schedule: 0 0-23 * * *
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsUser: 101
+            runAsGroup: 101
+          containers:
+            - name: sync
+              image: ghcr.io/realliance/mc-allowlist-sync:main
+              resources:
+                requests:
+                  memory: 100Mi
+                  cpu: 100m
+                limits:
+                  memory: 100Mi
+                  cpu: 100m
+              securityContext:
+                readOnlyRootFilesystem: true
+                runAsUser: 101
+                runAsGroup: 101
+              env:
+                - name: RCON_ADDR
+                  value: rcon
+              envFrom:
+                - secretRef:
+                    name: rcon-password
+                - secretRef:
+                    name: oidc-secret

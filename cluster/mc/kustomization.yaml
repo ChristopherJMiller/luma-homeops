@@ -6,3 +6,5 @@ resources:
   - server.yaml
   - rcon-secret.yaml
   - ingress.yaml
+  - allowlist-sync.yaml
+  - oidc-secret.yaml
