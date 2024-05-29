@@ -1,0 +1,74 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pack-serve
+  labels:
+    app: pack-serve
+    service: web
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: pack-serve
+  template:
+    metadata:
+      labels:
+        app: pack-serve
+        service: web
+    spec:
+      securityContext:
+        runAsUser: 101
+        runAsGroup: 101
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+        - name: cache
+          emptyDir:
+            medium: Memory
+      containers:
+        - name: pack-serve
+          image: ghcr.io/realliance/mc-modpack-serve:0.2.5
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsUser: 101
+            runAsGroup: 101
+          volumeMounts:
+            - mountPath: /tmp
+              name: tmp
+            - mountPath: /var/cache/nginx
+              name: cache
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: [/usr/sbin/nginx, -s, quit]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pack-serve
+  labels:
+    service: web
+spec:
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: pack-serve
