@@ -41,14 +41,39 @@ spec:
             - name: MEMORY
               value: 16G
             - name: MAX_WORLD_SIZE
-              value: "10000"
+              value: '10000'
             - name: SEED
-              value: "8467872173225768382"
+              value: '8467872173225768382'
             - name: ALLOW_FLIGHT
-              value: "TRUE"
+              value: 'TRUE'
           envFrom:
             - secretRef:
                 name: rcon-password
+        - name: exporter
+          image: ghcr.io/dirien/minecraft-exporter
+          ports:
+            - containerPort: 9150
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          env:
+            - name: WEB_TELEMETRY_PATH
+              value: /metrics
+            - name: WEB_LISTEN_ADDRESS
+              value: :9150
+            - name: MC_WORLD
+              value: /data/world
+            - name: MC_RCON_ADDRESS
+              value: :25575
+            - name: MC_RCON_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rcon-password
+                  key: RCON_PASSWORD
+            - name: MC_NAME_SOURCE
+              value: mojang
+            - name: MC_MOD_SERVER_STATS
+              value: papermc
       volumes:
         - name: data
           hostPath:
