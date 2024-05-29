@@ -74,6 +74,8 @@ spec:
               value: mojang
             - name: MC_MOD_SERVER_STATS
               value: papermc
+            - name: WEB_DISABLED_EXPORTER_METRICS
+              value: 'true'
       volumes:
         - name: data
           hostPath:
