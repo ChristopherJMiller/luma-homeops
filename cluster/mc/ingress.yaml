@@ -5,38 +5,38 @@ metadata:
   name: mc
   namespace: mc
   annotations:
-    external-dns.alpha.kubernetes.io/target: luma.chrismiller.xyz
+    external-dns.alpha.kubernetes.io/target: mc.realliance.net
     kubernetes.io/ingress.class: nginx
 spec:
   tls:
     - hosts:
-        - bluemap.luma.chrismiller.xyz
-      secretName: bluemap-tls
+        - map.mc.realliance.net
+      secretName: map-rea-tls
   rules:
-    - host: bluemap.luma.chrismiller.xyz
+    - host: map.mc.realliance.net
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: bluemap
+                name: map
                 port:
                   number: 8100
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: bluemap-tls
+  name: map-rea-tls
   namespace: mc
 spec:
-  secretName: bluemap-tls
+  secretName: map-rea-tls
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  commonName: bluemap.luma.chrismiller.xyz
+  commonName: map.mc.realliance.net
   dnsNames:
-    - bluemap.luma.chrismiller.xyz
+    - map.mc.realliance.net
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA
