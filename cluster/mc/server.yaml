@@ -31,7 +31,7 @@ spec:
             - name: TYPE
               value: FABRIC
             - name: PACKWIZ_URL
-              value: https://pack.realliance.net/pack.toml
+              value: http://pack-serve/pack.toml
             - name: VERSION
               value: 1.20.1
             - name: FABRIC_LOADER_VERSION
@@ -39,7 +39,13 @@ spec:
             - name: EULA
               value: 'true'
             - name: MEMORY
-              value: 8G
+              value: 16G
+            - name: MAX_WORLD_SIZE
+              value: "10000"
+            - name: SEED
+              value: "8467872173225768382"
+            - name: ALLOW_FLIGHT
+              value: "TRUE"
           envFrom:
             - secretRef:
                 name: rcon-password
