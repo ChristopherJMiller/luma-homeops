@@ -8,3 +8,4 @@ resources:
   - ingress.yaml
   - allowlist-sync.yaml
   - oidc-secret.yaml
+  - pack-serve.yaml
