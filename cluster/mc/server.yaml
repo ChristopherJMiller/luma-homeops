@@ -6,6 +6,10 @@ metadata:
   namespace: mc
   labels:
     app: server
+  annotations:
+    prometheus.io/scrape: 'true'
+    prometheus.io/path: /metrics
+    prometheus.io/port: '9150'
 spec:
   replicas: 1
   selector:
@@ -64,7 +68,7 @@ spec:
             - name: MC_WORLD
               value: /data/world
             - name: MC_RCON_ADDRESS
-              value: :25575
+              value: localhost:25575
             - name: MC_RCON_PASSWORD
               valueFrom:
                 secretKeyRef:
