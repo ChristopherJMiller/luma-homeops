@@ -2,40 +2,41 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: mc-intro
+  name: mc
   namespace: mc
   annotations:
+    external-dns.alpha.kubernetes.io/target: mc.realliance.net
     kubernetes.io/ingress.class: nginx
 spec:
   tls:
     - hosts:
-        - mc.realliance.net
-      secretName: rea-tls
+        - map.mc.realliance.net
+      secretName: map-rea-tls
   rules:
-    - host: mc.realliance.net
+    - host: map.mc.realliance.net
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: intro
+                name: bluemap
                 port:
-                  number: 80
+                  number: 8100
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: rea-tls
+  name: map-rea-tls
   namespace: mc
 spec:
-  secretName: rea-tls
+  secretName: map-rea-tls
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  commonName: mc.realliance.net
+  commonName: map.mc.realliance.net
   dnsNames:
-    - mc.realliance.net
+    - map.mc.realliance.net
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA

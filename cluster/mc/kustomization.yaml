@@ -6,6 +6,8 @@ resources:
   - server.yaml
   - rcon-secret.yaml
   - ingress.yaml
+  - map-ingress.yaml
   - allowlist-sync.yaml
   - oidc-secret.yaml
   - pack-serve.yaml
+  - intro.yaml
