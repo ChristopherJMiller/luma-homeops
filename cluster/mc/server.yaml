@@ -62,6 +62,8 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
+            - name: backup
+              mountPath: /data/backup
           env:
             - name: WEB_TELEMETRY_PATH
               value: /metrics
@@ -87,6 +89,21 @@ spec:
           hostPath:
             path: /static/mc
             type: Directory
+        - name: backup
+          persistentVolumeClaim:
+            claimName: mc-backup
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mc-backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block-hdd
+  resources:
+    requests:
+      storage: 400Gi
 ---
 apiVersion: v1
 kind: Service
