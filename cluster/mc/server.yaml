@@ -23,6 +23,9 @@ spec:
         app: server
     spec:
       nodeName: luma
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
       containers:
         - name: server
           image: docker.io/itzg/minecraft-server@sha256:3db8c0fce807f490436debc29da7173afcc8f8ab0665162d76b96409f036d3bd
