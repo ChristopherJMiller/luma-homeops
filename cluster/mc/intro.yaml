@@ -36,7 +36,6 @@ spec:
             - containerPort: 8080
               protocol: TCP
           securityContext:
-            readOnlyRootFilesystem: true
             runAsUser: 101
             runAsGroup: 101
           volumeMounts:
