@@ -29,7 +29,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: server
-          image: docker.io/itzg/minecraft-server@sha256:6e1d3c0dc96379b7f85a7519873ba6ce60cdc0da82d76434c06e40a726d4720e
+          image: docker.io/itzg/minecraft-server@sha256:a97d83b0ccdf122efe54232741312803390589ebbe6e3d3f203452083b4597b3
           ports:
             - containerPort: 25565
             - containerPort: 25575
