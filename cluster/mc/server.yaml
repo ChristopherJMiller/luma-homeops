@@ -51,7 +51,7 @@ spec:
             - name: EULA
               value: 'true'
             - name: MEMORY
-              value: 12G
+              value: 16G
             - name: MAX_WORLD_SIZE
               value: '10000'
             - name: SEED
