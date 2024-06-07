@@ -58,6 +58,8 @@ spec:
               value: '8467872173225768382'
             - name: ALLOW_FLIGHT
               value: 'TRUE'
+            - name: SPAWN_PROTECTION
+              value: '64'
           envFrom:
             - secretRef:
                 name: rcon-password
