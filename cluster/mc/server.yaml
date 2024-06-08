@@ -6,10 +6,6 @@ metadata:
   namespace: mc
   labels:
     app: server
-  annotations:
-    prometheus.io/scrape: 'true'
-    prometheus.io/path: /metrics
-    prometheus.io/port: '9150'
 spec:
   replicas: 1
   strategy:
@@ -63,33 +59,6 @@ spec:
           envFrom:
             - secretRef:
                 name: rcon-password
-        - name: exporter
-          image: ghcr.io/dirien/minecraft-exporter
-          ports:
-            - containerPort: 9150
-          volumeMounts:
-            - name: data
-              mountPath: /data
-          env:
-            - name: WEB_TELEMETRY_PATH
-              value: /metrics
-            - name: WEB_LISTEN_ADDRESS
-              value: :9150
-            - name: MC_WORLD
-              value: /data/world
-            - name: MC_RCON_ADDRESS
-              value: localhost:25575
-            - name: MC_RCON_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: rcon-password
-                  key: RCON_PASSWORD
-            - name: MC_NAME_SOURCE
-              value: mojang
-            - name: MC_MOD_SERVER_STATS
-              value: papermc
-            - name: WEB_DISABLED_EXPORTER_METRICS
-              value: 'true'
       volumes:
         - name: data
           hostPath:
