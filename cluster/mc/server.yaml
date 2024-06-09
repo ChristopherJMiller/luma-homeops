@@ -26,6 +26,13 @@ spec:
       containers:
         - name: server
           image: docker.io/itzg/minecraft-server@sha256:d8d39dfd7c152f197525f68384624fb6ed2c9609bcd6a958689590d69de81738
+          resources:
+            requests:
+              memory: "20.5Gi"
+              cpu: 8
+            limits:
+              memory: "22Gi"
+              cpu: 12
           ports:
             - containerPort: 25565
             - containerPort: 25575
