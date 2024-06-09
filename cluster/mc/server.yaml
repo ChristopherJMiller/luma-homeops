@@ -28,10 +28,10 @@ spec:
           image: docker.io/itzg/minecraft-server@sha256:d8d39dfd7c152f197525f68384624fb6ed2c9609bcd6a958689590d69de81738
           resources:
             requests:
-              memory: "20.5Gi"
+              memory: 20.5Gi
               cpu: 8
             limits:
-              memory: "22Gi"
+              memory: 22Gi
               cpu: 12
           ports:
             - containerPort: 25565
@@ -40,8 +40,10 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /data
-            - name: backup
+            - name: static-backup
               mountPath: /data/backup
+            - name: backup
+              mountPath: /data/remote-backup
           env:
             - name: TYPE
               value: FABRIC
@@ -70,6 +72,10 @@ spec:
         - name: data
           hostPath:
             path: /static/mc
+            type: Directory
+        - name: static-backup
+          hostPath:
+            path: /static/backup
             type: Directory
         - name: backup
           persistentVolumeClaim:
