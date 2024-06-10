@@ -80,6 +80,7 @@ metadata:
   name: mounting-box
   namespace: mc
 spec:
+  nodeName: luma
   volumes:
     - name: static-backup
       hostPath:
