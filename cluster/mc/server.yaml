@@ -86,16 +86,16 @@ spec:
       hostPath:
         path: /static/backup
         type: Directory
-    - name: backup
-      persistentVolumeClaim:
-        claimName: mc-backup
+    #- name: backup
+    #  persistentVolumeClaim:
+    #    claimName: mc-backup
   containers:
     - image: busybox
       volumeMounts:
         - name: static-backup
           mountPath: /data/backup
-        - name: backup
-          mountPath: /data/remote-backup
+        #- name: backup
+        #  mountPath: /data/remote-backup
       command:
         - sleep
         - '3600'
