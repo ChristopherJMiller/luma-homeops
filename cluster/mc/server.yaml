@@ -98,7 +98,7 @@ spec:
           mountPath: /data/remote-backup
       command:
         - sleep
-        - '60000'
+        - '3600'
       imagePullPolicy: IfNotPresent
       name: busybox
   restartPolicy: Always
