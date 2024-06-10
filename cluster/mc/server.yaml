@@ -40,8 +40,8 @@ spec:
               mountPath: /data
             - name: static-backup
               mountPath: /data/backup
-            - name: backup
-              mountPath: /data/remote-backup
+            #- name: backup
+            #  mountPath: /data/remote-backup
           env:
             - name: TYPE
               value: FABRIC
@@ -75,9 +75,9 @@ spec:
           hostPath:
             path: /static/backup
             type: Directory
-        - name: backup
-          persistentVolumeClaim:
-            claimName: mc-backup
+        #- name: backup
+        #  persistentVolumeClaim:
+        #    claimName: mc-backup
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
