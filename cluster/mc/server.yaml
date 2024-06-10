@@ -40,6 +40,8 @@ spec:
               mountPath: /data
             - name: static-backup
               mountPath: /data/backup
+            - name: backup
+              mountPath: /data/remote-backup
           env:
             - name: TYPE
               value: FABRIC
@@ -73,35 +75,9 @@ spec:
           hostPath:
             path: /static/backup
             type: Directory
----
-apiVersion: v1
-kind: Pod
-metadata:
-  name: mounting-box
-  namespace: mc
-spec:
-  nodeName: luma
-  volumes:
-    - name: static-backup
-      hostPath:
-        path: /static/backup
-        type: Directory
-    - name: backup
-      persistentVolumeClaim:
-        claimName: mc-backup
-  containers:
-    - image: busybox
-      volumeMounts:
-        - name: static-backup
-          mountPath: /data/backup
         - name: backup
-          mountPath: /data/remote-backup
-      command:
-        - sleep
-        - '3600'
-      imagePullPolicy: IfNotPresent
-      name: busybox
-  restartPolicy: Always
+          persistentVolumeClaim:
+            claimName: mc-backup
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
