@@ -28,9 +28,9 @@ spec:
           image: docker.io/itzg/minecraft-server@sha256:840585f8033dc60d00edfd770a27025c3eb29c74ce7c487252e8b5f41378d8a7
           resources:
             requests:
-              memory: 20.5Gi
+              memory: 18Gi
             limits:
-              memory: 22Gi
+              memory: 20Gi
           ports:
             - containerPort: 25565
             - containerPort: 25575
@@ -54,7 +54,7 @@ spec:
             - name: EULA
               value: 'true'
             - name: MEMORY
-              value: 20G
+              value: 16G
             - name: MAX_WORLD_SIZE
               value: '10000'
             - name: SEED
