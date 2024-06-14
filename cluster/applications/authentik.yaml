@@ -13,6 +13,22 @@ spec:
     helm:
       releaseName: authentik
       values: |
+        server:
+          resources:
+            requests:
+              cpu: 300m
+              memory: 512Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
+        worker:
+          resources:
+            requests:
+              cpu: 300m
+              memory: 512Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
         authentik:
           error_reporting:
             enabled: false

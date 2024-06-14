@@ -15,6 +15,13 @@ spec:
       values: |
         config:
           existingSecret: oauth2
+        resources:
+          limits:
+            cpu: 200m
+            memory: 300Mi
+          requests:
+            cpu: 200m
+            memory: 300Mi
         proxyVarsAsSecrets: true
         extraEnv:
         - name: OAUTH2_PROXY_PROVIDER

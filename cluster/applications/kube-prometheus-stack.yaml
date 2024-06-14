@@ -13,6 +13,14 @@ spec:
     helm:
       releaseName: prometheus
       values: |
+        server:
+          resources:
+            limits:
+              cpu: 500m
+              memory: 512Mi
+            requests:
+              cpu: 500m
+              memory: 512Mi
         defaultRules:
           create: true
           rules:
