@@ -19,8 +19,12 @@ spec:
         - name: firefly
           image: docker.io/fireflyiii/core:latest@sha256:5317d22f4f559a54d3a28e7c08955b053157db243b9bf245deec2db2c0295c48
           resources:
-            cpu: 150m
-            memory: 200Mi
+            requests:
+              cpu: 150m
+              memory: 200Mi
+            limits:
+              cpu: 150m
+              memory: 200Mi
           ports:
             - containerPort: 8080
           volumeMounts:
