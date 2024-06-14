@@ -211,28 +211,6 @@ spec:
   # These labels can be passed as LabelSelector to Prometheus
   #   monitoring:
   #   crashcollector:
-  resources:
-    mgr:
-      limits:
-        cpu: 500m
-        memory: 1024Mi
-      requests:
-        cpu: 500m
-        memory: 1024Mi
-    mon:
-      limits:
-        cpu: 500m
-        memory: 1024Mi
-      requests:
-        cpu: 500m
-        memory: 1024Mi
-    osd:
-      limits:
-        cpu: 500m
-        memory: 1024Mi
-      requests:
-        cpu: 500m
-        memory: 1024Mi
   # For OSD it also is a possible to specify requests/limits based on device class
   #   osd-hdd:
   #   osd-ssd:
