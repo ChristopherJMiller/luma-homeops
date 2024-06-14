@@ -5,11 +5,11 @@
         "value": {
             "requests": {
                 "cpu": "300m",
-                "memory": "150Mi"
+                "memory": "1Gi"
             },
             "limits": {
                 "cpu": "300m",
-                "memory": "150Mi"
+                "memory": "1Gi"
             }
         }
     }
