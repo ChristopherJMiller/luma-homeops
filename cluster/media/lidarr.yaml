@@ -22,6 +22,13 @@ spec:
       containers:
         - name: lidarr
           image: ghcr.io/hotio/lidarr:testing@sha256:3f846149e041651d7a18374124f70ef7b5ba79b4c6ef1dace80515fdd52e2a2f
+          resources:
+            requests:
+              memory: 300Mi
+              cpu: 400m
+            limits:
+              memory: 300Mi
+              cpu: 400m
           ports:
             - containerPort: 8686
           volumeMounts:

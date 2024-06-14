@@ -22,6 +22,13 @@ spec:
       containers:
         - name: readarr
           image: ghcr.io/hotio/readarr@sha256:0c198f0bb2f4f0f0c19656e67831ed385f6ab2eb530774f4870ce16696db05ad
+          resources:
+            requests:
+              memory: 300Mi
+              cpu: 400m
+            limits:
+              memory: 300Mi
+              cpu: 400m
           ports:
             - containerPort: 8787
           volumeMounts:

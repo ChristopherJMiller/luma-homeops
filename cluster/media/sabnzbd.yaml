@@ -20,6 +20,13 @@ spec:
       containers:
         - name: sabnzbd
           image: ghcr.io/hotio/sabnzbd@sha256:a73d6c8e7a89819324dfce4ab63d09be7b79b2aa80494fd3c8e116be9ec53e9d
+          resources:
+            requests:
+              memory: 300Mi
+              cpu: 400m
+            limits:
+              memory: 300Mi
+              cpu: 400m
           ports:
             - containerPort: 8080
           volumeMounts:

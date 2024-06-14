@@ -20,6 +20,13 @@ spec:
       containers:
         - name: nzbhydra
           image: ghcr.io/hotio/nzbhydra2@sha256:24602efce8eed68ae19d8a682b1f43eb1165f2fa3a93fc00a2a5bc41c70fbbd4
+          resources:
+            requests:
+              memory: 200Mi
+              cpu: 200m
+            limits:
+              memory: 200Mi
+              cpu: 200m
           ports:
             - containerPort: 5076
           volumeMounts:

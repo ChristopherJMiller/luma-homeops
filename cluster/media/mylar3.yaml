@@ -22,6 +22,13 @@ spec:
       containers:
         - name: mylar3
           image: lscr.io/linuxserver/mylar3:latest@sha256:b7077747c131c70d9f24c0d818652ca49b7bfbe1aba119675813232bd9526665
+          resources:
+            requests:
+              memory: 200Mi
+              cpu: 200m
+            limits:
+              memory: 200Mi
+              cpu: 200m
           ports:
             - containerPort: 8090
           volumeMounts:

@@ -22,6 +22,13 @@ spec:
       containers:
         - name: radarr
           image: ghcr.io/hotio/radarr@sha256:e337dac1016eaff597f29188e0b53ed83162ba4ea12eecca7d266cd07c05db09
+          resources:
+            requests:
+              memory: 300Mi
+              cpu: 400m
+            limits:
+              memory: 300Mi
+              cpu: 400m
           ports:
             - containerPort: 7878
           volumeMounts:
