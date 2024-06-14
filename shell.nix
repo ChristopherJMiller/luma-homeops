@@ -8,5 +8,6 @@ pkgs.mkShell {
     kubeseal
     k0sctl
     nodejs_20
+    kustomize
   ];
 }
