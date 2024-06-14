@@ -4,12 +4,12 @@
         "path": "/spec/template/spec/containers/0/resources",
         "value": {
             "requests": {
-                "cpu": "100m",
-                "memory": "100Mi"
+                "cpu": "300m",
+                "memory": "150Mi"
             },
             "limits": {
-                "cpu": "100m",
-                "memory": "100Mi"
+                "cpu": "300m",
+                "memory": "150Mi"
             }
         }
     }
