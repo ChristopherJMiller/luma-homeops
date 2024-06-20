@@ -8,7 +8,7 @@ spec:
   nodeName: luma
   containers:
     - name: backup
-      image: docker.io/alpine@sha256:77726ef6b57ddf65bb551896826ec38bc3e53f75cdde31354fbffb4f25238ebd
+      image: docker.io/alpine@sha256:5f48f60d043e6df88720dea5f954dcf507912368cd84bd08703325fdf269724e
       volumeMounts:
         - name: downloads
           mountPath: /downloads
