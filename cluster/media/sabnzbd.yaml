@@ -19,7 +19,7 @@ spec:
       nodeName: luma
       containers:
         - name: sabnzbd
-          image: ghcr.io/hotio/sabnzbd@sha256:a73d6c8e7a89819324dfce4ab63d09be7b79b2aa80494fd3c8e116be9ec53e9d
+          image: ghcr.io/hotio/sabnzbd@sha256:30f43c9b8e762cc70c8dc042b81b50946ddae18cee9b890b305019e4c73d3bd9
           resources:
             requests:
               memory: 300Mi
