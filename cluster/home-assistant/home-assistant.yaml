@@ -22,7 +22,7 @@ spec:
         runAsGroup: 0
       containers:
         - name: home-assistant
-          image: docker.io/homeassistant/home-assistant:2023.12@sha256:8d000332b09b71fd946f596b1f721b0af969263b6f27ebc1d212fdbd13bb1bd8
+          image: docker.io/homeassistant/home-assistant:2024.7@sha256:e2ef2c7ba01689af8324b46558bd478daf5418c6a1abaec299bba05fd5ae0703
           ports:
             - containerPort: 8123
           volumeMounts:
