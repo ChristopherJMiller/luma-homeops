@@ -17,13 +17,9 @@ spec:
         app: home-assistant
     spec:
       nodeName: yoshi
-      initContainers:
-        - name: clear-fault
-          image: busybox:1
-          command: ['sh', '-c', "rm -rf /config/home-assistant.log.fault"]
-          volumeMounts:
-            - name: config
-              mountPath: /config
+      securityContext:
+        runAsUser: 101
+        runAsGroup: 101
       containers:
         - name: home-assistant
           image: docker.io/homeassistant/home-assistant:2023.12@sha256:8d000332b09b71fd946f596b1f721b0af969263b6f27ebc1d212fdbd13bb1bd8
@@ -40,8 +36,9 @@ spec:
             privileged: true
       volumes:
         - name: config
-          persistentVolumeClaim:
-            claimName: ha-config
+          hostPath:
+            path: /static/ha
+            type: Directory
         - name: tz-config
           hostPath:
             path: /etc/localtime
