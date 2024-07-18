@@ -20,7 +20,7 @@ spec:
       initContainers:
         - name: clear-fault
           image: busybox:1
-          command: ['sh', '-c', "chown $(whoami):$(whoami) -R /config"]
+          command: ['sh', '-c', "rm -rf /config/home-assistant.log.fault"]
           volumeMounts:
             - name: config
               mountPath: /config
