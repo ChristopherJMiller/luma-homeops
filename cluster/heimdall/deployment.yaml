@@ -22,7 +22,7 @@ spec:
             claimName: heimdall-pvc
       containers:
         - name: heimdall
-          image: lscr.io/linuxserver/heimdall:latest@sha256:0e19a9975dcf7d973725d7da86f68f1e1e7e10fef60ffd8ae08dac339df44569
+          image: lscr.io/linuxserver/heimdall:latest@sha256:440c83b0172d33d16c19197375172a1148cd944ad3ebaae1b7138b190dfa9c83
           volumeMounts:
             - name: config
               mountPath: /config
