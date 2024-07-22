@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: firefly
-          image: docker.io/fireflyiii/core:latest@sha256:025dcb70f899ceb4862b177bb932a40fcd6ceed46fca0f507964fda3e5067087
+          image: docker.io/fireflyiii/core:latest@sha256:309e0e5de9c777a45c7028807f25a5587d3f7607cde823258b0d7152bda353ce
           resources:
             requests:
               cpu: 150m
