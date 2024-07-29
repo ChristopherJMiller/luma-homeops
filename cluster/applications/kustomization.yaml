@@ -26,6 +26,5 @@ resources:
   - rook.yaml
   - secrets-generator.yaml
   - cloud.yaml
-  - tpl-passholder.yaml
   - nextcloud.yaml
   - vtt.yaml
