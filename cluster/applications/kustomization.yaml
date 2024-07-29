@@ -27,4 +27,5 @@ resources:
   - secrets-generator.yaml
   - cloud.yaml
   - nextcloud.yaml
+  - tpl-passholder.yaml
   - vtt.yaml
