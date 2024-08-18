@@ -22,10 +22,10 @@ spec:
           image: ghcr.io/hotio/nzbhydra2@sha256:b8b03029e1aed84dd0c7f2bdc1d4d2a09d654ca639878564001bb65987444fc4
           resources:
             requests:
-              memory: 200Mi
+              memory: 300Mi
               cpu: 200m
             limits:
-              memory: 200Mi
+              memory: 300Mi
               cpu: 200m
           ports:
             - containerPort: 5076
