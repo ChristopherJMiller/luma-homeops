@@ -32,9 +32,9 @@ spec:
             - name: PGID
               value: '1000'
             - name: TZ
-              value: 'UTC'
+              value: UTC
             - name: APP_NAME
-              value: 'The Miller Family'
+              value: The Miller Family
 ---
 apiVersion: v1
 kind: Service
