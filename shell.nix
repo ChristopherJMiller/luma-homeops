@@ -9,5 +9,6 @@ pkgs.mkShell {
     nodejs_20
     kustomize
     talosctl
+    kubernetes-helm
   ];
 }
