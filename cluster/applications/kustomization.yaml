@@ -7,3 +7,4 @@ resources:
   - cert-approver.yaml
   - metallb.yaml
   - metrics-server.yaml
+  - ingress-nginx.yaml
