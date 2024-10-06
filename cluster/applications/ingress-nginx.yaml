@@ -26,6 +26,11 @@ spec:
           autoscaling:
             enabled: true
             minReplicas: 2
+            maxReplicas: 4
+          resources:
+            requests:
+              cpu: 150m
+              memory: 150Mi
           metrics:
             enabled: true
           affinity:
