@@ -8,7 +8,7 @@ spec:
   project: default
   source:
     chart: metallb
-    repoURL: https://charts.bitnami.com/bitnami
+    repoURL: registry-1.docker.io/bitnamicharts
     targetRevision: 6.3.x
   destination:
     server: https://kubernetes.default.svc
