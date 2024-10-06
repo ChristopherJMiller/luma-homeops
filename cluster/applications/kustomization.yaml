@@ -8,3 +8,4 @@ resources:
   - metallb.yaml
   - metrics-server.yaml
   - ingress-nginx.yaml
+  - rook.yaml
