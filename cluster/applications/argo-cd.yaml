@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
     path: cluster/argo-cd
-    targetRevision: 1.x.x
+    targetRevision: 7.x.x
     helm:
       releaseName: argo-install
   destination:
