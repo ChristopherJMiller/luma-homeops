@@ -25,7 +25,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: server
-          image: docker.io/itzg/minecraft-server@sha256:03cde45bf37d1e8efddac96516a3b916852911ad5eeb32f26109bdda5c127a6f
+          image: docker.io/itzg/minecraft-server@sha256:ef2651f53b70a6555943cc92ae58fd91ceae4c1527cdb866824f2466f7e9920b
           resources:
             requests:
               memory: 18Gi
