@@ -2,14 +2,13 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: metallb-release
+  name: metallb
   namespace: argo-cd
 spec:
   project: default
   source:
-    chart: metallb
-    repoURL: https://charts.bitnami.com/bitnami
-    targetRevision: 6.3.x
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops
+    path: cluster/metallb
   destination:
     server: https://kubernetes.default.svc
     namespace: metallb-system
@@ -20,3 +19,4 @@ spec:
       allowEmpty: true
     syncOptions:
       - PrunePropagationPolicy=foreground
+      - CreateNamespace=true
