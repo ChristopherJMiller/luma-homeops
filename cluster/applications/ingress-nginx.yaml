@@ -27,10 +27,11 @@ spec:
             enabled: true
             minReplicas: 2
             maxReplicas: 4
+            targetMemoryUtilizationPercentage: 80
           resources:
             requests:
-              cpu: 150m
-              memory: 200Mi
+              cpu: 100m
+              memory: 250Mi
           metrics:
             enabled: true
           affinity:
