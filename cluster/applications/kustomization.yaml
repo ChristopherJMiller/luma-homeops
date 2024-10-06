@@ -6,3 +6,4 @@ resources:
   - applications.yaml
   - metallb.yaml
   - metrics-server.yaml
+  - kubelet-serving-cert-approver.yaml
