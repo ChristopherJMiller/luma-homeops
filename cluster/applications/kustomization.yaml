@@ -4,6 +4,6 @@ kind: Kustomization
 resources:
   - argo-cd.yaml
   - applications.yaml
+  - cert-approver.yaml
   - metallb.yaml
   - metrics-server.yaml
-  - kubelet-serving-cert-approver.yaml

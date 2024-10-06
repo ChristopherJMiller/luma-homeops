@@ -2,7 +2,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: kubelet-serving-cert-approver
+  name: cert-approver
   namespace: argo-cd
 spec:
   project: default
