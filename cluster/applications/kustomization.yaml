@@ -5,3 +5,4 @@ resources:
   - argo-cd.yaml
   - applications.yaml
   - metallb.yaml
+  - metrics-server.yaml
