@@ -10,4 +10,3 @@ resources:
   - ingress-nginx.yaml
   - rook.yaml
   - rook-cluster.yaml
-  - security.yaml

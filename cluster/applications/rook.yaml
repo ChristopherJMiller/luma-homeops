@@ -13,6 +13,9 @@ spec:
     helm:
       releaseName: rook
       valuesObject:
+        csi:
+          serviceMonitor:
+            enabled: true
         monitoring:
           enabled: true
   destination:
