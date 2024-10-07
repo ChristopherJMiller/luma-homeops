@@ -9,3 +9,4 @@ resources:
   - metrics-server.yaml
   - ingress-nginx.yaml
   - rook.yaml
+  - rook-cluster.yaml
