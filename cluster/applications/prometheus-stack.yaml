@@ -3,7 +3,7 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: kube-prometheus-stack
-  namespace: argocd
+  namespace: argo-cd
 spec:
   project: default
   source:
@@ -79,7 +79,7 @@ spec:
                       storage: 50Gi
   destination:
     server: https://kubernetes.default.svc
-    namespace: dashboard
+    namespace: prometheus
   syncPolicy:
     automated:
       prune: true
