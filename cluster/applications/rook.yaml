@@ -15,9 +15,9 @@ spec:
       valuesObject:
         csi:
           serviceMonitor:
-            enabled: true
+            enabled: false
         monitoring:
-          enabled: true
+          enabled: false
   destination:
     server: https://kubernetes.default.svc
     namespace: rook
