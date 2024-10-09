@@ -54,7 +54,7 @@ spec:
             storage:
               volumeClaimTemplate:
                 spec:
-                  #storageClassName: rook-ceph-block-hdd
+                  storageClassName: rook-ceph-block
                   accessModes: [ReadWriteOnce]
                   resources:
                     requests:
@@ -72,7 +72,7 @@ spec:
             storageSpec:
               volumeClaimTemplate:
                 spec:
-                  #storageClassName: rook-ceph-block-hdd
+                  storageClassName: rook-ceph-block
                   accessModes: [ReadWriteOnce]
                   resources:
                     requests:
