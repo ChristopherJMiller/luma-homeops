@@ -17,7 +17,7 @@ metadata:
     storageclass.kubernetes.io/is-default-class: 'true'
 provisioner: rook.rbd.csi.ceph.com
 parameters:
-  clusterID: rook-cluster
+  clusterID: rook
   pool: block-pool
   imageFormat: '2'
   imageFeatures: layering,fast-diff,object-map,deep-flatten,exclusive-lock
