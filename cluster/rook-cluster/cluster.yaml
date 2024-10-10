@@ -245,7 +245,7 @@ spec:
         cpu: 500m
         memory: 512Mi
       limits:
-        memory: 1.5Gi
+        memory: 1536Mi
   # The option to automatically remove OSDs that are out and are safe to destroy.
   removeOSDsIfOutAndSafeToRemove: false
   priorityClassNames:
