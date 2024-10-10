@@ -221,6 +221,31 @@ spec:
   #   logcollector:
   #   cleanup:
   #   exporter:
+  resources:
+    api:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        memory: 512Mi
+    mgr:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        memory: 512Mi
+    mon:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        memory: 512Mi
+    osd:
+      requests:
+        cpu: 500m
+        memory: 512Mi
+      limits:
+        memory: 512Mi
   # The option to automatically remove OSDs that are out and are safe to destroy.
   removeOSDsIfOutAndSafeToRemove: false
   priorityClassNames:
