@@ -11,3 +11,4 @@ resources:
   - rook.yaml
   - rook-cluster.yaml
   - prometheus-stack.yaml
+  - sealed-secrets.yaml
