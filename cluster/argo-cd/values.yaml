@@ -39,6 +39,7 @@ argo-cd:
           cpu: 100m
           memory: 64Mi
     haproxy:
+      hardAntiAffinity: false
       resources:
         limits:
           memory: 64Mi
