@@ -8,6 +8,9 @@ argo-cd:
     repositories:
       luma-homeops:
         url: https://github.com/ChristopherJMiller/luma-homeops
+    clusterCredentials:
+      default:
+        server: https://kubernetes.default.svc
   controller:
     dynamicClusterDistribution: true
     replicas: 2
