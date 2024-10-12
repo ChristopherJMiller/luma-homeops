@@ -10,5 +10,6 @@ pkgs.mkShell {
     kustomize
     talosctl
     kubernetes-helm
+    argocd
   ];
 }
