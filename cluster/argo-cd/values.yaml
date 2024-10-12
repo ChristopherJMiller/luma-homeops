@@ -11,6 +11,7 @@ argo-cd:
     clusterCredentials:
       default:
         server: https://kubernetes.default.svc
+        config: {}
   controller:
     dynamicClusterDistribution: true
     replicas: 2
