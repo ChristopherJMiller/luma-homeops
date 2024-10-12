@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: dns
+  name: external-dns
 spec:
   template:
     spec:
