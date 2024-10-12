@@ -37,15 +37,13 @@ argo-cd:
           memory: 64Mi
         requests:
           cpu: 100m
-          memory: 128Mi
+          memory: 64Mi
     haproxy:
       hardAntiAffinity: false
       resources:
-        limits:
-          memory: 64Mi
         requests:
           cpu: 100m
-          memory: 128Mi
+          memory: 64Mi
   server:
     autoscaling:
       enabled: true
