@@ -6,7 +6,7 @@ argo-cd:
     statusbadge.enabled: true
     repositories:
       luma-homeops:
-        url: https://github.com/ChristopherJMiller/luma-homeops
+        url: https://github.com/ChristopherJMiller/luma-homeops.git
   controller:
     dynamicClusterDistribution: true
     replicas: 2
