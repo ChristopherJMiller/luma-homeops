@@ -1,7 +1,7 @@
 ---
 apiVersion: v2
 name: argocd-install
-version: 7.6.9
+version: 7.6.8
 dependencies:
   - name: argo-cd
     version: 7.6.8
