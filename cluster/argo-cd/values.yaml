@@ -12,6 +12,9 @@ argo-cd:
       default:
         server: https://kubernetes.default.svc
         config: {}
+    cm:
+      timeout.reconciliation: 180s
+      timeout.hard.reconciliation: 180s
   controller:
     dynamicClusterDistribution: true
     replicas: 2
