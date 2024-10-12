@@ -1,0 +1,30 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflareddns
+  namespace: dns
+  labels:
+    app: cloudflareddns
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cloudflareddns
+  template:
+    metadata:
+      labels:
+        app: cloudflareddns
+    spec:
+      containers:
+        - name: cloudflareddns
+          image: ghcr.io/hotio/cloudflareddns@sha256:7bcf73f111409a9432404cc1cdf7e71a4e48640387c0f793d3606203231833e8
+          envFrom:
+            - configMapRef:
+                name: cloudflareddns-config
+          env:
+            - name: CF_APITOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflare-api-token
+                  key: api-token

@@ -5,6 +5,8 @@ resources:
   - argo-cd.yaml
   - applications.yaml
   - cert-approver.yaml
+  #- cert-manager.yaml
+  #- external-dns.yaml
   - metallb.yaml
   - metrics-server.yaml
   - ingress-nginx.yaml
