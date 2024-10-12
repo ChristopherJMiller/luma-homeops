@@ -4,9 +4,10 @@ argo-cd:
     domain: ci.chrismiller.xyz
     addPrometheusAnnotations: true
     statusbadge.enabled: true
+  configs:
     repositories:
       luma-homeops:
-        url: https://github.com/ChristopherJMiller/luma-homeops.git
+        url: https://github.com/ChristopherJMiller/luma-homeops
   controller:
     dynamicClusterDistribution: true
     replicas: 2
