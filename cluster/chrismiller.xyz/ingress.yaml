@@ -1,0 +1,60 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chrismillerxyz
+  namespace: chrismillerxyz
+  labels:
+    service: web
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/cors-allow-origin: http://localhost:8080
+    nginx.ingress.kubernetes.io/enable-cors: 'true'
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_clear_headers "Content-Security-Policy";
+spec:
+  tls:
+    - hosts:
+        - chrismiller.xyz
+        - www.chrismiller.xyz
+      secretName: chrismillerxyz-tls
+  rules:
+    - host: chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mysite
+                port:
+                  number: 80
+    - host: www.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mysite
+                port:
+                  number: 80
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: chrismiller-tls
+  namespace: chrismillerxyz
+spec:
+  secretName: chrismillerxyz-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: chrismiller.xyz
+  dnsNames:
+    - chrismiller.xyz
+    - www.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384

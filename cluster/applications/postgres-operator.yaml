@@ -1,0 +1,31 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: postgres-operator
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://ckotzbauer.github.io/helm-charts
+    targetRevision: 1.12.x
+    chart: postgres-operator
+    helm:
+      releaseName: postgres-operator
+      valuesObject:
+        configKubernetes:
+          cluster_name_label: galaxy
+          enable_readiness_probe: true
+          enable_persistent_volume_claim_deletion: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: postgres-operator
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

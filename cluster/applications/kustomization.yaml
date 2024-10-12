@@ -6,11 +6,13 @@ resources:
   - applications.yaml
   - cert-approver.yaml
   - cert-manager.yaml
+  - chrismillerxyz.yaml
   - external-dns.yaml
   - metallb.yaml
   - metrics-server.yaml
   - ingress-nginx.yaml
   - rook.yaml
   - rook-cluster.yaml
+  - postgres-operator.yaml
   - prometheus-stack.yaml
   - sealed-secrets.yaml
