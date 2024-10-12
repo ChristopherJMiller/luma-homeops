@@ -14,7 +14,7 @@ argo-cd:
         config: {}
     cm:
       timeout.reconciliation: 180s
-      timeout.hard.reconciliation: 180s
+      timeout.hard.reconciliation: 300s
   controller:
     replicas: 1
     pdb:
