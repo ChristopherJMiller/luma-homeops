@@ -29,21 +29,13 @@ argo-cd:
       requests:
         cpu: 10m
         memory: 32Mi
-  redis-ha:
-    enabled: true
-    redis:
-      resources:
-        limits:
-          memory: 64Mi
-        requests:
-          cpu: 100m
-          memory: 64Mi
-    haproxy:
-      hardAntiAffinity: false
-      resources:
-        requests:
-          cpu: 100m
-          memory: 64Mi
+  redis:
+    resources:
+      limits:
+        memory: 128Mi
+      requests:
+        cpu: 150m
+        memory: 128Mi
   server:
     autoscaling:
       enabled: true
