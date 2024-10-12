@@ -7,7 +7,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://kubernetes-sigs.github.io/metrics-server/
+    repoURL: https://kubernetes-sigs.github.io/metrics-server
     chart: metrics-server
     targetRevision: 3.12.1
     helm:

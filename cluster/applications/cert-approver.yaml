@@ -7,7 +7,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/alex1989hu/kubelet-serving-cert-approver
+    repoURL: https://github.com/alex1989hu/kubelet-serving-cert-approver.git
     path: deploy/ha
   destination:
     server: https://kubernetes.default.svc

@@ -7,7 +7,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/ChristopherJMiller/luma-homeops
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
     path: cluster/applications
   destination:
     server: https://kubernetes.default.svc
