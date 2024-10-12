@@ -16,8 +16,7 @@ argo-cd:
       timeout.reconciliation: 180s
       timeout.hard.reconciliation: 180s
   controller:
-    dynamicClusterDistribution: true
-    replicas: 2
+    replicas: 1
     pdb:
       enabled: true
       minAvailable: 1
@@ -44,9 +43,6 @@ argo-cd:
         cpu: 150m
         memory: 128Mi
   server:
-    autoscaling:
-      enabled: true
-      maxReplicas: 2
     pdb:
       enabled: true
       minAvailable: 1
