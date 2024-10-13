@@ -1,4 +1,5 @@
 ---
+# TODO label this namespace with privs by default
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
