@@ -8,7 +8,7 @@ metadata:
     app: mysite
     service: web
 spec:
-  replicas: 2
+  replicas: 1
   revisionHistoryLimit: 1
   strategy:
     type: RollingUpdate
