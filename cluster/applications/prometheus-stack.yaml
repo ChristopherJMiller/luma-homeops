@@ -1,3 +1,4 @@
+# TODO label namespace with privileged labels
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
