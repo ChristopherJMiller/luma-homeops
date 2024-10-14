@@ -63,6 +63,16 @@ argo-cd:
         nginx.ingress.kubernetes.io/ssl-passthrough: 'true'
       hostname: ci.chrismiller.xyz
       tls: true
+      extraRules:
+        - http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: '{{ include "argo-cd.server.fullname" . }}'
+                    port:
+                      name: '{{ .Values.server.service.servicePortHttpName }}'
   repoServer:
     autoscaling:
       enabled: true
