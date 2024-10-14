@@ -22,3 +22,21 @@ spec:
       allowEmpty: true
     syncOptions:
       - PrunePropagationPolicy=foreground
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argocd-server
+  namespace: argo-cd
+spec:
+  secretName: argocd-server-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: ci.chrismiller.xyz
+  dnsNames:
+    - ci.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
