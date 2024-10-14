@@ -59,6 +59,8 @@ argo-cd:
       annotations:
         kubernetes.io/ingress.class: nginx
         external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+        nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
+        nginx.ingress.kubernetes.io/ssl-passthrough: 'true'
       hostname: ci.chrismiller.xyz
       tls: true
   repoServer:
