@@ -15,8 +15,11 @@ spec:
       valuesObject:
         installCRDs: true
         resources:
-          cpu: 50m
-          memory: 100Mi
+          requests:
+            cpu: 50m
+            memory: 100Mi
+          limits:
+            memory: 100Mi
   destination:
     server: https://kubernetes.default.svc
     namespace: dns
