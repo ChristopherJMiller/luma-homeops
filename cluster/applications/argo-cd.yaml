@@ -23,31 +23,6 @@ spec:
     syncOptions:
       - PrunePropagationPolicy=foreground
 ---
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: argocd-ingress
-  namespace: argo-cd
-  annotations:
-    kubernetes.io/ingress.class: nginx
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
-spec:
-  tls:
-    - hosts:
-        - ci.chrismiller.xyz
-      secretName: argocd-server-tls
-  rules:
-    - host: ci.chrismiller.xyz
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: argo-install-argocd-server
-                port:
-                  number: 80
----
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
