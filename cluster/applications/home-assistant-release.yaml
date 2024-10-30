@@ -8,7 +8,7 @@ spec:
   project: default
   source:
     repoURL: https://github.com/ChristopherJMiller/ha-helm.git
-    path: /
+    path: .
     targetRevision: main
     helm:
       releaseName: ha
