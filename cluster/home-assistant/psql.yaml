@@ -11,7 +11,7 @@ spec:
   spiloRunAsGroup: 103
   spiloFSGroup: 103
   postgresql:
-    version: '17'
+    version: '16'
   teamId: acid
   users:
     postgres: []

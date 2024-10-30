@@ -14,7 +14,7 @@ spec:
       releaseName: postgres-operator
       valuesObject:
         configMajorVersionUpgrade:
-          target_major_version: 17
+          target_major_version: 16
         configKubernetes:
           cluster_name_label: galaxy
           enable_readiness_probe: true
