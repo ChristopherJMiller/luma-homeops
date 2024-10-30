@@ -25,6 +25,11 @@ spec:
         haConfigStorage:
           storageClassName: rook-ceph-block
           size: 5Gi
+        haconfig:
+          http:
+            use_x_forwarded_for: true
+            trusted_proxies:
+              - 10.0.0.0/8
         ingress:
           enabled: true
           className: nginx
