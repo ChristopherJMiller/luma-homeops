@@ -37,7 +37,7 @@ spec:
             - host: home.chrismiller.xyz
               paths:
                 - path: /
-                  pathType: ImplementationSpecific
+                  pathType: Prefix
           tls:
             - hosts:
                 - home.chrismiller.xyz
