@@ -9,6 +9,7 @@ resources:
   - chrismillerxyz.yaml
   - external-dns.yaml
   - home-assistant.yaml
+  - home-assistant-release.yaml
   - metallb.yaml
   - metrics-server.yaml
   - ingress-nginx.yaml

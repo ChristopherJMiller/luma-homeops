@@ -15,7 +15,14 @@ spec:
         postgresql:
           enabled: false
         externalPostgres:
-          host:
+          host: acid-ha
+          port: 5432
+          passwordFromSecretKeyRef:
+            name: postgres.acid-ha.credentials.postgresql.acid.zalan.do
+            key: pssword
+        haConfigStorage:
+          storageClassName: rook-ceph-block
+          size: 5Gi
   destination:
     server: https://kubernetes.default.svc
     namespace: home-assistant
