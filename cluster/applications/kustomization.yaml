@@ -8,6 +8,7 @@ resources:
   - cert-manager.yaml
   - chrismillerxyz.yaml
   - external-dns.yaml
+  - home-assistant.yaml
   - metallb.yaml
   - metrics-server.yaml
   - ingress-nginx.yaml

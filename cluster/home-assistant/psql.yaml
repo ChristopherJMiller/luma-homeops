@@ -1,0 +1,19 @@
+---
+apiVersion: acid.zalan.do/v1
+kind: postgresql
+metadata:
+  name: acid-ha
+spec:
+  databases:
+    postgres: postgres
+  numberOfInstances: 1
+  spiloRunAsUser: 101
+  spiloRunAsGroup: 103
+  spiloFSGroup: 103
+  postgresql:
+    version: 17
+  teamId: acid
+  users:
+    postgres: []
+  volume:
+    size: 10Gi
