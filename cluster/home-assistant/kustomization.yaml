@@ -4,3 +4,4 @@ kind: Kustomization
 namespace: home-assistant
 resources:
   - psql.yaml
+  - tls.yaml
