@@ -18,6 +18,7 @@ spec:
         externalPostgres:
           host: acid-ha
           port: 5432
+          username: postgres
           passwordFromSecretKeyRef:
             name: postgres.acid-ha.credentials.postgresql.acid.zalan.do
             key: pssword
