@@ -3,6 +3,8 @@ apiVersion: rabbitmq.com/v1beta1
 kind: RabbitmqCluster
 metadata:
   name: mq-zigbee
+  labels:
+    app.kubernetes.io/name: mq-zigbee
 spec:
   replicas: 2
   resources:
