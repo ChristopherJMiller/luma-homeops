@@ -21,6 +21,8 @@ spec:
   persistence:
     storageClassName: rook-ceph-block
     storage: 10Gi
+  service:
+    type: LoadBalancer
   affinity:
     podAntiAffinity:
       requiredDuringSchedulingIgnoredDuringExecution:
