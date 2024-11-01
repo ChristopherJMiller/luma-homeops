@@ -1,0 +1,36 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: rabbitmq-cluster-operator
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: oci://registry-1.docker.io/bitnamicharts
+    targetRevision: 4.3.x
+    chart: rabbitmq-cluster-operator
+    helm:
+      releaseName: rabbitmqco
+      valuesObject:
+        clusterOperator:
+          metrics:
+            service:
+              enabled: true
+        msgTopologyOperator:
+          metrics:
+            service:
+              enabled: true
+        useCertManager: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rabbitmq-cluster-operator
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

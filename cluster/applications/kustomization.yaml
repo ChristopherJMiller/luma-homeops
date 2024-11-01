@@ -10,6 +10,7 @@ resources:
   - external-dns.yaml
   - home-assistant.yaml
   - home-assistant-release.yaml
+  - rabbitmq-cluster-operator.yaml
   - metallb.yaml
   - metrics-server.yaml
   - ingress-nginx.yaml
