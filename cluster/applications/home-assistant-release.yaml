@@ -13,6 +13,7 @@ spec:
     helm:
       releaseName: ha
       valuesObject:
+        hacs: true
         postgresql:
           enabled: false
         externalPostgres:
