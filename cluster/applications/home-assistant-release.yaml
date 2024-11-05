@@ -27,6 +27,21 @@ spec:
           storageClassName: rook-ceph-block
           size: 5Gi
         haconfig:
+          circadian_lighting:
+            transition: 5
+
+          switch:
+            - name: Circadian Lighting Enable
+              platform: circadian_lighting
+              lights_ct:
+                - light.dresser_lamp
+                - light.floor_lamp
+                - light.floor_lamp_a
+                - light.floor_lamp_b
+                - light.ground_spot
+                - light.nightstand_lamp
+                - light.tv_accent
+
           http:
             use_x_forwarded_for: true
             trusted_proxies:
