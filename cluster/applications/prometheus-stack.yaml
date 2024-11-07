@@ -96,6 +96,7 @@ spec:
         grafana:
           ingress:
             enabled: true
+            ingressClassName: nginx
             annotations:
               kubernetes.io/ingress.class: nginx
               external-dns.alpha.kubernetes.io/target: chrismiller.xyz
