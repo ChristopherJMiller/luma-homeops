@@ -5,4 +5,3 @@ namespace: home-assistant
 resources:
   - psql.yaml
   - tls.yaml
-  - mq-zigbee.yaml

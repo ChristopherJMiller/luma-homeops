@@ -1,0 +1,41 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mosquitto
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://storage.googleapis.com/t3n-helm-charts
+    targetRevision: 2.x.x
+    chart: mosquitto
+    helm:
+      releaseName: mosquitto
+      valuesObject:
+        service:
+          type: LoadBalancer
+        persistence:
+          storageClass: rook-ceph-block
+          size: 5Gi
+        resources:
+          limits:
+            memory: 128Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        monitoring:
+          podMonitor:
+            enabled: true
+          sidecar:
+            enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: home-assistant
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
