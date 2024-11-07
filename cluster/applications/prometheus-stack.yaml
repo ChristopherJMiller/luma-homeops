@@ -1,4 +1,3 @@
-# TODO label namespace with privileged labels
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
@@ -94,6 +93,18 @@ spec:
                   resources:
                     requests:
                       storage: 50Gi
+          grafana:
+            ingress:
+              enabled: true
+              annotations:
+                kubernetes.io/ingress.class: nginx
+                external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+              hosts:
+                - dashboard.chrismiller.xyz
+              tls:
+                - secretName: dashboard-tls
+                  hosts:
+                    - dashboard.chrismiller.xyz
   destination:
     server: https://kubernetes.default.svc
     namespace: prometheus
@@ -106,3 +117,21 @@ spec:
       - CreateNamespace=true
       - ServerSideApply=true
       - PrunePropagationPolicy=foreground
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dashboard-tls
+  namespace: prometheus
+spec:
+  secretName: dashboard-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: dashboard.xyz
+  dnsNames:
+    - dashboard.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
