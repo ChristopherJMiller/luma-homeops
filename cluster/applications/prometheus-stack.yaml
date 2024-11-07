@@ -128,7 +128,7 @@ spec:
   issuerRef:
     kind: ClusterIssuer
     name: letsencrypt-prod
-  commonName: dashboard.xyz
+  commonName: dashboard.chrismiller.xyz
   dnsNames:
     - dashboard.chrismiller.xyz
   privateKey:
