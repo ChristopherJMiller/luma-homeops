@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: foundry
-          image: docker.io/felddy/foundryvtt:11.315.1@sha256:6a79a9fe9110d7447e7b36f534402884a2c88783dc59b7d25943a3c47145ab03
+          image: docker.io/felddy/foundryvtt:13.332.0@sha256:3eeab8bbda9ce357f3e53293948b4e100d915a8d594481a6dbfaa4fc2ddb9e3d
           ports:
             - containerPort: 30000
           volumeMounts:
