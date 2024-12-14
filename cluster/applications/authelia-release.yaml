@@ -43,11 +43,9 @@ spec:
         session:
           redis:
             enabled: true
-            deploy: true
         storage:
           postgres:
             enable: true
-            deploy: true
         persistence:
           enabled: true
           storageClass: rook-ceph-block
