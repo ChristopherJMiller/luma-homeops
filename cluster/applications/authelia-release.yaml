@@ -23,7 +23,9 @@ spec:
           className: nginx
           hostOverride:
             - host: auth.chrismiller.xyz
-              path: /
+              paths:
+                - path: /
+                  pathType: Prefix
           tls:
             enabled: true
             secretName: auth-tls
