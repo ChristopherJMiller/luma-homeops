@@ -1,0 +1,40 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: authelia-openldap
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://jp-gouin.github.io/helm-openldap
+    targetRevision: 4.0.x
+    chart: helm-openldap
+    helm:
+      releaseName: ldap
+      valuesObject:
+        pdp:
+          enabled: true
+        persistence:
+          storageClass: rook-ceph-block
+        resources:
+          requests:
+            cpu: 0.5
+            memory: 250Mi
+          limits:
+            memory: 250Mi
+        phpldapadmin:
+          enabled: true
+          ingress:
+            enabled: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: authelia
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
