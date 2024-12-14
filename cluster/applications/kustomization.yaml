@@ -12,6 +12,8 @@ resources:
   - home-assistant-release.yaml
   - home-assistant-mosquitto.yaml
   - rabbitmq-cluster-operator.yaml
+  - media.yaml
+  - mega-media-release.yaml
   - metallb.yaml
   - metrics-server.yaml
   - ingress-nginx.yaml

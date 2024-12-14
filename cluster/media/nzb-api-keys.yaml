@@ -1,0 +1,16 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp:
+  name: nzb-api-keys
+  namespace: media
+spec:
+  encryptedData:
+    nzb-geek:
+      AgCsYK1u1NkInAhhzc5ciG0BIghvGPG58f/AeRV4RAOPCBPXPk6ALAHNewjXglT8aRUUgVbI4bKmVaueo8uh64GtIBj47fDTz41NrB6zN+87WnvgeranNh6vbd+RKf1ylB078vlWwiFcEZIGXLJk/h4Kx3qkh3rtjtsx4ejL/XMR6ytc6/zzkniKiBorUsJK4yXgIa0/aVEA6mdaznmSIMoV0jhsIyL6cnTiNC5QzqGGqPxbX4WMJKrCNVXYiSkI2uzNEOHvWv8ZDfGrl7IUKN0Pko+O1+i0N/irSvDhx33XlY4kh1gwA2dAtzReYMGeazr3qtiCRLp3PTK5rvyqwzfgF7MsR/Rb3VFRGGjFHwUYXW4334sJ7zJaZWpMzQ598ibFqPaWy0c7l0CzjGu/SRt9h9Av0BnYFZW2mwPNYg2FdejVQ1gQOlqTekrm3lLwA1r2ixM32uB5Q7BhIMqgUEF4Yu61o3mApKe4rIdeYl3X4s8H5wb0+A2lMj2IQdYnles4HMfwNC8urEDaLMvcfaX5+VDLTGLIkFgPgGWZNW5fszUNxJYRMaX+zDGpO0bZHRdMI+3yUi/18fsMVHVNcdURohJ3lX7KMm2pXz72RvOxTnpyG14O2OCkAkArBWA7uWzzGsTT0JnDiPgsazKvv0KyH9TUpZNJ+QBSxDf9hyTchChELsnXbKixhjofcYBb5y6BlwIB+g1qq2AHvFmb7tLikT/ij4Vet7Y0XOiMWpvNpg==
+  template:
+    metadata:
+      creationTimestamp:
+      name: nzb-api-keys
+      namespace: media
