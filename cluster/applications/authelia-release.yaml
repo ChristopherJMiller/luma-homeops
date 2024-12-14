@@ -2,7 +2,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: authelia
+  name: authelia-release
   namespace: argo-cd
 spec:
   project: default
