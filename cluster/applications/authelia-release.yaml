@@ -21,10 +21,20 @@ spec:
             nginx.ingress.kubernetes.io/configuration-snippet: |
               more_clear_headers "Content-Security-Policy";
           className: nginx
+          rulesOverride:
+            - host: auth.chrismiller.xyz
+              http:
+                paths:
+                  - path: /
+                    pathType: Prefix
+                    backend:
+                      service:
+                        name: a-authelia
+                        port:
+                          number: 80
           tls:
             enabled: true
             secretName: auth-tls
-            hostNameOverride: auth.chrismiller.xyz
         pod:
           resources:
             requests:
