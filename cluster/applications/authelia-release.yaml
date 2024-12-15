@@ -53,7 +53,7 @@ spec:
             postgres:
               enabled: true
               deploy: true
-              host: a-postgresql
+              address: a-postgresql
           notifier:
             filesystem:
               enabled: true
