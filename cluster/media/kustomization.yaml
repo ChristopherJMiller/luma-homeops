@@ -7,3 +7,4 @@ resources:
   - tls.yaml
   - nzb-api-keys.yaml
   - usenet-user-pass.yaml
+  - sonarr-ingress.yaml
