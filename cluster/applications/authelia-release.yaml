@@ -52,6 +52,9 @@ spec:
             postgres:
               enable: true
               deploy: true
+          notifier:
+            filesystem:
+              enabled: true
           authentication_backend:
             ldap:
               enabled: true
