@@ -13,6 +13,9 @@ spec:
     helm:
       releaseName: ldap
       valuesObject:
+        global:
+          storageClass: rook-ceph-block
+          ldapDomain: chrismiller.xyz
         pdp:
           enabled: true
         persistence:
