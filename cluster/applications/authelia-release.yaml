@@ -66,12 +66,19 @@ spec:
               address: ldap://ldap
               base_dn: DC=chrismiller,DC=xyz
               user: CN=Authelia,DC=chrismiller,DC=xyz
+              password:
+                secret_name: ldap-ltb-passwd
+                path: LDAP_ADMIN_PASSWORD
         secret:
           additionalSecrets:
             a-postgresql:
               items:
                 - key: postgres-password
                   path: postgres-password
+            ldap-ltb-passwd:
+              items:
+                - key: LDAP_ADMIN_PASSWORD
+                  path: LDAP_ADMIN_PASSWORD
         persistence:
           enabled: false
         postgresql:
