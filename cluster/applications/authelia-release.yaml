@@ -65,7 +65,7 @@ spec:
               enabled: true
               address: ldap://ldap
               base_dn: DC=chrismiller,DC=xyz
-              user: CN=admin,DC=chrismiller,DC=xyz
+              user: CN=admin,DC=example,DC=org
               password:
                 secret_name: ldap-ltb-passwd
                 path: LDAP_ADMIN_PASSWORD
