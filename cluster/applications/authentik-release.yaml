@@ -1,0 +1,72 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: authentik-release
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://charts.goauthentik.io
+    targetRevision: 2024.x.x
+    chart: authentik
+    helm:
+      releaseName: a
+      valuesObject:
+        authentik:
+          secret_key: file:///secret-key/key
+          postgresql:
+            host: acid-auth
+            user: postgres
+            password: file:///postgres-creds/password
+        server:
+          ingress:
+            enabled: true
+            hosts:
+              - auth.chrismiller.xyz
+            tls:
+              - secretName: auth-tls
+                hosts:
+                  - auth.chrismiller.xyz
+          volumes:
+            - name: postgres-creds
+              secret:
+                secretName: postgres.acid-auth.credentials.postgresql.acid.zalan.do
+            - name: secret-key
+              secret:
+                secretName: secret-key
+          volumeMounts:
+            - name: postgres-creds
+              mountPath: /postgres-creds
+              readOnly: true
+            - name: secret-key
+              mountPath: /secret-key
+              readOnly: true
+        worker:
+          volumes:
+            - name: postgres-creds
+              secret:
+                secretName: postgres.acid-auth.credentials.postgresql.acid.zalan.do
+            - name: secret-key
+              secret:
+                secretName: secret-key
+          volumeMounts:
+            - name: postgres-creds
+              mountPath: /postgres-creds
+              readOnly: true
+            - name: secret-key
+              mountPath: /secret-key
+              readOnly: true
+        redis:
+          enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: authentik
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground

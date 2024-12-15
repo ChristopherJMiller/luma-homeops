@@ -4,6 +4,8 @@ kind: Kustomization
 resources:
   - argo-cd.yaml
   - applications.yaml
+  - authentik.yaml
+  - authentik-release.yaml
   - cert-approver.yaml
   - cert-manager.yaml
   - chrismillerxyz.yaml
