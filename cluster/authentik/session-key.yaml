@@ -1,0 +1,15 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp: null
+  name: session-key
+  namespace: authentik
+spec:
+  encryptedData:
+    key: AgCNewOS8DfutM3EZKQnvBrNZu76AEkg7LoEzqriMa0poba2lXnaUGrFRy+vDbQEzKxuOxu7TLsjoPjdcc4CPnwAvX3GfPlpeRhDxWeC8VS/wetIJUZp/Cpyfj1xEfEALgGy7mgflEaMe7nuelboai7oiH1LxD6H951atlJPbGOyYJxRfB225nx/01Xm69DBEy/pd69lQIJwaKjBypKrTg5nqgc/PrVMmDwIQ2O0qkV5Ey8/NhLrrMD5nQj7r9r5tPx40a+JKFyzBlIoanAV6yx+cdZ03+aa21ejROw+BV3lj/jzt0RDm1xiQLdq5NdSvBw8rOOM/KTPOWZByNKtDOmWG9L5P+2YSIRhr1m0znS0kf52PGlCwhE6gohX+fxW5tD0YXCXqWYmYPNcLQaDJEgOXzGVGsWCLDN2E/52QcdVD5zGFo047So+TDgcenwOKT0KcpFtaKDZB2aKcILPyeRm6cB5KCB54nU7TobKTmW1z1LXg7bGqq7ElIvJcgn0EmtbDlmTi6e06euwUOjmhsKxE9Eq6SguzwJR0+QWjyALJDMzN8JoPewiFL0wq7IcnIDR5o50EjWjHySVfATTi/ZbOQjokznR538D+6aPxl3HR/MGDQGTTmhv77S81NR+nHJzBAywY5henTtjbxM7VzK3rHfa9oBJUTD3JU3r28N18VR09wuVRpN70DRClCNUO7oGgOzLZvyi/zu/0JYWomDhxRclh4BMGyDicfgVFe+wC/h2GkXEgKOaRfL0QpjcO6QUFkHJd4kQIVnqm+jWZW0YJHPo/EmwNVP5vo5ZxgvjmaP2FnbPbZbWt0e30er27uPzO9Gfuyx2z0XJ76253R1UCOexgGQm/JRdztWHpsM99Q==
+  template:
+    metadata:
+      creationTimestamp: null
+      name: session-key
+      namespace: authentik

@@ -5,4 +5,4 @@ namespace: chrismillerxyz
 resources:
   - psql.yaml
   - tls.yaml
-  - secret-key.yaml
+  - session-key.yaml
