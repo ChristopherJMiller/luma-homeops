@@ -50,8 +50,9 @@ spec:
               deploy: true
           storage:
             postgres:
-              enable: true
+              enabled: true
               deploy: true
+
           notifier:
             filesystem:
               enabled: true
