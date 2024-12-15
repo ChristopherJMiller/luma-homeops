@@ -39,10 +39,10 @@ spec:
             storageClassName: rook-ceph-block
           resources:
             requests:
-              memory: 1Gi
+              memory: 2Gi
               cpu: 400m
             limits:
-              memory: 1Gi
+              memory: 2Gi
           servers:
             - name: news.eweka.nl
               enabled: true
