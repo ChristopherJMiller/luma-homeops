@@ -49,6 +49,8 @@ spec:
           metrics:
             enabled: true
         configMap:
+          server:
+            path: /
           session:
             cookies:
               - subdomain: auth
