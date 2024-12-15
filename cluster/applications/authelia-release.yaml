@@ -59,8 +59,7 @@ spec:
               base_dn: DC=chrismiller,DC=xyz
               user: CN=Authelia,DC=chrismiller,DC=xyz
         persistence:
-          enabled: true
-          storageClass: rook-ceph-fs
+          enabled: false
         postgresql:
           primary:
             persistence:
