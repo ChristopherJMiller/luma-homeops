@@ -60,7 +60,7 @@ spec:
               user: CN=Authelia,DC=chrismiller,DC=xyz
         persistence:
           enabled: true
-          storageClass: rook-ceph-block
+          storageClass: rook-ceph-fs
         postgresql:
           primary:
             persistence:
