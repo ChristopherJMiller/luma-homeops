@@ -63,13 +63,12 @@ spec:
           authentication_backend:
             ldap:
               enabled: true
-              address: ldaps://ldap
+              address: ldap://ldap
               base_dn: DC=chrismiller,DC=xyz
               user: CN=admin,DC=example,DC=org
               password:
                 secret_name: ldap
                 path: LDAP_ADMIN_PASSWORD
-              start_tls: true
         secret:
           additionalSecrets:
             a-postgresql:
