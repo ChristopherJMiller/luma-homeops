@@ -14,7 +14,7 @@ spec:
       releaseName: a
       valuesObject:
         authentik:
-          secret_key: file:///secret-key/key
+          secret_key: file:///session-key/key
           postgresql:
             host: acid-auth
             user: postgres
@@ -32,30 +32,30 @@ spec:
             - name: postgres-creds
               secret:
                 secretName: postgres.acid-auth.credentials.postgresql.acid.zalan.do
-            - name: secret-key
+            - name: session-key
               secret:
-                secretName: secret-key
+                secretName: session-key
           volumeMounts:
             - name: postgres-creds
               mountPath: /postgres-creds
               readOnly: true
-            - name: secret-key
-              mountPath: /secret-key
+            - name: session-key
+              mountPath: /session-key
               readOnly: true
         worker:
           volumes:
             - name: postgres-creds
               secret:
                 secretName: postgres.acid-auth.credentials.postgresql.acid.zalan.do
-            - name: secret-key
+            - name: session-key
               secret:
-                secretName: secret-key
+                secretName: session-key
           volumeMounts:
             - name: postgres-creds
               mountPath: /postgres-creds
               readOnly: true
-            - name: secret-key
-              mountPath: /secret-key
+            - name: session-key
+              mountPath: /session-key
               readOnly: true
         redis:
           enabled: true
