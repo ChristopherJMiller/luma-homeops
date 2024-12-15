@@ -37,6 +37,12 @@ spec:
         sabnzbd:
           config:
             storageClassName: rook-ceph-block
+          resources:
+            requests:
+              memory: 1Gi
+              cpu: 400m
+            limits:
+              memory: 1Gi
           servers:
             - name: news.eweka.nl
               enabled: true
@@ -49,7 +55,7 @@ spec:
               passwordFromSecretKeyRef:
                 name: usenet-user-pass
                 key: password
-              connections: 8
+              connections: 50
           ini: |
             helpful_warnings = 1
             host_whitelist = "sabnzbd.chrismiller.xyz"
