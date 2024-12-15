@@ -34,6 +34,14 @@ spec:
               - secretName: auth-tls
                 hosts:
                   - auth.chrismiller.xyz
+            extraPaths:
+              - path: /outpost.goauthentik.io
+                pathType: Prefix
+                backend:
+                  service:
+                    name: ak-outpost-authentik-embedded-outpost
+                    port:
+                      number: 9000
           volumes:
             - name: postgres-creds
               secret:
