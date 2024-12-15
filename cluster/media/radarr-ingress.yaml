@@ -33,7 +33,7 @@ spec:
               service:
                 name: mm-radarr
                 port:
-                  number: 8989
+                  number: 7878
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
