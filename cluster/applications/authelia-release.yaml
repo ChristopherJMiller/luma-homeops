@@ -48,6 +48,7 @@ spec:
             redis:
               enabled: true
               deploy: true
+              host: a-redis-master
           storage:
             postgres:
               enabled: true
