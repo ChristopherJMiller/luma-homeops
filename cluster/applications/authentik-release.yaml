@@ -18,7 +18,7 @@ spec:
           postgresql:
             host: acid-auth
             user: postgres
-            database: postgres
+            name: postgres
             password: file:///postgres-creds/password
         server:
           ingress:
