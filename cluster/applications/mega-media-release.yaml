@@ -68,7 +68,7 @@ spec:
             config_lock = 0
             fixed_ports = 1
             notified_new_skin = 0
-            direct_unpack_tested = 0
+            direct_unpack_tested = 1
             sorters_converted = 1
             check_new_rel = 1
             auto_browser = 0
@@ -414,6 +414,14 @@ spec:
             priority = -100
             [[software]]
             name = software
+            order = 4
+            pp = ""
+            script = Default
+            dir = ""
+            newzbin = ""
+            priority = -100
+            [[books]]
+            name = books
             order = 4
             pp = ""
             script = Default
