@@ -6,3 +6,4 @@ resources:
   - psql.yaml
   - tls.yaml
   - session-key.yaml
+  - outpost-ingress.yaml
