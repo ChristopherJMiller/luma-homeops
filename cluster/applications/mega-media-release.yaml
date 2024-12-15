@@ -79,7 +79,7 @@ spec:
             https_port = ""
             username = ""
             password = ""
-            bandwidth_max = 100
+            bandwidth_max = ""
             cache_limit = 1G
             web_dir = Glitter
             web_color = Auto
