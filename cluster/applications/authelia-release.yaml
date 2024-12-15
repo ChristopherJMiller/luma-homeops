@@ -53,10 +53,10 @@ spec:
             postgres:
               enabled: true
               deploy: true
-              address: acid-auth
+              address: a-postgresql
               password:
-                secret_name: postgres.acid-auth.credentials.postgresql.acid.zalan.do
-                path: password
+                secret_name: a-postgresql
+                path: postgres-password
           notifier:
             filesystem:
               enabled: true
@@ -65,22 +65,28 @@ spec:
               enabled: true
               address: ldap://ldap
               base_dn: DC=chrismiller,DC=xyz
-              user: CN=admin,DC=chrismiller,DC=xyz
+              user: CN=Authelia,DC=chrismiller,DC=xyz
               password:
                 secret_name: ldap-ltb-passwd
                 path: LDAP_ADMIN_PASSWORD
         secret:
           additionalSecrets:
-            postgres.acid-auth.credentials.postgresql.acid.zalan.do:
+            a-postgresql:
               items:
-                - key: password
-                  path: password
+                - key: postgres-password
+                  path: postgres-password
             ldap-ltb-passwd:
               items:
                 - key: LDAP_ADMIN_PASSWORD
                   path: LDAP_ADMIN_PASSWORD
         persistence:
           enabled: false
+        postgresql:
+          primary:
+            persistence:
+              enabled: true
+              storageClass: rook-ceph-block
+              size: 10Gi
         redis:
           master:
             persistence:
