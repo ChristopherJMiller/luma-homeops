@@ -4,3 +4,4 @@ kind: Kustomization
 namespace: authelia
 resources:
   - tls.yaml
+  - psql.yaml

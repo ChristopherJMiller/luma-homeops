@@ -1,0 +1,19 @@
+---
+apiVersion: acid.zalan.do/v1
+kind: postgresql
+metadata:
+  name: acid-auth
+spec:
+  databases:
+    authelia: authelia
+  numberOfInstances: 1
+  spiloRunAsUser: 101
+  spiloRunAsGroup: 103
+  spiloFSGroup: 103
+  postgresql:
+    version: '16'
+  teamId: acid
+  users:
+    authelia: []
+  volume:
+    size: 20Gi
