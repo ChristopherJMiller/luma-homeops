@@ -69,6 +69,7 @@ spec:
               password:
                 secret_name: ldap
                 path: LDAP_ADMIN_PASSWORD
+              start_tls: true
         secret:
           additionalSecrets:
             a-postgresql:
