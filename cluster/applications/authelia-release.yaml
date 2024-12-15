@@ -25,8 +25,7 @@ spec:
             - host: auth.chrismiller.xyz
               http:
                 paths:
-                  - path: /
-                    pathType: Prefix
+                  - pathType: Prefix
                     backend:
                       service:
                         name: a-authelia
@@ -49,8 +48,6 @@ spec:
           metrics:
             enabled: true
         configMap:
-          server:
-            path: /
           session:
             cookies:
               - subdomain: auth
