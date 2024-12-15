@@ -7,9 +7,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/realliance/helm-mega-media.git
-    path: ./
-    targetRevision: main
+    repoURL: https://realliance.github.io/helm-mega-media
+    chart: mega-media
+    targetRevision: 0.x.x
     helm:
       releaseName: mm
       valuesObject:
