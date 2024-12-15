@@ -63,7 +63,7 @@ spec:
           authentication_backend:
             ldap:
               enabled: true
-              address: ldap://ldap
+              address: ldaps://ldap
               base_dn: DC=chrismiller,DC=xyz
               user: CN=admin,DC=example,DC=org
               password:
