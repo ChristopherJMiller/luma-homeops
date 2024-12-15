@@ -54,6 +54,9 @@ spec:
               enabled: true
               deploy: true
               address: a-postgresql
+              password:
+                secret_name: a-postgresql
+                path: postgres-password
           notifier:
             filesystem:
               enabled: true
