@@ -42,6 +42,8 @@ spec:
             enabled: true
         configMap:
           session:
+            encryption_key:
+              secret_name: '~'
             cookies:
               - subdomain: auth
                 domain: chrismiller.xyz
