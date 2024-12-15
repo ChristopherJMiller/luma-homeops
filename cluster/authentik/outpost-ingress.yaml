@@ -15,7 +15,7 @@ spec:
     - host: auth.chrismiller.xyz
       http:
         paths:
-          - path: /outpost
+          - path: /outpost.goauthentik.io
             pathType: Prefix
             backend:
               service:
