@@ -9,3 +9,6 @@ resources:
   - usenet-user-pass.yaml
   - sonarr-ingress.yaml
   - radarr-ingress.yaml
+  - lidarr-ingress.yaml
+  - prowlarr-ingress.yaml
+  - readarr-ingress.yaml
