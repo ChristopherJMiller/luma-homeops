@@ -4,9 +4,6 @@ kind: Kustomization
 resources:
   - argo-cd.yaml
   - applications.yaml
-  - authelia.yaml
-  - authelia-openldap.yaml
-  - authelia-release.yaml
   - cert-approver.yaml
   - cert-manager.yaml
   - chrismillerxyz.yaml
