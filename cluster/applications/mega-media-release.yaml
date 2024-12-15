@@ -35,6 +35,20 @@ spec:
           transcode:
             storageClassName: rook-ceph-block
         sabnzbd:
+          livenessProbe:
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 10
+            httpGet:
+              path: /
+              port: http
+          readinessProbe:
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 10
+            httpGet:
+              path: /
+              port: http
           config:
             storageClassName: rook-ceph-block
           resources:
