@@ -74,9 +74,9 @@ spec:
             resources:
               requests:
                 cpu: 200m
-                memory: 800Mi
+                memory: 1.5Gi
               limits:
-                memory: 800Mi
+                memory: 1.5Gi
             additionalScrapeConfigs:
               - job_name: kubernetes-pods
                 kubernetes_sd_configs:
