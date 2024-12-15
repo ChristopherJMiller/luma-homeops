@@ -42,8 +42,6 @@ spec:
             enabled: true
         configMap:
           session:
-            encryption_key:
-              secret_name: '~'
             cookies:
               - subdomain: auth
                 domain: chrismiller.xyz
@@ -69,7 +67,7 @@ spec:
               base_dn: DC=chrismiller,DC=xyz
               user: CN=admin,DC=example,DC=org
               password:
-                secret_name: ldap-ltb-passwd
+                secret_name: ldap
                 path: LDAP_ADMIN_PASSWORD
         secret:
           additionalSecrets:
@@ -77,7 +75,7 @@ spec:
               items:
                 - key: postgres-password
                   path: postgres-password
-            ldap-ltb-passwd:
+            ldap:
               items:
                 - key: LDAP_ADMIN_PASSWORD
                   path: LDAP_ADMIN_PASSWORD
