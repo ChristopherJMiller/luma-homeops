@@ -62,7 +62,7 @@ spec:
           authentication_backend:
             ldap:
               enabled: true
-              address: ldap://ldap-helm-openldap
+              address: ldap://ldap-openldap-stack-ha
               base_dn: DC=chrismiller,DC=xyz
               user: CN=Authelia,DC=chrismiller,DC=xyz
         persistence:
