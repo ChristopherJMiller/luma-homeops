@@ -73,6 +73,12 @@ spec:
               readOnly: true
         redis:
           enabled: true
+          resources:
+            requests:
+              cpu: 1
+              memory: 1Gi
+            limits:
+              memory: 1Gi
   destination:
     server: https://kubernetes.default.svc
     namespace: authentik
