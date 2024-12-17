@@ -26,10 +26,10 @@ spec:
           enabled: true
           resources:
             requests:
-              memory: 4Gi
+              memory: 6Gi
               cpu: 1
             limits:
-              memory: 4Gi
+              memory: 6Gi
           config:
             storageClassName: rook-ceph-block
           transcode:
