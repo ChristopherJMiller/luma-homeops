@@ -21,12 +21,15 @@ spec:
             name: postgres
             password: file:///postgres-creds/password
         server:
+          livenessProbe:
+            # -- Number of seconds after which the [probe] times out
+            timeoutSeconds: 10
           resources:
             requests:
               cpu: 250m
-              memory: 512Mi
+              memory: 256Mi
             limits:
-              memory: 512Mi
+              memory: 256Mi
           ingress:
             enabled: true
             annotations:
@@ -63,12 +66,16 @@ spec:
               mountPath: /session-key
               readOnly: true
         worker:
+          replicas: 2
+          livenessProbe:
+            # -- Number of seconds after which the [probe] times out
+            timeoutSeconds: 10
           resources:
             requests:
               cpu: 250m
-              memory: 512Mi
+              memory: 256Mi
             limits:
-              memory: 512Mi
+              memory: 256Mi
           volumes:
             - name: postgres-creds
               secret:
@@ -85,12 +92,29 @@ spec:
               readOnly: true
         redis:
           enabled: true
-          resources:
-            requests:
-              cpu: 250m
-              memory: 512Mi
-            limits:
-              memory: 512Mi
+          architecture: replication
+          master:
+            livenessProbe:
+              timeoutSeconds: 10
+            readinessProbe:
+              timeoutSeconds: 10
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 256Mi
+          replica:
+            livenessProbe:
+              timeoutSeconds: 10
+            readinessProbe:
+              timeoutSeconds: 10
+            resources:
+              requests:
+                cpu: 100m
+                memory: 256Mi
+              limits:
+                memory: 256Mi
   destination:
     server: https://kubernetes.default.svc
     namespace: authentik
