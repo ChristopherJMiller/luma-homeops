@@ -231,21 +231,21 @@ spec:
     mgr:
       requests:
         cpu: 500m
-        memory: 512Mi
+        memory: 2Gi
       limits:
-        memory: 512Mi
+        memory: 2Gi
     mon:
       requests:
         cpu: 500m
-        memory: 512Mi
+        memory: 4Gi
       limits:
-        memory: 512Mi
+        memory: 4Gi
     osd:
       requests:
         cpu: 500m
-        memory: 1536Mi
+        memory: 4Gi
       limits:
-        memory: 1536Mi
+        memory: 4Gi
     crashcollector:
       requests:
         cpu: 100m
