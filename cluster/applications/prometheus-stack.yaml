@@ -66,6 +66,10 @@ spec:
             requests:
               cpu: 100m
               memory: 100Mi
+          livenessProbe:
+            timeoutSeconds: 10
+          readinessProbe:
+            timeoutSeconds: 10
         prometheus:
           podDisruptionBudget:
             enabled: true
