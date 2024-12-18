@@ -101,9 +101,9 @@ spec:
             resources:
               requests:
                 cpu: 100m
-                memory: 256Mi
+                memory: 512Mi
               limits:
-                memory: 256Mi
+                memory: 512Mi
           replica:
             livenessProbe:
               timeoutSeconds: 10
@@ -112,9 +112,9 @@ spec:
             resources:
               requests:
                 cpu: 100m
-                memory: 256Mi
+                memory: 512Mi
               limits:
-                memory: 256Mi
+                memory: 512Mi
   destination:
     server: https://kubernetes.default.svc
     namespace: authentik
