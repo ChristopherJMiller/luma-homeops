@@ -24,10 +24,24 @@ spec:
             key: password
         plex:
           enabled: true
+          livenessProbe:
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 10
+            httpGet:
+              path: /identity
+              port: http
+          readinessProbe:
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 10
+            httpGet:
+              path: /identity
+              port: http
           resources:
             requests:
               memory: 6Gi
-              cpu: 1
+              cpu: 2
             limits:
               memory: 6Gi
           config:
