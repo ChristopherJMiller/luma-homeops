@@ -13,3 +13,4 @@ resources:
   - prowlarr-ingress.yaml
   - readarr-ingress.yaml
   - sabnzbd-ingress.yaml
+  - api-keys.yaml

@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://realliance.github.io/helm-mega-media
     chart: mega-media
-    targetRevision: 0.x.x
+    targetRevision: 0.3.0
     helm:
       releaseName: mm
       valuesObject:
@@ -22,6 +22,27 @@ spec:
           passwordFromSecretKeyRef:
             name: postgres.acid-media.credentials.postgresql.acid.zalan.do
             key: password
+        arrs:
+          sonarr:
+            apiKey:
+              name: api-keys
+              key: sonarr
+          radarr:
+            apiKey:
+              name: api-keys
+              key: radarr
+          lidarr:
+            apiKey:
+              name: api-keys
+              key: lidarr
+          readarr:
+            apiKey:
+              name: api-keys
+              key: readarr
+          prowlarr:
+            apiKey:
+              name: api-keys
+              key: prowlarr
         plex:
           enabled: true
           livenessProbe:
@@ -63,6 +84,9 @@ spec:
             httpGet:
               path: /
               port: http
+          apiKey:
+            name: api-keys
+            key: sabnzbd
           config:
             storageClassName: rook-ceph-block
           resources:
