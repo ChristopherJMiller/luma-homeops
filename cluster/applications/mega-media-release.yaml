@@ -475,7 +475,7 @@ spec:
 
         media:
           storageClassName: rook-ceph-block
-          size: 1000Gi
+          size: 2000Gi
         ingress:
           className: nginx
           endpoints:
