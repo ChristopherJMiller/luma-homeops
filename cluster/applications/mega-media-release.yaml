@@ -45,8 +45,8 @@ spec:
               key: prowlarr
         plex:
           enabled: true
-          livenessProbe: {}
-          readinessProbe: {}
+          livenessProbe: null
+          readinessProbe: null
           resources:
             requests:
               memory: 6Gi
