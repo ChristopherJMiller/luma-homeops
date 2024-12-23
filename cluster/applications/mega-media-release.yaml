@@ -46,9 +46,9 @@ spec:
         plex:
           enabled: true
           livenessProbe:
-            httpGet: null
+            failureThreshold: 25
           readinessProbe:
-            httpGet: null
+            failureThreshold: 25
           resources:
             requests:
               memory: 6Gi
