@@ -14,7 +14,7 @@ spec:
       releaseName: ingress-nginx
       valuesObject:
         controller:
-          enableAnnotationValidations: 'false'
+          enableAnnotationValidations: false
           ingressClassResource:
             default: true
           config:
