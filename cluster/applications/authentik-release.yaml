@@ -43,7 +43,7 @@ spec:
                   - auth.chrismiller.xyz
             extraPaths:
               - path: /outpost.goauthentik.io
-                pathType: Prefix
+                pathType: ImplementationSpecific
                 backend:
                   service:
                     name: ak-outpost-media-outpost
