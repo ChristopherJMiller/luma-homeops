@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://christopherjmiller.github.io/charts
     chart: fittrackee
-    targetRevision: 0.2.0
+    targetRevision: 0.2.1
     helm:
       releaseName: fit
       valuesObject:
