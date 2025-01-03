@@ -31,6 +31,15 @@ spec:
             passwordSecretKeyRef:
               name: postgres.acid-fit.credentials.postgresql.acid.zalan.do
               key: password
+        podSecurityContext:
+          fsGroup: 1000
+        securityContext:
+          capabilities:
+            drop:
+              - ALL
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1000
         pvc:
           storageClassName: rook-ceph-block
           size: 20Gi
