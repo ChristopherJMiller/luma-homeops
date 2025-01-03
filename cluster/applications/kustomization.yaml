@@ -10,6 +10,8 @@ resources:
   - cert-manager.yaml
   - chrismillerxyz.yaml
   - external-dns.yaml
+  - fit.yaml
+  - fittrackee.yaml
   - home-assistant.yaml
   - home-assistant-release.yaml
   - home-assistant-mosquitto.yaml

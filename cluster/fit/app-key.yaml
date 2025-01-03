@@ -1,0 +1,15 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp: null
+  name: app-key
+  namespace: fit
+spec:
+  encryptedData:
+    key: AgBm3cLHLjSvanIevtlFRNNLBQFHP1bawVUeU9JXofsRSmOyBrVm4LRzEGvxO/GPWIIlPh0VLGIe1aWpSzV9B1NSI387xf9bB2eX6ZX4wS829HOzkfGXpJ8qUEjiM8/xGaDEYm9v1vf23PZ4XyfqmnSVt8AbVmg8AwNCKoUrPeNee2amu17RRvzwaBUqNJr63Pa5/huq/JerPPjdoJUTJpeTqTasIHpy4oUTKrur4COBqVbj8SAR/xk8D2TH0VBogA6mTBakV0BJv8GPDBLpYLMSk1VEoBxbyNpougj1YlqiOPcIlGZaSLRND5033VPSmPauOYyS94hBPED6zN0a/Za38HEAHplpz/gd6Xt3YtKTbxgQmEpLq/W1M0USSJpV2f8gurOIuKQs0unRSNd8ayivjifN2bdQciyPks/F/h/ctt6V2M5BQjqNTJc7/QKfaUTdJQzBtV5IKoXmtv/1ot0cU1h5feGxlMwOfshNK7MKorXOYSUB6A9W3+th8EkjidLf/H7vi2AylN6IsLmocdm93er4kAsOQ6apL6rQibxPFVZKxYLkGJ/48rBRzP4Bou5wdOO9sm4A7v0ni4uEavn/soHKGJM/z2wiNPBxHrrYvqWVqDdniUP6icLmF62ooS9daVHcxiiQzNHvOhbg0ilgsrKOVQCvMAqyUc7c4W8bs2zC1K6LKv66dQwQ7wl+Dqe6nCLKxJ7O89D5xFM7QrlbCxUI86QGagaTwUb/w/6i4g==
+  template:
+    metadata:
+      creationTimestamp: null
+      name: app-key
+      namespace: fit

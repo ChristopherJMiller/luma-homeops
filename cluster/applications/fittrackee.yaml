@@ -1,0 +1,53 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fittrackee
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://christopherjmiller.github.io/charts
+    chart: fittrackee
+    targetRevision: 0.2.0
+    helm:
+      releaseName: fit
+      valuesObject:
+        fittrackee:
+          appSecretKey:
+            generate: false
+            secretKeyRef:
+              name: api-key
+              key: key
+        postgresql:
+          # Disables built in PSQL
+          enabled: false
+          externalConnection:
+            host: acid-fit
+            database: postgres
+            usernameSecretKeyRef:
+              name: psql-username
+              key: username
+            passwordFromSecretKeyRef:
+              name: postgres.acid-ha.credentials.postgresql.acid.zalan.do
+              key: password
+        pvc:
+          storageClassName: rook-ceph-block
+          size: 20Gi
+        resources:
+          limits:
+            memory: 256Mi
+          requests:
+            cpu: 200m
+            memory: 256Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: fit
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
