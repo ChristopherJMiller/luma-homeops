@@ -17,7 +17,7 @@ spec:
           appSecretKey:
             generate: false
             secretKeyRef:
-              name: api-key
+              name: app-key
               key: key
         postgresql:
           # Disables built in PSQL
