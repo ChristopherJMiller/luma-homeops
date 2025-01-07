@@ -21,7 +21,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: radarr
-          image: ghcr.io/hotio/radarr@sha256:2f60cef44a249a2c5b37e7182361be457aadae5d3b8c6253e169283771d9547b
+          image: ghcr.io/hotio/radarr@sha256:0788e83b2c401b3b0c5d83613eae1dad430cbfa30e57ffaf01aba03ca6502199
           resources:
             requests:
               memory: 300Mi
