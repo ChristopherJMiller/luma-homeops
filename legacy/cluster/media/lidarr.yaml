@@ -21,7 +21,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: lidarr
-          image: ghcr.io/hotio/lidarr:testing@sha256:6e0a97c1705dbc331ccd0df6b2507eb9d51808a8c563a02a44a8e5c4c19a8c58
+          image: ghcr.io/hotio/lidarr:testing@sha256:5f09efcecd9c604b48da3815dd64856b5f2ad6f640ee55ced2625e0c23b50148
           resources:
             requests:
               memory: 300Mi
