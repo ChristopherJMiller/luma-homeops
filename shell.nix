@@ -11,5 +11,6 @@ pkgs.mkShell {
     talosctl
     kubernetes-helm
     argocd
+    krew
   ];
 }
