@@ -4,5 +4,5 @@ name: argocd-install
 version: 7.6.8
 dependencies:
   - name: argo-cd
-    version: 7.8.4
+    version: 7.8.5
     repository: https://argoproj.github.io/argo-helm
