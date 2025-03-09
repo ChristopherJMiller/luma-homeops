@@ -1,0 +1,32 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: amd-gpu-plugin
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://rocm.github.io/k8s-device-plugin
+    targetRevision: 0.x.x
+    chart: amd-gpu
+    helm:
+      releaseName: labeller
+      valuesObject:
+        labeller:
+          enabled: true
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: amd-gpu
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: privileged
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
