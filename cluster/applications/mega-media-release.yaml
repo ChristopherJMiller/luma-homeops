@@ -51,10 +51,10 @@ spec:
             failureThreshold: 25
           resources:
             requests:
-              memory: 6Gi
+              memory: 4Gi
               cpu: 2
             limits:
-              memory: 6Gi
+              memory: 4Gi
               amd.com/gpu: 1
           config:
             storageClassName: rook-ceph-block
