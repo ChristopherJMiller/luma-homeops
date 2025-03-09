@@ -12,5 +12,6 @@ pkgs.mkShell {
     kubernetes-helm
     argocd
     krew
+    pinentry-tty
   ];
 }
