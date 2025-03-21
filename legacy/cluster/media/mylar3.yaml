@@ -21,7 +21,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: mylar3
-          image: lscr.io/linuxserver/mylar3:latest@sha256:124eb1d44d7683fa05fe586b8b6eb04311f2cf96891a1107adba47c74a774b1e
+          image: lscr.io/linuxserver/mylar3:latest@sha256:29667e112cf4f7feb0f43cb9c274bd345b324a5fa602293b0a12f6d9f7d51f5b
           resources:
             requests:
               memory: 200Mi
