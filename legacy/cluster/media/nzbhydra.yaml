@@ -19,7 +19,7 @@ spec:
       nodeName: luma
       containers:
         - name: nzbhydra
-          image: ghcr.io/hotio/nzbhydra2@sha256:8d90695a9a0e3b78374487105c6e9dd0066cdc96551ee20f92f3c97cf9da3ed7
+          image: ghcr.io/hotio/nzbhydra2@sha256:65e76368dc961b46ab5d49484e68db945ad14687b8a73151209294075f3982c5
           resources:
             requests:
               memory: 600Mi
