@@ -21,7 +21,7 @@ spec:
       nodeName: yoshi
       containers:
         - name: home-assistant
-          image: docker.io/homeassistant/home-assistant:2024.12@sha256:132ef461504be5c5ebd6e34e5d3fb3d7958bb6758a5136107eea9f84c299254a
+          image: docker.io/homeassistant/home-assistant:2025.4@sha256:eecdfc57236ac9cfd9f296b61ae0c8ff65b8e483346e0f15ee14a75a3aa81efa
           ports:
             - containerPort: 8123
           volumeMounts:
