@@ -31,7 +31,7 @@ spec:
             medium: Memory
       containers:
         - name: intro
-          image: ghcr.io/realliance/mc-intro:main@sha256:a95ebfb357c8e2eab2432be91aa6ae76a796981244af73f6faf479ff5a1b6cba
+          image: ghcr.io/realliance/mc-intro:main@sha256:565013c8e3a66a303d6b2d72cf147c295c20ff08d03dfe21df089cde6a9124b3
           ports:
             - containerPort: 8080
               protocol: TCP
