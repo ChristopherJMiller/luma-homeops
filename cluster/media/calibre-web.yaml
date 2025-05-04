@@ -32,6 +32,7 @@ spec:
                 operator: In
                 values:
                 - mm
+            topologyKey: "kubernetes.io/hostname"
       containers:
         - name: calibre-web
           image: lscr.io/linuxserver/calibre-web:0.6.24
