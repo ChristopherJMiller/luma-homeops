@@ -20,9 +20,6 @@ spec:
       labels:
         service: calibre
     spec:
-      securityContext:
-        runAsUser: 101
-        runAsGroup: 101
       affinity:
         podAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
