@@ -40,7 +40,16 @@ spec:
               memory: 200Mi
               cpu: 150m
             limits:
-              memory: 200Mi
+              memory: 
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchExpressions:
+                  - key: app.kubernetes.io/instance
+                    operator: In
+                    values:
+                    - mm
           securityContext:
             readOnlyRootFilesystem: true
             runAsUser: 1000
