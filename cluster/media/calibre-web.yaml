@@ -60,6 +60,10 @@ spec:
               value: linuxserver/mods:universal-calibre
             - name: TZ
               value: Etc/UTC
+            - name: PUID
+              value: "0"
+            - name: PGID
+              value: "0"
           volumeMounts:
             - name: config
               mountPath: /config
