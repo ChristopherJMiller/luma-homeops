@@ -51,9 +51,6 @@ spec:
               cpu: 150m
             limits:
               memory: 200Mi
-          securityContext:
-            runAsUser: 1000
-            runAsGroup: 1000
           env:
             - name: DOCKER_MODS
               value: linuxserver/mods:universal-calibre
