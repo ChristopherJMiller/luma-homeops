@@ -1,0 +1,92 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calibre-web
+  labels:
+    service: calibre
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      services: calibre
+  template:
+    metadata:
+      labels:
+        service: calibre
+    spec:
+      securityContext:
+        runAsUser: 101
+        runAsGroup: 101
+      containers:
+        - name: mysite
+          image: lscr.io/linuxserver/calibre-web:0.6.24
+          ports:
+            - containerPort: 8083
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8083
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: 200Mi
+              cpu: 150m
+            limits:
+              memory: 200Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsUser: 1000
+            runAsGroup: 1000
+          env:
+            - name: DOCKER_MODS
+              value: linuxserver/mods:universal-calibre
+            - name: TZ
+              value: Etc/UTC
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: library
+              mountPath: /books
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: calibre-web-data
+        - name: library
+          persistentVolumeClaim:
+            claimName: mm-media
+            subPath: books
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: calibre-web
+  labels:
+    service: calibre
+spec:
+  ports:
+    - port: 80
+      targetPort: 8083
+      protocol: TCP
+      name: http
+  selector:
+    service: calibre
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: calibre-web-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 8Gi
