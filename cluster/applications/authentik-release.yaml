@@ -92,7 +92,8 @@ spec:
               readOnly: true
         redis:
           enabled: true
-          architecture: standalone
+          architecture: replication
+          commonConfiguration: ""
           master:
             livenessProbe:
               timeoutSeconds: 10
