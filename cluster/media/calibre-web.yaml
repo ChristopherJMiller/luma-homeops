@@ -52,7 +52,6 @@ spec:
             limits:
               memory: 200Mi
           securityContext:
-            readOnlyRootFilesystem: true
             runAsUser: 1000
             runAsGroup: 1000
           env:
