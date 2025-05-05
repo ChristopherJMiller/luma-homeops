@@ -27,6 +27,11 @@ spec:
             apiKey:
               name: api-keys
               key: sonarr
+            resources:
+              requests:
+                memory: 400Mi
+              limits:
+                memory: 400Mi
           radarr:
             apiKey:
               name: api-keys
@@ -466,7 +471,7 @@ spec:
 
         media:
           storageClassName: rook-ceph-block
-          size: 2000Gi
+          size: 3000Gi
         ingress:
           className: nginx
           endpoints:
