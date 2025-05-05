@@ -51,10 +51,10 @@ spec:
             periodSeconds: 10
           resources:
             requests:
-              memory: 300Mi
+              memory: 500Mi
               cpu: 150m
             limits:
-              memory: 300Mi
+              memory: 500Mi
           env:
             - name: DOCKER_MODS
               value: linuxserver/mods:universal-calibre
