@@ -21,7 +21,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: readarr
-          image: ghcr.io/hotio/readarr@sha256:4d94d96282f9b94355ec7d9b0a22b17f4c3c03aa8a57651f284f4e38807bb005
+          image: ghcr.io/hotio/readarr@sha256:80a8042b06ec624b9f18878b165a0767252daef8ccbcb4cca3315ccaf4558450
           resources:
             requests:
               memory: 300Mi
