@@ -1,7 +1,0 @@
-[
- {
-  "op": "replace",
-  "path": "/data/ROOK_CSI_KUBELET_DIR_PATH",
-  "value": "/var/lib/k0s/kubelet"
- }
-]
