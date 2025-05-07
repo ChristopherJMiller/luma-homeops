@@ -1,0 +1,72 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calibre
+  labels:
+    service: calibre
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      service: calibre
+  template:
+    metadata:
+      labels:
+        service: calibre
+    spec:
+      affinity:
+        podAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app.kubernetes.io/instance
+                operator: In
+                values:
+                - mm
+            topologyKey: "kubernetes.io/hostname"
+      containers:
+        - name: calibre
+          image: lscr.io/linuxserver/calibre:8.3.0
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+            - containerPort: 8081
+              protocol: TCP
+          startupProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: 500Mi
+              cpu: 150m
+            limits:
+              memory: 500Mi
+          env:
+            - name: TZ
+              value: Etc/UTC
+            - name: PUID
+              value: "0"
+            - name: PGID
+              value: "0"
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: library
+              mountPath: /books
+      volumes:
+        - name: config
+          persistentVolumeClaim:
+            claimName: calibre-data
+        - name: library
+          persistentVolumeClaim:
+            claimName: mm-media
+            subPath: books

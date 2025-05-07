@@ -16,3 +16,4 @@ resources:
   - api-keys.yaml
   - calibre-web.yaml
   - calibre-web-ingress.yaml
+  - calibre.yaml
