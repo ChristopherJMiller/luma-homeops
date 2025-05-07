@@ -243,9 +243,9 @@ spec:
     osd:
       requests:
         cpu: 500m
-        memory: 4Gi
+        memory: 5Gi
       limits:
-        memory: 4Gi
+        memory: 5Gi
     crashcollector:
       requests:
         cpu: 100m
