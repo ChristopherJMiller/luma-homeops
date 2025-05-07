@@ -13,7 +13,6 @@ spec:
   tls:
     - hosts:
         - realliance.net
-        - www.realliance.net
       secretName: realliance-tls
   rules:
     - host: realliance.net
