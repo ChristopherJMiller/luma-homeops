@@ -38,10 +38,10 @@ spec:
               protocol: TCP
           resources:
             requests:
-              memory: 1Gi
+              memory: 800Mi
               cpu: 150m
             limits:
-              memory: 1Gi
+              memory: 800Mi
           env:
             - name: TZ
               value: Etc/UTC

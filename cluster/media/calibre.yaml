@@ -46,10 +46,10 @@ spec:
             periodSeconds: 10
           resources:
             requests:
-              memory: 500Mi
+              memory: 400Mi
               cpu: 150m
             limits:
-              memory: 500Mi
+              memory: 400Mi
           env:
             - name: TZ
               value: Etc/UTC
