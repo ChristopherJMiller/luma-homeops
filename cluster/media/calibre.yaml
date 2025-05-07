@@ -65,7 +65,7 @@ spec:
       volumes:
         - name: config
           persistentVolumeClaim:
-            claimName: calibre-data
+            claimName: calibre-web-data
         - name: library
           persistentVolumeClaim:
             claimName: mm-media
