@@ -468,6 +468,14 @@ spec:
             dir = ""
             newzbin = ""
             priority = -100
+            [[Readarr]]
+            name = Readarr
+            order = 5
+            pp = ""
+            script = Default
+            dir = ""
+            newzbin = ""
+            priority = -100
 
         media:
           storageClassName: rook-ceph-block
