@@ -26,13 +26,3 @@ spec:
                 name: home
                 port:
                   number: 80
-    - host: www.realliance.net
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: home
-                port:
-                  number: 80
