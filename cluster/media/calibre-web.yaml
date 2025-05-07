@@ -49,8 +49,6 @@ spec:
             limits:
               memory: 1Gi
           env:
-            - name: DOCKER_MODS
-              value: linuxserver/mods:universal-calibre
             - name: TZ
               value: Etc/UTC
             - name: PUID
