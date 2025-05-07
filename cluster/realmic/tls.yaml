@@ -1,0 +1,18 @@
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: realmic-tls
+  namespace: realmic
+spec:
+  secretName: realmic-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: legacy.realliance.net
+  dnsNames:
+    - legacy.realliance.net
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384

@@ -22,6 +22,8 @@ resources:
   - metallb.yaml
   - metrics-server.yaml
   - ingress-nginx.yaml
+  - realliance-net.yaml
+  - realmic.yaml
   - rook.yaml
   - rook-cluster.yaml
   - postgres-operator.yaml
