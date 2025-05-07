@@ -4,7 +4,7 @@ kind: Deployment
 metadata:
   name: calibre-web
   labels:
-    service: calibre
+    service: calibre-web
 spec:
   replicas: 1
   revisionHistoryLimit: 1
@@ -14,11 +14,11 @@ spec:
       maxUnavailable: 1
   selector:
     matchLabels:
-      service: calibre
+      service: calibre-web
   template:
     metadata:
       labels:
-        service: calibre
+        service: calibre-web
     spec:
       affinity:
         podAffinity:
@@ -76,7 +76,7 @@ kind: Service
 metadata:
   name: calibre-web
   labels:
-    service: calibre
+    service: calibre-web
 spec:
   ports:
     - port: 80
@@ -84,7 +84,7 @@ spec:
       protocol: TCP
       name: http
   selector:
-    service: calibre
+    service: calibre-web
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
