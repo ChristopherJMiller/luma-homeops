@@ -17,3 +17,4 @@ resources:
   - calibre-web.yaml
   - calibre-web-ingress.yaml
   - calibre.yaml
+  - calibre-ingress.yaml
