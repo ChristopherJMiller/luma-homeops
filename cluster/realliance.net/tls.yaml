@@ -11,6 +11,7 @@ spec:
   commonName: realliance.net
   dnsNames:
     - realliance.net
+    - www.realliance.net
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA
