@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://realliance.github.io/helm-mega-media
     chart: mega-media
-    targetRevision: 0.4.0
+    targetRevision: 0.4.1
     helm:
       releaseName: mm
       valuesObject:
