@@ -33,37 +33,22 @@ spec:
                 memory: 400Mi
               limits:
                 memory: 400Mi
-            mediaCovers:
-              storageClassName: rook-ceph-block
-              size: 4Gi
           radarr:
             apiKey:
               name: api-keys
               key: radarr
-            mediaCovers:
-              storageClassName: rook-ceph-block
-              size: 4Gi
           lidarr:
             apiKey:
               name: api-keys
               key: lidarr
-            mediaCovers:
-              storageClassName: rook-ceph-block
-              size: 4Gi
           readarr:
             apiKey:
               name: api-keys
               key: readarr
-            mediaCovers:
-              storageClassName: rook-ceph-block
-              size: 4Gi
           prowlarr:
             apiKey:
               name: api-keys
               key: prowlarr
-            mediaCovers:
-              storageClassName: rook-ceph-block
-              size: 4Gi
             resources:
               requests:
                 memory: 150Mi
@@ -501,6 +486,10 @@ spec:
         media:
           storageClassName: rook-ceph-block
           size: 3000Gi
+        mediaCovers:
+          enabled: true
+          storageClassName: rook-ceph-block
+          size: 4Gi
         ingress:
           className: nginx
           endpoints:
