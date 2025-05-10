@@ -445,7 +445,7 @@ spec:
             [[movies]]
             name = movies
             order = 1
-            pp = ""
+            pp = 0
             script = Default
             dir = ""
             newzbin = ""
@@ -453,7 +453,7 @@ spec:
             [[tv]]
             name = tv
             order = 2
-            pp = ""
+            pp = 0
             script = Default
             dir = ""
             newzbin = ""
