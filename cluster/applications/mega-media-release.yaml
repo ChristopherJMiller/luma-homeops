@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://realliance.github.io/helm-mega-media
     chart: mega-media
-    targetRevision: 0.4.1
+    targetRevision: 0.5.0
     helm:
       releaseName: mm
       valuesObject:
@@ -33,22 +33,37 @@ spec:
                 memory: 400Mi
               limits:
                 memory: 400Mi
+            mediaCovers:
+              storageClassName: rook-ceph-block
+              size: 4Gi
           radarr:
             apiKey:
               name: api-keys
               key: radarr
+            mediaCovers:
+              storageClassName: rook-ceph-block
+              size: 4Gi
           lidarr:
             apiKey:
               name: api-keys
               key: lidarr
+            mediaCovers:
+              storageClassName: rook-ceph-block
+              size: 4Gi
           readarr:
             apiKey:
               name: api-keys
               key: readarr
+            mediaCovers:
+              storageClassName: rook-ceph-block
+              size: 4Gi
           prowlarr:
             apiKey:
               name: api-keys
               key: prowlarr
+            mediaCovers:
+              storageClassName: rook-ceph-block
+              size: 4Gi
             resources:
               requests:
                 memory: 150Mi
