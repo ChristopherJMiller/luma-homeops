@@ -6,7 +6,7 @@ metadata:
 spec:
   databases:
     postgres: postgres
-  numberOfInstances: 1
+  numberOfInstances: 2
   spiloRunAsUser: 101
   spiloRunAsGroup: 103
   spiloFSGroup: 103
