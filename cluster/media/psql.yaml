@@ -16,4 +16,4 @@ spec:
   users:
     postgres: []
   volume:
-    size: 40Gi
+    size: 20Gi
