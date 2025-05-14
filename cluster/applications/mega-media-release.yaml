@@ -49,11 +49,6 @@ spec:
             apiKey:
               name: api-keys
               key: prowlarr
-            resources:
-              requests:
-                memory: 150Mi
-              limits:
-                memory: 150Mi
         plex:
           enabled: true
           livenessProbe:
