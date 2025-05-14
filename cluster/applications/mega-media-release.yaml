@@ -25,6 +25,7 @@ spec:
             key: password
         arrs:
           sonarr:
+            enabled: true
             apiKey:
               name: api-keys
               key: sonarr
@@ -38,6 +39,7 @@ spec:
               storageClassName: rook-ceph-block
               size: 4Gi
           radarr:
+            enabled: true
             apiKey:
               name: api-keys
               key: radarr
@@ -46,6 +48,7 @@ spec:
               storageClassName: rook-ceph-block
               size: 4Gi
           lidarr:
+            enabled: true
             apiKey:
               name: api-keys
               key: lidarr
@@ -54,6 +57,7 @@ spec:
               storageClassName: rook-ceph-block
               size: 4Gi
           readarr:
+            enabled: true
             apiKey:
               name: api-keys
               key: readarr
@@ -62,6 +66,7 @@ spec:
               storageClassName: rook-ceph-block
               size: 4Gi
           prowlarr:
+            enabled: true
             apiKey:
               name: api-keys
               key: prowlarr
