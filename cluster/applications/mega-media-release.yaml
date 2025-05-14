@@ -33,18 +33,34 @@ spec:
                 memory: 400Mi
               limits:
                 memory: 400Mi
+            mediaCovers:
+              enabled: true
+              storageClassName: rook-ceph-block
+              size: 4Gi
           radarr:
             apiKey:
               name: api-keys
               key: radarr
+            mediaCovers:
+              enabled: true
+              storageClassName: rook-ceph-block
+              size: 4Gi
           lidarr:
             apiKey:
               name: api-keys
               key: lidarr
+            mediaCovers:
+              enabled: true
+              storageClassName: rook-ceph-block
+              size: 4Gi
           readarr:
             apiKey:
               name: api-keys
               key: readarr
+            mediaCovers:
+              enabled: true
+              storageClassName: rook-ceph-block
+              size: 4Gi
           prowlarr:
             apiKey:
               name: api-keys
