@@ -14,7 +14,5 @@ resources:
   - readarr-ingress.yaml
   - sabnzbd-ingress.yaml
   - api-keys.yaml
-  - calibre-web.yaml
-  - calibre-web-ingress.yaml
   - calibre.yaml
   - calibre-ingress.yaml
