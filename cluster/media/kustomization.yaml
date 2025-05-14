@@ -3,7 +3,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: media
 resources:
-  - psql.yaml
+  #- psql.yaml
   - tls.yaml
   - nzb-api-keys.yaml
   - usenet-user-pass.yaml
