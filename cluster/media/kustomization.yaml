@@ -16,3 +16,4 @@ resources:
   - api-keys.yaml
   - calibre.yaml
   - calibre-ingress.yaml
+  - webdav.yaml

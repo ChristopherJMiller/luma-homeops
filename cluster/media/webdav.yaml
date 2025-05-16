@@ -1,0 +1,16 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp:
+  name: webdav-media-pass
+  namespace: media
+spec:
+  encryptedData:
+    password:
+      AgC9u7cu3jdNSwVsViP6+18i+TfcXWrGobk+tCBguilqlmAaBfg6cM6DkfBf1+7ji8M7FtkgS/+/q61F1dZIv9xN7cpaV3M8NjBUniRmrMwmgG0ItycxzYATDBMsZa9vTWRgArMQ2iKBVNuizqK/5n6UHeap3Yn1fSXJF36sC8Av/eWKu/inkXvhXZ4P6BqSMp52+LL+UzsGlWg9yh2WLM0ZcHuPijMBmCGkpMLPyAjY40EyolRQxVsZuavk4KmsrcwmQlZJuLMB+3IPq/DDFk6R35LZECKV46k/zi7FpIBak08+kIPIScSW83J/84cJi+qrnUpnNU9zsWWvzjPwqKPOTwnnl8heAwgcIRMG/cnSR7nUfh42WKB0TuZji+3wY/9KuLPOjY40vIfeji1LYZFCT3K83BYaX6jcgzPiFRbeBzZyeeYOxwsskIi16aHINfJXJdRAvZ6JOlou8+rP3ITDUNliRWXCglMe6nHkypstpkE1fm++R1lww0a8YGlePJ4MYwpeHKPnwY2FCM5IomVFSA+U58LKwz2hSsIIAtmCgj0/8d1IrRS4uVXJeSYEMMVuCfIe7/Z8hnHFTqNem7Mf4WCpjjbGIXx35vJbbJHiRK9LHU98iR8WFz/PDXqA5gyI0sW2kRH1NDPnx4Qd9IAcRxbJctWHV0GBNVHZYBg7x6/8AVprtgrabyT+KqZCrjci4D0H8Ni17iKIdq8ATrA+6j2dTmjJ3KsXEhJinScwZsdo5iYO6W24LfqExq0W8lIhcWxMSCsP8GeaXTtuPDVC
+  template:
+    metadata:
+      creationTimestamp:
+      name: webdav-media-pass
+      namespace: media
