@@ -17,5 +17,4 @@ resources:
   - calibre.yaml
   - calibre-ingress.yaml
   - webdav.yaml
-  - ../applications/media-webdav.yaml
   - mediadav-tls.yaml
