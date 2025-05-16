@@ -19,6 +19,7 @@ resources:
   - rabbitmq-cluster-operator.yaml
   - media.yaml
   - mega-media-release.yaml
+  - media-webdav.yaml
   - metallb.yaml
   - metrics-server.yaml
   - ingress-nginx.yaml
