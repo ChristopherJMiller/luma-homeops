@@ -96,9 +96,9 @@ spec:
           commonConfiguration: ""
           master:
             livenessProbe:
-              timeoutSeconds: 10
+              timeoutSeconds: 300
             readinessProbe:
-              timeoutSeconds: 10
+              timeoutSeconds: 300
             resources:
               requests:
                 cpu: 100m
@@ -107,9 +107,9 @@ spec:
                 memory: 512Mi
           replica:
             livenessProbe:
-              timeoutSeconds: 10
+              timeoutSeconds: 300
             readinessProbe:
-              timeoutSeconds: 10
+              timeoutSeconds: 300
             resources:
               requests:
                 cpu: 100m
