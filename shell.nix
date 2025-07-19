@@ -4,6 +4,7 @@ pkgs.mkShell {
   packages = with pkgs; [
     git
     kubectl
+    krew
     pre-commit
     kubeseal
     nodejs_20

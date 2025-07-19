@@ -13,6 +13,8 @@ spec:
     helm:
       releaseName: ha
       valuesObject:
+        image:
+          tag: 2025.7
         hacs: true
         postgresql:
           enabled: false
