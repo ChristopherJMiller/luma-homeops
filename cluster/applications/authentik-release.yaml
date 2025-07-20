@@ -95,10 +95,6 @@ spec:
           architecture: standalone
           commonConfiguration: ""
           master:
-            livenessProbe:
-              timeoutSeconds: 300
-            readinessProbe:
-              timeoutSeconds: 300
             resources:
               requests:
                 cpu: 100m
