@@ -92,7 +92,7 @@ spec:
               readOnly: true
         redis:
           enabled: true
-          architecture: replication
+          architecture: standalone
           commonConfiguration: ""
           master:
             livenessProbe:
@@ -105,17 +105,8 @@ spec:
                 memory: 512Mi
               limits:
                 memory: 512Mi
-          replica:
-            livenessProbe:
-              timeoutSeconds: 300
-            readinessProbe:
-              timeoutSeconds: 300
-            resources:
-              requests:
-                cpu: 100m
-                memory: 512Mi
-              limits:
-                memory: 512Mi
+            persistence:
+              enabled: false
   destination:
     server: https://kubernetes.default.svc
     namespace: authentik
