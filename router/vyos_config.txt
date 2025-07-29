@@ -1,0 +1,188 @@
+# VyOS Configuration
+# Generated: Mon Jul 28 07:09:57 PM PDT 2025
+
+# SYSTEM CONFIGURATION
+# ===================
+set system config-management commit-revisions '100'
+set system console device ttyS0 speed '115200'
+set system host-name 'vyos'
+set system login user chris authentication public-keys git@chrismiller.xyz key 'AAAAC3NzaC1lZDI1NTE5AAAAICHR4q3amhKDhCF6+xa3oTXJX2ycN503+cEo/gpnOkFt'
+set system login user chris authentication public-keys git@chrismiller.xyz type 'ssh-ed25519'
+set system name-server '1.0.0.1'
+set system name-server '1.1.1.1'
+set system name-server '2606:4700:4700::1001'
+set system name-server '2606:4700:4700::1111'
+set system syslog global facility all level 'info'
+set system syslog global facility local7 level 'debug'
+
+# INTERFACES
+# ==========
+set interfaces ethernet eth0 address 'dhcp'
+set interfaces ethernet eth0 description 'OUTSIDE'
+set interfaces ethernet eth0 hw-id '20:7c:14:f2:f4:fd'
+set interfaces ethernet eth0 offload gro
+set interfaces ethernet eth0 offload gso
+set interfaces ethernet eth0 offload sg
+set interfaces ethernet eth0 offload tso
+set interfaces ethernet eth2 address '192.168.0.1/24'
+set interfaces ethernet eth2 description 'LAN'
+set interfaces ethernet eth2 hw-id '20:7c:14:f2:f4:fb'
+set interfaces ethernet eth3 hw-id '20:7c:14:f2:f4:fc'
+set interfaces ethernet eth4 hw-id '20:7c:14:f2:f4:fe'
+set interfaces ethernet eth4 offload gro
+set interfaces ethernet eth4 offload gso
+set interfaces ethernet eth4 offload sg
+set interfaces ethernet eth4 offload tso
+set interfaces loopback lo
+
+# FIREWALL CONFIGURATION
+# =====================
+## Global Options
+set firewall global-options state-policy established action 'accept'
+set firewall global-options state-policy invalid action 'drop'
+set firewall global-options state-policy related action 'accept'
+
+## Groups
+set firewall group interface-group LAN interface 'eth2'
+set firewall group interface-group WAN interface 'eth0'
+set firewall group network-group NET-INSIDE-v4 network '192.168.0.0/24'
+
+## IPv4 Rules
+set firewall ipv4 forward filter rule 100 action 'jump'
+set firewall ipv4 forward filter rule 100 destination group network-group 'NET-INSIDE-v4'
+set firewall ipv4 forward filter rule 100 inbound-interface group 'WAN'
+set firewall ipv4 forward filter rule 100 jump-target 'OUTSIDE-IN'
+set firewall ipv4 input filter default-action 'drop'
+set firewall ipv4 input filter rule 20 action 'jump'
+set firewall ipv4 input filter rule 20 destination port '22'
+set firewall ipv4 input filter rule 20 jump-target 'VyOS_MANAGEMENT'
+set firewall ipv4 input filter rule 20 protocol 'tcp'
+set firewall ipv4 input filter rule 30 action 'accept'
+set firewall ipv4 input filter rule 30 icmp type-name 'echo-request'
+set firewall ipv4 input filter rule 30 protocol 'icmp'
+set firewall ipv4 input filter rule 30 state 'new'
+set firewall ipv4 input filter rule 40 action 'accept'
+set firewall ipv4 input filter rule 40 destination port '53'
+set firewall ipv4 input filter rule 40 protocol 'tcp_udp'
+set firewall ipv4 input filter rule 40 source group network-group 'NET-INSIDE-v4'
+set firewall ipv4 input filter rule 50 action 'accept'
+set firewall ipv4 input filter rule 50 source address '127.0.0.0/8'
+set firewall ipv4 input filter rule 60 action 'accept'
+set firewall ipv4 input filter rule 60 destination port '8585'
+set firewall ipv4 input filter rule 60 protocol 'tcp'
+set firewall ipv4 input filter rule 60 source group network-group 'NET-INSIDE-v4'
+set firewall ipv4 name OUTSIDE-IN default-action 'drop'
+set firewall ipv4 name OUTSIDE-IN rule 10 action 'accept'
+set firewall ipv4 name OUTSIDE-IN rule 10 destination port '80'
+set firewall ipv4 name OUTSIDE-IN rule 10 inbound-interface group 'WAN'
+set firewall ipv4 name OUTSIDE-IN rule 10 protocol 'tcp_udp'
+set firewall ipv4 name OUTSIDE-IN rule 20 action 'accept'
+set firewall ipv4 name OUTSIDE-IN rule 20 destination port '443'
+set firewall ipv4 name OUTSIDE-IN rule 20 inbound-interface group 'WAN'
+set firewall ipv4 name OUTSIDE-IN rule 20 protocol 'tcp_udp'
+set firewall ipv4 name VyOS_MANAGEMENT default-action 'return'
+set firewall ipv4 name VyOS_MANAGEMENT rule 15 action 'accept'
+set firewall ipv4 name VyOS_MANAGEMENT rule 15 inbound-interface group 'LAN'
+set firewall ipv4 name VyOS_MANAGEMENT rule 20 action 'drop'
+set firewall ipv4 name VyOS_MANAGEMENT rule 20 inbound-interface group 'WAN'
+set firewall ipv4 name VyOS_MANAGEMENT rule 20 recent count '4'
+set firewall ipv4 name VyOS_MANAGEMENT rule 20 recent time 'minute'
+set firewall ipv4 name VyOS_MANAGEMENT rule 20 state 'new'
+set firewall ipv4 name VyOS_MANAGEMENT rule 21 action 'accept'
+set firewall ipv4 name VyOS_MANAGEMENT rule 21 inbound-interface group 'WAN'
+set firewall ipv4 name VyOS_MANAGEMENT rule 21 state 'new'
+
+# NAT CONFIGURATION
+# =================
+## Destination NAT
+set nat destination rule 200 description 'HTTP Port Forward'
+set nat destination rule 200 destination port '80'
+set nat destination rule 200 inbound-interface name 'eth0'
+set nat destination rule 200 protocol 'tcp_udp'
+set nat destination rule 200 translation address '192.168.0.6'
+set nat destination rule 200 translation port '80'
+set nat destination rule 210 description 'NAT Reflection: HTTP'
+set nat destination rule 210 destination address '152.44.247.88'
+set nat destination rule 210 destination port '80'
+set nat destination rule 210 inbound-interface name 'eth2'
+set nat destination rule 210 protocol 'tcp_udp'
+set nat destination rule 210 translation address '192.168.0.6'
+set nat destination rule 210 translation port '80'
+set nat destination rule 300 description 'HTTPS Port Forward'
+set nat destination rule 300 destination port '443'
+set nat destination rule 300 inbound-interface name 'eth0'
+set nat destination rule 300 protocol 'tcp_udp'
+set nat destination rule 300 translation address '192.168.0.6'
+set nat destination rule 300 translation port '443'
+set nat destination rule 310 description 'NAT Reflection: HTTPS'
+set nat destination rule 310 destination address '152.44.247.88'
+set nat destination rule 310 destination port '443'
+set nat destination rule 310 inbound-interface name 'eth2'
+set nat destination rule 310 protocol 'tcp_udp'
+set nat destination rule 310 translation address '192.168.0.6'
+set nat destination rule 310 translation port '443'
+
+## Source NAT
+set nat source rule 100 outbound-interface name 'eth0'
+set nat source rule 100 source address '192.168.0.0/24'
+set nat source rule 100 translation address 'masquerade'
+set nat source rule 110 description 'NAT Reflection: LAN'
+set nat source rule 110 destination address '192.168.0.0/24'
+set nat source rule 110 outbound-interface name 'eth2'
+set nat source rule 110 protocol 'tcp'
+set nat source rule 110 source address '192.168.0.0/24'
+set nat source rule 110 translation address 'masquerade'
+
+# SERVICES
+# ========
+## DHCP Server
+set service dhcp-server shared-network-name LAN subnet 192.168.0.0/24 lease '86400'
+set service dhcp-server shared-network-name LAN subnet 192.168.0.0/24 option default-router '192.168.0.1'
+set service dhcp-server shared-network-name LAN subnet 192.168.0.0/24 option name-server '192.168.0.1'
+set service dhcp-server shared-network-name LAN subnet 192.168.0.0/24 range 0 start '192.168.0.9'
+set service dhcp-server shared-network-name LAN subnet 192.168.0.0/24 range 0 stop '192.168.0.239'
+set service dhcp-server shared-network-name LAN subnet 192.168.0.0/24 static-mapping bottom ip-address '192.168.0.242'
+set service dhcp-server shared-network-name LAN subnet 192.168.0.0/24 static-mapping bottom mac '9c:6b:00:70:58:fd'
+set service dhcp-server shared-network-name LAN subnet 192.168.0.0/24 static-mapping middle ip-address '192.168.0.241'
+set service dhcp-server shared-network-name LAN subnet 192.168.0.0/24 static-mapping middle mac '9c:6b:00:70:58:b8'
+set service dhcp-server shared-network-name LAN subnet 192.168.0.0/24 static-mapping top ip-address '192.168.0.240'
+set service dhcp-server shared-network-name LAN subnet 192.168.0.0/24 static-mapping top mac '9c:6b:00:70:58:bd'
+set service dhcp-server shared-network-name LAN subnet 192.168.0.0/24 subnet-id '1'
+
+## DNS Forwarding
+set service dns forwarding allow-from '192.168.0.0/24'
+set service dns forwarding cache-size '0'
+set service dns forwarding listen-address '192.168.0.1'
+
+## NTP
+set service ntp allow-client address '10.0.0.0/8'
+set service ntp allow-client address '::1/128'
+set service ntp allow-client address '127.0.0.0/8'
+set service ntp allow-client address '169.254.0.0/16'
+set service ntp allow-client address '172.16.0.0/12'
+set service ntp allow-client address '192.168.0.0/16'
+set service ntp allow-client address 'fc00::/7'
+set service ntp allow-client address 'fe80::/10'
+set service ntp server time1.vyos.net
+set service ntp server time2.vyos.net
+set service ntp server time3.vyos.net
+
+## SSH
+set service ssh disable-password-authentication
+set service ssh port '22'
+
+# CONTAINER CONFIGURATION
+# ======================
+set container name zigbee2mqtt allow-host-networks
+set container name zigbee2mqtt device adapter destination '/dev/ttyUSB0'
+set container name zigbee2mqtt device adapter source '/dev/ttyUSB0'
+set container name zigbee2mqtt environment TZ value 'Etc/UTC'
+set container name zigbee2mqtt image 'koenkk/zigbee2mqtt'
+set container name zigbee2mqtt port http destination '8080'
+set container name zigbee2mqtt port http protocol 'tcp'
+set container name zigbee2mqtt port http source '8585'
+set container name zigbee2mqtt volume configdir destination '/app/data'
+set container name zigbee2mqtt volume configdir source '/mnt/zigbee2mqtt'
+set container name zigbee2mqtt volume runudev destination '/run/udev'
+set container name zigbee2mqtt volume runudev mode 'ro'
+set container name zigbee2mqtt volume runudev source '/run/udev'
