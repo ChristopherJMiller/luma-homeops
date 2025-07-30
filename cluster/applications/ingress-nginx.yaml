@@ -18,12 +18,13 @@ spec:
           ingressClassResource:
             default: true
           config:
-            enable-brotli: 'true'
-            use-geoip: 'false'
-            use-geoip2: 'false'
-            enable-ocsp: 'true'
-            allow-snippet-annotations: 'true'
+            enable-brotli: "true"
+            use-geoip: "false"
+            use-geoip2: "false"
+            enable-ocsp: "true"
+            allow-snippet-annotations: "true"
             proxy-buffer-size: 1M
+            proxy_busy_buffers_size: 1M
             annotations-risk-level: Critical
           autoscaling:
             enabled: true
@@ -52,7 +53,7 @@ spec:
                         - key: app.kubernetes.io/instance
                           operator: In
                           values:
-                            - '{{ .Release.Name }}'
+                            - "{{ .Release.Name }}"
                         - key: app.kubernetes.io/component
                           operator: In
                           values:
