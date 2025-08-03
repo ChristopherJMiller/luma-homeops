@@ -37,6 +37,8 @@ spec:
             secret: mediadav-tls
         nodeSelector:
           kubernetes.io/hostname: middle
+        strategy:
+          type: Recreate
         persistence:
           enabled: true
           existingClaim: "mm-media"
