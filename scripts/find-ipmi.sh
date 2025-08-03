@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # --- Configuration ---
 SSH_USER=$(whoami)
 ROUTER_IP="192.168.0.1"

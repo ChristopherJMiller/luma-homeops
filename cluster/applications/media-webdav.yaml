@@ -17,7 +17,7 @@ spec:
           /:
             htpasswdSecretRef:
               name: webdav-media-pass
-              key: password 
+              key: password
         existingHtpasswdSecrets:
           - name: webdav-media-pass
         ingress:
@@ -35,10 +35,12 @@ spec:
           tls:
             enabled: true
             secret: mediadav-tls
+        nodeSelector:
+          kubernetes.io/hostname: middle
         persistence:
           enabled: true
           existingClaim: "mm-media"
-  
+
   destination:
     server: https://kubernetes.default.svc
     namespace: media
