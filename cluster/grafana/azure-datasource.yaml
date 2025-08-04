@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource-azure
+  namespace: prometheus
+  labels:
+    grafana_datasource: "1"
+data:
+  azure-monitor.yaml: |
+    apiVersion: 1
+    datasources:
+    - name: Azure Monitor
+      type: grafana-azure-monitor-datasource
+      access: proxy
+      jsonData:
+        cloudName: azuremonitor
+        subscriptionId: ddc1f03e-6903-4508-a23d-1754eb304cad
+        logAnalyticsDefaultWorkspace: 7e100cb4-3907-4540-8bf1-fb596260b75b
+        # Authentication will need to be configured post-deployment
+        # Either via managed identity or service principal
+      secureJsonData:
+        # These need to be filled in after deployment
+        # tenantId: YOUR_TENANT_ID
+        # clientId: YOUR_CLIENT_ID  
+        # clientSecret: YOUR_CLIENT_SECRET
