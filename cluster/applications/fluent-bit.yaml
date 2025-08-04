@@ -126,6 +126,9 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: logging
+  managedNamespaceMetadata:
+    labels:
+      pod-security.kubernetes.io/enforce: privileged
   syncPolicy:
     automated:
       prune: true
