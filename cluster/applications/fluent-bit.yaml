@@ -126,12 +126,15 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: logging
-  managedNamespaceMetadata:
-    labels:
-      pod-security.kubernetes.io/enforce: privileged
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: privileged
+        pod-security.kubernetes.io/enforce-version: latest
+        pod-security.kubernetes.io/warn: baseline
+        pod-security.kubernetes.io/audit: baseline
