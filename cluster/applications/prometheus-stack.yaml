@@ -60,9 +60,9 @@ spec:
                     requests:
                       storage: 5Gi
             secrets:
-            - discord-webhook
+              - discord-webhook
             configMaps:
-            - alertmanager-config
+              - alertmanager-config
         prometheusOperator:
           resources:
             limits:
@@ -78,24 +78,25 @@ spec:
           podDisruptionBudget:
             enabled: true
           prometheusSpec:
-            replicas: 2
+            replicas: 1
             resources:
               requests:
                 cpu: 200m
-                memory: 3Gi
+                memory: 4Gi
               limits:
-                memory: 3Gi
+                memory: 4Gi
             additionalScrapeConfigs:
               - job_name: kubernetes-pods
                 kubernetes_sd_configs:
                   - role: pod
                 relabel_configs:
-                  - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                  - source_labels:
+                      [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
                     action: keep
                     regex: true
               - job_name: vyos-snmp
                 static_configs:
-                  - targets: ['192.168.0.1:161']
+                  - targets: ["192.168.0.1:161"]
                 metrics_path: /snmp
                 params:
                   module: [if_mib]
