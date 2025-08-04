@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-alert-rules
+  namespace: prometheus
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+data:
+  argocd-alerts.yaml: |
+    groups:
+    - name: argocd-sync-failures
+      interval: 60s
+      rules:
+      - alert: ArgoAppSyncFailed
+        expr: |
+          argocd_app_sync_total{phase="Failed"} > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ArgoCD application sync failed (app {{ $labels.name }})"
+          description: "Application {{ $labels.name }} in namespace {{ $labels.namespace }} has failed to sync. Check ArgoCD UI for details."
+          
+      - alert: ArgoAppHealthDegraded
+        expr: |
+          argocd_app_health_status{health_status!="Healthy"} == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ArgoCD application health degraded (app {{ $labels.name }})"
+          description: "Application {{ $labels.name }} health status is {{ $labels.health_status }}."
+          
+      - alert: ArgoAppOutOfSync
+        expr: |
+          argocd_app_info{sync_status!="Synced"} == 1
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "ArgoCD application out of sync (app {{ $labels.name }})"
+          description: "Application {{ $labels.name }} has been out of sync for more than 30 minutes. Current status: {{ $labels.sync_status }}."
+          
+      - alert: ArgoAppSyncPending
+        expr: |
+          argocd_app_info{operation_initiated_by_username!=""} == 1
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "ArgoCD application sync pending (app {{ $labels.name }})"
+          description: "Application {{ $labels.name }} has a sync operation pending for more than 1 hour."
+          
+      - alert: ArgoControllerMetricsError
+        expr: |
+          up{job="argocd-metrics"} == 0 or up{job="argocd-server-metrics"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "ArgoCD metrics endpoint is down"
+          description: "ArgoCD {{ $labels.job }} metrics endpoint has been down for more than 5 minutes."

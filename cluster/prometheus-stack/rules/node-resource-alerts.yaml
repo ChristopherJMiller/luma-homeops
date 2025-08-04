@@ -1,0 +1,83 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: node-resource-alert-rules
+  namespace: prometheus
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+data:
+  node-resource-alerts.yaml: |
+    groups:
+    - name: node-resource-exhaustion
+      interval: 30s
+      rules:
+      - alert: NodeMemoryPressure
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node memory usage is high (instance {{ $labels.instance }})"
+          description: "Node {{ $labels.node }} memory usage is {{ $value | humanize }}%."
+          
+      - alert: NodeMemoryCritical
+        expr: |
+          (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node memory usage is critical (instance {{ $labels.instance }})"
+          description: "Node {{ $labels.node }} memory usage is {{ $value | humanize }}%. OOM killer may activate!"
+          
+      - alert: NodeDiskPressure
+        expr: |
+          (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} / node_filesystem_size_bytes)) * 100 > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node disk usage is high (instance {{ $labels.instance }})"
+          description: "Disk {{ $labels.device }} on node {{ $labels.instance }} is {{ $value | humanize }}% full."
+          
+      - alert: NodeDiskCritical
+        expr: |
+          (1 - (node_filesystem_avail_bytes{fstype!~"tmpfs|fuse.lxcfs|squashfs"} / node_filesystem_size_bytes)) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Node disk usage is critical (instance {{ $labels.instance }})"
+          description: "Disk {{ $labels.device }} on node {{ $labels.instance }} is {{ $value | humanize }}% full. Pods may fail to start!"
+          
+      - alert: NodeCPUHighUsage
+        expr: |
+          100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node CPU usage is high (instance {{ $labels.instance }})"
+          description: "Node {{ $labels.instance }} CPU usage is {{ $value | humanize }}%."
+          
+      - alert: NodeNotReady
+        expr: |
+          kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kubernetes node not ready (node {{ $labels.node }})"
+          description: "Node {{ $labels.node }} has been unready for more than 5 minutes."
+          
+      - alert: NodeUnreachable
+        expr: |
+          kube_node_spec_unschedulable == 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kubernetes node is unschedulable (node {{ $labels.node }})"
+          description: "Node {{ $labels.node }} is unschedulable. New pods cannot be placed on this node."

@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: certificate-alert-rules
+  namespace: prometheus
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+data:
+  certificate-alerts.yaml: |
+    groups:
+    - name: certificate-expiration
+      interval: 1h
+      rules:
+      - alert: CertificateExpiringSoon
+        expr: |
+          certmanager_certificate_expiration_timestamp_seconds - time() < 21 * 24 * 60 * 60
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Certificate expiring soon (instance {{ $labels.name }})"
+          description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} expires in {{ $value | humanizeDuration }}."
+          
+      - alert: CertificateExpiringCritical
+        expr: |
+          certmanager_certificate_expiration_timestamp_seconds - time() < 7 * 24 * 60 * 60
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Certificate expiring critically soon (instance {{ $labels.name }})"
+          description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} expires in {{ $value | humanizeDuration }}. Immediate action required!"
+          
+      - alert: CertificateRenewalFailed
+        expr: |
+          certmanager_certificate_renewal_timestamp_seconds < time() - 7200
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Certificate renewal failed (instance {{ $labels.name }})"
+          description: "Certificate {{ $labels.name }} in namespace {{ $labels.namespace }} failed to renew. Last renewal attempt was {{ $value | humanizeDuration }} ago."

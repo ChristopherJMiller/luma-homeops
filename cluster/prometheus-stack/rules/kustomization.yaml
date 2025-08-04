@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: prometheus
+configMapGenerator:
+  - name: luma-homelab-alert-rules
+    files:
+      - certificate-alerts.yaml
+      - rook-ceph-alerts.yaml
+      - node-resource-alerts.yaml
+      - argocd-alerts.yaml

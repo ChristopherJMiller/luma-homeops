@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rook-ceph-alert-rules
+  namespace: prometheus
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+data:
+  rook-ceph-alerts.yaml: |
+    groups:
+    - name: rook-ceph-health
+      interval: 30s
+      rules:
+      - alert: CephClusterHealthError
+        expr: |
+          ceph_health_status == 2
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ceph cluster health status is ERROR"
+          description: "Ceph cluster is in ERROR state. Immediate investigation required."
+          
+      - alert: CephClusterHealthWarning
+        expr: |
+          ceph_health_status == 1
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ceph cluster health status is WARNING"
+          description: "Ceph cluster is in WARNING state. Please check cluster status."
+          
+      - alert: CephOSDDown
+        expr: |
+          ceph_osd_up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ceph OSD {{ $labels.ceph_daemon }} is down"
+          description: "OSD {{ $labels.ceph_daemon }} has been down for more than 5 minutes."
+          
+      - alert: CephStorageCapacityLow
+        expr: |
+          (ceph_cluster_total_used_raw_bytes / ceph_cluster_total_bytes) * 100 > 80
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ceph storage capacity is running low"
+          description: "Ceph cluster is {{ $value | humanize }}% full. Consider adding more storage."
+          
+      - alert: CephStorageCapacityCritical
+        expr: |
+          (ceph_cluster_total_used_raw_bytes / ceph_cluster_total_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ceph storage capacity is critically low"
+          description: "Ceph cluster is {{ $value | humanize }}% full. Immediate action required!"
+          
+      - alert: CephPGInconsistent
+        expr: |
+          ceph_pg_inconsistent > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Ceph has inconsistent placement groups"
+          description: "{{ $value }} inconsistent PGs detected. Data integrity may be at risk."

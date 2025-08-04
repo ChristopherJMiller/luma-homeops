@@ -85,6 +85,13 @@ spec:
                 memory: 4Gi
               limits:
                 memory: 4Gi
+            ruleSelector:
+              matchLabels:
+                prometheus: kube-prometheus
+                role: alert-rules
+            ruleNamespaceSelector:
+              matchNames:
+                - prometheus
             additionalScrapeConfigs:
               - job_name: kubernetes-pods
                 kubernetes_sd_configs:
