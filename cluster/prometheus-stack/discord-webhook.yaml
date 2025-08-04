@@ -1,0 +1,15 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp: null
+  name: discord-webhook
+  namespace: prometheus
+spec:
+  encryptedData:
+    webhook-url: AgByqlbaV95CXKtfd8mfwMgXioRLnUAhGgtVd32nouw8wplCqsTFniyqj6yLN580Dm3VAOEkWuQofH3drppt/CQV5Jm2wppHnt3SBrcAviBHL1UpMTbMe31bIFWAvBoQBqwR+2RSdWvOKpzzNH38HF3Ob/PjWc9X9fYOpInHq+/YdefIROqHjEorPgrXBYgt/b3Uba+WQ3ejUJljVFY3+kvdnvX/8DLg3WG8mebylHb/7KVKgVLImx8nbaeIvdVc9augNMaUST8sBh8B95eqRpeUllZEffgQsMzNGaE1mO4Ve3zf4t6iDVctIpLqU5wBfLkwpanof+rt7Ua5ndPQFrQ4Xz7AwnKu/klzwZWHHJ5uIAbbbpgO+RgEUQJwGibQgYc283viVVDM4+teZ00bkxWymKZianNp5npw+SZ5BsABKOI0EoH03BCospl51SrwAg9Zh+4BL08bOh4gvRCCcUJUtDMG4aeLD3lFlOZkJM7ECVir+yuYAReMS8+pNL9OtLN2gEOCR+gekbqfZAoTDnUZ/ll0qC7tcvrGspj2M7pJwFXFpuB7FVAE6IXDzJJc+tG2nKk9V6IQ7ktqGImE+rvnQiqpozRTE6eKjD7pGEdZORFwA79FDvESiFxEZjsUC1JipiuMKvW/mIAkxV6SrFiYtEbzYls4Tb6n+F3GTn/0qcyzUMXSoRkj65XVMYYcmGd5xqA/4elw5ei4a7+xlzw2KACXt34/t1epjKbUOHkUw55vYjO1jd+ndHoNWVzr/1VrOTL/9s+kD6MOkDQiWSMh0slP
+  template:
+    metadata:
+      creationTimestamp: null
+      name: discord-webhook
+      namespace: prometheus

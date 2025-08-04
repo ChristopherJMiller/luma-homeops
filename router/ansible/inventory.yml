@@ -1,0 +1,19 @@
+---
+# VyOS Ansible Inventory
+all:
+  children:
+    vyos_routers:
+      hosts:
+        vyos-router:
+          ansible_host: 192.168.0.1
+          ansible_user: chris
+          ansible_network_os: vyos.vyos.vyos
+          ansible_connection: ansible.netcommon.network_cli
+          ansible_python_interpreter: "{{ ansible_playbook_python }}"
+      vars:
+        # VyOS connection settings
+        ansible_ssh_private_key_file: ~/.ssh/id_ed25519  # Adjust path as needed
+        ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
+        # Router identification
+        router_hostname: vyos
+        router_domain: homelab.local

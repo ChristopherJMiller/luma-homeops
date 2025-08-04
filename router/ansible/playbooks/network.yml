@@ -1,0 +1,61 @@
+---
+# VyOS Network Configuration Tasks
+- name: Configure all ethernet interfaces
+      vyos.vyos.vyos_interfaces:
+        config:
+          - name: "{{ networks.lan.interface }}"
+            description: "{{ networks.lan.description }}"
+            enabled: true
+          - name: "{{ networks.wan.interface }}"
+            description: "{{ networks.wan.description }}"
+            enabled: true
+          - name: eth3
+            enabled: false
+          - name: eth4
+            enabled: false
+          - name: lo
+            enabled: true
+        state: merged
+      tags: [network, interfaces]
+
+- name: Configure Layer 3 interface addresses
+      vyos.vyos.vyos_l3_interfaces:
+        config:
+          - name: "{{ networks.lan.interface }}"
+            ipv4:
+              - address: "{{ networks.lan.address }}"
+          - name: "{{ networks.wan.interface }}"
+            ipv4:
+              - address: "{{ networks.wan.address }}"
+        state: merged
+      tags: [network, l3_interfaces]
+
+- name: Configure interface hardware specifics (using vyos_config for hw-id and offload)
+      vyos.vyos.vyos_config:
+        lines:
+          # LAN interface hardware
+          - "set interfaces ethernet {{ networks.lan.interface }} hw-id '{{ networks.lan.hw_id }}'"
+          # WAN interface hardware and offload
+          - "set interfaces ethernet {{ networks.wan.interface }} hw-id '{{ networks.wan.hw_id }}'"
+          - "set interfaces ethernet {{ networks.wan.interface }} offload gro"
+          - "set interfaces ethernet {{ networks.wan.interface }} offload gso"
+          - "set interfaces ethernet {{ networks.wan.interface }} offload sg"
+          - "set interfaces ethernet {{ networks.wan.interface }} offload tso"
+          # Unused interfaces
+          - "set interfaces ethernet eth3 hw-id '{{ networks.unused_interfaces[0].hw_id }}'"
+          - "set interfaces ethernet eth4 hw-id '{{ networks.unused_interfaces[1].hw_id }}'"
+          - "set interfaces ethernet eth4 offload gro"
+          - "set interfaces ethernet eth4 offload gso"
+          - "set interfaces ethernet eth4 offload sg"
+          - "set interfaces ethernet eth4 offload tso"
+        save: false
+      tags: [network, hardware]
+
+- name: Configure DNS forwarding service
+      vyos.vyos.vyos_config:
+        lines:
+          - "set service dns forwarding allow-from '{{ networks.lan.address | regex_replace('/\\d+', '/24') }}'"
+          - set service dns forwarding cache-size '0'
+          - "set service dns forwarding listen-address '{{ networks.lan.address | regex_replace('/\\d+', '') }}'"
+        save: false
+      tags: [network, dns]

@@ -29,4 +29,5 @@ resources:
   - rook-cluster.yaml
   - postgres-operator.yaml
   - prometheus-stack.yaml
+  - prometheus-stack-config.yaml
   - sealed-secrets.yaml

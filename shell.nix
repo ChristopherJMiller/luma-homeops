@@ -14,5 +14,6 @@ pkgs.mkShell {
     argocd
     krew
     pinentry-tty
+    ansible
   ];
 }

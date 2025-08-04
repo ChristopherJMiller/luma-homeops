@@ -1,0 +1,128 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: prometheus
+  labels:
+    app.kubernetes.io/name: alertmanager
+data:
+  alertmanager.yml: |
+    global:
+      resolve_timeout: 5m
+      # Discord webhook URL from secret
+      discord_api_url: "https://discord.com/api/webhooks"
+
+    # Inhibition rules - suppress lower severity when higher severity is active
+    inhibit_rules:
+    - source_matchers:
+      - severity="critical"
+      target_matchers:
+      - severity="warning"
+      equal: ['alertname', 'instance']
+
+    # Main routing tree
+    route:
+      receiver: 'homelab-default'
+      group_by: ['alertname', 'cluster', 'service', 'severity']
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 2h
+      
+      routes:
+      # Critical infrastructure alerts - immediate notification
+      - matchers:
+        - severity="critical"
+        receiver: 'critical-alerts'
+        group_wait: 10s
+        repeat_interval: 30m
+        
+      # Storage alerts - separate channel
+      - matchers:
+        - alertname=~".*Disk.*|.*Storage.*|.*Volume.*|.*Ceph.*"
+        receiver: 'storage-alerts'
+        routes:
+        - matchers:
+          - severity="critical"
+          receiver: 'critical-alerts'
+          
+      # Weekend suppression for non-critical alerts
+      - matchers:
+        - severity!="critical"
+        active_time_intervals:
+        - weekdays
+        receiver: 'homelab-default'
+      
+      # Weekend critical alerts still go through
+      - matchers:
+        - severity="critical"
+        receiver: 'critical-alerts'
+
+    # Time intervals for weekend suppression
+    time_intervals:
+    - name: weekdays
+      time_intervals:
+      - times:
+        - start_time: '09:00'
+          end_time: '22:00'
+        weekdays: ['monday:friday']
+
+    # Alert receivers
+    receivers:
+    - name: 'homelab-default'
+      discord_configs:
+      - webhook_url_file: '/etc/alertmanager/secrets/webhook-url'
+        title: '📊 Homelab Alert: {{ .GroupLabels.alertname }}'
+        message: |
+          **Cluster:** {{ .GroupLabels.cluster | default "homelab" }}
+          **Severity:** {{ .CommonLabels.severity | upper }}
+          
+          {{ range .Alerts.Firing }}
+          🟡 **{{ .Labels.alertname }}**
+          📍 **Instance:** `{{ .Labels.instance }}`
+          📝 **Description:** {{ .Annotations.description }}
+          🔗 **Runbook:** {{ .Annotations.runbook_url }}
+          {{ end }}
+          
+          {{ range .Alerts.Resolved }}
+          ✅ **RESOLVED:** {{ .Labels.alertname }}
+          📍 **Instance:** `{{ .Labels.instance }}`
+          {{ end }}
+
+    - name: 'critical-alerts'
+      discord_configs:
+      - webhook_url_file: '/etc/alertmanager/secrets/webhook-url'
+        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+        message: |
+          @everyone **CRITICAL ALERT**
+          
+          **Cluster:** {{ .GroupLabels.cluster | default "homelab" }}
+          **Time:** {{ .CommonAnnotations.startsAt }}
+          
+          {{ range .Alerts.Firing }}
+          🔴 **{{ .Labels.alertname }}**
+          📍 **Instance:** `{{ .Labels.instance }}`
+          📝 **Description:** {{ .Annotations.description }}
+          🔗 **Runbook:** {{ .Annotations.runbook_url }}
+          
+          **Labels:**
+          {{ range .Labels.SortedPairs }}• {{ .Name }}: {{ .Value }}
+          {{ end }}
+          {{ end }}
+
+    - name: 'storage-alerts'
+      discord_configs:
+      - webhook_url_file: '/etc/alertmanager/secrets/webhook-url'
+        title: '💾 Storage Alert: {{ .GroupLabels.alertname }}'
+        message: |
+          **Storage System Alert**
+          
+          {{ range .Alerts.Firing }}
+          📦 **{{ .Labels.alertname }}**
+          📍 **Instance:** `{{ .Labels.instance }}`
+          📊 **Current Value:** {{ .Annotations.value }}
+          📝 **Description:** {{ .Annotations.description }}
+          {{ end }}
+
+    # Silence configuration
+    templates: []

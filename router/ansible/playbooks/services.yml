@@ -1,0 +1,71 @@
+---
+# VyOS Services Configuration Tasks
+- name: Configure DHCP server
+      vyos.vyos.vyos_config:
+        lines:
+          - "set service dhcp-server shared-network-name {{ dhcp.shared_network }} subnet {{ dhcp.subnet }} lease '{{ dhcp.lease_time }}'"
+          - "set service dhcp-server shared-network-name {{ dhcp.shared_network }} subnet {{ dhcp.subnet }} option default-router '{{ dhcp.default_router }}'"
+          - "set service dhcp-server shared-network-name {{ dhcp.shared_network }} subnet {{ dhcp.subnet }} option name-server '{{ dhcp.name_server }}'"
+          - "set service dhcp-server shared-network-name {{ dhcp.shared_network }} subnet {{ dhcp.subnet }} range 0 start '{{ dhcp.range_start }}'"
+          - "set service dhcp-server shared-network-name {{ dhcp.shared_network }} subnet {{ dhcp.subnet }} range 0 stop '{{ dhcp.range_stop }}'"
+          - "set service dhcp-server shared-network-name {{ dhcp.shared_network }} subnet {{ dhcp.subnet }} subnet-id '1'"
+        save: false
+      tags: [services, dhcp]
+
+- name: Configure DHCP static mappings
+      vyos.vyos.vyos_config:
+        lines:
+          - "set service dhcp-server shared-network-name {{ dhcp.shared_network }} subnet {{ dhcp.subnet }} static-mapping {{ item.name }} ip-address '{{ item.ip }}'"
+          - "set service dhcp-server shared-network-name {{ dhcp.shared_network }} subnet {{ dhcp.subnet }} static-mapping {{ item.name }} mac '{{ item.mac }}'"
+        save: false
+      loop: "{{ dhcp.static_mappings }}"
+      tags: [services, dhcp, static]
+
+- name: Configure Zigbee2MQTT container
+      vyos.vyos.vyos_config:
+        lines:
+          - "set container name {{ containers.zigbee2mqtt.image | basename }} image '{{ containers.zigbee2mqtt.image }}'"
+          - "set container name {{ containers.zigbee2mqtt.image | basename }} allow-host-networks"
+          - "set container name {{ containers.zigbee2mqtt.image | basename }} environment TZ value '{{ containers.zigbee2mqtt.environment.TZ }}'"
+        save: false
+      tags: [services, containers, zigbee]
+
+- name: Configure Zigbee2MQTT container devices
+      vyos.vyos.vyos_config:
+        lines:
+          - "set container name {{ containers.zigbee2mqtt.image | basename }} device adapter destination '{{ item.destination }}'"
+          - "set container name {{ containers.zigbee2mqtt.image | basename }} device adapter source '{{ item.source }}'"
+        save: false
+      loop: "{{ containers.zigbee2mqtt.devices }}"
+      tags: [services, containers, zigbee, devices]
+
+- name: Configure Zigbee2MQTT container ports
+      vyos.vyos.vyos_config:
+        lines:
+          - "set container name {{ containers.zigbee2mqtt.image | basename }} port {{ item.name }} destination '{{ item.destination }}'"
+          - "set container name {{ containers.zigbee2mqtt.image | basename }} port {{ item.name }} protocol '{{ item.protocol }}'"
+          - "set container name {{ containers.zigbee2mqtt.image | basename }} port {{ item.name }} source '{{ item.source }}'"
+        save: false
+      loop: "{{ containers.zigbee2mqtt.ports }}"
+      tags: [services, containers, zigbee, ports]
+
+- name: Configure Zigbee2MQTT container volumes
+      vyos.vyos.vyos_config:
+        lines:
+          - "set container name {{ containers.zigbee2mqtt.image | basename }} volume {{ item.name }} destination '{{ item.destination }}'"
+          - "set container name {{ containers.zigbee2mqtt.image | basename }} volume {{ item.name }} source '{{ item.source }}'"
+        save: false
+      loop: "{{ containers.zigbee2mqtt.volumes }}"
+      when: not item.mode is defined
+      tags: [services, containers, zigbee, volumes]
+
+- name: Configure Zigbee2MQTT container volumes with mode
+      vyos.vyos.vyos_config:
+        lines:
+          - "set container name {{ containers.zigbee2mqtt.image | basename }} volume {{ item.name }} destination '{{ item.destination }}'"
+          - "set container name {{ containers.zigbee2mqtt.image | basename }} volume {{ item.name }} mode '{{ item.mode }}'"
+          - "set container name {{ containers.zigbee2mqtt.image | basename }} volume {{ item.name }} source '{{ item.source }}'"
+        save: false
+      loop: "{{ containers.zigbee2mqtt.volumes }}"
+      when: item.mode is defined
+      tags: [services, containers, zigbee, volumes]

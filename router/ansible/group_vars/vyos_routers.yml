@@ -1,0 +1,159 @@
+---
+# VyOS Router Group Variables
+# Common settings for all VyOS routers in the homelab
+
+# Network Configuration
+networks:
+  lan:
+    interface: eth2
+    address: 192.168.0.1/24
+    description: "LAN"
+    hw_id: "20:7c:14:f2:f4:fb"
+  wan:
+    interface: eth0
+    address: dhcp
+    description: "OUTSIDE"
+    hw_id: "20:7c:14:f2:f4:fd"
+  unused_interfaces:
+    - interface: eth3
+      hw_id: "20:7c:14:f2:f4:fc"
+    - interface: eth4
+      hw_id: "20:7c:14:f2:f4:fe"
+      offload: true
+
+# DNS Settings
+dns_servers:
+  - 1.0.0.1
+  - 1.1.1.1
+  - 2606:4700:4700::1001
+  - 2606:4700:4700::1111
+
+# NTP Configuration
+ntp_servers:
+  - time1.vyos.net
+  - time2.vyos.net
+  - time3.vyos.net
+
+# System Configuration
+system:
+  hostname: vyos
+  commit_revisions: 100
+  console_speed: 115200
+  ssh_key: "AAAAC3NzaC1lZDI1NTE5AAAAICHR4q3amhKDhCF6+xa3oTXJX2ycN503+cEo/gpnOkFt"
+  ssh_key_type: ssh-ed25519
+  ssh_key_name: "git@chrismiller.xyz"
+
+# DHCP Configuration
+dhcp:
+  shared_network: LAN
+  subnet: 192.168.0.0/24
+  lease_time: 86400
+  range_start: 192.168.0.9
+  range_stop: 192.168.0.239
+  default_router: 192.168.0.1
+  name_server: 192.168.0.1
+  static_mappings:
+    - name: top
+      mac: "9c:6b:00:70:58:bd"
+      ip: 192.168.0.240
+    - name: middle
+      mac: "9c:6b:00:70:58:b8"
+      ip: 192.168.0.241
+    - name: bottom
+      mac: "9c:6b:00:70:58:fd"
+      ip: 192.168.0.242
+
+# Firewall Groups
+firewall_groups:
+  interface_groups:
+    - name: LAN
+      interface: eth2
+    - name: WAN
+      interface: eth0
+  network_groups:
+    - name: NET-INSIDE-v4
+      network: 192.168.0.0/24
+
+# NAT Configuration
+nat:
+  destination_rules:
+    - rule: 200
+      description: "HTTP Port Forward"
+      port: 80
+      protocol: tcp_udp
+      inbound_interface: eth0
+      translation_address: 192.168.0.6
+      translation_port: 80
+    - rule: 210
+      description: "NAT Reflection: HTTP"
+      destination_address: 152.44.247.88
+      port: 80
+      protocol: tcp_udp
+      inbound_interface: eth2
+      translation_address: 192.168.0.6
+      translation_port: 80
+    - rule: 300
+      description: "HTTPS Port Forward"
+      port: 443
+      protocol: tcp_udp
+      inbound_interface: eth0
+      translation_address: 192.168.0.6
+      translation_port: 443
+    - rule: 310
+      description: "NAT Reflection: HTTPS"
+      destination_address: 152.44.247.88
+      port: 443
+      protocol: tcp_udp
+      inbound_interface: eth2
+      translation_address: 192.168.0.6
+      translation_port: 443
+  source_rules:
+    - rule: 100
+      outbound_interface: eth0
+      source_address: 192.168.0.0/24
+      translation: masquerade
+    - rule: 110
+      description: "NAT Reflection: LAN"
+      destination_address: 192.168.0.0/24
+      outbound_interface: eth2
+      protocol: tcp
+      source_address: 192.168.0.0/24
+      translation: masquerade
+
+# Container Configuration
+containers:
+  zigbee2mqtt:
+    image: koenkk/zigbee2mqtt
+    allow_host_networks: true
+    environment:
+      TZ: "Etc/UTC"
+    devices:
+      - source: /dev/ttyUSB0
+        destination: /dev/ttyUSB0
+    ports:
+      - source: 8585
+        destination: 8080
+        protocol: tcp
+        name: http
+    volumes:
+      - source: /mnt/zigbee2mqtt
+        destination: /app/data
+        name: configdir
+      - source: /run/udev
+        destination: /run/udev
+        mode: ro
+        name: runudev
+
+# Monitoring Configuration (for our new syslog setup)
+monitoring:
+  syslog:
+    enabled: true
+    listen_port: 514
+    log_file: kubernetes-logs
+    archive_size: 100M
+    archive_files: 200
+  prometheus:
+    node_exporter:
+      enabled: true
+      listen_address: 0.0.0.0
+      port: 9100

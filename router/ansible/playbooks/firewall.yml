@@ -1,0 +1,106 @@
+---
+# VyOS Firewall Configuration Tasks
+- name: Configure firewall global options and groups (using vyos_config)
+      vyos.vyos.vyos_config:
+        lines:
+          # Global options
+          - set firewall global-options state-policy established action 'accept'
+          - set firewall global-options state-policy invalid action 'drop'
+          - set firewall global-options state-policy related action 'accept'
+          # Interface groups
+          - set firewall group interface-group LAN interface 'eth2'
+          - set firewall group interface-group WAN interface 'eth0'
+          # Network groups
+          - set firewall group network-group NET-INSIDE-v4 network '192.168.0.0/24'
+        save: false
+      tags: [firewall, global, groups]
+
+- name: Configure IPv4 input filter rules
+      vyos.vyos.vyos_firewall_rules:
+        config:
+          - afi: ipv4
+            rule_sets:
+              - name: input_filter
+                default_action: drop
+                rules:
+                  - number: 20
+                    action: jump
+                    destination:
+                      port: 22
+                    jump_target: VyOS_MANAGEMENT
+                    protocol: tcp
+                  - number: 30
+                    action: accept
+                    icmp:
+                      type_name: echo-request
+                    protocol: icmp
+                    state:
+                      new: true
+                  - number: 40
+                    action: accept
+                    destination:
+                      port: 53
+                    protocol: tcp_udp
+                    source:
+                      group:
+                        network_group: NET-INSIDE-v4
+                  - number: 50
+                    action: accept
+                    source:
+                      address: 127.0.0.0/8
+                  - number: 60
+                    action: accept
+                    destination:
+                      port: 8585
+                    protocol: tcp
+                    source:
+                      group:
+                        network_group: NET-INSIDE-v4
+        state: merged
+      tags: [firewall, input]
+
+- name: Configure IPv4 forward filter rules
+      vyos.vyos.vyos_firewall_rules:
+        config:
+          - afi: ipv4
+            rule_sets:
+              - name: forward_filter
+                rules:
+                  - number: 100
+                    action: jump
+                    destination:
+                      group:
+                        network_group: NET-INSIDE-v4
+                    inbound_interface:
+                      group: WAN
+                    jump_target: OUTSIDE-IN
+        state: merged
+      tags: [firewall, forward]
+
+- name: Configure custom firewall chains (using vyos_config for complex rules)
+      vyos.vyos.vyos_config:
+        lines:
+          # OUTSIDE-IN chain
+          - set firewall ipv4 name OUTSIDE-IN default-action 'drop'
+          - set firewall ipv4 name OUTSIDE-IN rule 10 action 'accept'
+          - set firewall ipv4 name OUTSIDE-IN rule 10 destination port '80'
+          - set firewall ipv4 name OUTSIDE-IN rule 10 inbound-interface group 'WAN'
+          - set firewall ipv4 name OUTSIDE-IN rule 10 protocol 'tcp_udp'
+          - set firewall ipv4 name OUTSIDE-IN rule 20 action 'accept'
+          - set firewall ipv4 name OUTSIDE-IN rule 20 destination port '443'
+          - set firewall ipv4 name OUTSIDE-IN rule 20 inbound-interface group 'WAN'
+          - set firewall ipv4 name OUTSIDE-IN rule 20 protocol 'tcp_udp'
+          # VyOS_MANAGEMENT chain
+          - set firewall ipv4 name VyOS_MANAGEMENT default-action 'return'
+          - set firewall ipv4 name VyOS_MANAGEMENT rule 15 action 'accept'
+          - set firewall ipv4 name VyOS_MANAGEMENT rule 15 inbound-interface group 'LAN'
+          - set firewall ipv4 name VyOS_MANAGEMENT rule 20 action 'drop'
+          - set firewall ipv4 name VyOS_MANAGEMENT rule 20 inbound-interface group 'WAN'
+          - set firewall ipv4 name VyOS_MANAGEMENT rule 20 recent count '4'
+          - set firewall ipv4 name VyOS_MANAGEMENT rule 20 recent time 'minute'
+          - set firewall ipv4 name VyOS_MANAGEMENT rule 20 state 'new'
+          - set firewall ipv4 name VyOS_MANAGEMENT rule 21 action 'accept'
+          - set firewall ipv4 name VyOS_MANAGEMENT rule 21 inbound-interface group 'WAN'
+          - set firewall ipv4 name VyOS_MANAGEMENT rule 21 state 'new'
+        save: false
+      tags: [firewall, chains]

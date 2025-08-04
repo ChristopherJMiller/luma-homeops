@@ -1,0 +1,92 @@
+---
+# VyOS Main Configuration Playbook
+# Orchestrates complete VyOS router configuration
+- name: Deploy complete VyOS configuration
+  hosts: vyos_routers
+  gather_facts: false
+  connection: ansible.netcommon.network_cli
+  serial: 1  # Configure one router at a time to avoid conflicts
+  
+  pre_tasks:
+    - name: Verify connectivity to VyOS router
+      vyos.vyos.vyos_command:
+        commands:
+          - show version
+      register: vyos_version
+      tags: [always, verify]
+
+    - name: Display VyOS version
+      debug:
+        msg: "Connected to VyOS {{ vyos_version.stdout[0].split()[2] }}"
+      tags: [always, verify]
+
+    - name: Create configuration backup
+      vyos.vyos.vyos_command:
+        commands:
+          - show configuration commands
+      register: current_config
+      tags: [always, backup]
+
+    - name: Save current configuration locally
+      copy:
+        content: "{{ current_config.stdout[0] }}"
+        dest: "./backups/vyos-config-backup-{{ ansible_date_time.epoch }}.txt"
+      delegate_to: localhost
+      tags: [always, backup]
+
+  tasks:
+    - name: Include system configuration
+      include_tasks: playbooks/system.yml
+      tags: [system]
+
+    - name: Include network configuration
+      include_tasks: playbooks/network.yml
+      tags: [network]
+
+    - name: Include firewall configuration
+      include_tasks: playbooks/firewall.yml
+      tags: [firewall]
+
+    - name: Include NAT configuration
+      include_tasks: playbooks/nat.yml
+      tags: [nat]
+
+    - name: Include services configuration
+      include_tasks: playbooks/services.yml
+      tags: [services]
+
+    - name: Include monitoring configuration
+      include_tasks: playbooks/monitoring.yml
+      tags: [monitoring]
+
+    - name: Commit and save all changes
+      vyos.vyos.vyos_config:
+        save: true
+        comment: "Ansible automated configuration deployment"
+      tags: [always, commit]
+
+  post_tasks:
+    - name: Verify configuration integrity
+      vyos.vyos.vyos_command:
+        commands:
+          - show configuration
+          - show interfaces
+          - show firewall
+          - show nat
+      register: config_verification
+      tags: [always, verify]
+
+    - name: Display configuration summary
+      debug:
+        msg: 
+          - "Configuration deployment completed successfully"
+          - "Router: {{ inventory_hostname }}"
+          - "Timestamp: {{ ansible_date_time.iso8601 }}"
+          - "Backup saved to: ./backups/vyos-config-backup-{{ ansible_date_time.epoch }}.txt"
+      tags: [always, verify]
+
+# Separate playbook for monitoring-only updates
+- name: Deploy monitoring configuration only
+  import_playbook: playbooks/monitoring.yml
+  tags: [monitoring-only]
+  when: "'monitoring-only' in ansible_run_tags"

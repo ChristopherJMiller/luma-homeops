@@ -1,0 +1,89 @@
+---
+# VyOS Monitoring Configuration Tasks
+# Deploys syslog collection for Kubernetes cluster logs
+- name: Configure syslog to receive remote logs
+      vyos.vyos.vyos_config:
+        lines:
+          - set system syslog host 0.0.0.0 facility all level info
+          - set system syslog host 0.0.0.0 protocol udp
+          - set system syslog host 0.0.0.0 port 514
+        save: false
+      when: monitoring.syslog.enabled
+      tags: [monitoring, syslog]
+
+- name: Configure log files with rotation
+      vyos.vyos.vyos_config:
+        lines:
+          - "set system syslog file {{ monitoring.syslog.log_file }} facility all level info"
+          - "set system syslog file {{ monitoring.syslog.log_file }} archive size {{ monitoring.syslog.archive_size }}"
+          - "set system syslog file {{ monitoring.syslog.log_file }} archive files {{ monitoring.syslog.archive_files }}"
+        save: false
+      when: monitoring.syslog.enabled
+      tags: [monitoring, syslog]
+
+- name: Configure firewall rule for syslog access
+      vyos.vyos.vyos_firewall_rules:
+        config:
+          - afi: ipv4
+            rule_sets:
+              - name: input_filter
+                rules:
+                  - number: 100
+                    action: accept
+                    protocol: udp
+                    destination:
+                      port: "{{ monitoring.syslog.listen_port }}"
+                    source:
+                      address: "{{ networks.lan.address | regex_replace('/\\d+', '/24') }}"
+                    description: "Kubernetes syslog collection"
+        state: merged
+      when: monitoring.syslog.enabled
+      tags: [monitoring, syslog, firewall]
+
+- name: Enable Prometheus node exporter
+      vyos.vyos.vyos_config:
+        lines:
+          - "set service monitoring prometheus node-exporter listen-address {{ monitoring.prometheus.node_exporter.listen_address }}"
+          - "set service monitoring prometheus node-exporter port {{ monitoring.prometheus.node_exporter.port }}"
+        save: false
+      when: monitoring.prometheus.node_exporter.enabled
+      tags: [monitoring, prometheus]
+
+- name: Configure firewall rule for Prometheus node exporter
+      vyos.vyos.vyos_firewall_rules:
+        config:
+          - afi: ipv4
+            rule_sets:
+              - name: input_filter
+                rules:
+                  - number: 110
+                    action: accept
+                    protocol: tcp
+                    destination:
+                      port: "{{ monitoring.prometheus.node_exporter.port }}"
+                    source:
+                      address: "{{ networks.lan.address | regex_replace('/\\d+', '/24') }}"
+                    description: "Prometheus node exporter"
+        state: merged
+      when: monitoring.prometheus.node_exporter.enabled
+      tags: [monitoring, prometheus, firewall]
+
+- name: Verify syslog service status
+      vyos.vyos.vyos_command:
+        commands:
+          - show log tail 10
+      register: log_status
+      tags: [monitoring, verify]
+
+- name: Create log directory and setup logrotate (post-commit)
+      vyos.vyos.vyos_command:
+        commands:
+          - run mkdir -p /var/log/kubernetes
+          - run chown -R vyos:vyos /var/log/kubernetes
+          - run chmod 755 /var/log/kubernetes
+      tags: [monitoring, system_setup]
+
+- name: Display verification results
+      debug:
+        var: log_status.stdout_lines
+      tags: [monitoring, verify]
