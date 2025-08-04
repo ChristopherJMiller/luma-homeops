@@ -3,11 +3,18 @@
 # Orchestrates complete VyOS router configuration
 - name: Deploy complete VyOS configuration
   hosts: vyos_routers
-  gather_facts: false
+  gather_facts: true
   connection: ansible.netcommon.network_cli
   serial: 1  # Configure one router at a time to avoid conflicts
   
   pre_tasks:
+    - name: Get timestamp on localhost
+      setup:
+        gather_subset: min
+      delegate_to: localhost
+      run_once: true
+      tags: [always, backup]
+
     - name: Verify connectivity to VyOS router
       vyos.vyos.vyos_command:
         commands:
@@ -30,7 +37,7 @@
     - name: Save current configuration locally
       copy:
         content: "{{ current_config.stdout[0] }}"
-        dest: "./backups/vyos-config-backup-{{ ansible_date_time.epoch }}.txt"
+        dest: "./backups/vyos-config-backup-{{ ansible_date_time.epoch | default(ansible_play_batch | random) }}.txt"
       delegate_to: localhost
       tags: [always, backup]
 
@@ -85,8 +92,3 @@
           - "Backup saved to: ./backups/vyos-config-backup-{{ ansible_date_time.epoch }}.txt"
       tags: [always, verify]
 
-# Separate playbook for monitoring-only updates
-- name: Deploy monitoring configuration only
-  import_playbook: playbooks/monitoring.yml
-  tags: [monitoring-only]
-  when: "'monitoring-only' in ansible_run_tags"

@@ -1,2 +1,4 @@
 cluster/vpn
 cluster/democratic-csi
+router/ansible/backups/
+router/ansible/ansible.log

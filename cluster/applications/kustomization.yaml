@@ -30,4 +30,5 @@ resources:
   - postgres-operator.yaml
   - prometheus-stack.yaml
   - prometheus-stack-config.yaml
+  - prometheus-snmp-exporter.yaml
   - sealed-secrets.yaml

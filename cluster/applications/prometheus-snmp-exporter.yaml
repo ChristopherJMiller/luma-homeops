@@ -1,0 +1,37 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: prometheus-snmp-exporter
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    targetRevision: 5.5.x
+    chart: prometheus-snmp-exporter
+    helm:
+      releaseName: prometheus-snmp-exporter
+      valuesObject:
+        image:
+          repository: quay.io/prometheus/snmp-exporter
+          tag: v0.26.0
+        service:
+          port: 9116
+        serviceMonitor:
+          enabled: false
+        resources:
+          limits:
+            memory: 128Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: prometheus
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

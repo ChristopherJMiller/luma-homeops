@@ -1,62 +1,62 @@
 ---
 # VyOS System Configuration Tasks
 - name: Configure system hostname and basic settings
-      vyos.vyos.vyos_config:
-        lines:
-          - "set system host-name '{{ system.hostname }}'"
-          - "set system config-management commit-revisions '{{ system.commit_revisions }}'"
-          - "set system console device ttyS0 speed '{{ system.console_speed }}'"
-        save: false
-      tags: [system, basic]
+  vyos.vyos.vyos_config:
+    lines:
+      - "set system host-name '{{ system.hostname }}'"
+      - "set system config-management commit-revisions '{{ system.commit_revisions }}'"
+      - "set system console device ttyS0 speed '{{ system.console_speed }}'"
+    save: false
+  tags: [system, basic]
 
 - name: Configure user authentication
-      vyos.vyos.vyos_config:
-        lines:
-          - "set system login user {{ ansible_user }} authentication public-keys {{ system.ssh_key_name }} key '{{ system.ssh_key }}'"
-          - "set system login user {{ ansible_user }} authentication public-keys {{ system.ssh_key_name }} type '{{ system.ssh_key_type }}'"
-        save: false
-      tags: [system, auth]
+  vyos.vyos.vyos_config:
+    lines:
+      - "set system login user {{ ansible_user }} authentication public-keys {{ system.ssh_key_name }} key '{{ system.ssh_key }}'"
+      - "set system login user {{ ansible_user }} authentication public-keys {{ system.ssh_key_name }} type '{{ system.ssh_key_type }}'"
+    save: false
+  tags: [system, auth]
 
 - name: Configure DNS servers
-      vyos.vyos.vyos_config:
-        lines:
-          - "set system name-server '{{ item }}'"
-      loop: "{{ dns_servers }}"
-      tags: [system, dns]
+  vyos.vyos.vyos_config:
+    lines:
+      - "set system name-server '{{ item }}'"
+  loop: "{{ dns_servers }}"
+  tags: [system, dns]
 
 - name: Configure system syslog
-      vyos.vyos.vyos_config:
-        lines:
-          - set system syslog global facility all level 'info'
-          - set system syslog global facility local7 level 'debug'
-        save: false
-      tags: [system, syslog]
+  vyos.vyos.vyos_config:
+    lines:
+      - set system syslog global facility all level 'info'
+      - set system syslog global facility local7 level 'debug'
+    save: false
+  tags: [system, syslog]
 
 - name: Configure NTP service
-      vyos.vyos.vyos_config:
-        lines:
-          - set service ntp allow-client address '10.0.0.0/8'
-          - set service ntp allow-client address '::1/128'
-          - set service ntp allow-client address '127.0.0.0/8'
-          - set service ntp allow-client address '169.254.0.0/16'
-          - set service ntp allow-client address '172.16.0.0/12'
-          - set service ntp allow-client address '192.168.0.0/16'
-          - set service ntp allow-client address 'fc00::/7'
-          - set service ntp allow-client address 'fe80::/10'
-        save: false
-      tags: [system, ntp]
+  vyos.vyos.vyos_config:
+    lines:
+      - set service ntp allow-client address '10.0.0.0/8'
+      - set service ntp allow-client address '::1/128'
+      - set service ntp allow-client address '127.0.0.0/8'
+      - set service ntp allow-client address '169.254.0.0/16'
+      - set service ntp allow-client address '172.16.0.0/12'
+      - set service ntp allow-client address '192.168.0.0/16'
+      - set service ntp allow-client address 'fc00::/7'
+      - set service ntp allow-client address 'fe80::/10'
+    save: false
+  tags: [system, ntp]
 
 - name: Configure NTP servers
-      vyos.vyos.vyos_config:
-        lines:
-          - "set service ntp server {{ item }}"
-      loop: "{{ ntp_servers }}"
-      tags: [system, ntp]
+  vyos.vyos.vyos_config:
+    lines:
+      - "set service ntp server {{ item }}"
+  loop: "{{ ntp_servers }}"
+  tags: [system, ntp]
 
 - name: Configure SSH service
-      vyos.vyos.vyos_config:
-        lines:
-          - set service ssh disable-password-authentication
-          - set service ssh port '22'
-        save: false
-      tags: [system, ssh]
+  vyos.vyos.vyos_config:
+    lines:
+      - set service ssh disable-password-authentication
+      - set service ssh port '22'
+    save: false
+  tags: [system, ssh]
