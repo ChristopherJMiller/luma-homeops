@@ -90,8 +90,8 @@ spec:
                 prometheus: kube-prometheus
                 role: alert-rules
             ruleNamespaceSelector:
-              matchNames:
-                - prometheus
+              matchLabels:
+                kubernetes.io/metadata.name: prometheus
             additionalScrapeConfigs:
               - job_name: kubernetes-pods
                 kubernetes_sd_configs:
