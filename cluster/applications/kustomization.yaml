@@ -5,6 +5,7 @@ resources:
   - argo-cd.yaml
   - amd-gpu-plugin-release.yaml
   - applications.yaml
+  - azure-log-analytics-secret.yaml
   - authentik.yaml
   - authentik-release.yaml
   - cert-approver.yaml
@@ -13,6 +14,7 @@ resources:
   - external-dns.yaml
   - fit.yaml
   - fittrackee.yaml
+  - fluent-bit.yaml
   - home-assistant.yaml
   - home-assistant-release.yaml
   - home-assistant-mosquitto.yaml
@@ -23,6 +25,7 @@ resources:
   - metallb.yaml
   - metrics-server.yaml
   - ingress-nginx.yaml
+  - logging-secrets.yaml
   - realliance-net.yaml
   - realmic.yaml
   - rook.yaml

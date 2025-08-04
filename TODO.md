@@ -23,22 +23,23 @@ Architecture:
 
 ## Implementation Phases
 
-### Phase 1: Critical Alerting (Week 1) - ZERO DOWNTIME
+### Phase 1: Critical Alerting (Week 1) - ZERO DOWNTIME ✅ **COMPLETED**
 **Goal**: Get immediate notifications when things break
 
-#### 1.1 Configure AlertManager with Discord
-- Add Discord webhook configuration
-- Set up weekend suppression rules
-- Configure alert routing by severity
+#### 1.1 Configure AlertManager with Discord ✅ **DONE**
+- ✅ Add Discord webhook configuration
+- ✅ Set up weekend suppression rules  
+- ✅ Configure alert routing by severity
 
-#### 1.2 VyOS Log Buffer Setup
-- Configure VyOS syslog receiver
-- Set up log rotation (20-30GB limit, 30-day retention)
-- Test emergency log collection
+#### 1.2 VyOS Log Buffer Setup ✅ **DONE** 
+- ✅ Configure VyOS syslog receiver
+- ✅ Set up log rotation (20-30GB limit, 30-day retention)
+- ✅ Implemented via Ansible IaC instead of shell script
 
-**Files to create/modify:**
-- `cluster/prometheus-stack/alertmanager-config.yaml`
-- `router/syslog-setup.sh`
+**Files created/modified:**
+- ✅ `cluster/prometheus-stack/alertmanager-config.yaml`
+- ✅ `cluster/prometheus-stack/discord-webhook.secret.yaml`
+- ✅ `router/ansible/` (complete VyOS Infrastructure as Code)
 
 ### Phase 2: Log Aggregation (Week 2) - ZERO DOWNTIME
 **Goal**: Collect and store logs for troubleshooting
@@ -66,14 +67,14 @@ Architecture:
 - Node resource exhaustion
 - ArgoCD sync failures
 
-#### 3.2 VyOS Router Monitoring
-- SNMP exporter setup (low CPU impact)
-- Network interface monitoring (bandwidth, errors)
-- **Skip NetFlow/sFlow** (Celeron J6412 insufficient for flow analysis)
+#### 3.2 VyOS Router Monitoring ✅ **DONE**
+- ✅ SNMP exporter setup (low CPU impact)
+- ✅ Network interface monitoring (bandwidth, errors)
+- ✅ **Skip NetFlow/sFlow** (Celeron J6412 insufficient for flow analysis)
 
-**Files to create:**
-- `cluster/prometheus-stack/alert-rules.yaml`
-- `cluster/monitoring/vyos-monitoring.yaml`
+**Files created:**
+- `cluster/applications/prometheus-snmp-exporter.yaml` ✅
+- `cluster/applications/prometheus-stack.yaml` (VyOS scrape target added) ✅
 
 ### Phase 4: Dashboards & Automation (Week 4)
 **Goal**: Visibility and maintenance automation
@@ -99,9 +100,11 @@ Architecture:
 4. **Resource monitoring**: Watch VyOS performance during Loki deployment
 
 ## Success Metrics
-- [ ] Receive Discord alerts within 5 minutes of issues
-- [ ] 30-day log retention on VyOS (20-30GB storage)
+- ✅ Receive Discord alerts within 5 minutes of issues
+- ✅ 30-day log retention on VyOS (20-30GB storage)
 - [ ] 90-day log retention in Azure
+- ✅ VyOS router monitoring (SNMP)
+- ✅ Complete VyOS Infrastructure as Code (Ansible)
 - [ ] All critical services monitored
 - [ ] Monthly maintenance reports automated
 

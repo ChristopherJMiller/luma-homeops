@@ -1,0 +1,134 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: fluent-bit
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://fluent.github.io/helm-charts
+    targetRevision: 0.47.x
+    chart: fluent-bit
+    helm:
+      releaseName: fluent-bit
+      valuesObject:
+        kind: DaemonSet
+        replicaCount: 1
+        image:
+          repository: fluent/fluent-bit
+          tag: "2.2.2"
+        serviceAccount:
+          create: true
+        rbac:
+          create: true
+        podSecurityPolicy:
+          create: false
+        resources:
+          limits:
+            memory: 200Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        tolerations:
+          - key: node-role.kubernetes.io/master
+            operator: Exists
+            effect: NoSchedule
+          - key: node-role.kubernetes.io/control-plane
+            operator: Exists
+            effect: NoSchedule
+        env:
+          - name: AZURE_WORKSPACE_ID
+            valueFrom:
+              secretKeyRef:
+                name: azure-log-analytics
+                key: workspace-id
+          - name: AZURE_SHARED_KEY
+            valueFrom:
+              secretKeyRef:
+                name: azure-log-analytics
+                key: shared-key
+        config:
+          service: |
+            [SERVICE]
+                Daemon Off
+                Flush 5
+                Log_Level info
+                Parsers_File parsers.conf
+                HTTP_Server On
+                HTTP_Listen 0.0.0.0
+                HTTP_Port 2020
+                Health_Check On
+          inputs: |
+            [INPUT]
+                Name tail
+                Tag kube.*
+                Path /var/log/containers/*.log
+                multiline.parser docker, cri
+                DB /var/fluent-bit/state/flb_container.db
+                Mem_Buf_Limit 50MB
+                Skip_Long_Lines On
+                Refresh_Interval 10
+            [INPUT]
+                Name systemd
+                Tag host.*
+                Systemd_Filter _SYSTEMD_UNIT=kubelet.service
+                Systemd_Filter _SYSTEMD_UNIT=containerd.service
+                DB /var/fluent-bit/state/flb_systemd.db
+          filters: |
+            [FILTER]
+                Name kubernetes
+                Match kube.*
+                Kube_URL https://kubernetes.default.svc:443
+                Kube_CA_File /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+                Kube_Token_File /var/run/secrets/kubernetes.io/serviceaccount/token
+                Merge_Log On
+                Merge_Log_Key log_processed
+                K8S-Logging.Parser On
+                K8S-Logging.Exclude Off
+            [FILTER]
+                Name modify
+                Match *
+                Add hostname ${HOSTNAME}
+                Add cluster luma-homelab
+          outputs: |
+            [OUTPUT]
+                Name syslog
+                Match *
+                Host 192.168.0.1
+                Port 514
+                Mode udp
+                Syslog_Format rfc3164
+                Syslog_Hostname_Key hostname
+                Syslog_Appname_Key kubernetes_container_name
+                Syslog_Procid_Key kubernetes_pod_name
+            [OUTPUT]
+                Name azure
+                Match *
+                Customer_ID ${AZURE_WORKSPACE_ID}
+                Shared_Key ${AZURE_SHARED_KEY}
+                Log_Type luma_homelab_logs
+                Time_Key @timestamp
+                Time_Generated On
+          parsers: |
+            [PARSER]
+                Name docker
+                Format json
+                Time_Key time
+                Time_Format %Y-%m-%dT%H:%M:%S.%L
+                Time_Keep On
+            [PARSER]
+                Name cri
+                Format regex
+                Regex ^(?<time>[^ ]+) (?<stream>stdout|stderr) (?<logtag>[^ ]*) (?<message>.*)$
+                Time_Key time
+                Time_Format %Y-%m-%dT%H:%M:%S.%L%z
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

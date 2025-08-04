@@ -1,4 +1,7 @@
-{ pkgs ? import <nixpkgs> {} }:
+{ pkgs ? import <nixpkgs> { 
+    config.allowUnfree = true;
+  } 
+}:
 
 pkgs.mkShell {
   packages = with pkgs; [
@@ -15,5 +18,7 @@ pkgs.mkShell {
     krew
     pinentry-tty
     ansible
+    azure-cli
+    terraform
   ];
 }
