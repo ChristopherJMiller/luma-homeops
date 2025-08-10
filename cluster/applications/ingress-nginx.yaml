@@ -24,8 +24,8 @@ spec:
             enable-ocsp: "true"
             allow-snippet-annotations: "true"
             proxy-buffer-size: "16k"
-            proxy-buffers: "8 32k"
-            proxy-busy-buffers-size: "64k"
+            proxy-buffers: "8 16k"
+            proxy-busy-buffers-size: "32k"
             annotations-risk-level: Critical
           autoscaling:
             enabled: true
