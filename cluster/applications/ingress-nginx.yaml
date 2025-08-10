@@ -8,7 +8,7 @@ spec:
   project: default
   source:
     repoURL: https://kubernetes.github.io/ingress-nginx
-    targetRevision: 4.12.4
+    targetRevision: 4.x.x
     chart: ingress-nginx
     helm:
       releaseName: ingress-nginx
@@ -23,8 +23,9 @@ spec:
             use-geoip2: "false"
             enable-ocsp: "true"
             allow-snippet-annotations: "true"
-            proxy-buffer-size: 1M
-            proxy_busy_buffers_size: 1G
+            proxy-buffer-size: "16k"
+            proxy-buffers: "8 32k"
+            proxy-busy-buffers-size: "64k"
             annotations-risk-level: Critical
           autoscaling:
             enabled: true
