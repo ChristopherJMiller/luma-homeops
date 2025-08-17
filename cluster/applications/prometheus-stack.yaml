@@ -123,9 +123,7 @@ spec:
                     requests:
                       storage: 200Gi
         grafana:
-          envFrom:
-            - secretRef:
-                name: azure-monitor-credentials
+          envFromSecret: azure-monitor-credentials
           ingress:
             enabled: true
             ingressClassName: nginx
