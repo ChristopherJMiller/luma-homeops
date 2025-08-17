@@ -65,7 +65,6 @@ spec:
             - name: session-key
               mountPath: /session-key
               readOnly: true
-        server:
           metrics:
             serviceMonitor:
               enabled: true
