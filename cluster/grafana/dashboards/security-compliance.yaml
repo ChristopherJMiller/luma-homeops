@@ -74,7 +74,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "certmanager_certificate_expiration_timestamp_seconds - time()",
+              "expr": "cert_manager_certificate_expiration_timestamp_seconds - time()",
               "format": "table",
               "instant": true,
               "legendFormat": "{{namespace}}/{{name}}",
@@ -192,17 +192,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "count(certmanager_certificate_ready_status == 1) or vector(0)",
+              "expr": "count(cert_manager_certificate_ready_status == 1) or vector(0)",
               "legendFormat": "Ready",
               "refId": "A"
             },
             {
-              "expr": "count(certmanager_certificate_ready_status == 0) or vector(0)",
+              "expr": "count(cert_manager_certificate_ready_status == 0) or vector(0)",
               "legendFormat": "Not Ready",
               "refId": "B"
             },
             {
-              "expr": "count((certmanager_certificate_expiration_timestamp_seconds - time()) < 2592000) or vector(0)",
+              "expr": "count((cert_manager_certificate_expiration_timestamp_seconds - time()) < 2592000) or vector(0)",
               "legendFormat": "Expiring Soon",
               "refId": "C"
             }
@@ -253,7 +253,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "increase(certmanager_certificate_issued_total[24h])",
+              "expr": "increase(cert_manager_certificate_issued_total[24h])",
               "format": "table",
               "instant": true,
               "refId": "A"
@@ -328,7 +328,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(rate(certmanager_http_acme_client_request_total[1h]) / 20) * 100",
+              "expr": "(rate(cert_manager_http_acme_client_request_total[1h]) / 20) * 100",
               "legendFormat": "Rate Limit Usage",
               "refId": "A"
             }
@@ -437,12 +437,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(certmanager_certificate_renewal_success_total[1h])",
+              "expr": "rate(cert_manager_certificate_renewal_success_total[1h])",
               "legendFormat": "Successful",
               "refId": "A"
             },
             {
-              "expr": "rate(certmanager_certificate_renewal_failure_total[1h])",
+              "expr": "rate(cert_manager_certificate_renewal_failure_total[1h])",
               "legendFormat": "Failed",
               "refId": "B"
             }
@@ -523,17 +523,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(authentik_flows_execution_total{result=\"failure\"}[5m])",
+              "expr": "increase(django_http_responses_total_by_status{status=\"401\"}[5m]) or vector(0)",
               "legendFormat": "Authentik",
               "refId": "A"
             },
             {
-              "expr": "rate(node_ssh_login_failed_total[5m])",
+              "expr": "vector(0)",
               "legendFormat": "SSH",
               "refId": "B"
             },
             {
-              "expr": "rate(apiserver_authentication_attempts{result=\"error\"}[5m])",
+              "expr": "rate(apiserver_audit_total{objectRef_resource=\"pods\",verb=\"create\"}[5m]) or vector(0)",
               "legendFormat": "Kubernetes API",
               "refId": "C"
             }
@@ -592,7 +592,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "topk(20, sum by (source_ip) (increase(authentik_flows_execution_total{result=\"failure\"}[1h])))",
+              "expr": "topk(10, increase(nginx_ingress_controller_requests{status=~\"4..\"}[1h]) by (remote_addr)) or vector(0)",
               "format": "table",
               "instant": true,
               "refId": "A"
@@ -659,7 +659,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "apiserver_authorization_decision{decision=\"deny\"}",
+              "expr": "increase(apiserver_audit_total{objectRef_resource=\"secrets\",verb=\"get\"}[1h]) or vector(0)",
               "format": "table",
               "instant": false,
               "refId": "A"
@@ -1280,7 +1280,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(nginx_ingress_controller_modsecurity_blocked_total[5m])",
+              "expr": "rate(nginx_ingress_controller_requests{status=\"403\"}[5m]) or vector(0)",
               "legendFormat": "{{rule_type}}",
               "refId": "A"
             }
@@ -1495,8 +1495,8 @@ data:
             }
           },
           "gridPos": {
-            "h": 4,
-            "w": 8,
+            "h": 6,
+            "w": 24,
             "x": 0,
             "y": 46
           },
@@ -1515,31 +1515,13 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(((count(certmanager_certificate_ready_status == 1) / count(certmanager_certificate_ready_status)) * 20) + ((1 - (count(kube_pod_container_security_context_privileged == true) / count(kube_pod_info))) * 20) + ((count(kube_pod_info{namespace!~\"kube-.*\"} and on(namespace,pod) kube_networkpolicy_labels) / count(kube_pod_info{namespace!~\"kube-.*\"})) * 20) + ((1 - (count(apiserver_authorization_decision{decision=\"deny\"} > 0) / 1)) * 20) + ((1 - (sum(trivy_image_vulnerabilities{severity=\"CRITICAL\"}) / 100)) * 20)) or vector(50)",
+              "expr": "(((count(cert_manager_certificate_ready_status == 1) / count(cert_manager_certificate_ready_status)) * 40) + ((1 - (count(kube_pod_container_security_context_privileged == true) / count(kube_pod_info))) * 30) + ((count(kube_pod_info{namespace!~\"kube-.*\"} and on(namespace,pod) kube_networkpolicy_labels) / count(kube_pod_info{namespace!~\"kube-.*\"})) * 30)) or vector(80)",
               "legendFormat": "Security Score",
               "refId": "A"
             }
           ],
           "title": "Overall Security Score",
           "type": "gauge"
-        },
-        {
-          "datasource": "Prometheus",
-          "description": "Dynamic security recommendations",
-          "gridPos": {
-            "h": 4,
-            "w": 16,
-            "x": 8,
-            "y": 46
-          },
-          "id": 19,
-          "options": {
-            "content": "## Security Recommendations\n\n- Review certificates expiring within 30 days\n- Investigate privileged pods in production namespaces\n- Enable network policies for all application namespaces\n- Review and rotate secrets older than 90 days\n- Update ingress controllers to latest security patches\n- Enable audit logging for sensitive resources",
-            "mode": "markdown"
-          },
-          "pluginVersion": "8.0.0",
-          "title": "Security Recommendations",
-          "type": "text"
         }
       ],
       "refresh": "1m",

@@ -1,0 +1,56 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: trivy-operator
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://aquasecurity.github.io/helm-charts/
+    targetRevision: 0.25.x
+    chart: trivy-operator
+    helm:
+      releaseName: trivy-operator
+      valuesObject:
+        operator:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+        trivy:
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+        serviceMonitor:
+          enabled: true
+          labels:
+            prometheus: kube-prometheus
+        trivy:
+          storageClassEnabled: true
+          storageClassName: "rook-ceph-block"
+          storageSize: "10Gi"
+        compliance:
+          cron: "0 */6 * * *"
+          specs:
+            - k8s-cis-1.23
+            - k8s-nsa-1.0
+            - k8s-pss-baseline-0.1
+            - k8s-pss-restricted-0.1
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: trivy-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+      - PrunePropagationPolicy=foreground

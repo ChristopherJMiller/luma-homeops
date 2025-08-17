@@ -35,3 +35,4 @@ resources:
   - prometheus-stack-config.yaml
   - prometheus-snmp-exporter.yaml
   - sealed-secrets.yaml
+  - trivy-operator.yaml

@@ -751,27 +751,187 @@ data:
             type: counter
             help: The total number of IP datagrams which local IP user-protocols supplied to IP
           
+          - name: ipForwDatagrams
+            oid: 1.3.6.1.2.1.4.6
+            type: counter
+            help: The number of input datagrams for which this entity was not their final destination
+          
+          - name: ipRoutingDiscards
+            oid: 1.3.6.1.2.1.4.23
+            type: counter
+            help: The number of routing entries which were chosen to be discarded
+          
+          # TCP MIB metrics
           - name: tcpActiveOpens
             oid: 1.3.6.1.2.1.6.5
             type: counter
             help: The number of times TCP connections have made a direct transition to the SYN-SENT state
+          
+          - name: tcpPassiveOpens
+            oid: 1.3.6.1.2.1.6.6
+            type: counter
+            help: The number of times TCP connections have made a direct transition to the SYN-RCVD state
           
           - name: tcpCurrEstab
             oid: 1.3.6.1.2.1.6.9
             type: gauge
             help: The number of TCP connections for which the current state is either ESTABLISHED or CLOSE-WAIT
           
+          - name: tcpInSegs
+            oid: 1.3.6.1.2.1.6.10
+            type: counter
+            help: The total number of segments received
+          
+          - name: tcpOutSegs
+            oid: 1.3.6.1.2.1.6.11
+            type: counter
+            help: The total number of segments sent
+          
+          - name: tcpRetransSegs
+            oid: 1.3.6.1.2.1.6.12
+            type: counter
+            help: The total number of segments retransmitted
+          
+          # UDP MIB metrics
           - name: udpInDatagrams
             oid: 1.3.6.1.2.1.7.1
             type: counter
             help: The total number of UDP datagrams delivered to UDP users
           
+          - name: udpNoPorts
+            oid: 1.3.6.1.2.1.7.2
+            type: counter
+            help: The total number of received UDP datagrams for which there was no application at the destination port
+          
+          - name: udpInErrors
+            oid: 1.3.6.1.2.1.7.3
+            type: counter
+            help: The number of received UDP datagrams that could not be delivered for reasons other than the lack of an application
+          
+          - name: udpOutDatagrams
+            oid: 1.3.6.1.2.1.7.4
+            type: counter
+            help: The total number of UDP datagrams sent from this entity
+          
+          # ICMP MIB metrics
           - name: icmpInMsgs
             oid: 1.3.6.1.2.1.5.1
             type: counter
             help: The total number of ICMP messages received
           
+          - name: icmpInErrors
+            oid: 1.3.6.1.2.1.5.2
+            type: counter
+            help: The number of ICMP messages received with errors
+          
+          - name: icmpInDestUnreachs
+            oid: 1.3.6.1.2.1.5.3
+            type: counter
+            help: The number of ICMP Destination Unreachable messages received
+          
+          - name: icmpInTimeExcds
+            oid: 1.3.6.1.2.1.5.4
+            type: counter
+            help: The number of ICMP Time Exceeded messages received
+          
+          - name: icmpInEchos
+            oid: 1.3.6.1.2.1.5.8
+            type: counter
+            help: The number of ICMP Echo (request) messages received
+          
+          - name: icmpInEchoReps
+            oid: 1.3.6.1.2.1.5.9
+            type: counter
+            help: The number of ICMP Echo Reply messages received
+          
+          - name: icmpOutMsgs
+            oid: 1.3.6.1.2.1.5.14
+            type: counter
+            help: The total number of ICMP messages which this entity attempted to send
+          
+          - name: icmpOutEchos
+            oid: 1.3.6.1.2.1.5.21
+            type: counter
+            help: The number of ICMP Echo (request) messages sent
+          
+          - name: icmpOutEchoReps
+            oid: 1.3.6.1.2.1.5.22
+            type: counter
+            help: The number of ICMP Echo Reply messages sent
+          
+          # SNMP MIB metrics
           - name: snmpInPkts
             oid: 1.3.6.1.2.1.11.1
             type: counter
             help: The total number of messages delivered to the SNMP entity
+          
+          - name: snmpOutPkts
+            oid: 1.3.6.1.2.1.11.2
+            type: counter
+            help: The total number of SNMP Messages which were passed from the SNMP entity
+          
+          - name: snmpInBadVersions
+            oid: 1.3.6.1.2.1.11.3
+            type: counter
+            help: The total number of SNMP messages delivered with an unsupported SNMP version
+          
+          # UCD-SNMP MIB metrics (if available)
+          - name: ssCpuRawUser
+            oid: 1.3.6.1.4.1.2021.11.50
+            type: counter
+            help: The number of 'ticks' spent processing user-level code
+          
+          - name: ssCpuRawNice
+            oid: 1.3.6.1.4.1.2021.11.51
+            type: counter
+            help: The number of 'ticks' spent processing reduced-priority code
+          
+          - name: ssCpuRawSystem
+            oid: 1.3.6.1.4.1.2021.11.52
+            type: counter
+            help: The number of 'ticks' spent processing system-level code
+          
+          - name: ssCpuRawIdle
+            oid: 1.3.6.1.4.1.2021.11.53
+            type: counter
+            help: The number of 'ticks' spent idle
+          
+          - name: ssCpuRawWait
+            oid: 1.3.6.1.4.1.2021.11.54
+            type: counter
+            help: The number of 'ticks' spent waiting for IO
+          
+          - name: ssCpuRawKernel
+            oid: 1.3.6.1.4.1.2021.11.55
+            type: counter
+            help: The number of 'ticks' spent processing kernel code
+          
+          - name: ssCpuRawInterrupt
+            oid: 1.3.6.1.4.1.2021.11.56
+            type: counter
+            help: The number of 'ticks' spent processing hardware interrupts
+          
+          - name: memTotalReal
+            oid: 1.3.6.1.4.1.2021.4.5
+            type: gauge
+            help: Total real/physical memory installed
+          
+          - name: memAvailReal
+            oid: 1.3.6.1.4.1.2021.4.6
+            type: gauge
+            help: Available real/physical memory
+          
+          - name: memTotalFree
+            oid: 1.3.6.1.4.1.2021.4.11
+            type: gauge
+            help: Total free memory including swap
+          
+          - name: memBuffer
+            oid: 1.3.6.1.4.1.2021.4.14
+            type: gauge
+            help: Memory used for buffers
+          
+          - name: memCached
+            oid: 1.3.6.1.4.1.2021.4.15
+            type: gauge
+            help: Memory used for cache
