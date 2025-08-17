@@ -287,8 +287,8 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"prometheus-prometheus-node-exporter\",mode=\"idle\"}[5m])) * 100)",
-              "legendFormat": "{{instance}}",
+              "expr": "avg(hrProcessorLoad{instance=\"192.168.0.1:161\"})",
+              "legendFormat": "VyOS Router CPU",
               "refId": "A"
             }
           ],

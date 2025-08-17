@@ -7,5 +7,6 @@ resources:
   - discord-webhook.yaml
   - rules/
   - grafana-admin.yaml
+  - snmp-exporter-config.yaml
 
 namespace: prometheus

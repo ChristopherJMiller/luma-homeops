@@ -26,6 +26,14 @@ spec:
           requests:
             cpu: 50m
             memory: 64Mi
+        configmapReload:
+          enabled: true
+        extraConfigmapMounts:
+          - name: snmp-config
+            mountPath: /etc/snmp_exporter/snmp.yml
+            subPath: snmp.yml
+            configMap: snmp-exporter-config
+            readOnly: true
   destination:
     server: https://kubernetes.default.svc
     namespace: prometheus

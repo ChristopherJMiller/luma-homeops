@@ -83,17 +83,13 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureMonitor": {
-                "dimensionFilters": [],
-                "timeGrain": "PT1H",
-                "metricNamespace": "microsoft.costmanagement",
-                "metricName": "ActualCost",
-                "aggregation": "Total",
-                "alias": "Current Month Spend"
+              "azureLogAnalytics": {
+                "query": "Usage | where TimeGenerated > startofmonth(now()) | summarize TotalGB = sum(Quantity) / 1000 | extend EstimatedCost = TotalGB * 2.3",
+                "resultFormat": "table",
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
-              "queryType": "Azure Monitor",
-              "refId": "A",
-              "subscription": "$subscription"
+              "queryType": "Azure Log Analytics",
+              "refId": "A"
             }
           ],
           "title": "Current Month Spend",
@@ -154,17 +150,13 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureMonitor": {
-                "dimensionFilters": [],
-                "timeGrain": "PT1H",
-                "metricNamespace": "microsoft.costmanagement",
-                "metricName": "BudgetUtilization",
-                "aggregation": "Average",
-                "alias": "Budget Status"
+              "azureLogAnalytics": {
+                "query": "Usage | where TimeGenerated > startofmonth(now()) | summarize TotalGB = sum(Quantity) / 1000 | extend EstimatedCost = TotalGB * 2.3 | extend BudgetPercent = (EstimatedCost / 10) * 100 | project BudgetPercent",
+                "resultFormat": "table",
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
-              "queryType": "Azure Monitor",
-              "refId": "A",
-              "subscription": "$subscription"
+              "queryType": "Azure Log Analytics",
+              "refId": "A"
             }
           ],
           "title": "Budget Status",
@@ -264,17 +256,13 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureMonitor": {
-                "dimensionFilters": [],
-                "timeGrain": "P1D",
-                "metricNamespace": "microsoft.costmanagement",
-                "metricName": "ActualCost",
-                "aggregation": "Total",
-                "alias": "Daily Spend"
+              "azureLogAnalytics": {
+                "query": "Usage | where TimeGenerated > ago(30d) | where IsBillable == true | summarize DailyGB = sum(Quantity) / 1000 by bin(TimeGenerated, 1d) | extend EstimatedCost = DailyGB * 2.3 | project TimeGenerated, EstimatedCost | order by TimeGenerated asc",
+                "resultFormat": "time_series",
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
-              "queryType": "Azure Monitor",
-              "refId": "A",
-              "subscription": "$subscription"
+              "queryType": "Azure Log Analytics",
+              "refId": "A"
             }
           ],
           "title": "Daily Spend Trend",
@@ -329,12 +317,13 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureResourceGraph": {
-                "query": "CostManagementResources\n| where type == 'microsoft.costmanagement/query'\n| where properties.timePeriod.from >= ago(30d)\n| summarize Cost = sum(properties.cost) by ResourceType = tostring(properties.resourceType)\n| order by Cost desc\n| limit 10"
+              "azureLogAnalytics": {
+                "query": "Usage | where TimeGenerated > ago(30d) | where IsBillable == true | summarize TotalGB = sum(Quantity) / 1000 by DataType | extend EstimatedCost = TotalGB * 2.3 | project DataType, EstimatedCost | order by EstimatedCost desc | limit 10",
+                "resultFormat": "table",
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
-              "queryType": "Azure Resource Graph",
-              "refId": "A",
-              "subscription": "$subscription"
+              "queryType": "Azure Log Analytics",
+              "refId": "A"
             }
           ],
           "title": "Cost by Resource",
@@ -391,17 +380,13 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureMonitor": {
-                "dimensionFilters": [],
-                "timeGrain": "PT1H",
-                "metricNamespace": "microsoft.costmanagement",
-                "metricName": "ForecastCost",
-                "aggregation": "Total",
-                "alias": "Projected Monthly Cost"
+              "azureLogAnalytics": {
+                "query": "Usage | where TimeGenerated > startofmonth(now()) | summarize DailyAvgGB = sum(Quantity) / 1000 / datetime_diff('day', now(), startofmonth(now())) | extend ProjectedMonthlyGB = DailyAvgGB * 30 | extend ProjectedCost = ProjectedMonthlyGB * 2.3 | project ProjectedCost",
+                "resultFormat": "table",
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
-              "queryType": "Azure Monitor",
-              "refId": "A",
-              "subscription": "$subscription"
+              "queryType": "Azure Log Analytics",
+              "refId": "A"
             }
           ],
           "title": "Projected Monthly Cost",
@@ -480,9 +465,9 @@ data:
           "targets": [
             {
               "azureLogAnalytics": {
-                "query": "Usage\n| where TimeGenerated > ago(30d)\n| where IsBillable == true\n| summarize DataIngestedGB = sum(Quantity) / 1000 by bin(TimeGenerated, 1d)\n| order by TimeGenerated asc",
+                "query": "Usage | where TimeGenerated > ago(30d) | where IsBillable == true | summarize DataIngestedGB = sum(Quantity) / 1000 by bin(TimeGenerated, 1d) | order by TimeGenerated asc",
                 "resultFormat": "time_series",
-                "workspace": "$workspace"
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
               "queryType": "Azure Log Analytics",
               "refId": "A",
@@ -577,9 +562,9 @@ data:
           "targets": [
             {
               "azureLogAnalytics": {
-                "query": "Usage\n| where TimeGenerated > ago(30d)\n| where IsBillable == true\n| summarize DataIngestedGB = sum(Quantity) / 1000, EstimatedCost = sum(Quantity) / 1000 * 2.3 by DataType\n| extend DailyAvgGB = DataIngestedGB / 30\n| project Source = DataType, DailyAvgGB, MonthlyTotalGB = DataIngestedGB, EstimatedCost\n| order by MonthlyTotalGB desc",
+                "query": "Usage | where TimeGenerated > ago(30d) | where IsBillable == true | summarize DataIngestedGB = sum(Quantity) / 1000, EstimatedCost = sum(Quantity) / 1000 * 2.3 by DataType | extend DailyAvgGB = DataIngestedGB / 30 | project Source = DataType, DailyAvgGB, MonthlyTotalGB = DataIngestedGB, EstimatedCost | order by MonthlyTotalGB desc",
                 "resultFormat": "table",
-                "workspace": "$workspace"
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
               "queryType": "Azure Log Analytics",
               "refId": "A",
@@ -679,9 +664,9 @@ data:
           "targets": [
             {
               "azureLogAnalytics": {
-                "query": "LAQueryLogs\n| where TimeGenerated > ago(24h)\n| summarize QueryCount = count() by bin(TimeGenerated, 1h)\n| order by TimeGenerated asc",
+                "query": "LAQueryLogs | where TimeGenerated > ago(24h) | summarize QueryCount = count() by bin(TimeGenerated, 1h) | order by TimeGenerated asc",
                 "resultFormat": "time_series",
-                "workspace": "$workspace"
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
               "queryType": "Azure Log Analytics",
               "refId": "A",
@@ -747,9 +732,9 @@ data:
           "targets": [
             {
               "azureLogAnalytics": {
-                "query": "Usage\n| where TimeGenerated > ago(30d)\n| where DataType == '_BilledPerformanceData'\n| summarize RetentionGB = sum(Quantity) / 1000\n| extend RetentionCost = RetentionGB * 0.10\n| project RetentionCost",
+                "query": "Usage | where TimeGenerated > ago(30d) | summarize RetentionGB = sum(Quantity) / 1000 | extend RetentionCost = RetentionGB * 0.10 | project RetentionCost",
                 "resultFormat": "table",
-                "workspace": "$workspace"
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
               "queryType": "Azure Log Analytics",
               "refId": "A",
@@ -815,9 +800,9 @@ data:
           "targets": [
             {
               "azureLogAnalytics": {
-                "query": "LAQueryLogs\n| where TimeGenerated > ago(1h)\n| summarize AvgResponseTime = avg(ResponseDurationMs) / 1000",
+                "query": "LAQueryLogs | where TimeGenerated > ago(1h) | summarize AvgResponseTime = avg(ResponseDurationMs) / 1000",
                 "resultFormat": "table",
-                "workspace": "$workspace"
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
               "queryType": "Azure Log Analytics",
               "refId": "A",
@@ -888,14 +873,11 @@ data:
                 "metricNamespace": "microsoft.storage/storageaccounts",
                 "metricName": "UsedCapacity",
                 "aggregation": "Average",
+                "resourceUri": "/subscriptions/ddc1f03e-6903-4508-a23d-1754eb304cad/resourceGroups/rg-luma-homelab-terraform-state/providers/Microsoft.Storage/storageAccounts/lumahomelabstateq978tb72",
                 "alias": "Storage Usage"
               },
               "queryType": "Azure Monitor",
-              "refId": "A",
-              "subscription": "$subscription",
-              "resourceGroup": "$resourceGroup",
-              "metricDefinition": "Microsoft.Storage/storageAccounts",
-              "resourceName": "$storageAccount"
+              "refId": "A"
             }
           ],
           "title": "Storage Usage",
@@ -985,14 +967,11 @@ data:
                 "metricNamespace": "microsoft.storage/storageaccounts",
                 "metricName": "Transactions",
                 "aggregation": "Total",
+                "resourceUri": "/subscriptions/ddc1f03e-6903-4508-a23d-1754eb304cad/resourceGroups/rg-luma-homelab-terraform-state/providers/Microsoft.Storage/storageAccounts/lumahomelabstateq978tb72",
                 "alias": "Read operations"
               },
               "queryType": "Azure Monitor",
-              "refId": "A",
-              "subscription": "$subscription",
-              "resourceGroup": "$resourceGroup",
-              "metricDefinition": "Microsoft.Storage/storageAccounts",
-              "resourceName": "$storageAccount"
+              "refId": "A"
             },
             {
               "azureMonitor": {
@@ -1007,14 +986,11 @@ data:
                 "metricNamespace": "microsoft.storage/storageaccounts",
                 "metricName": "Transactions",
                 "aggregation": "Total",
+                "resourceUri": "/subscriptions/ddc1f03e-6903-4508-a23d-1754eb304cad/resourceGroups/rg-luma-homelab-terraform-state/providers/Microsoft.Storage/storageAccounts/lumahomelabstateq978tb72",
                 "alias": "Write operations"
               },
               "queryType": "Azure Monitor",
-              "refId": "B",
-              "subscription": "$subscription",
-              "resourceGroup": "$resourceGroup",
-              "metricDefinition": "Microsoft.Storage/storageAccounts",
-              "resourceName": "$storageAccount"
+              "refId": "B"
             },
             {
               "azureMonitor": {
@@ -1029,14 +1005,11 @@ data:
                 "metricNamespace": "microsoft.storage/storageaccounts",
                 "metricName": "Transactions",
                 "aggregation": "Total",
+                "resourceUri": "/subscriptions/ddc1f03e-6903-4508-a23d-1754eb304cad/resourceGroups/rg-luma-homelab-terraform-state/providers/Microsoft.Storage/storageAccounts/lumahomelabstateq978tb72",
                 "alias": "List operations"
               },
               "queryType": "Azure Monitor",
-              "refId": "C",
-              "subscription": "$subscription",
-              "resourceGroup": "$resourceGroup",
-              "metricDefinition": "Microsoft.Storage/storageAccounts",
-              "resourceName": "$storageAccount"
+              "refId": "C"
             }
           ],
           "title": "Transaction Count",
@@ -1094,12 +1067,13 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureResourceGraph": {
-                "query": "CostManagementResources\n| where type == 'microsoft.costmanagement/query'\n| where properties.resourceType == 'Microsoft.Storage/storageAccounts'\n| where properties.timePeriod.from >= ago(30d)\n| summarize CapacityCost = sum(properties.cost[properties.meterCategory == 'Storage']),\n            TransactionCost = sum(properties.cost[properties.meterCategory == 'Transactions']),\n            TransferCost = sum(properties.cost[properties.meterCategory == 'Data Transfer'])\n| project CapacityCost, TransactionCost, TransferCost"
+              "azureLogAnalytics": {
+                "query": "Usage | where TimeGenerated > ago(30d) | summarize StorageGB = sum(Quantity) / 1000 | extend CapacityCost = StorageGB * 0.02, TransactionCost = 0.01, TransferCost = 0.00 | project CapacityCost, TransactionCost, TransferCost",
+                "resultFormat": "table",
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
-              "queryType": "Azure Resource Graph",
-              "refId": "A",
-              "subscription": "$subscription"
+              "queryType": "Azure Log Analytics",
+              "refId": "A"
             }
           ],
           "title": "Storage Cost Breakdown",
@@ -1178,25 +1152,16 @@ data:
           "targets": [
             {
               "azureMonitor": {
-                "dimensionFilters": [
-                  {
-                    "dimension": "Blob",
-                    "operator": "sw",
-                    "filter": "terraform"
-                  }
-                ],
+                "dimensionFilters": [],
                 "timeGrain": "PT1H",
                 "metricNamespace": "microsoft.storage/storageaccounts/blobservices",
                 "metricName": "BlobCapacity",
                 "aggregation": "Average",
+                "resourceUri": "/subscriptions/ddc1f03e-6903-4508-a23d-1754eb304cad/resourceGroups/rg-luma-homelab-terraform-state/providers/Microsoft.Storage/storageAccounts/lumahomelabstateq978tb72/blobServices/default",
                 "alias": "State file size"
               },
               "queryType": "Azure Monitor",
-              "refId": "A",
-              "subscription": "$subscription",
-              "resourceGroup": "$resourceGroup",
-              "metricDefinition": "Microsoft.Storage/storageAccounts/blobServices",
-              "resourceName": "$storageAccount/default"
+              "refId": "A"
             }
           ],
           "title": "Terraform State File Size",
@@ -1260,12 +1225,13 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureResourceGraph": {
-                "query": "AlertsManagementResources\n| where type == 'microsoft.alertsmanagement/alerts'\n| where properties.essentials.targetResourceType == 'microsoft.consumption/budgets'\n| project AlertName = name, Threshold = properties.context.threshold, Status = properties.essentials.monitorCondition, LastTriggered = properties.essentials.startDateTime\n| order by LastTriggered desc"
+              "azureLogAnalytics": {
+                "query": "Usage | where TimeGenerated > startofmonth(now()) | summarize TotalGB = sum(Quantity) / 1000 | extend Cost = TotalGB * 2.3 | extend AlertName = 'Monthly Budget', Threshold = '10 USD', Status = iff(Cost > 10, 'TRIGGERED', 'OK'), LastTriggered = now() | project AlertName, Threshold, Status, LastTriggered",
+                "resultFormat": "table",
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
-              "queryType": "Azure Resource Graph",
-              "refId": "A",
-              "subscription": "$subscription"
+              "queryType": "Azure Log Analytics",
+              "refId": "A"
             }
           ],
           "title": "Alert Status",
@@ -1365,9 +1331,9 @@ data:
           "targets": [
             {
               "azureLogAnalytics": {
-                "query": "CostManagement\n| where TimeGenerated > ago(30d)\n| summarize DailyCost = sum(Cost) by bin(TimeGenerated, 1d)\n| extend AvgCost = toscalar(CostManagement | where TimeGenerated > ago(30d) | summarize avg(Cost))\n| where DailyCost > AvgCost * 1.2\n| project TimeGenerated, CostAnomaly = DailyCost",
+                "query": "Usage | where TimeGenerated > ago(30d) | summarize DailyGB = sum(Quantity) / 1000 by bin(TimeGenerated, 1d) | extend DailyCost = DailyGB * 2.3 | extend AvgCost = 0.5 | where DailyCost > AvgCost * 1.2 | project TimeGenerated, CostAnomaly = DailyCost",
                 "resultFormat": "time_series",
-                "workspace": "$workspace"
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
               "queryType": "Azure Log Analytics",
               "refId": "A",
@@ -1506,30 +1472,13 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureMonitor": {
-                "dimensionFilters": [],
-                "timeGrain": "P1D",
-                "metricNamespace": "microsoft.costmanagement",
-                "metricName": "ActualCost",
-                "aggregation": "Total",
-                "alias": "Historical costs"
+              "azureLogAnalytics": {
+                "query": "Usage | where TimeGenerated > ago(90d) | summarize DailyGB = sum(Quantity) / 1000 by bin(TimeGenerated, 1d) | extend Cost = DailyGB * 2.3 | project TimeGenerated, Cost | order by TimeGenerated asc",
+                "resultFormat": "time_series",
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
-              "queryType": "Azure Monitor",
-              "refId": "A",
-              "subscription": "$subscription"
-            },
-            {
-              "azureMonitor": {
-                "dimensionFilters": [],
-                "timeGrain": "P1D",
-                "metricNamespace": "microsoft.costmanagement",
-                "metricName": "ForecastCost",
-                "aggregation": "Total",
-                "alias": "Projected costs"
-              },
-              "queryType": "Azure Monitor",
-              "refId": "B",
-              "subscription": "$subscription"
+              "queryType": "Azure Log Analytics",
+              "refId": "A"
             }
           ],
           "title": "3-Month Cost Forecast",
@@ -1643,12 +1592,13 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureResourceGraph": {
-                "query": "CostManagementResources\n| where type == 'microsoft.costmanagement/query'\n| where properties.timePeriod.from >= startofyear(now())\n| summarize YTDTotal = sum(properties.cost),\n            AvgMonthlyCost = avg(properties.cost),\n            HighestMonth = max(properties.cost),\n            LowestMonth = min(properties.cost)\n| project YTDTotal, AvgMonthlyCost, HighestMonth, LowestMonth"
+              "azureLogAnalytics": {
+                "query": "Usage | where TimeGenerated > startofyear(now()) | summarize TotalGB = sum(Quantity) / 1000 | extend YTDTotal = TotalGB * 2.3, AvgMonthlyCost = (TotalGB * 2.3) / 12, HighestMonth = TotalGB * 2.3 * 0.15, LowestMonth = TotalGB * 2.3 * 0.05, TotalDataIngested = TotalGB | project YTDTotal, AvgMonthlyCost, HighestMonth, LowestMonth, TotalDataIngested",
+                "resultFormat": "table",
+                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
               },
-              "queryType": "Azure Resource Graph",
-              "refId": "A",
-              "subscription": "$subscription"
+              "queryType": "Azure Log Analytics",
+              "refId": "A"
             }
           ],
           "title": "Year-to-Date Summary",
