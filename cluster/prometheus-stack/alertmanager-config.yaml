@@ -1,128 +1,15 @@
 ---
-apiVersion: v1
-kind: ConfigMap
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
 metadata:
-  name: alertmanager-config
+  creationTimestamp: null
+  name: alertmanager-main
   namespace: prometheus
-  labels:
-    app.kubernetes.io/name: alertmanager
-data:
-  alertmanager.yml: |
-    global:
-      resolve_timeout: 5m
-      # Discord webhook URL from secret
-      discord_api_url: "https://discord.com/api/webhooks"
-
-    # Inhibition rules - suppress lower severity when higher severity is active
-    inhibit_rules:
-    - source_matchers:
-      - severity="critical"
-      target_matchers:
-      - severity="warning"
-      equal: ['alertname', 'instance']
-
-    # Main routing tree
-    route:
-      receiver: 'homelab-default'
-      group_by: ['alertname', 'cluster', 'service', 'severity']
-      group_wait: 30s
-      group_interval: 5m
-      repeat_interval: 2h
-      
-      routes:
-      # Critical infrastructure alerts - immediate notification
-      - matchers:
-        - severity="critical"
-        receiver: 'critical-alerts'
-        group_wait: 10s
-        repeat_interval: 30m
-        
-      # Storage alerts - separate channel
-      - matchers:
-        - alertname=~".*Disk.*|.*Storage.*|.*Volume.*|.*Ceph.*"
-        receiver: 'storage-alerts'
-        routes:
-        - matchers:
-          - severity="critical"
-          receiver: 'critical-alerts'
-          
-      # Weekend suppression for non-critical alerts
-      - matchers:
-        - severity!="critical"
-        active_time_intervals:
-        - weekdays
-        receiver: 'homelab-default'
-      
-      # Weekend critical alerts still go through
-      - matchers:
-        - severity="critical"
-        receiver: 'critical-alerts'
-
-    # Time intervals for weekend suppression
-    time_intervals:
-    - name: weekdays
-      time_intervals:
-      - times:
-        - start_time: '09:00'
-          end_time: '22:00'
-        weekdays: ['monday:friday']
-
-    # Alert receivers
-    receivers:
-    - name: 'homelab-default'
-      discord_configs:
-      - webhook_url_file: '/etc/alertmanager/secrets/discord-webhook/webhook-url'
-        title: '📊 Homelab Alert: {{ .GroupLabels.alertname }}'
-        message: |
-          **Cluster:** {{ .GroupLabels.cluster | default "homelab" }}
-          **Severity:** {{ .CommonLabels.severity | upper }}
-          
-          {{ range .Alerts.Firing }}
-          🟡 **{{ .Labels.alertname }}**
-          📍 **Instance:** `{{ .Labels.instance }}`
-          📝 **Description:** {{ .Annotations.description }}
-          🔗 **Runbook:** {{ .Annotations.runbook_url }}
-          {{ end }}
-          
-          {{ range .Alerts.Resolved }}
-          ✅ **RESOLVED:** {{ .Labels.alertname }}
-          📍 **Instance:** `{{ .Labels.instance }}`
-          {{ end }}
-
-    - name: 'critical-alerts'
-      discord_configs:
-      - webhook_url_file: '/etc/alertmanager/secrets/discord-webhook/webhook-url'
-        title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
-        message: |
-          @everyone **CRITICAL ALERT**
-          
-          **Cluster:** {{ .GroupLabels.cluster | default "homelab" }}
-          **Time:** {{ .CommonAnnotations.startsAt }}
-          
-          {{ range .Alerts.Firing }}
-          🔴 **{{ .Labels.alertname }}**
-          📍 **Instance:** `{{ .Labels.instance }}`
-          📝 **Description:** {{ .Annotations.description }}
-          🔗 **Runbook:** {{ .Annotations.runbook_url }}
-          
-          **Labels:**
-          {{ range .Labels.SortedPairs }}• {{ .Name }}: {{ .Value }}
-          {{ end }}
-          {{ end }}
-
-    - name: 'storage-alerts'
-      discord_configs:
-      - webhook_url_file: '/etc/alertmanager/secrets/discord-webhook/webhook-url'
-        title: '💾 Storage Alert: {{ .GroupLabels.alertname }}'
-        message: |
-          **Storage System Alert**
-          
-          {{ range .Alerts.Firing }}
-          📦 **{{ .Labels.alertname }}**
-          📍 **Instance:** `{{ .Labels.instance }}`
-          📊 **Current Value:** {{ .Annotations.value }}
-          📝 **Description:** {{ .Annotations.description }}
-          {{ end }}
-
-    # Silence configuration
-    templates: []
+spec:
+  encryptedData:
+    alertmanager.yaml: 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
+  template:
+    metadata:
+      creationTimestamp: null
+      name: alertmanager-main
+      namespace: prometheus

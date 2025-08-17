@@ -4,7 +4,6 @@ kind: Kustomization
 
 resources:
   - alertmanager-config.yaml
-  - discord-webhook.yaml
   - rules/
   - grafana-admin.yaml
   - snmp-exporter-config.yaml
