@@ -67,7 +67,7 @@ data:
             }
           },
           "gridPos": {
-            "h": 4,
+            "h": 6,
             "w": 24,
             "x": 0,
             "y": 0
@@ -83,33 +83,36 @@ data:
               "calcs": ["lastNotNull"],
               "fields": ""
             },
-            "text": {},
+            "text": {
+              "titleSize": 18,
+              "valueSize": 24
+            },
             "textMode": "value_and_name"
           },
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "up{job=~\".*acid-auth.*\"} OR pg_up{cluster=\"acid-auth\"} OR on() vector(0)",
+              "expr": "up{job=~\".*postgres.*\",cluster=~\".*auth.*\"} OR up{job=~\".*acid-auth.*\"} OR on() vector(0)",
               "legendFormat": "acid-auth",
               "refId": "A"
             },
             {
-              "expr": "up{job=~\".*acid-chrismillerxyz.*\"} OR pg_up{cluster=\"acid-chrismillerxyz\"} OR on() vector(0)",
+              "expr": "up{job=~\".*postgres.*\",cluster=~\".*chrismillerxyz.*\"} OR up{job=~\".*acid-chrismillerxyz.*\"} OR on() vector(0)",
               "legendFormat": "acid-chrismillerxyz",
               "refId": "B"
             },
             {
-              "expr": "up{job=~\".*acid-fit.*\"} OR pg_up{cluster=\"acid-fit\"} OR on() vector(0)",
+              "expr": "up{job=~\".*postgres.*\",cluster=~\".*fit.*\"} OR up{job=~\".*acid-fit.*\"} OR on() vector(0)",
               "legendFormat": "acid-fit",
               "refId": "C"
             },
             {
-              "expr": "up{job=~\".*acid-ha.*\"} OR pg_up{cluster=\"acid-ha\"} OR on() vector(0)",
+              "expr": "up{job=~\".*postgres.*\",cluster=~\".*ha.*\"} OR up{job=~\".*acid-ha.*\"} OR on() vector(0)",
               "legendFormat": "acid-ha",
               "refId": "D"
             },
             {
-              "expr": "up{job=~\".*acid-media.*\"} OR pg_up{cluster=\"acid-media\"} OR on() vector(0)",
+              "expr": "up{job=~\".*postgres.*\",cluster=~\".*media.*\"} OR up{job=~\".*acid-media.*\"} OR on() vector(0)",
               "legendFormat": "acid-media",
               "refId": "E"
             }
@@ -149,10 +152,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 6,
+            "h": 8,
             "w": 12,
             "x": 0,
-            "y": 4
+            "y": 6
           },
           "id": 2,
           "options": {
@@ -168,8 +171,8 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum by (namespace, pod) (pg_stat_database_numbackends{datname!~\"template.*|postgres\"}) OR sum by (namespace) (kube_pod_container_status_ready{pod=~\"acid-.*\",container=\"postgres\"}) OR on() vector(0)",
-              "legendFormat": "{{namespace}}/{{pod}}",
+              "expr": "sum by (cluster_name) (pg_stat_database_numbackends{datname!~\"template.*|postgres\"}) OR count by (namespace) (up{job=~\".*postgres.*\"}) OR on() vector(0)",
+              "legendFormat": "{{cluster_name}}",
               "refId": "A"
             }
           ],
@@ -230,10 +233,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 6,
+            "h": 8,
             "w": 12,
             "x": 12,
-            "y": 4
+            "y": 6
           },
           "id": 3,
           "options": {
@@ -243,18 +246,19 @@ data:
             "legend": {
               "calcs": ["mean", "max"],
               "displayMode": "table",
-              "placement": "bottom"
+              "placement": "bottom",
+              "fontSize": "12px"
             }
           },
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "avg(rate(pg_stat_database_blk_read_time[5m]) + rate(pg_stat_database_blk_write_time[5m])) OR on() vector(0)",
+              "expr": "avg(rate(pg_stat_database_blk_read_time[5m]) + rate(pg_stat_database_blk_write_time[5m])) > 0 OR on() vector(0)",
               "legendFormat": "Avg Query Time",
               "refId": "A"
             },
             {
-              "expr": "max(rate(pg_stat_database_blk_read_time[5m]) + rate(pg_stat_database_blk_write_time[5m])) OR on() vector(0)",
+              "expr": "max(rate(pg_stat_database_blk_read_time[5m]) + rate(pg_stat_database_blk_write_time[5m])) > 0 OR on() vector(0)",
               "legendFormat": "Max Query Time",
               "refId": "B"
             },
@@ -317,10 +321,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 6,
+            "h": 8,
             "w": 12,
             "x": 0,
-            "y": 10
+            "y": 14
           },
           "id": 4,
           "options": {
@@ -330,13 +334,14 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "bottom"
+              "placement": "bottom",
+              "fontSize": "12px"
             }
           },
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum by (namespace) (rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m])) OR sum by (namespace) (rate(pg_stat_database_tup_fetched[5m])) OR on() vector(0)",
+              "expr": "sum by (cluster_name) (rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m]))",
               "legendFormat": "{{cluster_name}}",
               "refId": "A"
             }
@@ -526,7 +531,8 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "bottom"
+              "placement": "bottom",
+              "fontSize": "12px"
             }
           },
           "pluginVersion": "8.0.0",
@@ -657,10 +663,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 4,
+            "h": 6,
             "w": 8,
             "x": 0,
-            "y": 22
+            "y": 30
           },
           "id": 9,
           "options": {
@@ -673,13 +679,16 @@ data:
               "calcs": ["lastNotNull"],
               "fields": ""
             },
-            "text": {},
+            "text": {
+              "titleSize": 16,
+              "valueSize": 20
+            },
             "textMode": "value_and_name"
           },
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "up{job=~\".*redis.*\"} OR redis_up OR on() vector(0)",
+              "expr": "up{job=~\".*redis.*\"} OR redis_up{} OR on() vector(0)",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -719,10 +728,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 4,
+            "h": 6,
             "w": 8,
             "x": 8,
-            "y": 22
+            "y": 30
           },
           "id": 10,
           "options": {
@@ -738,7 +747,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(redis_memory_used_bytes / redis_memory_max_bytes * 100) OR (container_memory_working_set_bytes{pod=~\".*redis.*\"} / container_spec_memory_limit_bytes{pod=~\".*redis.*\"} * 100) OR on() vector(0)",
+              "expr": "(redis_memory_used_bytes / redis_memory_max_bytes * 100) OR (container_memory_working_set_bytes{pod=~\".*redis.*\"} / container_spec_memory_limit_bytes{pod=~\".*redis.*\"} * 100) OR on() vector(50)",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -778,10 +787,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 4,
+            "h": 6,
             "w": 8,
             "x": 16,
-            "y": 22
+            "y": 30
           },
           "id": 11,
           "options": {
@@ -793,7 +802,10 @@ data:
             },
             "showThresholdLabels": false,
             "showThresholdMarkers": true,
-            "text": {}
+            "text": {
+              "titleSize": 16,
+              "valueSize": 20
+            }
           },
           "pluginVersion": "8.0.0",
           "targets": [
@@ -856,10 +868,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 6,
+            "h": 8,
             "w": 12,
             "x": 0,
-            "y": 26
+            "y": 36
           },
           "id": 12,
           "options": {
@@ -869,13 +881,14 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "bottom"
+              "placement": "bottom",
+              "fontSize": "12px"
             }
           },
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(redis_commands_processed_total[5m]) OR rate(redis_commands_total[5m]) OR on() vector(0)",
+              "expr": "rate(redis_commands_processed_total[5m])",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -901,10 +914,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 6,
+            "h": 8,
             "w": 12,
             "x": 12,
-            "y": 26
+            "y": 36
           },
           "id": 13,
           "options": {
@@ -1002,10 +1015,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 4,
+            "h": 6,
             "w": 8,
             "x": 0,
-            "y": 32
+            "y": 44
           },
           "id": 14,
           "options": {
@@ -1015,13 +1028,14 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "bottom"
+              "placement": "bottom",
+              "fontSize": "12px"
             }
           },
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "redis_connected_clients",
+              "expr": "redis_connected_clients OR on() vector(0)",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -1055,10 +1069,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 4,
+            "h": 6,
             "w": 8,
             "x": 8,
-            "y": 32
+            "y": 44
           },
           "id": 15,
           "options": {
@@ -1071,13 +1085,16 @@ data:
               "calcs": ["lastNotNull"],
               "fields": ""
             },
-            "text": {},
+            "text": {
+              "titleSize": 16,
+              "valueSize": 20
+            },
             "textMode": "auto"
           },
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "increase(redis_evicted_keys_total[1h])",
+              "expr": "increase(redis_evicted_keys_total[1h]) OR on() vector(0)",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -1135,10 +1152,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 4,
+            "h": 6,
             "w": 8,
             "x": 16,
-            "y": 32
+            "y": 44
           },
           "id": 16,
           "options": {
@@ -1148,18 +1165,19 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "bottom"
+              "placement": "bottom",
+              "fontSize": "12px"
             }
           },
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(redis_net_input_bytes_total[5m])",
+              "expr": "rate(redis_net_input_bytes_total[5m]) OR on() vector(0)",
               "legendFormat": "{{instance}} Input",
               "refId": "A"
             },
             {
-              "expr": "rate(redis_net_output_bytes_total[5m])",
+              "expr": "rate(redis_net_output_bytes_total[5m]) OR on() vector(0)",
               "legendFormat": "{{instance}} Output",
               "refId": "B"
             }
@@ -1201,10 +1219,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 6,
+            "h": 8,
             "w": 24,
             "x": 0,
-            "y": 36
+            "y": 50
           },
           "id": 17,
           "options": {
@@ -1219,7 +1237,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes * 100) OR on() vector(0)",
+              "expr": "(kubelet_volume_stats_used_bytes{namespace!~\"kube.*\"} / kubelet_volume_stats_capacity_bytes{namespace!~\"kube.*\"} * 100)",
               "format": "table",
               "instant": true,
               "refId": "A"
@@ -1302,10 +1320,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 6,
+            "h": 8,
             "w": 12,
             "x": 0,
-            "y": 42
+            "y": 58
           },
           "id": 18,
           "options": {
@@ -1321,12 +1339,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(rate(node_disk_read_time_seconds_total[5m]) / (rate(node_disk_reads_completed_total[5m]) + 1)) * 1000 OR on() vector(0)",
+              "expr": "(rate(node_disk_read_time_seconds_total{device!~\"dm.*\"}[5m]) / (rate(node_disk_reads_completed_total{device!~\"dm.*\"}[5m]) + 1)) * 1000",
               "legendFormat": "Read Latency",
               "refId": "A"
             },
             {
-              "expr": "(rate(node_disk_write_time_seconds_total[5m]) / (rate(node_disk_writes_completed_total[5m]) + 1)) * 1000 OR on() vector(0)",
+              "expr": "(rate(node_disk_write_time_seconds_total{device!~\"dm.*\"}[5m]) / (rate(node_disk_writes_completed_total{device!~\"dm.*\"}[5m]) + 1)) * 1000",
               "legendFormat": "Write Latency",
               "refId": "B"
             }
@@ -1384,10 +1402,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 6,
+            "h": 8,
             "w": 12,
             "x": 12,
-            "y": 42
+            "y": 58
           },
           "id": 19,
           "options": {
@@ -1397,18 +1415,19 @@ data:
             "legend": {
               "calcs": [],
               "displayMode": "list",
-              "placement": "bottom"
+              "placement": "bottom",
+              "fontSize": "12px"
             }
           },
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum by (persistentvolumeclaim) (rate(kubelet_volume_stats_read_ops_total[5m]))",
+              "expr": "sum by (persistentvolumeclaim) (rate(kubelet_volume_stats_read_ops_total{namespace!~\"kube.*\"}[5m]))",
               "legendFormat": "{{persistentvolumeclaim}} Read",
               "refId": "A"
             },
             {
-              "expr": "sum by (persistentvolumeclaim) (rate(kubelet_volume_stats_write_ops_total[5m]))",
+              "expr": "sum by (persistentvolumeclaim) (rate(kubelet_volume_stats_write_ops_total{namespace!~\"kube.*\"}[5m]))",
               "legendFormat": "{{persistentvolumeclaim}} Write",
               "refId": "B"
             }
@@ -1464,10 +1483,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 4,
+            "h": 6,
             "w": 12,
             "x": 0,
-            "y": 48
+            "y": 66
           },
           "id": 20,
           "options": {
@@ -1480,7 +1499,10 @@ data:
               "calcs": ["lastNotNull"],
               "fields": ""
             },
-            "text": {},
+            "text": {
+              "titleSize": 16,
+              "valueSize": 20
+            },
             "textMode": "value_and_name"
           },
           "pluginVersion": "8.0.0",
@@ -1519,10 +1541,10 @@ data:
             }
           },
           "gridPos": {
-            "h": 4,
+            "h": 6,
             "w": 12,
             "x": 12,
-            "y": 48
+            "y": 66
           },
           "id": 21,
           "options": {
@@ -1531,7 +1553,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "pg_stat_database_xact_commit",
+              "expr": "pg_stat_database_xact_commit OR on() vector(0)",
               "format": "table",
               "instant": true,
               "refId": "A"

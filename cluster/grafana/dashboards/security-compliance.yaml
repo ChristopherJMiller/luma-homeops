@@ -21,7 +21,7 @@ data:
           }
         ]
       },
-      "description": "Certificate management, security events, RBAC violations, and compliance monitoring",
+      "description": "Trivy security scanning alerts, vulnerability management, and compliance monitoring",
       "editable": true,
       "gnetId": null,
       "graphTooltip": 1,
@@ -30,7 +30,7 @@ data:
       "panels": [
         {
           "datasource": "Prometheus",
-          "description": "Certificate expiry timeline showing time until expiration",
+          "description": "Critical vulnerability alerts by image",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -38,60 +38,81 @@ data:
               },
               "custom": {
                 "align": "auto",
-                "displayMode": "auto"
+                "displayMode": "color-background"
               },
               "mappings": [],
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "red",
+                    "color": "green",
                     "value": 0
                   },
                   {
                     "color": "yellow",
-                    "value": 604800
+                    "value": 1
                   },
                   {
-                    "color": "green",
-                    "value": 2592000
+                    "color": "orange",
+                    "value": 5
+                  },
+                  {
+                    "color": "red",
+                    "value": 10
                   }
                 ]
               },
-              "unit": "s"
+              "unit": "short"
             }
           },
           "gridPos": {
-            "h": 6,
+            "h": 8,
             "w": 24,
             "x": 0,
             "y": 0
           },
           "id": 1,
           "options": {
-            "showHeader": true
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Critical"
+              }
+            ]
           },
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "cert_manager_certificate_expiration_timestamp_seconds - time()",
+              "expr": "trivy_image_vulnerabilities{severity=\"Critical\"}",
               "format": "table",
               "instant": true,
-              "legendFormat": "{{namespace}}/{{name}}",
               "refId": "A"
             }
           ],
-          "title": "Certificate Expiry Timeline",
+          "title": "Critical Vulnerability Alerts by Image",
           "transformations": [
             {
               "id": "organize",
               "options": {
-                "excludeByName": {},
+                "excludeByName": {
+                  "Time": true,
+                  "job": true,
+                  "instance": true,
+                  "endpoint": true,
+                  "pod": true,
+                  "container": true,
+                  "service": true,
+                  "__name__": true
+                },
                 "indexByName": {},
                 "renameByName": {
-                  "name": "Certificate",
                   "namespace": "Namespace",
-                  "Value": "Time Until Expiry"
+                  "resource_name": "Resource",
+                  "resource_kind": "Kind",
+                  "image_repository": "Image",
+                  "image_tag": "Tag",
+                  "Value": "Critical"
                 }
               }
             }
@@ -100,7 +121,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Certificate status overview",
+          "description": "Overview of vulnerabilities by severity",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -112,7 +133,19 @@ data:
                 "steps": [
                   {
                     "color": "green",
-                    "value": null
+                    "value": 0
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "orange",
+                    "value": 5
+                  },
+                  {
+                    "color": "red",
+                    "value": 10
                   }
                 ]
               },
@@ -122,23 +155,14 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Not Ready"
+                  "options": "Critical"
                 },
                 "properties": [
                   {
-                    "id": "thresholds",
+                    "id": "color",
                     "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "red",
-                          "value": null
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
+                      "fixedColor": "red",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -146,23 +170,44 @@ data:
               {
                 "matcher": {
                   "id": "byName",
-                  "options": "Expiring Soon"
+                  "options": "High"
                 },
                 "properties": [
                   {
-                    "id": "thresholds",
+                    "id": "color",
                     "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "yellow",
-                          "value": null
-                        },
-                        {
-                          "color": "yellow",
-                          "value": 1
-                        }
-                      ]
+                      "fixedColor": "orange",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Medium"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "yellow",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Low"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "green",
+                      "mode": "fixed"
                     }
                   }
                 ]
@@ -173,7 +218,7 @@ data:
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 6
+            "y": 8
           },
           "id": 2,
           "options": {
@@ -192,89 +237,169 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "count(cert_manager_certificate_ready_status == 1) or vector(0)",
-              "legendFormat": "Ready",
+              "expr": "sum(trivy_image_vulnerabilities{severity=\"Critical\"}) or vector(0)",
+              "legendFormat": "Critical",
               "refId": "A"
             },
             {
-              "expr": "count(cert_manager_certificate_ready_status == 0) or vector(0)",
-              "legendFormat": "Not Ready",
+              "expr": "sum(trivy_image_vulnerabilities{severity=\"High\"}) or vector(0)",
+              "legendFormat": "High",
               "refId": "B"
             },
             {
-              "expr": "count((cert_manager_certificate_expiration_timestamp_seconds - time()) < 2592000) or vector(0)",
-              "legendFormat": "Expiring Soon",
+              "expr": "sum(trivy_image_vulnerabilities{severity=\"Medium\"}) or vector(0)",
+              "legendFormat": "Medium",
               "refId": "C"
+            },
+            {
+              "expr": "sum(trivy_image_vulnerabilities{severity=\"Low\"}) or vector(0)",
+              "legendFormat": "Low",
+              "refId": "D"
             }
           ],
-          "title": "Certificates by Status",
+          "title": "Vulnerabilities by Severity",
           "type": "stat"
         },
         {
           "datasource": "Prometheus",
-          "description": "Recent certificate events",
+          "description": "Config audit findings by severity",
           "fieldConfig": {
             "defaults": {
               "color": {
                 "mode": "thresholds"
-              },
-              "custom": {
-                "align": "auto",
-                "displayMode": "auto"
               },
               "mappings": [],
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "text",
-                    "value": null
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "orange",
+                    "value": 5
+                  },
+                  {
+                    "color": "red",
+                    "value": 10
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Critical"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "High"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "orange",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Medium"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "yellow",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Low"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "green",
+                      "mode": "fixed"
+                    }
                   }
                 ]
               }
-            }
+            ]
           },
           "gridPos": {
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 6
+            "y": 8
           },
           "id": 3,
           "options": {
-            "showHeader": true,
-            "sortBy": [
-              {
-                "desc": true,
-                "displayName": "Time"
-              }
-            ]
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
           },
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "increase(cert_manager_certificate_issued_total[24h])",
-              "format": "table",
-              "instant": true,
+              "expr": "sum(trivy_resource_configaudits{severity=\"Critical\"}) or vector(0)",
+              "legendFormat": "Critical",
               "refId": "A"
-            }
-          ],
-          "title": "Cert-Manager Events",
-          "transformations": [
+            },
             {
-              "id": "organize",
-              "options": {
-                "excludeByName": {},
-                "indexByName": {},
-                "renameByName": {
-                  "name": "Certificate",
-                  "namespace": "Namespace",
-                  "Value": "Events (24h)"
-                }
-              }
+              "expr": "sum(trivy_resource_configaudits{severity=\"High\"}) or vector(0)",
+              "legendFormat": "High",
+              "refId": "B"
+            },
+            {
+              "expr": "sum(trivy_resource_configaudits{severity=\"Medium\"}) or vector(0)",
+              "legendFormat": "Medium",
+              "refId": "C"
+            },
+            {
+              "expr": "sum(trivy_resource_configaudits{severity=\"Low\"}) or vector(0)",
+              "legendFormat": "Low",
+              "refId": "D"
             }
           ],
-          "type": "table"
+          "title": "Config Audit Findings",
+          "type": "stat"
         },
         {
           "datasource": "Prometheus",
@@ -421,7 +546,7 @@ data:
             "h": 4,
             "w": 16,
             "x": 8,
-            "y": 10
+            "y": 12
           },
           "id": 5,
           "options": {
@@ -437,17 +562,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(cert_manager_certificate_renewal_success_total[1h])",
-              "legendFormat": "Successful",
+              "expr": "sum by (severity) (trivy_image_vulnerabilities)",
+              "legendFormat": "{{severity}}",
               "refId": "A"
-            },
-            {
-              "expr": "rate(cert_manager_certificate_renewal_failure_total[1h])",
-              "legendFormat": "Failed",
-              "refId": "B"
             }
           ],
-          "title": "Certificate Renewal History",
+          "title": "Vulnerability Trends",
           "type": "timeseries"
         },
         {
@@ -507,7 +627,7 @@ data:
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 14
+            "y": 16
           },
           "id": 6,
           "options": {
@@ -577,7 +697,7 @@ data:
             "h": 6,
             "w": 12,
             "x": 12,
-            "y": 14
+            "y": 16
           },
           "id": 7,
           "options": {
@@ -644,7 +764,7 @@ data:
             "h": 6,
             "w": 12,
             "x": 0,
-            "y": 20
+            "y": 22
           },
           "id": 8,
           "options": {
@@ -717,7 +837,7 @@ data:
             "h": 6,
             "w": 6,
             "x": 12,
-            "y": 20
+            "y": 22
           },
           "id": 9,
           "options": {
@@ -789,7 +909,7 @@ data:
             "h": 6,
             "w": 6,
             "x": 18,
-            "y": 20
+            "y": 22
           },
           "id": 10,
           "options": {
@@ -1515,19 +1635,19 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(((count(cert_manager_certificate_ready_status == 1) / count(cert_manager_certificate_ready_status)) * 25) + ((1 - (count(kube_pod_container_security_context_privileged == true) / count(kube_pod_info))) * 25) + ((count(kube_pod_info{namespace!~\"kube-.*\"} and on(namespace,pod) kube_networkpolicy_labels) / count(kube_pod_info{namespace!~\"kube-.*\"})) * 25) + ((1 - (sum(trivy_image_vulnerabilities{severity=\"Critical\"}) / (sum(trivy_image_vulnerabilities{severity=\"Critical\"}) + 10))) * 25)) or vector(75)",
+              "expr": "((1 - (sum(trivy_image_vulnerabilities{severity=\"Critical\"}) / (sum(trivy_image_vulnerabilities) + 1))) * 40) + ((1 - (sum(trivy_image_exposedsecrets{severity=\"Critical\"}) / (sum(trivy_image_exposedsecrets) + 1))) * 30) + ((1 - (sum(trivy_resource_configaudits{severity=\"Critical\"}) / (sum(trivy_resource_configaudits) + 1))) * 30)) or vector(85)",
               "legendFormat": "Security Score",
               "refId": "A"
             }
           ],
-          "title": "Overall Security Score",
+          "title": "Trivy Security Score",
           "type": "gauge"
         }
       ],
       "refresh": "1m",
       "schemaVersion": 30,
       "style": "dark",
-      "tags": ["homelab", "security", "certificates", "compliance", "rbac"],
+      "tags": ["homelab", "security", "trivy", "vulnerabilities", "compliance"],
       "templating": {
         "list": [
           {
@@ -1672,7 +1792,7 @@ data:
         "refresh_intervals": ["30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
       },
       "timezone": "",
-      "title": "Security & Compliance",
+      "title": "Trivy Security & Compliance",
       "uid": "security-compliance",
       "version": 1
     }
