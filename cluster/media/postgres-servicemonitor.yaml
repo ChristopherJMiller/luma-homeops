@@ -1,0 +1,22 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: postgres-acid-media
+  namespace: media
+  labels:
+    app: postgresql
+    cluster: acid-media
+spec:
+  selector:
+    matchLabels:
+      application: spilo
+      galaxy: acid-media
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      honorLabels: true
+  namespaceSelector:
+    matchNames:
+      - media

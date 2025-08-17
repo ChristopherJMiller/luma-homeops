@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: media
 resources:
   - psql.yaml
+  - postgres-servicemonitor.yaml
   - tls.yaml
   - nzb-api-keys.yaml
   - usenet-user-pass.yaml

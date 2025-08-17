@@ -92,7 +92,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "up{job=~\".*postgres.*\",cluster=~\".*auth.*\"} OR up{job=~\".*acid-auth.*\"} OR on() vector(0)",
+              "expr": "up{job=\"kubernetes-pods\",pod=~\"acid-auth.*\"} OR on() vector(0)",
               "legendFormat": "acid-auth",
               "refId": "A"
             },
@@ -172,7 +172,7 @@ data:
           "targets": [
             {
               "expr": "sum by (cluster_name) (pg_stat_database_numbackends{datname!~\"template.*|postgres\"}) OR count by (namespace) (up{job=~\".*postgres.*\"}) OR on() vector(0)",
-              "legendFormat": "{{cluster_name}}",
+              "legendFormat": "{{datname}}",
               "refId": "A"
             }
           ],
@@ -342,7 +342,7 @@ data:
           "targets": [
             {
               "expr": "sum by (cluster_name) (rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m]))",
-              "legendFormat": "{{cluster_name}}",
+              "legendFormat": "{{datname}}",
               "refId": "A"
             }
           ],
@@ -402,7 +402,7 @@ data:
           "targets": [
             {
               "expr": "avg(pg_stat_database_blks_hit / (pg_stat_database_blks_hit + pg_stat_database_blks_read + 1) * 100) OR on() vector(95)",
-              "legendFormat": "{{cluster_name}}",
+              "legendFormat": "{{datname}}",
               "refId": "A"
             }
           ],
@@ -538,8 +538,8 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "pg_database_size_bytes OR sum by (namespace) (container_fs_usage_bytes{pod=~\"acid-.*\",container=\"postgres\"}) OR on() vector(0)",
-              "legendFormat": "{{cluster_name}}/{{datname}}",
+              "expr": "pg_database_size_bytes OR on() vector(0)",
+              "legendFormat": "{{datname}}",
               "refId": "A"
             }
           ],

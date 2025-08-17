@@ -19,6 +19,11 @@ spec:
           cluster_name_label: galaxy
           enable_readiness_probe: true
           enable_persistent_volume_claim_deletion: false
+          enable_sidecars: true
+          share_pgsocket_with_sidecars: false
+        configGeneral:
+          enable_database_access: true
+          debug_logging: true
   destination:
     server: https://kubernetes.default.svc
     namespace: postgres-operator
