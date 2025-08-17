@@ -19,6 +19,21 @@ spec:
             secretKeyRef:
               name: app-key
               key: key
+        redis:
+          enabled: true
+          metrics:
+            enabled: true
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                memory: 64Mi
+            serviceMonitor:
+              enabled: true
+              namespace: fit
+              labels:
+                release: prometheus
         postgresql:
           # Disables built in PSQL
           enabled: false

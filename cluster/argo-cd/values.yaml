@@ -42,6 +42,14 @@ argo-cd:
       requests:
         cpu: 150m
         memory: 128Mi
+    exporter:
+      enabled: true
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 64Mi
   server:
     pdb:
       enabled: true

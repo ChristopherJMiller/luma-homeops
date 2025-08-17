@@ -1661,7 +1661,7 @@ data:
       "refresh": "10s",
       "schemaVersion": 27,
       "style": "dark",
-      "tags": ["home-assistant", "mqtt", "mosquitto", "iot", "automation"],
+      "tags": ["homelab", "home-assistant", "mqtt", "mosquitto", "iot", "automation"],
       "templating": {
         "list": [
           {

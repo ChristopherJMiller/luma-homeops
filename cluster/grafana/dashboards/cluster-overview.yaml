@@ -471,7 +471,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\",job=\"prometheus-prometheus-node-exporter\"}[5m])) * 100)",
+              "expr": "100 - (avg by (instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100)",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -558,7 +558,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(1 - (node_memory_MemAvailable_bytes{job=\"prometheus-prometheus-node-exporter\"} / node_memory_MemTotal_bytes{job=\"prometheus-prometheus-node-exporter\"})) * 100",
+              "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -1071,7 +1071,7 @@ data:
       "refresh": "30s",
       "schemaVersion": 27,
       "style": "dark",
-      "tags": ["kubernetes", "cluster", "overview"],
+      "tags": ["homelab", "kubernetes", "cluster", "overview"],
       "templating": {
         "list": [
           {

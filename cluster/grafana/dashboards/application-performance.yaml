@@ -1408,7 +1408,7 @@ data:
       "refresh": "30s",
       "schemaVersion": 27,
       "style": "dark",
-      "tags": ["applications", "argocd", "authentik", "media"],
+      "tags": ["homelab", "applications", "argocd", "authentik", "media"],
       "templating": {
         "list": [
           {

@@ -103,6 +103,19 @@ spec:
                 memory: 512Mi
             persistence:
               enabled: false
+          metrics:
+            enabled: true
+            resources:
+              requests:
+                cpu: 50m
+                memory: 64Mi
+              limits:
+                memory: 64Mi
+            serviceMonitor:
+              enabled: true
+              namespace: authentik
+              labels:
+                release: prometheus
   destination:
     server: https://kubernetes.default.svc
     namespace: authentik

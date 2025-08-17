@@ -1545,7 +1545,7 @@ data:
       "refresh": "1m",
       "schemaVersion": 30,
       "style": "dark",
-      "tags": ["security", "certificates", "compliance", "rbac"],
+      "tags": ["homelab", "security", "certificates", "compliance", "rbac"],
       "templating": {
         "list": [
           {

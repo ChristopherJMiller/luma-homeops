@@ -1468,7 +1468,7 @@ data:
       "refresh": "5m",
       "schemaVersion": 27,
       "style": "dark",
-      "tags": ["azure", "cost", "budget", "logging"],
+      "tags": ["homelab", "azure", "cost", "budget", "logging"],
       "templating": {
         "list": [
           {

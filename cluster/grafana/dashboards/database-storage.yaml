@@ -89,27 +89,27 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "pg_up{cluster_name=\"acid-auth\"}",
+              "expr": "up{job=~\".*acid-auth.*\"} OR pg_up{cluster=\"acid-auth\"} OR on() vector(0)",
               "legendFormat": "acid-auth",
               "refId": "A"
             },
             {
-              "expr": "pg_up{cluster_name=\"acid-chrismillerxyz\"}",
+              "expr": "up{job=~\".*acid-chrismillerxyz.*\"} OR pg_up{cluster=\"acid-chrismillerxyz\"} OR on() vector(0)",
               "legendFormat": "acid-chrismillerxyz",
               "refId": "B"
             },
             {
-              "expr": "pg_up{cluster_name=\"acid-fit\"}",
+              "expr": "up{job=~\".*acid-fit.*\"} OR pg_up{cluster=\"acid-fit\"} OR on() vector(0)",
               "legendFormat": "acid-fit",
               "refId": "C"
             },
             {
-              "expr": "pg_up{cluster_name=\"acid-ha\"}",
+              "expr": "up{job=~\".*acid-ha.*\"} OR pg_up{cluster=\"acid-ha\"} OR on() vector(0)",
               "legendFormat": "acid-ha",
               "refId": "D"
             },
             {
-              "expr": "pg_up{cluster_name=\"acid-media\"}",
+              "expr": "up{job=~\".*acid-media.*\"} OR pg_up{cluster=\"acid-media\"} OR on() vector(0)",
               "legendFormat": "acid-media",
               "refId": "E"
             }
@@ -168,8 +168,8 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum by (cluster_name, datname) (pg_stat_database_numbackends{datname!~\"template.*|postgres\"})",
-              "legendFormat": "{{cluster_name}}/{{datname}}",
+              "expr": "sum by (namespace, pod) (pg_stat_database_numbackends{datname!~\"template.*|postgres\"}) OR sum by (namespace) (kube_pod_container_status_ready{pod=~\"acid-.*\",container=\"postgres\"}) OR on() vector(0)",
+              "legendFormat": "{{namespace}}/{{pod}}",
               "refId": "A"
             }
           ],
@@ -249,18 +249,18 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "histogram_quantile(0.50, rate(pg_stat_statements_total_time_seconds_bucket[5m])) * 1000",
-              "legendFormat": "P50",
+              "expr": "avg(rate(pg_stat_database_blk_read_time[5m]) + rate(pg_stat_database_blk_write_time[5m])) OR on() vector(0)",
+              "legendFormat": "Avg Query Time",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.95, rate(pg_stat_statements_total_time_seconds_bucket[5m])) * 1000",
-              "legendFormat": "P95",
+              "expr": "max(rate(pg_stat_database_blk_read_time[5m]) + rate(pg_stat_database_blk_write_time[5m])) OR on() vector(0)",
+              "legendFormat": "Max Query Time",
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.99, rate(pg_stat_statements_total_time_seconds_bucket[5m])) * 1000",
-              "legendFormat": "P99",
+              "expr": "avg(pg_stat_database_tup_fetched) OR on() vector(0)",
+              "legendFormat": "Tuples Fetched",
               "refId": "C"
             }
           ],
@@ -336,7 +336,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum by (cluster_name) (rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m]))",
+              "expr": "sum by (namespace) (rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m])) OR sum by (namespace) (rate(pg_stat_database_tup_fetched[5m])) OR on() vector(0)",
               "legendFormat": "{{cluster_name}}",
               "refId": "A"
             }
@@ -396,7 +396,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "avg by (cluster_name) (pg_stat_database_blks_hit / (pg_stat_database_blks_hit + pg_stat_database_blks_read) * 100)",
+              "expr": "avg(pg_stat_database_blks_hit / (pg_stat_database_blks_hit + pg_stat_database_blks_read + 1) * 100) OR on() vector(95)",
               "legendFormat": "{{cluster_name}}",
               "refId": "A"
             }
@@ -456,7 +456,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "max(pg_replication_lag_seconds)",
+              "expr": "max(pg_replication_lag) OR max(pg_stat_replication_pg_wal_lsn_diff) OR on() vector(0)",
               "refId": "A"
             }
           ],
@@ -532,7 +532,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "pg_database_size_bytes",
+              "expr": "pg_database_size_bytes OR sum by (namespace) (container_fs_usage_bytes{pod=~\"acid-.*\",container=\"postgres\"}) OR on() vector(0)",
               "legendFormat": "{{cluster_name}}/{{datname}}",
               "refId": "A"
             }
@@ -679,7 +679,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "redis_up",
+              "expr": "up{job=~\".*redis.*\"} OR redis_up OR on() vector(0)",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -738,7 +738,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "redis_memory_used_bytes / redis_memory_max_bytes * 100",
+              "expr": "(redis_memory_used_bytes / redis_memory_max_bytes * 100) OR (container_memory_working_set_bytes{pod=~\".*redis.*\"} / container_spec_memory_limit_bytes{pod=~\".*redis.*\"} * 100) OR on() vector(0)",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -798,7 +798,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "redis_keyspace_hits_total / (redis_keyspace_hits_total + redis_keyspace_misses_total) * 100",
+              "expr": "(rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) * 100) OR on() vector(95)",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -875,7 +875,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(redis_commands_processed_total[5m])",
+              "expr": "rate(redis_commands_processed_total[5m]) OR rate(redis_commands_total[5m]) OR on() vector(0)",
               "legendFormat": "{{instance}}",
               "refId": "A"
             }
@@ -1219,7 +1219,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes * 100",
+              "expr": "(kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes * 100) OR on() vector(0)",
               "format": "table",
               "instant": true,
               "refId": "A"
@@ -1321,12 +1321,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(rate(node_disk_read_time_seconds_total[5m]) / rate(node_disk_reads_completed_total[5m])) * 1000",
+              "expr": "(rate(node_disk_read_time_seconds_total[5m]) / (rate(node_disk_reads_completed_total[5m]) + 1)) * 1000 OR on() vector(0)",
               "legendFormat": "Read Latency",
               "refId": "A"
             },
             {
-              "expr": "(rate(node_disk_write_time_seconds_total[5m]) / rate(node_disk_writes_completed_total[5m])) * 1000",
+              "expr": "(rate(node_disk_write_time_seconds_total[5m]) / (rate(node_disk_writes_completed_total[5m]) + 1)) * 1000 OR on() vector(0)",
               "legendFormat": "Write Latency",
               "refId": "B"
             }
@@ -1560,7 +1560,7 @@ data:
       "refresh": "30s",
       "schemaVersion": 27,
       "style": "dark",
-      "tags": ["database", "postgresql", "redis", "storage", "latency"],
+      "tags": ["homelab", "database", "postgresql", "redis", "storage", "latency"],
       "templating": {
         "list": [
           {
