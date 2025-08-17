@@ -16,3 +16,4 @@ resources:
   - dashboards/security-compliance.yaml
   - dashboards/home-automation.yaml
   - dashboards/azure-cost-usage.yaml
+  - dashboards/vyos-router.yaml

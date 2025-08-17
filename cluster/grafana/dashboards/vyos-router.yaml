@@ -1396,7 +1396,7 @@ data:
       "refresh": "30s",
       "schemaVersion": 27,
       "style": "dark",
-      "tags": ["vyos", "router", "network"],
+      "tags": ["vyos", "router", "network", "homelab"],
       "templating": {
         "list": []
       },
