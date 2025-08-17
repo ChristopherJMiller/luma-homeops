@@ -127,7 +127,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "count by (health_status) (argocd_app_info)",
+              "expr": "count by (health_status) (argocd_app_info) OR on() vector(0)",
               "legendFormat": "{{health_status}}",
               "refId": "A"
             }
@@ -211,7 +211,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "count by (sync_status) (argocd_app_info)",
+              "expr": "count by (sync_status) (argocd_app_info) OR on() vector(0)",
               "legendFormat": "{{sync_status}}",
               "refId": "A"
             }
@@ -335,17 +335,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum(rate(argocd_app_sync_total{phase=\"Succeeded\"}[5m]))",
+              "expr": "sum(rate(argocd_app_sync_total{phase=\"Succeeded\"}[5m])) OR on() vector(0)",
               "legendFormat": "Success",
               "refId": "A"
             },
             {
-              "expr": "sum(rate(argocd_app_sync_total{phase=\"Failed\"}[5m]))",
+              "expr": "sum(rate(argocd_app_sync_total{phase=\"Failed\"}[5m])) OR on() vector(0)",
               "legendFormat": "Failed",
               "refId": "B"
             },
             {
-              "expr": "sum(rate(argocd_app_sync_total{phase=\"Running\"}[5m]))",
+              "expr": "sum(rate(argocd_app_sync_total{phase=\"Running\"}[5m])) OR on() vector(0)",
               "legendFormat": "In Progress",
               "refId": "C"
             }
@@ -440,12 +440,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(container_cpu_usage_seconds_total{namespace=\"argo-cd\",pod=~\".*repo-server.*\"}[5m])",
+              "expr": "rate(container_cpu_usage_seconds_total{namespace=\"argo-cd\",pod=~\".*repo-server.*\"}[5m]) OR on() vector(0)",
               "legendFormat": "CPU",
               "refId": "A"
             },
             {
-              "expr": "container_memory_working_set_bytes{namespace=\"argo-cd\",pod=~\".*repo-server.*\"}",
+              "expr": "container_memory_working_set_bytes{namespace=\"argo-cd\",pod=~\".*repo-server.*\"} OR on() vector(0)",
               "legendFormat": "Memory",
               "refId": "B"
             }
@@ -522,22 +522,22 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "histogram_quantile(0.50, sum(rate(argocd_git_request_duration_seconds_bucket[5m])) by (le))",
+              "expr": "histogram_quantile(0.50, sum(rate(argocd_git_request_duration_seconds_bucket[5m])) by (le)) OR on() vector(0)",
               "legendFormat": "P50",
               "refId": "A"
             },
             {
-              "expr": "histogram_quantile(0.90, sum(rate(argocd_git_request_duration_seconds_bucket[5m])) by (le))",
+              "expr": "histogram_quantile(0.90, sum(rate(argocd_git_request_duration_seconds_bucket[5m])) by (le)) OR on() vector(0)",
               "legendFormat": "P90",
               "refId": "B"
             },
             {
-              "expr": "histogram_quantile(0.95, sum(rate(argocd_git_request_duration_seconds_bucket[5m])) by (le))",
+              "expr": "histogram_quantile(0.95, sum(rate(argocd_git_request_duration_seconds_bucket[5m])) by (le)) OR on() vector(0)",
               "legendFormat": "P95",
               "refId": "C"
             },
             {
-              "expr": "histogram_quantile(0.99, sum(rate(argocd_git_request_duration_seconds_bucket[5m])) by (le))",
+              "expr": "histogram_quantile(0.99, sum(rate(argocd_git_request_duration_seconds_bucket[5m])) by (le)) OR on() vector(0)",
               "legendFormat": "P99",
               "refId": "D"
             }
@@ -590,7 +590,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "authentik_core_users_active_total",
+              "expr": "authentik_core_users_active_total OR on() vector(0)",
               "refId": "A"
             }
           ],
@@ -698,12 +698,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(authentik_flows_execution_total{result=\"success\"}[5m])",
+              "expr": "rate(authentik_flows_execution_total{result=\"success\"}[5m]) OR on() vector(0)",
               "legendFormat": "Successful",
               "refId": "A"
             },
             {
-              "expr": "rate(authentik_flows_execution_total{result=\"failure\"}[5m])",
+              "expr": "rate(authentik_flows_execution_total{result=\"failure\"}[5m]) OR on() vector(0)",
               "legendFormat": "Failed",
               "refId": "B"
             }
@@ -758,7 +758,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "topk(10, sum by (client_ip) (increase(authentik_flows_execution_total{result=\"failure\"}[1h])))",
+              "expr": "topk(10, sum by (client_ip) (increase(authentik_flows_execution_total{result=\"failure\"}[1h]))) OR on() vector(0)",
               "format": "table",
               "instant": true,
               "refId": "A"
@@ -843,7 +843,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "up{job=~\".*outpost.*\"}",
+              "expr": "up{job=~\".*outpost.*\"} OR on() vector(0)",
               "legendFormat": "{{job}}",
               "refId": "A"
             }
@@ -896,12 +896,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "authentik_providers_saml_active",
+              "expr": "authentik_providers_saml_active OR on() vector(0)",
               "legendFormat": "SAML",
               "refId": "A"
             },
             {
-              "expr": "authentik_providers_ldap_active",
+              "expr": "authentik_providers_ldap_active OR on() vector(0)",
               "legendFormat": "LDAP",
               "refId": "B"
             }

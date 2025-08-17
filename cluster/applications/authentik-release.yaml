@@ -65,8 +65,21 @@ spec:
             - name: session-key
               mountPath: /session-key
               readOnly: true
+        server:
+          metrics:
+            serviceMonitor:
+              enabled: true
+              namespace: authentik
+              selector:
+                release: prometheus
         worker:
           replicas: 2
+          metrics:
+            serviceMonitor:
+              enabled: true
+              namespace: authentik
+              selector:
+                release: prometheus
           livenessProbe:
             # -- Number of seconds after which the [probe] times out
             timeoutSeconds: 10

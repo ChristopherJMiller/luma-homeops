@@ -6,6 +6,7 @@ namespace: prometheus
 resources:
   - dashboard-provider.yaml
   - azure-datasource.yaml
+  - azure-monitor-credentials.yaml
   - dashboards/argocd-dashboard.yaml
   - dashboards/homelab-overview.yaml
   - dashboards/cluster-overview.yaml

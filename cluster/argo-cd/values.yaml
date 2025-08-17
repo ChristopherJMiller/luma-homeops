@@ -28,6 +28,11 @@ argo-cd:
         memory: 1Gi
     metrics:
       enabled: true
+      serviceMonitor:
+        enabled: true
+        namespace: argo-cd
+        selector:
+          release: prometheus
   dex:
     resources:
       limits:
@@ -62,6 +67,11 @@ argo-cd:
         memory: 256Mi
     metrics:
       enabled: true
+      serviceMonitor:
+        enabled: true
+        namespace: argo-cd
+        selector:
+          release: prometheus
     ingress:
       enabled: true
       annotations:
@@ -84,6 +94,13 @@ argo-cd:
       requests:
         cpu: 10m
         memory: 1Gi
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+        namespace: argo-cd
+        selector:
+          release: prometheus
   applicationSet:
     pdb:
       enabled: true
@@ -94,5 +111,12 @@ argo-cd:
       requests:
         cpu: 200m
         memory: 128Mi
+    metrics:
+      enabled: true
+      serviceMonitor:
+        enabled: true
+        namespace: argo-cd
+        selector:
+          release: prometheus
   notifications:
     enabled: false

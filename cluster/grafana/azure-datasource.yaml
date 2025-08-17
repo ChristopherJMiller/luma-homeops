@@ -16,10 +16,7 @@ data:
         cloudName: azuremonitor
         subscriptionId: ddc1f03e-6903-4508-a23d-1754eb304cad
         logAnalyticsDefaultWorkspace: 7e100cb4-3907-4540-8bf1-fb596260b75b
-        # Authentication will need to be configured post-deployment
-        # Either via managed identity or service principal
+        tenantId: $__env{AZURE_TENANT_ID}
+        clientId: $__env{AZURE_CLIENT_ID}
       secureJsonData:
-        # These need to be filled in after deployment
-        # tenantId: YOUR_TENANT_ID
-        # clientId: YOUR_CLIENT_ID  
-        # clientSecret: YOUR_CLIENT_SECRET
+        clientSecret: $__env{AZURE_CLIENT_SECRET}
