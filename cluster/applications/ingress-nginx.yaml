@@ -40,6 +40,10 @@ spec:
               memory: 500Mi
           metrics:
             enabled: true
+            serviceMonitor:
+              enabled: true
+              additionalLabels:
+                release: prometheus
           affinity:
             podAntiAffinity:
               preferredDuringSchedulingIgnoredDuringExecution:

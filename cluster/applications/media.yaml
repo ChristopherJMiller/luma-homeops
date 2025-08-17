@@ -24,3 +24,20 @@ spec:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground
       - PruneLast=true
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/progressDeadlineSeconds
+        - /spec/template/spec/containers/0/imagePullPolicy
+        - /spec/template/spec/containers/0/startupProbe/failureThreshold
+        - /spec/template/spec/containers/0/startupProbe/successThreshold
+        - /spec/template/spec/containers/0/startupProbe/timeoutSeconds
+        - /spec/template/spec/containers/0/terminationMessagePath
+        - /spec/template/spec/containers/0/terminationMessagePolicy
+        - /spec/template/spec/dnsPolicy
+        - /spec/template/spec/restartPolicy
+        - /spec/template/spec/schedulerName
+        - /spec/template/spec/securityContext
+        - /spec/template/spec/terminationGracePeriodSeconds
+        - /spec/strategy/rollingUpdate/maxSurge
