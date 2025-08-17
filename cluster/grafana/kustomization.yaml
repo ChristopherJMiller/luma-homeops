@@ -8,3 +8,10 @@ resources:
   - azure-datasource.yaml
   - dashboards/argocd-dashboard.yaml
   - dashboards/homelab-overview.yaml
+  - dashboards/cluster-overview.yaml
+  - dashboards/network-ingress.yaml
+  - dashboards/application-performance.yaml
+  - dashboards/database-storage.yaml
+  - dashboards/security-compliance.yaml
+  - dashboards/home-automation.yaml
+  - dashboards/azure-cost-usage.yaml
