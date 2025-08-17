@@ -83,12 +83,10 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureLogAnalytics": {
-                "query": "Usage | where TimeGenerated > startofmonth(now()) | summarize TotalGB = sum(Quantity) / 1000 | extend EstimatedCost = TotalGB * 2.3",
-                "resultFormat": "table",
-                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
+              "azureResourceGraph": {
+                "query": "ConsumptionResources | where type == 'microsoft.consumption/budgets' | where name == 'luma-homelab-logging-budget' | project currentSpend = todouble(properties.currentSpend.amount)"
               },
-              "queryType": "Azure Log Analytics",
+              "queryType": "Azure Resource Graph",
               "refId": "A"
             }
           ],
@@ -150,12 +148,10 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureLogAnalytics": {
-                "query": "Usage | where TimeGenerated > startofmonth(now()) | summarize TotalGB = sum(Quantity) / 1000 | extend EstimatedCost = TotalGB * 2.3 | extend BudgetPercent = (EstimatedCost / 10) * 100 | project BudgetPercent",
-                "resultFormat": "table",
-                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
+              "azureResourceGraph": {
+                "query": "ConsumptionResources | where type == 'microsoft.consumption/budgets' | where name == 'luma-homelab-logging-budget' | project name, amount, currentSpend = properties.currentSpend.amount, percentUsed = (todouble(properties.currentSpend.amount) / todouble(properties.amount)) * 100 | project percentUsed"
               },
-              "queryType": "Azure Log Analytics",
+              "queryType": "Azure Resource Graph",
               "refId": "A"
             }
           ],
@@ -256,12 +252,16 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureLogAnalytics": {
-                "query": "Usage | where TimeGenerated > ago(30d) | where IsBillable == true | summarize DailyGB = sum(Quantity) / 1000 by bin(TimeGenerated, 1d) | extend EstimatedCost = DailyGB * 2.3 | project TimeGenerated, EstimatedCost | order by TimeGenerated asc",
-                "resultFormat": "time_series",
-                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
+              "azureMonitor": {
+                "dimensionFilters": [],
+                "timeGrain": "P1D",
+                "metricNamespace": "microsoft.storage/storageaccounts",
+                "metricName": "UsedCapacity",
+                "aggregation": "Average",
+                "resourceUri": "/subscriptions/ddc1f03e-6903-4508-a23d-1754eb304cad/resourceGroups/rg-luma-homelab-terraform-state/providers/Microsoft.Storage/storageAccounts/lumahomelabstateq978tb72",
+                "alias": "Storage Used"
               },
-              "queryType": "Azure Log Analytics",
+              "queryType": "Azure Monitor",
               "refId": "A"
             }
           ],
@@ -380,16 +380,37 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureLogAnalytics": {
-                "query": "Usage | where TimeGenerated > startofmonth(now()) | summarize DailyAvgGB = sum(Quantity) / 1000 / datetime_diff('day', now(), startofmonth(now())) | extend ProjectedMonthlyGB = DailyAvgGB * 30 | extend ProjectedCost = ProjectedMonthlyGB * 2.3 | project ProjectedCost",
-                "resultFormat": "table",
-                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
+              "azureMonitor": {
+                "dimensionFilters": [],
+                "timeGrain": "PT1H",
+                "metricNamespace": "microsoft.storage/storageaccounts",
+                "metricName": "UsedCapacity",
+                "aggregation": "Average",
+                "resourceUri": "/subscriptions/ddc1f03e-6903-4508-a23d-1754eb304cad/resourceGroups/rg-luma-homelab-terraform-state/providers/Microsoft.Storage/storageAccounts/lumahomelabstateq978tb72",
+                "alias": ""
               },
-              "queryType": "Azure Log Analytics",
+              "queryType": "Azure Monitor",
               "refId": "A"
             }
           ],
           "title": "Projected Monthly Cost",
+          "transformations": [
+            {
+              "id": "calculateField",
+              "options": {
+                "mode": "binary",
+                "reduce": {
+                  "reducer": "lastNotNull"
+                },
+                "binary": {
+                  "left": "UsedCapacity",
+                  "operator": "*",
+                  "right": "0.00000002"
+                },
+                "alias": "Projected Cost"
+              }
+            }
+          ],
           "type": "stat"
         },
         {
@@ -1472,13 +1493,24 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "azureLogAnalytics": {
-                "query": "Usage | where TimeGenerated > ago(90d) | summarize DailyGB = sum(Quantity) / 1000 by bin(TimeGenerated, 1d) | extend Cost = DailyGB * 2.3 | project TimeGenerated, Cost | order by TimeGenerated asc",
-                "resultFormat": "time_series",
-                "workspace": "7e100cb4-3907-4540-8bf1-fb596260b75b"
+              "azureMonitor": {
+                "dimensionFilters": [],
+                "timeGrain": "P1D",
+                "metricNamespace": "microsoft.storage/storageaccounts",
+                "metricName": "UsedCapacity",
+                "aggregation": "Average",
+                "resourceUri": "/subscriptions/ddc1f03e-6903-4508-a23d-1754eb304cad/resourceGroups/rg-luma-homelab-terraform-state/providers/Microsoft.Storage/storageAccounts/lumahomelabstateq978tb72",
+                "alias": "Storage Cost"
               },
-              "queryType": "Azure Log Analytics",
+              "queryType": "Azure Monitor",
               "refId": "A"
+            },
+            {
+              "azureResourceGraph": {
+                "query": "ConsumptionResources | where type == 'microsoft.consumption/budgets' | where name == 'luma-homelab-logging-budget' | project budgetAmount = todouble(properties.amount)"
+              },
+              "queryType": "Azure Resource Graph",
+              "refId": "B"
             }
           ],
           "title": "3-Month Cost Forecast",
