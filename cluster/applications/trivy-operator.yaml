@@ -33,7 +33,7 @@ spec:
         serviceMonitor:
           enabled: true
           labels:
-            prometheus: kube-prometheus
+            release: prometheus
         compliance:
           cron: "0 */6 * * *"
           specs:

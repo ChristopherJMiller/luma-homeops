@@ -1041,27 +1041,27 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum(trivy_image_vulnerabilities{severity=\"CRITICAL\"}) or vector(0)",
+              "expr": "sum(trivy_image_vulnerabilities{severity=\"Critical\"}) or vector(0)",
               "legendFormat": "Critical",
               "refId": "A"
             },
             {
-              "expr": "sum(trivy_image_vulnerabilities{severity=\"HIGH\"}) or vector(0)",
+              "expr": "sum(trivy_image_vulnerabilities{severity=\"High\"}) or vector(0)",
               "legendFormat": "High",
               "refId": "B"
             },
             {
-              "expr": "sum(trivy_image_vulnerabilities{severity=\"MEDIUM\"}) or vector(0)",
+              "expr": "sum(trivy_image_vulnerabilities{severity=\"Medium\"}) or vector(0)",
               "legendFormat": "Medium",
               "refId": "C"
             },
             {
-              "expr": "sum(trivy_image_vulnerabilities{severity=\"LOW\"}) or vector(0)",
+              "expr": "sum(trivy_image_vulnerabilities{severity=\"Low\"}) or vector(0)",
               "legendFormat": "Low",
               "refId": "D"
             },
             {
-              "expr": "count(trivy_image_scanned_timestamp > (time() - 86400)) or vector(0)",
+              "expr": "count(count by (name) (trivy_image_vulnerabilities)) or vector(0)",
               "legendFormat": "Scanned Today",
               "refId": "E"
             }
@@ -1515,7 +1515,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(((count(cert_manager_certificate_ready_status == 1) / count(cert_manager_certificate_ready_status)) * 40) + ((1 - (count(kube_pod_container_security_context_privileged == true) / count(kube_pod_info))) * 30) + ((count(kube_pod_info{namespace!~\"kube-.*\"} and on(namespace,pod) kube_networkpolicy_labels) / count(kube_pod_info{namespace!~\"kube-.*\"})) * 30)) or vector(80)",
+              "expr": "(((count(cert_manager_certificate_ready_status == 1) / count(cert_manager_certificate_ready_status)) * 25) + ((1 - (count(kube_pod_container_security_context_privileged == true) / count(kube_pod_info))) * 25) + ((count(kube_pod_info{namespace!~\"kube-.*\"} and on(namespace,pod) kube_networkpolicy_labels) / count(kube_pod_info{namespace!~\"kube-.*\"})) * 25) + ((1 - (sum(trivy_image_vulnerabilities{severity=\"Critical\"}) / (sum(trivy_image_vulnerabilities{severity=\"Critical\"}) + 10))) * 25)) or vector(75)",
               "legendFormat": "Security Score",
               "refId": "A"
             }
