@@ -3,6 +3,9 @@ apiVersion: acid.zalan.do/v1
 kind: postgresql
 metadata:
   name: acid-chrismillerxyz
+  labels:
+    app: postgresql
+    cluster: acid-chrismillerxyz
 spec:
   databases:
     postgres: postgres
@@ -29,6 +32,34 @@ spec:
       - local     all  all  trust
       - host      all  all  all  trust
       - hostnossl all  all  all  trust
+  sidecars:
+    - name: postgres-exporter
+      image: quay.io/prometheuscommunity/postgres-exporter:v0.15.0
+      ports:
+        - name: metrics
+          containerPort: 9187
+          protocol: TCP
+      env:
+        - name: DATA_SOURCE_URI
+          value: "localhost:5432/postgres?sslmode=disable"
+        - name: DATA_SOURCE_USER
+          value: postgres
+        - name: DATA_SOURCE_PASS
+          valueFrom:
+            secretKeyRef:
+              name: postgres.acid-chrismillerxyz.credentials.postgresql.acid.zalan.do
+              key: password
+        - name: PG_EXPORTER_AUTO_DISCOVER_DATABASES
+          value: "true"
+        - name: PG_EXPORTER_EXTEND_QUERY_PATH
+          value: "/etc/postgres_exporter/queries.yaml"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
 ---
 apiVersion: v1
 kind: Service

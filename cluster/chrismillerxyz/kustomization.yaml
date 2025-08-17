@@ -6,5 +6,6 @@ resources:
   - ingress.yaml
   - site.yaml
   - psql.yaml
+  - postgres-podmonitor.yaml
   - notion-creds.yaml
   - sync.yaml

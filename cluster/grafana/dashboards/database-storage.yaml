@@ -21,7 +21,7 @@ data:
           }
         ]
       },
-      "description": "PostgreSQL clusters, Redis instances, and persistent storage metrics with latency tracking",
+      "description": "PostgreSQL clusters, Redis instances, Ceph storage cluster, and persistent storage metrics with performance monitoring",
       "editable": true,
       "gnetId": null,
       "graphTooltip": 1,
@@ -1577,12 +1577,231 @@ data:
             }
           ],
           "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Ceph cluster health and storage overview",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "0": {
+                      "text": "HEALTH_OK",
+                      "color": "green"
+                    },
+                    "1": {
+                      "text": "HEALTH_WARN",
+                      "color": "yellow"
+                    },
+                    "2": {
+                      "text": "HEALTH_ERR",
+                      "color": "red"
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 2
+                  }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 24,
+            "x": 0,
+            "y": 72
+          },
+          "id": 22,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {
+              "titleSize": 16,
+              "valueSize": 20
+            },
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "ceph_health_status OR on() vector(2)",
+              "legendFormat": "Cluster Health",
+              "refId": "A"
+            },
+            {
+              "expr": "count(ceph_osd_in == 1) OR on() vector(0)",
+              "legendFormat": "OSDs In",
+              "refId": "B"
+            },
+            {
+              "expr": "count(ceph_osd_up == 1) OR on() vector(0)",
+              "legendFormat": "OSDs Up",
+              "refId": "C"
+            },
+            {
+              "expr": "(ceph_cluster_total_used_bytes / ceph_cluster_total_bytes) * 100 OR on() vector(50)",
+              "legendFormat": "Storage Used %",
+              "refId": "D"
+            },
+            {
+              "expr": "ceph_pg_active + ceph_pg_clean OR on() vector(0)",
+              "legendFormat": "Active PGs",
+              "refId": "E"
+            }
+          ],
+          "title": "Ceph Cluster Overview",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Ceph operations per second and latency trends",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 10
+                  },
+                  {
+                    "color": "red",
+                    "value": 50
+                  }
+                ]
+              },
+              "unit": "ops"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byRegex",
+                  "options": ".*Latency.*"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "ms"
+                  },
+                  {
+                    "id": "custom.axisPlacement",
+                    "value": "right"
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 78
+          },
+          "id": 23,
+          "options": {
+            "tooltip": {
+              "mode": "multi"
+            },
+            "legend": {
+              "calcs": ["mean", "max"],
+              "displayMode": "table",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "sum(rate(ceph_osd_op_r[5m])) OR on() vector(0)",
+              "legendFormat": "Read Ops/s",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(rate(ceph_osd_op_w[5m])) OR on() vector(0)",
+              "legendFormat": "Write Ops/s",
+              "refId": "B"
+            },
+            {
+              "expr": "avg(ceph_osd_apply_latency_ms) OR on() vector(0)",
+              "legendFormat": "Apply Latency (ms)",
+              "refId": "C"
+            },
+            {
+              "expr": "avg(ceph_osd_commit_latency_ms) OR on() vector(0)",
+              "legendFormat": "Commit Latency (ms)",
+              "refId": "D"
+            }
+          ],
+          "title": "Ceph IOPS and Latency Trends",
+          "type": "timeseries"
         }
       ],
       "refresh": "30s",
       "schemaVersion": 27,
       "style": "dark",
-      "tags": ["homelab", "database", "postgresql", "redis", "storage", "latency"],
+      "tags": ["homelab", "database", "postgresql", "redis", "ceph", "storage", "latency"],
       "templating": {
         "list": [
           {

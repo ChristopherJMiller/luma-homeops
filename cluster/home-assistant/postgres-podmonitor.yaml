@@ -2,17 +2,17 @@
 apiVersion: monitoring.coreos.com/v1
 kind: PodMonitor
 metadata:
-  name: postgres-acid-media
-  namespace: media
+  name: postgres-acid-ha
+  namespace: home-assistant
   labels:
     app: postgresql
-    cluster: acid-media
+    cluster: acid-ha
     release: prometheus
 spec:
   selector:
     matchLabels:
       application: spilo
-      galaxy: acid-media
+      galaxy: acid-ha
   podMetricsEndpoints:
     - port: metrics
       interval: 30s
@@ -20,4 +20,4 @@ spec:
       honorLabels: true
   namespaceSelector:
     matchNames:
-      - media
+      - home-assistant
