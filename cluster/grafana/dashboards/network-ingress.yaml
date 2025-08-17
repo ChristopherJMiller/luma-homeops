@@ -1,0 +1,1021 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-network-ingress
+  namespace: prometheus
+  labels:
+    grafana_dashboard: "1"
+data:
+  network-ingress.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "description": "Network and Ingress Controller Metrics",
+      "editable": true,
+      "gnetId": null,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": "Prometheus",
+          "description": "Total configured ingresses",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "blue",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "count(count by (ingress) (nginx_ingress_controller_ingress_upstream_latency_seconds_count))",
+              "refId": "A"
+            }
+          ],
+          "title": "Total Ingresses",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Total request rate",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 100
+                  },
+                  {
+                    "color": "red",
+                    "value": 500
+                  }
+                ]
+              },
+              "unit": "reqps"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 4,
+            "y": 0
+          },
+          "id": 2,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "sum(rate(nginx_ingress_controller_requests[5m]))",
+              "refId": "A"
+            }
+          ],
+          "title": "Request Rate",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Active connections",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 100
+                  },
+                  {
+                    "color": "red",
+                    "value": 500
+                  }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 8,
+            "y": 0
+          },
+          "id": 3,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "sum(nginx_ingress_controller_nginx_process_connections{state=\"active\"})",
+              "refId": "A"
+            }
+          ],
+          "title": "Active Connections",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "P95 latency across all ingresses",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 2,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 0.5
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "s"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 12,
+            "y": 0
+          },
+          "id": 4,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le))",
+              "refId": "A"
+            }
+          ],
+          "title": "P95 Latency",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "SSL certificate days until expiry",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 0,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 7
+                  },
+                  {
+                    "color": "green",
+                    "value": 30
+                  }
+                ]
+              },
+              "unit": "d"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 16,
+            "y": 0
+          },
+          "id": 5,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["min"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "(nginx_ingress_controller_ssl_expire_time_seconds - time()) / 86400",
+              "refId": "A"
+            }
+          ],
+          "title": "SSL Cert Expiry",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Error rate (4xx + 5xx)",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "decimals": 2,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 5
+                  }
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 20,
+            "y": 0
+          },
+          "id": 6,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "100 * (sum(rate(nginx_ingress_controller_requests{status=~\"4..|5..\"}[5m])) / sum(rate(nginx_ingress_controller_requests[5m])))",
+              "refId": "A"
+            }
+          ],
+          "title": "Error Rate",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Request rate by ingress",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "reqps"
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 4
+          },
+          "id": 7,
+          "options": {
+            "tooltip": {
+              "mode": "multi"
+            },
+            "legend": {
+              "calcs": ["mean"],
+              "displayMode": "table",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "sum by (ingress) (rate(nginx_ingress_controller_requests[5m]))",
+              "legendFormat": "{{ingress}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Request Rate by Ingress",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Response status codes",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "percent"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "reqps"
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 4
+          },
+          "id": 8,
+          "options": {
+            "tooltip": {
+              "mode": "multi"
+            },
+            "legend": {
+              "calcs": ["mean"],
+              "displayMode": "table",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "sum by (status) (rate(nginx_ingress_controller_requests[5m]))",
+              "legendFormat": "{{status}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Response Status Codes",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Latency percentiles",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s"
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 12
+          },
+          "id": 9,
+          "options": {
+            "tooltip": {
+              "mode": "multi"
+            },
+            "legend": {
+              "calcs": ["mean", "max"],
+              "displayMode": "table",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P50",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.90, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P90",
+              "refId": "B"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P95",
+              "refId": "C"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le))",
+              "legendFormat": "P99",
+              "refId": "D"
+            }
+          ],
+          "title": "Latency Percentiles",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Upstream response time by service",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "color-background-solid"
+              },
+              "decimals": 3,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 0.5
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "s"
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 12
+          },
+          "id": 10,
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "P95 Response Time"
+              }
+            ]
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum by (ingress, le) (rate(nginx_ingress_controller_ingress_upstream_latency_seconds_bucket[5m])))",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Upstream Response Time (P95)",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "le": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "Value": "P95 Response Time",
+                  "ingress": "Ingress"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "CoreDNS query rate",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops"
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 0,
+            "y": 20
+          },
+          "id": 11,
+          "options": {
+            "tooltip": {
+              "mode": "multi"
+            },
+            "legend": {
+              "calcs": ["mean"],
+              "displayMode": "table",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "sum(rate(coredns_dns_requests_total[5m])) by (type)",
+              "legendFormat": "{{type}}",
+              "refId": "A"
+            }
+          ],
+          "title": "CoreDNS Query Rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "CoreDNS cache hit ratio",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 50
+                  },
+                  {
+                    "color": "green",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 12,
+            "y": 20
+          },
+          "id": 12,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "text": {}
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "100 * (sum(rate(coredns_cache_hits_total[5m])) / (sum(rate(coredns_cache_hits_total[5m])) + sum(rate(coredns_cache_misses_total[5m]))))",
+              "refId": "A"
+            }
+          ],
+          "title": "DNS Cache Hit Ratio",
+          "type": "gauge"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "External DNS sync status",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 6,
+            "x": 18,
+            "y": 20
+          },
+          "id": 13,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "sum(rate(external_dns_source_errors_total[5m]))",
+              "legendFormat": "Errors",
+              "refId": "A"
+            },
+            {
+              "expr": "external_dns_registry_endpoints_total",
+              "legendFormat": "Endpoints",
+              "refId": "B"
+            }
+          ],
+          "title": "External DNS Status",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Service-to-service latency heatmap",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "color-background"
+              },
+              "decimals": 2,
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 50
+                  },
+                  {
+                    "color": "red",
+                    "value": 100
+                  }
+                ]
+              },
+              "unit": "ms"
+            }
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 28
+          },
+          "id": 14,
+          "options": {
+            "showHeader": true,
+            "sortBy": []
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum by (namespace, service, le) (rate(nginx_ingress_controller_response_duration_seconds_bucket[5m]))) * 1000",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Service Latency (P95)",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "le": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "Value": "Latency (ms)",
+                  "namespace": "Namespace",
+                  "service": "Service"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 27,
+      "style": "dark",
+      "tags": ["network", "ingress", "nginx"],
+      "templating": {
+        "list": [
+          {
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": "Prometheus",
+            "definition": "label_values(nginx_ingress_controller_requests, ingress)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Ingress",
+            "multi": true,
+            "name": "ingress",
+            "options": [],
+            "query": {
+              "query": "label_values(nginx_ingress_controller_requests, ingress)",
+              "refId": "Prometheus-ingress-Variable-Query"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+          }
+        ]
+      },
+      "time": {
+        "from": "now-6h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "",
+      "title": "Network & Ingress",
+      "uid": "network-ingress",
+      "version": 1
+    }

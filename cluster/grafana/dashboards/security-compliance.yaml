@@ -1,0 +1,1696 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-security-compliance
+  namespace: prometheus
+  labels:
+    grafana_dashboard: "1"
+data:
+  security-compliance.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "description": "Certificate management, security events, RBAC violations, and compliance monitoring",
+      "editable": true,
+      "gnetId": null,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": "Prometheus",
+          "description": "Certificate expiry timeline showing time until expiration",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "auto"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": 0
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 604800
+                  },
+                  {
+                    "color": "green",
+                    "value": 2592000
+                  }
+                ]
+              },
+              "unit": "s"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 24,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "showHeader": true
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "certmanager_certificate_expiration_timestamp_seconds - time()",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "{{namespace}}/{{name}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Certificate Expiry Timeline",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {},
+                "indexByName": {},
+                "renameByName": {
+                  "name": "Certificate",
+                  "namespace": "Namespace",
+                  "Value": "Time Until Expiry"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Certificate status overview",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Not Ready"
+                },
+                "properties": [
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "red",
+                          "value": null
+                        },
+                        {
+                          "color": "red",
+                          "value": 1
+                        }
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Expiring Soon"
+                },
+                "properties": [
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "yellow",
+                          "value": null
+                        },
+                        {
+                          "color": "yellow",
+                          "value": 1
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 0,
+            "y": 6
+          },
+          "id": 2,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "count(certmanager_certificate_ready_status == 1) or vector(0)",
+              "legendFormat": "Ready",
+              "refId": "A"
+            },
+            {
+              "expr": "count(certmanager_certificate_ready_status == 0) or vector(0)",
+              "legendFormat": "Not Ready",
+              "refId": "B"
+            },
+            {
+              "expr": "count((certmanager_certificate_expiration_timestamp_seconds - time()) < 2592000) or vector(0)",
+              "legendFormat": "Expiring Soon",
+              "refId": "C"
+            }
+          ],
+          "title": "Certificates by Status",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Recent certificate events",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "auto"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 12,
+            "y": 6
+          },
+          "id": 3,
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Time"
+              }
+            ]
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "increase(certmanager_certificate_issued_total[24h])",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Cert-Manager Events",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {},
+                "indexByName": {},
+                "renameByName": {
+                  "name": "Certificate",
+                  "namespace": "Namespace",
+                  "Value": "Events (24h)"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Let's Encrypt API rate limit usage",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "percentage",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 50
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 10
+          },
+          "id": 4,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "text": {}
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "(rate(certmanager_http_acme_client_request_total[1h]) / 20) * 100",
+              "legendFormat": "Rate Limit Usage",
+              "refId": "A"
+            }
+          ],
+          "title": "Let's Encrypt Rate Limits",
+          "type": "gauge"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Certificate renewal success and failure rates",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "bars",
+                "fillOpacity": 80,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Failed"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Successful"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "green",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 16,
+            "x": 8,
+            "y": 10
+          },
+          "id": 5,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "rate(certmanager_certificate_renewal_success_total[1h])",
+              "legendFormat": "Successful",
+              "refId": "A"
+            },
+            {
+              "expr": "rate(certmanager_certificate_renewal_failure_total[1h])",
+              "legendFormat": "Failed",
+              "refId": "B"
+            }
+          ],
+          "title": "Certificate Renewal History",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Failed authentication attempts across services",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 10
+                  }
+                ]
+              },
+              "unit": "ops"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 14
+          },
+          "id": 6,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "rate(authentik_flows_execution_total{result=\"failure\"}[5m])",
+              "legendFormat": "Authentik",
+              "refId": "A"
+            },
+            {
+              "expr": "rate(node_ssh_login_failed_total[5m])",
+              "legendFormat": "SSH",
+              "refId": "B"
+            },
+            {
+              "expr": "rate(apiserver_authentication_attempts{result=\"error\"}[5m])",
+              "legendFormat": "Kubernetes API",
+              "refId": "C"
+            }
+          ],
+          "title": "Failed Authentication Attempts",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Top IPs with failed authentication attempts",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "color-background"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 5
+                  },
+                  {
+                    "color": "red",
+                    "value": 10
+                  }
+                ]
+              }
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 14
+          },
+          "id": 7,
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Failures"
+              }
+            ]
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "topk(20, sum by (source_ip) (increase(authentik_flows_execution_total{result=\"failure\"}[1h])))",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Failed Auth Source IPs",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "source_ip": "Source IP",
+                  "Value": "Failures"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Kubernetes RBAC access denials",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "auto"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 20
+          },
+          "id": 8,
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Time"
+              }
+            ]
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "apiserver_authorization_decision{decision=\"deny\"}",
+              "format": "table",
+              "instant": false,
+              "refId": "A"
+            }
+          ],
+          "title": "RBAC Violations",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "decision": true,
+                  "job": true,
+                  "__name__": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "user": "User",
+                  "namespace": "Namespace",
+                  "verb": "Verb",
+                  "resource": "Resource",
+                  "reason": "Reason"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Pods with elevated security contexts",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 6,
+            "x": 12,
+            "y": 20
+          },
+          "id": 9,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "count(kube_pod_container_security_context_privileged == true) or vector(0)",
+              "legendFormat": "Privileged Pods",
+              "refId": "A"
+            },
+            {
+              "expr": "count(kube_pod_container_security_context_run_as_root == true) or vector(0)",
+              "legendFormat": "Root Containers",
+              "refId": "B"
+            },
+            {
+              "expr": "count(kube_pod_spec_host_network == true) or vector(0)",
+              "legendFormat": "Host Network",
+              "refId": "C"
+            }
+          ],
+          "title": "Privileged Pod Security",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Percentage of pods covered by network policies",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "percentage",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 70
+                  },
+                  {
+                    "color": "green",
+                    "value": 90
+                  }
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 6,
+            "x": 18,
+            "y": 20
+          },
+          "id": 10,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "text": {}
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "(count(kube_pod_info{namespace!~\"kube-.*\"} and on(namespace,pod) kube_networkpolicy_labels) / count(kube_pod_info{namespace!~\"kube-.*\"})) * 100",
+              "legendFormat": "Coverage",
+              "refId": "A"
+            }
+          ],
+          "title": "Network Policy Coverage",
+          "type": "gauge"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Pod distribution by security standards",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Restricted"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "green",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Baseline"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "yellow",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Privileged"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 0,
+            "y": 26
+          },
+          "id": 11,
+          "options": {
+            "displayLabels": ["percent"],
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "showUnfilled": true,
+            "text": {}
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "(count(kube_pod_container_security_context_privileged != true and on(namespace,pod) kube_pod_container_security_context_run_as_root != true) / count(kube_pod_info)) * 100",
+              "legendFormat": "Restricted",
+              "refId": "A"
+            },
+            {
+              "expr": "(count(kube_pod_container_security_context_privileged != true and on(namespace,pod) kube_pod_container_security_context_run_as_root == true) / count(kube_pod_info)) * 100",
+              "legendFormat": "Baseline",
+              "refId": "B"
+            },
+            {
+              "expr": "(count(kube_pod_container_security_context_privileged == true) / count(kube_pod_info)) * 100",
+              "legendFormat": "Privileged",
+              "refId": "C"
+            }
+          ],
+          "title": "Pod Security Standards Compliance",
+          "type": "bargauge"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Container image vulnerability summary",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": 0
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "orange",
+                    "value": 5
+                  },
+                  {
+                    "color": "red",
+                    "value": 10
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Critical"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "High"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "orange",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Medium"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "yellow",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Low"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "green",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 12,
+            "y": 26
+          },
+          "id": 12,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "sum(trivy_image_vulnerabilities{severity=\"CRITICAL\"}) or vector(0)",
+              "legendFormat": "Critical",
+              "refId": "A"
+            },
+            {
+              "expr": "sum(trivy_image_vulnerabilities{severity=\"HIGH\"}) or vector(0)",
+              "legendFormat": "High",
+              "refId": "B"
+            },
+            {
+              "expr": "sum(trivy_image_vulnerabilities{severity=\"MEDIUM\"}) or vector(0)",
+              "legendFormat": "Medium",
+              "refId": "C"
+            },
+            {
+              "expr": "sum(trivy_image_vulnerabilities{severity=\"LOW\"}) or vector(0)",
+              "legendFormat": "Low",
+              "refId": "D"
+            },
+            {
+              "expr": "count(trivy_image_scanned_timestamp > (time() - 86400)) or vector(0)",
+              "legendFormat": "Scanned Today",
+              "refId": "E"
+            }
+          ],
+          "title": "Image Vulnerability Summary",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Kubernetes secrets overview",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "color-background"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 90
+                  }
+                ]
+              }
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 0,
+            "y": 30
+          },
+          "id": 13,
+          "options": {
+            "showHeader": true
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "count by (namespace) (kube_secret_info)",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Secrets Management",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "namespace": "Namespace",
+                  "Value": "Secret Count"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Kubernetes audit log event rates",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 12,
+            "y": 30
+          },
+          "id": 14,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "rate(apiserver_audit_event_total[5m])",
+              "legendFormat": "{{verb}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Audit Log Events",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "WAF/ModSecurity blocked requests",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 34
+          },
+          "id": 15,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "rate(nginx_ingress_controller_modsecurity_blocked_total[5m])",
+              "legendFormat": "{{rule_type}}",
+              "refId": "A"
+            }
+          ],
+          "title": "WAF/ModSecurity Events",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "SSL/TLS configuration by ingress",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "auto"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 34
+          },
+          "id": 16,
+          "options": {
+            "showHeader": true
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "nginx_ingress_controller_ssl_expire_time_seconds",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "SSL/TLS Configuration",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "job": true,
+                  "__name__": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "host": "Ingress",
+                  "namespace": "Namespace",
+                  "Value": "Cert Expiry"
+                }
+              }
+            },
+            {
+              "id": "calculateField",
+              "options": {
+                "alias": "Days Until Expiry",
+                "binary": {
+                  "left": "Cert Expiry",
+                  "operator": "-",
+                  "reducer": "sum",
+                  "right": "$(time())"
+                },
+                "mode": "binary",
+                "reduce": {
+                  "reducer": "sum"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Unusual traffic patterns and potential attacks",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": true,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 100
+                  }
+                ]
+              },
+              "unit": "reqps"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 24,
+            "x": 0,
+            "y": 40
+          },
+          "id": 17,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "rate(nginx_ingress_controller_requests{status=\"404\"}[5m])",
+              "legendFormat": "404 Not Found",
+              "refId": "A"
+            },
+            {
+              "expr": "rate(nginx_ingress_controller_requests{status=\"403\"}[5m])",
+              "legendFormat": "403 Forbidden",
+              "refId": "B"
+            },
+            {
+              "expr": "rate(nginx_ingress_controller_requests{status=\"429\"}[5m])",
+              "legendFormat": "429 Rate Limited",
+              "refId": "C"
+            }
+          ],
+          "title": "Unusual Traffic Patterns",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Overall security posture score",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 100,
+              "min": 0,
+              "thresholds": {
+                "mode": "percentage",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 70
+                  },
+                  {
+                    "color": "green",
+                    "value": 90
+                  }
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 46
+          },
+          "id": 18,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "showThresholdLabels": true,
+            "showThresholdMarkers": true,
+            "text": {}
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "(((count(certmanager_certificate_ready_status == 1) / count(certmanager_certificate_ready_status)) * 20) + ((1 - (count(kube_pod_container_security_context_privileged == true) / count(kube_pod_info))) * 20) + ((count(kube_pod_info{namespace!~\"kube-.*\"} and on(namespace,pod) kube_networkpolicy_labels) / count(kube_pod_info{namespace!~\"kube-.*\"})) * 20) + ((1 - (count(apiserver_authorization_decision{decision=\"deny\"} > 0) / 1)) * 20) + ((1 - (sum(trivy_image_vulnerabilities{severity=\"CRITICAL\"}) / 100)) * 20)) or vector(50)",
+              "legendFormat": "Security Score",
+              "refId": "A"
+            }
+          ],
+          "title": "Overall Security Score",
+          "type": "gauge"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Dynamic security recommendations",
+          "gridPos": {
+            "h": 4,
+            "w": 16,
+            "x": 8,
+            "y": 46
+          },
+          "id": 19,
+          "options": {
+            "content": "## Security Recommendations\n\n- Review certificates expiring within 30 days\n- Investigate privileged pods in production namespaces\n- Enable network policies for all application namespaces\n- Review and rotate secrets older than 90 days\n- Update ingress controllers to latest security patches\n- Enable audit logging for sensitive resources",
+            "mode": "markdown"
+          },
+          "pluginVersion": "8.0.0",
+          "title": "Security Recommendations",
+          "type": "text"
+        }
+      ],
+      "refresh": "1m",
+      "schemaVersion": 30,
+      "style": "dark",
+      "tags": ["security", "certificates", "compliance", "rbac"],
+      "templating": {
+        "list": [
+          {
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": "Prometheus",
+            "definition": "label_values(kube_namespace_created, namespace)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Namespace",
+            "multi": true,
+            "name": "namespace",
+            "options": [],
+            "query": {
+              "query": "label_values(kube_namespace_created, namespace)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "24h",
+              "value": "24h"
+            },
+            "hide": 0,
+            "includeAll": false,
+            "label": "Time Range",
+            "multi": false,
+            "name": "time_range",
+            "options": [
+              {
+                "selected": false,
+                "text": "1h",
+                "value": "1h"
+              },
+              {
+                "selected": false,
+                "text": "6h",
+                "value": "6h"
+              },
+              {
+                "selected": true,
+                "text": "24h",
+                "value": "24h"
+              },
+              {
+                "selected": false,
+                "text": "7d",
+                "value": "7d"
+              }
+            ],
+            "query": "1h,6h,24h,7d",
+            "queryValue": "",
+            "skipUrlSync": false,
+            "type": "custom"
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "hide": 0,
+            "includeAll": true,
+            "label": "Severity",
+            "multi": true,
+            "name": "severity",
+            "options": [
+              {
+                "selected": true,
+                "text": "All",
+                "value": "$__all"
+              },
+              {
+                "selected": false,
+                "text": "Critical",
+                "value": "critical"
+              },
+              {
+                "selected": false,
+                "text": "High",
+                "value": "high"
+              },
+              {
+                "selected": false,
+                "text": "Medium",
+                "value": "medium"
+              },
+              {
+                "selected": false,
+                "text": "Low",
+                "value": "low"
+              }
+            ],
+            "query": "critical,high,medium,low",
+            "queryValue": "",
+            "skipUrlSync": false,
+            "type": "custom"
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": "Prometheus",
+            "definition": "label_values(up, job)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Service",
+            "multi": true,
+            "name": "service",
+            "options": [],
+            "query": {
+              "query": "label_values(up, job)",
+              "refId": "PrometheusVariableQueryEditor-VariableQuery"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "type": "query"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "timepicker": {
+        "refresh_intervals": ["30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+      },
+      "timezone": "",
+      "title": "Security & Compliance",
+      "uid": "security-compliance",
+      "version": 1
+    }

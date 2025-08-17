@@ -1,0 +1,1612 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-azure-cost-usage
+  namespace: prometheus
+  labels:
+    grafana_dashboard: "1"
+data:
+  azure-cost-usage.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "description": "Azure resource costs and usage tracking for Log Analytics and Storage Account",
+      "editable": true,
+      "gnetId": null,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": "Prometheus",
+          "description": "Current month-to-date spend in USD",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 8
+                  },
+                  {
+                    "color": "red",
+                    "value": 10
+                  }
+                ]
+              },
+              "unit": "currencyUSD"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "sum(azure_cost_daily_usd) OR on() vector(0)",
+              "refId": "A"
+            }
+          ],
+          "title": "Current Month Spend",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Percentage of monthly budget used",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 150,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 80
+                  },
+                  {
+                    "color": "red",
+                    "value": 100
+                  }
+                ]
+              },
+              "unit": "percent"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 0
+          },
+          "id": 2,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "text": {}
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "(sum(azure_cost_daily_usd) / 10) * 100",
+              "refId": "A"
+            }
+          ],
+          "title": "Budget Status",
+          "type": "gauge"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Bar chart showing daily spend with 30-day rolling average",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "bars",
+                "fillOpacity": 100,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "currencyUSD"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "30-day average"
+                },
+                "properties": [
+                  {
+                    "id": "custom.drawStyle",
+                    "value": "line"
+                  },
+                  {
+                    "id": "custom.fillOpacity",
+                    "value": 0
+                  },
+                  {
+                    "id": "custom.lineWidth",
+                    "value": 2
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 8,
+            "w": 12,
+            "x": 12,
+            "y": 0
+          },
+          "id": 3,
+          "options": {
+            "tooltip": {
+              "mode": "multi"
+            },
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "azure_cost_daily_usd",
+              "legendFormat": "Daily Spend",
+              "refId": "A"
+            },
+            {
+              "expr": "avg_over_time(azure_cost_daily_usd[30d])",
+              "legendFormat": "30-day average",
+              "refId": "B"
+            }
+          ],
+          "title": "Daily Spend Trend",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Cost breakdown by resource type",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                }
+              },
+              "mappings": [],
+              "unit": "currencyUSD"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 4
+          },
+          "id": 4,
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "values": ["value"]
+            },
+            "pieType": "pie",
+            "tooltip": {
+              "mode": "single"
+            },
+            "displayLabels": ["name", "percent"],
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "azure_cost_by_resource_usd",
+              "legendFormat": "{{resource}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Cost by Resource",
+          "type": "piechart"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Projected total for current month",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 10
+                  }
+                ]
+              },
+              "unit": "currencyUSD"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 6,
+            "y": 4
+          },
+          "id": 5,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "(sum(azure_cost_daily_usd) / day_of_month()) * day_of_month(vector(time()) + 86400 * (day_of_month(vector(time()) + 86400) < day_of_month(vector(time()))))",
+              "refId": "A"
+            }
+          ],
+          "title": "Projected Monthly Cost",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Area chart showing GB ingested per day",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 30,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "GB"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 8
+          },
+          "id": 6,
+          "options": {
+            "tooltip": {
+              "mode": "single"
+            },
+            "legend": {
+              "calcs": ["mean", "max"],
+              "displayMode": "table",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "azure_log_analytics_ingestion_gb",
+              "legendFormat": "Data Ingested",
+              "refId": "A"
+            }
+          ],
+          "title": "Daily Data Ingestion",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Breakdown by data source/table",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "auto"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Estimated Cost"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "currencyUSD"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Daily Average (GB)"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "GB"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Monthly Total (GB)"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "GB"
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 8
+          },
+          "id": 7,
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Monthly Total (GB)"
+              }
+            ]
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "azure_log_analytics_ingestion_by_source_gb",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Ingestion by Source",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "source": "Source Name",
+                  "daily_avg": "Daily Average (GB)",
+                  "monthly_total": "Monthly Total (GB)",
+                  "estimated_cost": "Estimated Cost"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Number of queries executed",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "queries/hour"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 8,
+            "x": 0,
+            "y": 14
+          },
+          "id": 8,
+          "options": {
+            "tooltip": {
+              "mode": "single"
+            },
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "rate(azure_log_analytics_query_count[1h])",
+              "legendFormat": "Queries/hour",
+              "refId": "A"
+            }
+          ],
+          "title": "Query Usage",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Monthly retention cost",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 2
+                  }
+                ]
+              },
+              "unit": "currencyUSD"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 8,
+            "x": 8,
+            "y": 14
+          },
+          "id": 9,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "azure_log_analytics_retention_size_gb * 0.10",
+              "refId": "A"
+            }
+          ],
+          "title": "Data Retention Cost",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Average query response time",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 10,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 5
+                  }
+                ]
+              },
+              "unit": "s"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 8,
+            "x": 16,
+            "y": 14
+          },
+          "id": 10,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["mean"],
+              "fields": ""
+            },
+            "showThresholdLabels": false,
+            "showThresholdMarkers": true,
+            "text": {}
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "avg(azure_log_analytics_query_response_time_seconds)",
+              "refId": "A"
+            }
+          ],
+          "title": "Workspace Performance",
+          "type": "gauge"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Current storage usage in MB",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 100
+                  },
+                  {
+                    "color": "red",
+                    "value": 500
+                  }
+                ]
+              },
+              "unit": "decmbytes"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 20
+          },
+          "id": 11,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "azure_storage_used_capacity_bytes / 1048576",
+              "refId": "A"
+            }
+          ],
+          "title": "Storage Usage",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Line chart by operation type",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 9,
+            "x": 6,
+            "y": 20
+          },
+          "id": 12,
+          "options": {
+            "tooltip": {
+              "mode": "multi"
+            },
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "rate(azure_storage_transactions_total{operation=\"read\"}[1h])",
+              "legendFormat": "Read operations",
+              "refId": "A"
+            },
+            {
+              "expr": "rate(azure_storage_transactions_total{operation=\"write\"}[1h])",
+              "legendFormat": "Write operations",
+              "refId": "B"
+            },
+            {
+              "expr": "rate(azure_storage_transactions_total{operation=\"list\"}[1h])",
+              "legendFormat": "List operations",
+              "refId": "C"
+            }
+          ],
+          "title": "Transaction Count",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Cost breakdown for storage",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#73BF69",
+                    "value": null
+                  },
+                  {
+                    "color": "#FADE2A",
+                    "value": 0.5
+                  },
+                  {
+                    "color": "#F2495C",
+                    "value": 1
+                  }
+                ]
+              },
+              "unit": "currencyUSD"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 9,
+            "x": 15,
+            "y": 20
+          },
+          "id": 13,
+          "options": {
+            "displayMode": "basic",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "showUnfilled": true
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "azure_storage_capacity_cost_usd",
+              "legendFormat": "Capacity cost",
+              "refId": "A"
+            },
+            {
+              "expr": "azure_storage_transaction_cost_usd",
+              "legendFormat": "Transaction cost",
+              "refId": "B"
+            },
+            {
+              "expr": "azure_storage_transfer_cost_usd",
+              "legendFormat": "Data transfer cost",
+              "refId": "C"
+            }
+          ],
+          "title": "Storage Cost Breakdown",
+          "type": "bargauge"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Size of terraform state files",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "bytes"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 0,
+            "y": 24
+          },
+          "id": 14,
+          "options": {
+            "tooltip": {
+              "mode": "single"
+            },
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "azure_storage_terraform_state_size_bytes",
+              "legendFormat": "State file size",
+              "refId": "A"
+            }
+          ],
+          "title": "Terraform State File Size",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Budget alert status",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "color-background"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "0": {
+                      "text": "OK",
+                      "color": "green"
+                    },
+                    "1": {
+                      "text": "TRIGGERED",
+                      "color": "red"
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 0,
+            "y": 26
+          },
+          "id": 15,
+          "options": {
+            "showHeader": true
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "azure_budget_alert_status",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Alert Status",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "alert_name": "Alert Name",
+                  "threshold": "Threshold",
+                  "status": "Status",
+                  "last_triggered": "Last Triggered"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Highlight days with >20% increase from average",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "points",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 10,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "always",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 0.2
+                  }
+                ]
+              },
+              "unit": "currencyUSD"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 12,
+            "y": 26
+          },
+          "id": 16,
+          "options": {
+            "tooltip": {
+              "mode": "single"
+            },
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "(azure_cost_daily_usd - avg_over_time(azure_cost_daily_usd[7d])) / avg_over_time(azure_cost_daily_usd[7d]) > 0.2",
+              "legendFormat": "Cost Anomaly",
+              "refId": "A"
+            }
+          ],
+          "title": "Cost Anomalies",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Static or dynamic recommendations",
+          "fieldConfig": {
+            "defaults": {},
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 24,
+            "x": 0,
+            "y": 30
+          },
+          "id": 17,
+          "options": {
+            "content": "## Optimization Recommendations\n\n### Current Efficiency Score: **85%**\n\n#### Top 3 Cost Optimization Suggestions:\n1. **Enable data sampling** - Reduce ingestion volume by 30% for non-critical logs\n2. **Adjust retention policies** - Move logs older than 30 days to archive storage\n3. **Optimize query patterns** - Cache frequently accessed queries to reduce compute costs\n\n#### Unused Resources:\n- No unused resources detected",
+            "mode": "markdown"
+          },
+          "pluginVersion": "8.0.0",
+          "title": "Optimization Recommendations",
+          "type": "text"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Line chart with historical and projected costs",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "currencyUSD"
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Projected costs"
+                },
+                "properties": [
+                  {
+                    "id": "custom.lineStyle",
+                    "value": {
+                      "dash": [10, 10],
+                      "fill": "dash"
+                    }
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Budget"
+                },
+                "properties": [
+                  {
+                    "id": "color",
+                    "value": {
+                      "fixedColor": "red",
+                      "mode": "fixed"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 34
+          },
+          "id": 18,
+          "options": {
+            "tooltip": {
+              "mode": "multi"
+            },
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "sum(azure_cost_daily_usd)",
+              "legendFormat": "Historical costs",
+              "refId": "A"
+            },
+            {
+              "expr": "predict_linear(sum(azure_cost_daily_usd)[30d], 86400 * 90)",
+              "legendFormat": "Projected costs",
+              "refId": "B"
+            },
+            {
+              "expr": "10",
+              "legendFormat": "Budget",
+              "refId": "C"
+            }
+          ],
+          "title": "3-Month Cost Forecast",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Year-to-date summary statistics",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "#5794F2",
+                    "value": null
+                  }
+                ]
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "YTD Total Spend"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "currencyUSD"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Average Monthly Cost"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "currencyUSD"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Highest Month"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "currencyUSD"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Lowest Month"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "currencyUSD"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Total Data Ingested"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "GB"
+                  }
+                ]
+              }
+            ]
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 34
+          },
+          "id": 19,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "sum(increase(azure_cost_daily_usd[365d]))",
+              "legendFormat": "YTD Total Spend",
+              "refId": "A"
+            },
+            {
+              "expr": "avg(sum by (month) (azure_cost_daily_usd))",
+              "legendFormat": "Average Monthly Cost",
+              "refId": "B"
+            },
+            {
+              "expr": "max(sum by (month) (azure_cost_daily_usd))",
+              "legendFormat": "Highest Month",
+              "refId": "C"
+            },
+            {
+              "expr": "min(sum by (month) (azure_cost_daily_usd))",
+              "legendFormat": "Lowest Month",
+              "refId": "D"
+            },
+            {
+              "expr": "sum(increase(azure_log_analytics_ingestion_gb[365d]))",
+              "legendFormat": "Total Data Ingested",
+              "refId": "E"
+            }
+          ],
+          "title": "Year-to-Date Summary",
+          "type": "stat"
+        }
+      ],
+      "refresh": "5m",
+      "schemaVersion": 27,
+      "style": "dark",
+      "tags": ["azure", "cost", "budget", "logging"],
+      "templating": {
+        "list": [
+          {
+            "current": {
+              "selected": false,
+              "text": "7d",
+              "value": "7d"
+            },
+            "hide": 0,
+            "includeAll": false,
+            "label": "Time Range",
+            "multi": false,
+            "name": "time_range",
+            "options": [
+              {
+                "selected": false,
+                "text": "7d",
+                "value": "7d"
+              },
+              {
+                "selected": false,
+                "text": "30d",
+                "value": "30d"
+              },
+              {
+                "selected": false,
+                "text": "90d",
+                "value": "90d"
+              },
+              {
+                "selected": false,
+                "text": "YTD",
+                "value": "YTD"
+              }
+            ],
+            "query": "7d,30d,90d,YTD",
+            "queryValue": "",
+            "skipUrlSync": false,
+            "type": "custom"
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": "Prometheus",
+            "definition": "label_values(azure_cost_by_resource_usd, resource_group)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Resource Group",
+            "multi": true,
+            "name": "resource_group",
+            "options": [],
+            "query": {
+              "query": "label_values(azure_cost_by_resource_usd, resource_group)",
+              "refId": "Prometheus-resource_group-Variable-Query"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": "Prometheus",
+            "definition": "label_values(azure_cost_by_resource_usd, resource_type)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Resource Type",
+            "multi": true,
+            "name": "resource_type",
+            "options": [],
+            "query": {
+              "query": "label_values(azure_cost_by_resource_usd, resource_type)",
+              "refId": "Prometheus-resource_type-Variable-Query"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "USD",
+              "value": "USD"
+            },
+            "hide": 0,
+            "includeAll": false,
+            "label": "Currency",
+            "multi": false,
+            "name": "currency",
+            "options": [
+              {
+                "selected": true,
+                "text": "USD",
+                "value": "USD"
+              },
+              {
+                "selected": false,
+                "text": "EUR",
+                "value": "EUR"
+              },
+              {
+                "selected": false,
+                "text": "GBP",
+                "value": "GBP"
+              }
+            ],
+            "query": "USD,EUR,GBP",
+            "queryValue": "",
+            "skipUrlSync": false,
+            "type": "custom"
+          }
+        ]
+      },
+      "time": {
+        "from": "now-30d",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "",
+      "title": "Azure Cost & Usage",
+      "uid": "azure-cost-usage",
+      "version": 1
+    }

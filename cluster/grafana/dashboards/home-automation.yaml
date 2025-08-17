@@ -1,0 +1,1827 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-home-automation
+  namespace: prometheus
+  labels:
+    grafana_dashboard: "1"
+data:
+  home-automation.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "builtIn": 1,
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "rgba(0, 211, 255, 1)",
+            "name": "Annotations & Alerts",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "description": "Home Assistant and Mosquitto MQTT metrics for home automation monitoring",
+      "editable": true,
+      "gnetId": null,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "panels": [
+        {
+          "datasource": "Prometheus",
+          "description": "Home Assistant system health overview",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 70
+                  },
+                  {
+                    "color": "red",
+                    "value": 90
+                  }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 0,
+            "y": 0
+          },
+          "id": 1,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "home_assistant_info",
+              "legendFormat": "HA Version",
+              "refId": "A"
+            },
+            {
+              "expr": "time() - process_start_time_seconds{job=\"home-assistant\"}",
+              "legendFormat": "Uptime",
+              "refId": "B"
+            },
+            {
+              "expr": "home_assistant_database_size_bytes / 1024 / 1024 / 1024",
+              "legendFormat": "DB Size (GB)",
+              "refId": "C"
+            },
+            {
+              "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"home-assistant\",mode=\"idle\"}[5m])) * 100)",
+              "legendFormat": "CPU %",
+              "refId": "D"
+            },
+            {
+              "expr": "(1 - (node_memory_MemAvailable_bytes{job=\"home-assistant\"} / node_memory_MemTotal_bytes{job=\"home-assistant\"})) * 100",
+              "legendFormat": "Memory %",
+              "refId": "E"
+            },
+            {
+              "expr": "sum(home_assistant_component_loaded)",
+              "legendFormat": "Components",
+              "refId": "F"
+            }
+          ],
+          "title": "System Health",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Home Assistant entity counts by domain",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 12,
+            "y": 0
+          },
+          "id": 2,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "value_and_name"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "home_assistant_entity_count{domain=\"sensor\"}",
+              "legendFormat": "Sensors",
+              "refId": "A"
+            },
+            {
+              "expr": "home_assistant_entity_count{domain=\"switch\"}",
+              "legendFormat": "Switches",
+              "refId": "B"
+            },
+            {
+              "expr": "home_assistant_entity_count{domain=\"light\"}",
+              "legendFormat": "Lights",
+              "refId": "C"
+            },
+            {
+              "expr": "home_assistant_entity_count{domain=\"binary_sensor\"}",
+              "legendFormat": "Binary Sensors",
+              "refId": "D"
+            },
+            {
+              "expr": "home_assistant_entity_count{domain=\"automation\"}",
+              "legendFormat": "Automations",
+              "refId": "E"
+            },
+            {
+              "expr": "home_assistant_entity_count{domain=\"script\"}",
+              "legendFormat": "Scripts",
+              "refId": "F"
+            }
+          ],
+          "title": "Entity Summary",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Entity state changes rate by domain",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 30,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 4
+          },
+          "id": 3,
+          "options": {
+            "tooltip": {
+              "mode": "multi"
+            },
+            "legend": {
+              "calcs": [],
+              "displayMode": "table",
+              "placement": "right"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "rate(home_assistant_state_changes_total[5m])",
+              "legendFormat": "{{domain}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Entity State Changes",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Home Assistant automation performance metrics",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "auto"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 4
+          },
+          "id": 4,
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Triggers (24h)"
+              }
+            ]
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "topk(10, increase(home_assistant_automation_triggered_total[24h]))",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Automation Performance",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "automation": "Automation Name",
+                  "Value": "Triggers (24h)"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Component health status",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "color-background"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "1": {
+                      "text": "Loaded",
+                      "color": "green"
+                    },
+                    "0": {
+                      "text": "Failed",
+                      "color": "red"
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 0,
+            "y": 10
+          },
+          "id": 5,
+          "options": {
+            "showHeader": true
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "home_assistant_component_loaded",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Component Health",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "component": "Component Name",
+                  "Value": "Status"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Home Assistant database performance",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "max": 10737418240,
+              "min": 0,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1073741824
+                  },
+                  {
+                    "color": "red",
+                    "value": 5368709120
+                  }
+                ]
+              },
+              "unit": "bytes"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 10
+          },
+          "id": 6,
+          "options": {
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "showThresholdLabels": true,
+            "showThresholdMarkers": true,
+            "text": {}
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "home_assistant_database_size_bytes",
+              "refId": "A"
+            }
+          ],
+          "title": "Database Performance",
+          "type": "gauge"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Integration status overview",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "1": {
+                      "text": "Connected",
+                      "color": "green"
+                    },
+                    "0": {
+                      "text": "Disconnected",
+                      "color": "red"
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 10
+          },
+          "id": 7,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "name"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "up{job=\"zigbee2mqtt\"} OR on() vector(0)",
+              "legendFormat": "Zigbee",
+              "refId": "A"
+            },
+            {
+              "expr": "up{job=\"zwave\"} OR on() vector(0)",
+              "legendFormat": "Z-Wave",
+              "refId": "B"
+            },
+            {
+              "expr": "up{job=\"wifi-devices\"} OR on() vector(0)",
+              "legendFormat": "WiFi",
+              "refId": "C"
+            },
+            {
+              "expr": "up{job=\"bluetooth\"} OR on() vector(0)",
+              "legendFormat": "Bluetooth",
+              "refId": "D"
+            },
+            {
+              "expr": "up{job=\"cloud-integrations\"} OR on() vector(0)",
+              "legendFormat": "Cloud",
+              "refId": "E"
+            }
+          ],
+          "title": "Integration Status",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "MQTT broker uptime and version",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "s"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 0,
+            "y": 14
+          },
+          "id": 8,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "mosquitto_broker_uptime_seconds",
+              "refId": "A"
+            }
+          ],
+          "title": "MQTT Broker Health",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Connected MQTT clients",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 50
+                  },
+                  {
+                    "color": "red",
+                    "value": 100
+                  }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 4,
+            "y": 14
+          },
+          "id": 9,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "mosquitto_clients_connected",
+              "refId": "A"
+            }
+          ],
+          "title": "Connected Clients",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "MQTT message publish and subscribe rate",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "ops"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 16,
+            "x": 8,
+            "y": 14
+          },
+          "id": 10,
+          "options": {
+            "tooltip": {
+              "mode": "multi"
+            },
+            "legend": {
+              "calcs": ["mean", "max"],
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "rate(mosquitto_messages_published_total[5m])",
+              "legendFormat": "Published",
+              "refId": "A"
+            },
+            {
+              "expr": "rate(mosquitto_messages_sent_total[5m])",
+              "legendFormat": "Sent",
+              "refId": "B"
+            }
+          ],
+          "title": "Message Rate",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Top 10 most active MQTT topics",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                }
+              },
+              "mappings": [],
+              "unit": "short"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 8,
+            "x": 0,
+            "y": 18
+          },
+          "id": 11,
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "values": ["value", "percent"]
+            },
+            "pieType": "donut",
+            "tooltip": {
+              "mode": "single"
+            },
+            "displayLabels": ["name", "percent"],
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "topk(10, mosquitto_topic_messages_count)",
+              "legendFormat": "{{topic}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Topics Distribution",
+          "type": "piechart"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Connected MQTT clients details",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "auto"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 8,
+            "y": 20
+          },
+          "id": 12,
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Messages"
+              }
+            ]
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "mosquitto_client_messages",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Client Connections",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "client_id": "Client ID",
+                  "ip_address": "IP Address",
+                  "Value": "Messages"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Retained messages count",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1000
+                  },
+                  {
+                    "color": "red",
+                    "value": 5000
+                  }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 16,
+            "y": 20
+          },
+          "id": 13,
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "auto"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "mosquitto_retained_messages_count",
+              "refId": "A"
+            }
+          ],
+          "title": "Retained Messages",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "MQTT network I/O",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "normal"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "Bps"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 20,
+            "y": 20
+          },
+          "id": 14,
+          "options": {
+            "tooltip": {
+              "mode": "multi"
+            },
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "rate(mosquitto_bytes_received_total[5m])",
+              "legendFormat": "Bytes In",
+              "refId": "A"
+            },
+            {
+              "expr": "rate(mosquitto_bytes_sent_total[5m])",
+              "legendFormat": "Bytes Out",
+              "refId": "B"
+            }
+          ],
+          "title": "Network I/O",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Most triggered automations in last 24 hours",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 24
+          },
+          "id": 15,
+          "options": {
+            "displayMode": "gradient",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "showUnfilled": false
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "topk(10, increase(home_assistant_automation_triggered_total[24h]))",
+              "legendFormat": "{{automation}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Most Triggered Automations",
+          "type": "bargauge"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Sensor activity heatmap by hour",
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "scaleDistribution": {
+                  "type": "linear"
+                }
+              }
+            }
+          },
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 24
+          },
+          "id": 16,
+          "options": {
+            "calculate": false,
+            "cellGap": 1,
+            "cellValues": {
+              "unit": "short"
+            },
+            "color": {
+              "exponent": 0.5,
+              "fill": "dark-orange",
+              "mode": "scheme",
+              "reverse": false,
+              "scale": "exponential",
+              "scheme": "Oranges",
+              "steps": 64
+            },
+            "exemplars": {
+              "color": "rgba(255,0,255,0.7)"
+            },
+            "filterValues": {
+              "le": 1e-9
+            },
+            "legend": {
+              "show": true
+            },
+            "rowsFrame": {
+              "layout": "auto"
+            },
+            "tooltip": {
+              "show": true,
+              "yHistogram": false
+            },
+            "yAxis": {
+              "axisPlacement": "left",
+              "reverse": false
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "sum by (entity, hour(time())) (increase(home_assistant_state_changes_total{domain=\"sensor\"}[1h]))",
+              "format": "heatmap",
+              "refId": "A"
+            }
+          ],
+          "title": "Sensor Activity Heatmap",
+          "type": "heatmap"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Device availability status",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [
+                {
+                  "options": {
+                    "1": {
+                      "text": "Online",
+                      "color": "green"
+                    },
+                    "0": {
+                      "text": "Offline",
+                      "color": "red"
+                    }
+                  },
+                  "type": "value"
+                }
+              ],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "green",
+                    "value": 1
+                  }
+                ]
+              }
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 0,
+            "y": 30
+          },
+          "id": 17,
+          "options": {
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            },
+            "text": {},
+            "textMode": "name"
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "home_assistant_device_availability",
+              "legendFormat": "{{device_name}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Device Availability",
+          "type": "stat"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Energy monitoring metrics",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 20,
+                "gradientMode": "opacity",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "smooth",
+                "lineWidth": 2,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "watt"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 12,
+            "y": 30
+          },
+          "id": 18,
+          "options": {
+            "tooltip": {
+              "mode": "multi"
+            },
+            "legend": {
+              "calcs": ["mean", "max"],
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "home_assistant_energy_consumption_watts",
+              "legendFormat": "{{device}}",
+              "refId": "A"
+            },
+            {
+              "expr": "home_assistant_solar_production_watts",
+              "legendFormat": "Solar Production",
+              "refId": "B"
+            },
+            {
+              "expr": "home_assistant_grid_import_watts",
+              "legendFormat": "Grid Import",
+              "refId": "C"
+            },
+            {
+              "expr": "home_assistant_grid_export_watts",
+              "legendFormat": "Grid Export",
+              "refId": "D"
+            }
+          ],
+          "title": "Energy Monitoring",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Event loop processing lag",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "drawStyle": "line",
+                "fillOpacity": 10,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "never",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "line"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 5
+                  }
+                ]
+              },
+              "unit": "s"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 0,
+            "y": 34
+          },
+          "id": 19,
+          "options": {
+            "tooltip": {
+              "mode": "single"
+            },
+            "legend": {
+              "calcs": ["mean", "max"],
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "home_assistant_event_loop_lag_seconds",
+              "legendFormat": "Event Loop Lag",
+              "refId": "A"
+            }
+          ],
+          "title": "Event Loop Performance",
+          "type": "timeseries"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Memory usage breakdown by component",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                }
+              },
+              "mappings": [],
+              "unit": "bytes"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 8,
+            "y": 34
+          },
+          "id": 20,
+          "options": {
+            "legend": {
+              "displayMode": "table",
+              "placement": "right",
+              "values": ["value", "percent"]
+            },
+            "pieType": "pie",
+            "tooltip": {
+              "mode": "single"
+            },
+            "displayLabels": ["name", "percent"],
+            "reduceOptions": {
+              "values": false,
+              "calcs": ["lastNotNull"],
+              "fields": ""
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "home_assistant_component_memory_usage_bytes",
+              "legendFormat": "{{component}}",
+              "refId": "A"
+            }
+          ],
+          "title": "Memory Usage Breakdown",
+          "type": "piechart"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "API response time distribution",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "fillOpacity": 80,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "tooltip": false,
+                  "viz": false,
+                  "legend": false
+                },
+                "lineWidth": 1
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 100
+                  },
+                  {
+                    "color": "red",
+                    "value": 500
+                  }
+                ]
+              },
+              "unit": "ms"
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 34
+          },
+          "id": 21,
+          "options": {
+            "bucketDataBound": "auto",
+            "legend": {
+              "calcs": ["mean"],
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.5, rate(home_assistant_api_response_time_seconds_bucket[5m])) * 1000",
+              "legendFormat": "P50",
+              "refId": "A"
+            },
+            {
+              "expr": "histogram_quantile(0.95, rate(home_assistant_api_response_time_seconds_bucket[5m])) * 1000",
+              "legendFormat": "P95",
+              "refId": "B"
+            },
+            {
+              "expr": "histogram_quantile(0.99, rate(home_assistant_api_response_time_seconds_bucket[5m])) * 1000",
+              "legendFormat": "P99",
+              "refId": "C"
+            }
+          ],
+          "title": "API Response Times",
+          "type": "histogram"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Recent errors from Home Assistant",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "auto"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 0,
+            "y": 38
+          },
+          "id": 22,
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Time"
+              }
+            ]
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "home_assistant_errors",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Recent Errors",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {},
+                "indexByName": {},
+                "renameByName": {
+                  "Time": "Timestamp",
+                  "component": "Component",
+                  "error": "Error Message",
+                  "count": "Count"
+                }
+              }
+            },
+            {
+              "id": "limit",
+              "options": {
+                "limitField": 20
+              }
+            }
+          ],
+          "type": "table"
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Failed automation executions",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "custom": {
+                "align": "auto",
+                "displayMode": "color-background"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  }
+                ]
+              }
+            }
+          },
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 12,
+            "y": 38
+          },
+          "id": 23,
+          "options": {
+            "showHeader": true,
+            "sortBy": [
+              {
+                "desc": true,
+                "displayName": "Failure Time"
+              }
+            ]
+          },
+          "pluginVersion": "8.0.0",
+          "targets": [
+            {
+              "expr": "home_assistant_automation_failed_total",
+              "format": "table",
+              "instant": true,
+              "refId": "A"
+            }
+          ],
+          "title": "Automation Failures",
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true
+                },
+                "indexByName": {},
+                "renameByName": {
+                  "automation": "Automation Name",
+                  "failure_time": "Failure Time",
+                  "error_reason": "Error Reason",
+                  "retry_count": "Retry Count"
+                }
+              }
+            }
+          ],
+          "type": "table"
+        }
+      ],
+      "refresh": "10s",
+      "schemaVersion": 27,
+      "style": "dark",
+      "tags": ["home-assistant", "mqtt", "mosquitto", "iot", "automation"],
+      "templating": {
+        "list": [
+          {
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": "Prometheus",
+            "definition": "label_values(home_assistant_entity_count, domain)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Entity Domain",
+            "multi": true,
+            "name": "entity_domain",
+            "options": [],
+            "query": {
+              "query": "label_values(home_assistant_entity_count, domain)",
+              "refId": "Prometheus-entity_domain-Variable-Query"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": "Prometheus",
+            "definition": "label_values(home_assistant_component_loaded, component)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Integration",
+            "multi": true,
+            "name": "integration",
+            "options": [],
+            "query": {
+              "query": "label_values(home_assistant_component_loaded, component)",
+              "refId": "Prometheus-integration-Variable-Query"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "",
+              "value": ""
+            },
+            "datasource": "Prometheus",
+            "definition": "label_values(home_assistant_automation_triggered_total, automation)",
+            "hide": 0,
+            "includeAll": false,
+            "label": "Automation",
+            "multi": false,
+            "name": "automation",
+            "options": [],
+            "query": {
+              "query": "label_values(home_assistant_automation_triggered_total, automation)",
+              "refId": "Prometheus-automation-Variable-Query"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "24h",
+              "value": "24h"
+            },
+            "hide": 0,
+            "includeAll": false,
+            "label": "Time Range",
+            "multi": false,
+            "name": "time_range",
+            "options": [
+              {
+                "selected": false,
+                "text": "1h",
+                "value": "1h"
+              },
+              {
+                "selected": false,
+                "text": "6h",
+                "value": "6h"
+              },
+              {
+                "selected": true,
+                "text": "24h",
+                "value": "24h"
+              },
+              {
+                "selected": false,
+                "text": "7d",
+                "value": "7d"
+              }
+            ],
+            "query": "1h,6h,24h,7d",
+            "skipUrlSync": false,
+            "type": "custom"
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "datasource": "Prometheus",
+            "definition": "label_values(home_assistant_device_availability, device_name)",
+            "hide": 0,
+            "includeAll": true,
+            "label": "Device",
+            "multi": true,
+            "name": "device",
+            "options": [],
+            "query": {
+              "query": "label_values(home_assistant_device_availability, device_name)",
+              "refId": "Prometheus-device-Variable-Query"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 1,
+            "tagValuesQuery": "",
+            "tags": [],
+            "tagsQuery": "",
+            "type": "query",
+            "useTags": false
+          }
+        ]
+      },
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "timepicker": {},
+      "timezone": "",
+      "title": "Home Automation",
+      "uid": "home-automation",
+      "version": 1
+    }
