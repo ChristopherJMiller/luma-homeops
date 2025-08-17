@@ -115,6 +115,10 @@ spec:
                     requests:
                       storage: 200Gi
         grafana:
+          admin:
+            existingSecret: "grafana-admin-secret"
+            userKey: admin-user
+            passwordKey: admin-password
           envFromSecret: azure-monitor-credentials
           ingress:
             enabled: true
