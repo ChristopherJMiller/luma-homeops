@@ -71,7 +71,7 @@ data:
     receivers:
     - name: 'homelab-default'
       discord_configs:
-      - webhook_url_file: '/etc/alertmanager/secrets/webhook-url'
+      - webhook_url_file: '/etc/alertmanager/secrets/discord-webhook/webhook-url'
         title: '📊 Homelab Alert: {{ .GroupLabels.alertname }}'
         message: |
           **Cluster:** {{ .GroupLabels.cluster | default "homelab" }}
@@ -91,7 +91,7 @@ data:
 
     - name: 'critical-alerts'
       discord_configs:
-      - webhook_url_file: '/etc/alertmanager/secrets/webhook-url'
+      - webhook_url_file: '/etc/alertmanager/secrets/discord-webhook/webhook-url'
         title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
         message: |
           @everyone **CRITICAL ALERT**
@@ -112,7 +112,7 @@ data:
 
     - name: 'storage-alerts'
       discord_configs:
-      - webhook_url_file: '/etc/alertmanager/secrets/webhook-url'
+      - webhook_url_file: '/etc/alertmanager/secrets/discord-webhook/webhook-url'
         title: '💾 Storage Alert: {{ .GroupLabels.alertname }}'
         message: |
           **Storage System Alert**
