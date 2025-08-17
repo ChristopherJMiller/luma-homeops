@@ -29,7 +29,10 @@ data:
       "links": [],
       "panels": [
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Current month-to-date spend in USD",
           "fieldConfig": {
             "defaults": {
@@ -97,7 +100,10 @@ data:
           "type": "stat"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Percentage of monthly budget used",
           "fieldConfig": {
             "defaults": {
@@ -165,7 +171,10 @@ data:
           "type": "gauge"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Bar chart showing daily spend with 30-day rolling average",
           "fieldConfig": {
             "defaults": {
@@ -272,7 +281,10 @@ data:
           "type": "timeseries"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Cost breakdown by resource type",
           "fieldConfig": {
             "defaults": {
@@ -329,7 +341,10 @@ data:
           "type": "piechart"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Projected total for current month",
           "fieldConfig": {
             "defaults": {
@@ -393,7 +408,10 @@ data:
           "type": "stat"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Area chart showing GB ingested per day",
           "fieldConfig": {
             "defaults": {
@@ -475,7 +493,10 @@ data:
           "type": "timeseries"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Breakdown by data source/table",
           "fieldConfig": {
             "defaults": {
@@ -586,7 +607,10 @@ data:
           "type": "table"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Number of queries executed",
           "fieldConfig": {
             "defaults": {
@@ -668,7 +692,10 @@ data:
           "type": "timeseries"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Monthly retention cost",
           "fieldConfig": {
             "defaults": {
@@ -733,7 +760,10 @@ data:
           "type": "stat"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Average query response time",
           "fieldConfig": {
             "defaults": {
@@ -798,7 +828,10 @@ data:
           "type": "gauge"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Current storage usage in MB",
           "fieldConfig": {
             "defaults": {
@@ -869,7 +902,10 @@ data:
           "type": "stat"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Line chart by operation type",
           "fieldConfig": {
             "defaults": {
@@ -1007,7 +1043,10 @@ data:
           "type": "timeseries"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Cost breakdown for storage",
           "fieldConfig": {
             "defaults": {
@@ -1067,7 +1106,10 @@ data:
           "type": "bargauge"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Size of terraform state files",
           "fieldConfig": {
             "defaults": {
@@ -1161,7 +1203,10 @@ data:
           "type": "timeseries"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Budget alert status",
           "fieldConfig": {
             "defaults": {
@@ -1244,7 +1289,10 @@ data:
           "type": "table"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Highlight days with >20% increase from average",
           "fieldConfig": {
             "defaults": {
@@ -1330,7 +1378,10 @@ data:
           "type": "timeseries"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Static or dynamic recommendations",
           "fieldConfig": {
             "defaults": {},
@@ -1352,7 +1403,10 @@ data:
           "type": "text"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Line chart with historical and projected costs",
           "fieldConfig": {
             "defaults": {
@@ -1482,7 +1536,10 @@ data:
           "type": "timeseries"
         },
         {
-          "datasource": "${datasource}",
+          "datasource": {
+            "type": "grafana-azure-monitor-datasource",
+            "uid": "P1EB995EACC6832D3"
+          },
           "description": "Year-to-date summary statistics",
           "fieldConfig": {
             "defaults": {
@@ -1607,29 +1664,13 @@ data:
           {
             "current": {
               "selected": false,
-              "text": "default",
-              "value": "default"
-            },
-            "hide": 0,
-            "includeAll": false,
-            "label": "Data Source",
-            "multi": false,
-            "name": "datasource",
-            "options": [],
-            "query": "azure-monitor",
-            "queryValue": "",
-            "refresh": 1,
-            "regex": "",
-            "skipUrlSync": false,
-            "type": "datasource"
-          },
-          {
-            "current": {
-              "selected": false,
               "text": "",
               "value": ""
             },
-            "datasource": "${datasource}",
+            "datasource": {
+              "type": "grafana-azure-monitor-datasource",
+              "uid": "P1EB995EACC6832D3"
+            },
             "definition": "",
             "hide": 0,
             "includeAll": false,
@@ -1657,7 +1698,10 @@ data:
               "text": "",
               "value": ""
             },
-            "datasource": "${datasource}",
+            "datasource": {
+              "type": "grafana-azure-monitor-datasource",
+              "uid": "P1EB995EACC6832D3"
+            },
             "definition": "",
             "hide": 0,
             "includeAll": false,
@@ -1686,7 +1730,10 @@ data:
               "text": "",
               "value": ""
             },
-            "datasource": "${datasource}",
+            "datasource": {
+              "type": "grafana-azure-monitor-datasource",
+              "uid": "P1EB995EACC6832D3"
+            },
             "definition": "",
             "hide": 0,
             "includeAll": false,
@@ -1716,7 +1763,10 @@ data:
               "text": "",
               "value": ""
             },
-            "datasource": "${datasource}",
+            "datasource": {
+              "type": "grafana-azure-monitor-datasource",
+              "uid": "P1EB995EACC6832D3"
+            },
             "definition": "",
             "hide": 0,
             "includeAll": false,
