@@ -42,6 +42,104 @@ spec:
             prometheus: true
             prometheusOperator: true
         alertmanager:
+          config:
+            global:
+              resolve_timeout: 5m
+              discord_api_url: "https://discord.com/api/webhooks"
+            inhibit_rules:
+            - source_matchers:
+              - severity="critical"
+              target_matchers:
+              - severity="warning"
+              equal: ['alertname', 'instance']
+            route:
+              receiver: 'homelab-default'
+              group_by: ['alertname', 'cluster', 'service', 'severity']
+              group_wait: 30s
+              group_interval: 5m
+              repeat_interval: 2h
+              routes:
+              - matchers:
+                - severity="critical"
+                receiver: 'critical-alerts'
+                group_wait: 10s
+                repeat_interval: 30m
+              - matchers:
+                - alertname=~".*Disk.*|.*Storage.*|.*Volume.*|.*Ceph.*"
+                receiver: 'storage-alerts'
+                routes:
+                - matchers:
+                  - severity="critical"
+                  receiver: 'critical-alerts'
+              - matchers:
+                - severity!="critical"
+                active_time_intervals:
+                - weekdays
+                receiver: 'homelab-default'
+              - matchers:
+                - severity="critical"
+                receiver: 'critical-alerts'
+            time_intervals:
+            - name: weekdays
+              time_intervals:
+              - times:
+                - start_time: '09:00'
+                  end_time: '22:00'
+                weekdays: ['monday:friday']
+            receivers:
+            - name: 'homelab-default'
+              discord_configs:
+              - webhook_url_file: '/etc/alertmanager/secrets/discord-webhook/webhook-url'
+                title: '📊 Homelab Alert: {{ .GroupLabels.alertname }}'
+                message: |
+                  **Cluster:** {{ .GroupLabels.cluster | default "homelab" }}
+                  **Severity:** {{ .CommonLabels.severity | upper }}
+                  
+                  {{ range .Alerts.Firing }}
+                  🟡 **{{ .Labels.alertname }}**
+                  📍 **Instance:** `{{ .Labels.instance }}`
+                  📝 **Description:** {{ .Annotations.description }}
+                  🔗 **Runbook:** {{ .Annotations.runbook_url }}
+                  {{ end }}
+                  
+                  {{ range .Alerts.Resolved }}
+                  ✅ **RESOLVED:** {{ .Labels.alertname }}
+                  📍 **Instance:** `{{ .Labels.instance }}`
+                  {{ end }}
+            - name: 'critical-alerts'
+              discord_configs:
+              - webhook_url_file: '/etc/alertmanager/secrets/discord-webhook/webhook-url'
+                title: '🚨 CRITICAL: {{ .GroupLabels.alertname }}'
+                message: |
+                  @everyone **CRITICAL ALERT**
+                  
+                  **Cluster:** {{ .GroupLabels.cluster | default "homelab" }}
+                  **Time:** {{ .CommonAnnotations.startsAt }}
+                  
+                  {{ range .Alerts.Firing }}
+                  🔴 **{{ .Labels.alertname }}**
+                  📍 **Instance:** `{{ .Labels.instance }}`
+                  📝 **Description:** {{ .Annotations.description }}
+                  🔗 **Runbook:** {{ .Annotations.runbook_url }}
+                  
+                  **Labels:**
+                  {{ range .Labels.SortedPairs }}• {{ .Name }}: {{ .Value }}
+                  {{ end }}
+                  {{ end }}
+            - name: 'storage-alerts'
+              discord_configs:
+              - webhook_url_file: '/etc/alertmanager/secrets/discord-webhook/webhook-url'
+                title: '💾 Storage Alert: {{ .GroupLabels.alertname }}'
+                message: |
+                  **Storage System Alert**
+                  
+                  {{ range .Alerts.Firing }}
+                  📦 **{{ .Labels.alertname }}**
+                  📍 **Instance:** `{{ .Labels.instance }}`
+                  📊 **Current Value:** {{ .Annotations.value }}
+                  📝 **Description:** {{ .Annotations.description }}
+                  {{ end }}
+            templates: []
           alertmanagerSpec:
             storage:
               volumeClaimTemplate:
