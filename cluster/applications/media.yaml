@@ -24,6 +24,7 @@ spec:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground
       - PruneLast=true
+      - RespectIgnoreDifferences=true
   ignoreDifferences:
     - group: apps
       kind: Deployment
@@ -41,3 +42,7 @@ spec:
         - /spec/template/spec/securityContext
         - /spec/template/spec/terminationGracePeriodSeconds
         - /spec/strategy/rollingUpdate/maxSurge
+    - group: ""
+      kind: PersistentVolumeClaim
+      managedFieldsManagers:
+        - kube-controller-manager
