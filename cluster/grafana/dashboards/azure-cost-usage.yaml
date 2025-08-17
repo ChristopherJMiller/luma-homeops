@@ -29,7 +29,7 @@ data:
       "links": [],
       "panels": [
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Current month-to-date spend in USD",
           "fieldConfig": {
             "defaults": {
@@ -80,15 +80,24 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum(azure_cost_daily_usd) OR on() vector(0)",
-              "refId": "A"
+              "azureMonitor": {
+                "dimensionFilters": [],
+                "timeGrain": "PT1H",
+                "metricNamespace": "microsoft.costmanagement",
+                "metricName": "ActualCost",
+                "aggregation": "Total",
+                "alias": "Current Month Spend"
+              },
+              "queryType": "Azure Monitor",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Current Month Spend",
           "type": "stat"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Percentage of monthly budget used",
           "fieldConfig": {
             "defaults": {
@@ -139,15 +148,24 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(sum(azure_cost_daily_usd) / 10) * 100",
-              "refId": "A"
+              "azureMonitor": {
+                "dimensionFilters": [],
+                "timeGrain": "PT1H",
+                "metricNamespace": "microsoft.costmanagement",
+                "metricName": "BudgetUtilization",
+                "aggregation": "Average",
+                "alias": "Budget Status"
+              },
+              "queryType": "Azure Monitor",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Budget Status",
           "type": "gauge"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Bar chart showing daily spend with 30-day rolling average",
           "fieldConfig": {
             "defaults": {
@@ -237,21 +255,24 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "azure_cost_daily_usd",
-              "legendFormat": "Daily Spend",
-              "refId": "A"
-            },
-            {
-              "expr": "avg_over_time(azure_cost_daily_usd[30d])",
-              "legendFormat": "30-day average",
-              "refId": "B"
+              "azureMonitor": {
+                "dimensionFilters": [],
+                "timeGrain": "P1D",
+                "metricNamespace": "microsoft.costmanagement",
+                "metricName": "ActualCost",
+                "aggregation": "Total",
+                "alias": "Daily Spend"
+              },
+              "queryType": "Azure Monitor",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Daily Spend Trend",
           "type": "timeseries"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Cost breakdown by resource type",
           "fieldConfig": {
             "defaults": {
@@ -296,16 +317,19 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "azure_cost_by_resource_usd",
-              "legendFormat": "{{resource}}",
-              "refId": "A"
+              "azureResourceGraph": {
+                "query": "CostManagementResources\n| where type == 'microsoft.costmanagement/query'\n| where properties.timePeriod.from >= ago(30d)\n| summarize Cost = sum(properties.cost) by ResourceType = tostring(properties.resourceType)\n| order by Cost desc\n| limit 10"
+              },
+              "queryType": "Azure Resource Graph",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Cost by Resource",
           "type": "piechart"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Projected total for current month",
           "fieldConfig": {
             "defaults": {
@@ -352,15 +376,24 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(sum(azure_cost_daily_usd) / day_of_month()) * day_of_month(vector(time()) + 86400 * (day_of_month(vector(time()) + 86400) < day_of_month(vector(time()))))",
-              "refId": "A"
+              "azureMonitor": {
+                "dimensionFilters": [],
+                "timeGrain": "PT1H",
+                "metricNamespace": "microsoft.costmanagement",
+                "metricName": "ForecastCost",
+                "aggregation": "Total",
+                "alias": "Projected Monthly Cost"
+              },
+              "queryType": "Azure Monitor",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Projected Monthly Cost",
           "type": "stat"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Area chart showing GB ingested per day",
           "fieldConfig": {
             "defaults": {
@@ -428,16 +461,21 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "azure_log_analytics_ingestion_gb",
-              "legendFormat": "Data Ingested",
-              "refId": "A"
+              "azureLogAnalytics": {
+                "query": "Usage\n| where TimeGenerated > ago(30d)\n| where IsBillable == true\n| summarize DataIngestedGB = sum(Quantity) / 1000 by bin(TimeGenerated, 1d)\n| order by TimeGenerated asc",
+                "resultFormat": "time_series",
+                "workspace": "$workspace"
+              },
+              "queryType": "Azure Log Analytics",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Daily Data Ingestion",
           "type": "timeseries"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Breakdown by data source/table",
           "fieldConfig": {
             "defaults": {
@@ -517,10 +555,14 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "azure_log_analytics_ingestion_by_source_gb",
-              "format": "table",
-              "instant": true,
-              "refId": "A"
+              "azureLogAnalytics": {
+                "query": "Usage\n| where TimeGenerated > ago(30d)\n| where IsBillable == true\n| summarize DataIngestedGB = sum(Quantity) / 1000, EstimatedCost = sum(Quantity) / 1000 * 2.3 by DataType\n| extend DailyAvgGB = DataIngestedGB / 30\n| project Source = DataType, DailyAvgGB, MonthlyTotalGB = DataIngestedGB, EstimatedCost\n| order by MonthlyTotalGB desc",
+                "resultFormat": "table",
+                "workspace": "$workspace"
+              },
+              "queryType": "Azure Log Analytics",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Ingestion by Source",
@@ -544,7 +586,7 @@ data:
           "type": "table"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Number of queries executed",
           "fieldConfig": {
             "defaults": {
@@ -612,16 +654,21 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(azure_log_analytics_query_count[1h])",
-              "legendFormat": "Queries/hour",
-              "refId": "A"
+              "azureLogAnalytics": {
+                "query": "LAQueryLogs\n| where TimeGenerated > ago(24h)\n| summarize QueryCount = count() by bin(TimeGenerated, 1h)\n| order by TimeGenerated asc",
+                "resultFormat": "time_series",
+                "workspace": "$workspace"
+              },
+              "queryType": "Azure Log Analytics",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Query Usage",
           "type": "timeseries"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Monthly retention cost",
           "fieldConfig": {
             "defaults": {
@@ -672,15 +719,21 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "azure_log_analytics_retention_size_gb * 0.10",
-              "refId": "A"
+              "azureLogAnalytics": {
+                "query": "Usage\n| where TimeGenerated > ago(30d)\n| where DataType == '_BilledPerformanceData'\n| summarize RetentionGB = sum(Quantity) / 1000\n| extend RetentionCost = RetentionGB * 0.10\n| project RetentionCost",
+                "resultFormat": "table",
+                "workspace": "$workspace"
+              },
+              "queryType": "Azure Log Analytics",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Data Retention Cost",
           "type": "stat"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Average query response time",
           "fieldConfig": {
             "defaults": {
@@ -731,15 +784,21 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "avg(azure_log_analytics_query_response_time_seconds)",
-              "refId": "A"
+              "azureLogAnalytics": {
+                "query": "LAQueryLogs\n| where TimeGenerated > ago(1h)\n| summarize AvgResponseTime = avg(ResponseDurationMs) / 1000",
+                "resultFormat": "table",
+                "workspace": "$workspace"
+              },
+              "queryType": "Azure Log Analytics",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Workspace Performance",
           "type": "gauge"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Current storage usage in MB",
           "fieldConfig": {
             "defaults": {
@@ -790,15 +849,27 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "azure_storage_used_capacity_bytes / 1048576",
-              "refId": "A"
+              "azureMonitor": {
+                "dimensionFilters": [],
+                "timeGrain": "PT1H",
+                "metricNamespace": "microsoft.storage/storageaccounts",
+                "metricName": "UsedCapacity",
+                "aggregation": "Average",
+                "alias": "Storage Usage"
+              },
+              "queryType": "Azure Monitor",
+              "refId": "A",
+              "subscription": "$subscription",
+              "resourceGroup": "$resourceGroup",
+              "metricDefinition": "Microsoft.Storage/storageAccounts",
+              "resourceName": "$storageAccount"
             }
           ],
           "title": "Storage Usage",
           "type": "stat"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Line chart by operation type",
           "fieldConfig": {
             "defaults": {
@@ -866,26 +937,77 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(azure_storage_transactions_total{operation=\"read\"}[1h])",
-              "legendFormat": "Read operations",
-              "refId": "A"
+              "azureMonitor": {
+                "dimensionFilters": [
+                  {
+                    "dimension": "ApiName",
+                    "operator": "eq",
+                    "filter": "GetBlob"
+                  }
+                ],
+                "timeGrain": "PT1H",
+                "metricNamespace": "microsoft.storage/storageaccounts",
+                "metricName": "Transactions",
+                "aggregation": "Total",
+                "alias": "Read operations"
+              },
+              "queryType": "Azure Monitor",
+              "refId": "A",
+              "subscription": "$subscription",
+              "resourceGroup": "$resourceGroup",
+              "metricDefinition": "Microsoft.Storage/storageAccounts",
+              "resourceName": "$storageAccount"
             },
             {
-              "expr": "rate(azure_storage_transactions_total{operation=\"write\"}[1h])",
-              "legendFormat": "Write operations",
-              "refId": "B"
+              "azureMonitor": {
+                "dimensionFilters": [
+                  {
+                    "dimension": "ApiName",
+                    "operator": "eq",
+                    "filter": "PutBlob"
+                  }
+                ],
+                "timeGrain": "PT1H",
+                "metricNamespace": "microsoft.storage/storageaccounts",
+                "metricName": "Transactions",
+                "aggregation": "Total",
+                "alias": "Write operations"
+              },
+              "queryType": "Azure Monitor",
+              "refId": "B",
+              "subscription": "$subscription",
+              "resourceGroup": "$resourceGroup",
+              "metricDefinition": "Microsoft.Storage/storageAccounts",
+              "resourceName": "$storageAccount"
             },
             {
-              "expr": "rate(azure_storage_transactions_total{operation=\"list\"}[1h])",
-              "legendFormat": "List operations",
-              "refId": "C"
+              "azureMonitor": {
+                "dimensionFilters": [
+                  {
+                    "dimension": "ApiName",
+                    "operator": "eq",
+                    "filter": "ListBlobs"
+                  }
+                ],
+                "timeGrain": "PT1H",
+                "metricNamespace": "microsoft.storage/storageaccounts",
+                "metricName": "Transactions",
+                "aggregation": "Total",
+                "alias": "List operations"
+              },
+              "queryType": "Azure Monitor",
+              "refId": "C",
+              "subscription": "$subscription",
+              "resourceGroup": "$resourceGroup",
+              "metricDefinition": "Microsoft.Storage/storageAccounts",
+              "resourceName": "$storageAccount"
             }
           ],
           "title": "Transaction Count",
           "type": "timeseries"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Cost breakdown for storage",
           "fieldConfig": {
             "defaults": {
@@ -933,26 +1055,19 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "azure_storage_capacity_cost_usd",
-              "legendFormat": "Capacity cost",
-              "refId": "A"
-            },
-            {
-              "expr": "azure_storage_transaction_cost_usd",
-              "legendFormat": "Transaction cost",
-              "refId": "B"
-            },
-            {
-              "expr": "azure_storage_transfer_cost_usd",
-              "legendFormat": "Data transfer cost",
-              "refId": "C"
+              "azureResourceGraph": {
+                "query": "CostManagementResources\n| where type == 'microsoft.costmanagement/query'\n| where properties.resourceType == 'Microsoft.Storage/storageAccounts'\n| where properties.timePeriod.from >= ago(30d)\n| summarize CapacityCost = sum(properties.cost[properties.meterCategory == 'Storage']),\n            TransactionCost = sum(properties.cost[properties.meterCategory == 'Transactions']),\n            TransferCost = sum(properties.cost[properties.meterCategory == 'Data Transfer'])\n| project CapacityCost, TransactionCost, TransferCost"
+              },
+              "queryType": "Azure Resource Graph",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Storage Cost Breakdown",
           "type": "bargauge"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Size of terraform state files",
           "fieldConfig": {
             "defaults": {
@@ -1020,16 +1135,33 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "azure_storage_terraform_state_size_bytes",
-              "legendFormat": "State file size",
-              "refId": "A"
+              "azureMonitor": {
+                "dimensionFilters": [
+                  {
+                    "dimension": "Blob",
+                    "operator": "sw",
+                    "filter": "terraform"
+                  }
+                ],
+                "timeGrain": "PT1H",
+                "metricNamespace": "microsoft.storage/storageaccounts/blobservices",
+                "metricName": "BlobCapacity",
+                "aggregation": "Average",
+                "alias": "State file size"
+              },
+              "queryType": "Azure Monitor",
+              "refId": "A",
+              "subscription": "$subscription",
+              "resourceGroup": "$resourceGroup",
+              "metricDefinition": "Microsoft.Storage/storageAccounts/blobServices",
+              "resourceName": "$storageAccount/default"
             }
           ],
           "title": "Terraform State File Size",
           "type": "timeseries"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Budget alert status",
           "fieldConfig": {
             "defaults": {
@@ -1083,10 +1215,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "azure_budget_alert_status",
-              "format": "table",
-              "instant": true,
-              "refId": "A"
+              "azureResourceGraph": {
+                "query": "AlertsManagementResources\n| where type == 'microsoft.alertsmanagement/alerts'\n| where properties.essentials.targetResourceType == 'microsoft.consumption/budgets'\n| project AlertName = name, Threshold = properties.context.threshold, Status = properties.essentials.monitorCondition, LastTriggered = properties.essentials.startDateTime\n| order by LastTriggered desc"
+              },
+              "queryType": "Azure Resource Graph",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Alert Status",
@@ -1110,7 +1244,7 @@ data:
           "type": "table"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Highlight days with >20% increase from average",
           "fieldConfig": {
             "defaults": {
@@ -1182,16 +1316,21 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(azure_cost_daily_usd - avg_over_time(azure_cost_daily_usd[7d])) / avg_over_time(azure_cost_daily_usd[7d]) > 0.2",
-              "legendFormat": "Cost Anomaly",
-              "refId": "A"
+              "azureLogAnalytics": {
+                "query": "CostManagement\n| where TimeGenerated > ago(30d)\n| summarize DailyCost = sum(Cost) by bin(TimeGenerated, 1d)\n| extend AvgCost = toscalar(CostManagement | where TimeGenerated > ago(30d) | summarize avg(Cost))\n| where DailyCost > AvgCost * 1.2\n| project TimeGenerated, CostAnomaly = DailyCost",
+                "resultFormat": "time_series",
+                "workspace": "$workspace"
+              },
+              "queryType": "Azure Log Analytics",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Cost Anomalies",
           "type": "timeseries"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Static or dynamic recommendations",
           "fieldConfig": {
             "defaults": {},
@@ -1213,7 +1352,7 @@ data:
           "type": "text"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Line chart with historical and projected costs",
           "fieldConfig": {
             "defaults": {
@@ -1313,26 +1452,37 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum(azure_cost_daily_usd)",
-              "legendFormat": "Historical costs",
-              "refId": "A"
+              "azureMonitor": {
+                "dimensionFilters": [],
+                "timeGrain": "P1D",
+                "metricNamespace": "microsoft.costmanagement",
+                "metricName": "ActualCost",
+                "aggregation": "Total",
+                "alias": "Historical costs"
+              },
+              "queryType": "Azure Monitor",
+              "refId": "A",
+              "subscription": "$subscription"
             },
             {
-              "expr": "predict_linear(sum(azure_cost_daily_usd)[30d], 86400 * 90)",
-              "legendFormat": "Projected costs",
-              "refId": "B"
-            },
-            {
-              "expr": "10",
-              "legendFormat": "Budget",
-              "refId": "C"
+              "azureMonitor": {
+                "dimensionFilters": [],
+                "timeGrain": "P1D",
+                "metricNamespace": "microsoft.costmanagement",
+                "metricName": "ForecastCost",
+                "aggregation": "Total",
+                "alias": "Projected costs"
+              },
+              "queryType": "Azure Monitor",
+              "refId": "B",
+              "subscription": "$subscription"
             }
           ],
           "title": "3-Month Cost Forecast",
           "type": "timeseries"
         },
         {
-          "datasource": "Prometheus",
+          "datasource": "Azure Monitor data source",
           "description": "Year-to-date summary statistics",
           "fieldConfig": {
             "defaults": {
@@ -1436,29 +1586,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum(increase(azure_cost_daily_usd[365d]))",
-              "legendFormat": "YTD Total Spend",
-              "refId": "A"
-            },
-            {
-              "expr": "avg(sum by (month) (azure_cost_daily_usd))",
-              "legendFormat": "Average Monthly Cost",
-              "refId": "B"
-            },
-            {
-              "expr": "max(sum by (month) (azure_cost_daily_usd))",
-              "legendFormat": "Highest Month",
-              "refId": "C"
-            },
-            {
-              "expr": "min(sum by (month) (azure_cost_daily_usd))",
-              "legendFormat": "Lowest Month",
-              "refId": "D"
-            },
-            {
-              "expr": "sum(increase(azure_log_analytics_ingestion_gb[365d]))",
-              "legendFormat": "Total Data Ingested",
-              "refId": "E"
+              "azureResourceGraph": {
+                "query": "CostManagementResources\n| where type == 'microsoft.costmanagement/query'\n| where properties.timePeriod.from >= startofyear(now())\n| summarize YTDTotal = sum(properties.cost),\n            AvgMonthlyCost = avg(properties.cost),\n            HighestMonth = max(properties.cost),\n            LowestMonth = min(properties.cost)\n| project YTDTotal, AvgMonthlyCost, HighestMonth, LowestMonth"
+              },
+              "queryType": "Azure Resource Graph",
+              "refId": "A",
+              "subscription": "$subscription"
             }
           ],
           "title": "Year-to-Date Summary",
@@ -1474,96 +1607,120 @@ data:
           {
             "current": {
               "selected": false,
-              "text": "7d",
-              "value": "7d"
+              "text": "",
+              "value": ""
             },
+            "datasource": "Azure Monitor data source",
+            "definition": "",
             "hide": 0,
             "includeAll": false,
-            "label": "Time Range",
+            "label": "Subscription",
             "multi": false,
-            "name": "time_range",
-            "options": [
-              {
-                "selected": false,
-                "text": "7d",
-                "value": "7d"
+            "name": "subscription",
+            "options": [],
+            "query": {
+              "azureLogAnalytics": {
+                "query": "",
+                "resource": "/subscriptions/"
               },
-              {
-                "selected": false,
-                "text": "30d",
-                "value": "30d"
-              },
-              {
-                "selected": false,
-                "text": "90d",
-                "value": "90d"
-              },
-              {
-                "selected": false,
-                "text": "YTD",
-                "value": "YTD"
-              }
-            ],
-            "query": "7d,30d,90d,YTD",
-            "queryValue": "",
+              "queryType": "Azure Subscriptions",
+              "refId": "A"
+            },
+            "refresh": 1,
+            "regex": "",
             "skipUrlSync": false,
-            "type": "custom"
+            "sort": 0,
+            "type": "query"
           },
           {
             "current": {
               "selected": false,
-              "text": "All",
-              "value": "$__all"
+              "text": "",
+              "value": ""
             },
-            "datasource": "Prometheus",
-            "definition": "label_values(azure_cost_by_resource_usd, resource_group)",
+            "datasource": "Azure Monitor data source",
+            "definition": "",
             "hide": 0,
-            "includeAll": true,
+            "includeAll": false,
             "label": "Resource Group",
-            "multi": true,
-            "name": "resource_group",
+            "multi": false,
+            "name": "resourceGroup",
             "options": [],
             "query": {
-              "query": "label_values(azure_cost_by_resource_usd, resource_group)",
-              "refId": "Prometheus-resource_group-Variable-Query"
+              "azureLogAnalytics": {
+                "query": "",
+                "resource": "/subscriptions/$subscription/resourceGroups"
+              },
+              "queryType": "Azure Resource Groups",
+              "refId": "A",
+              "subscription": "$subscription"
             },
             "refresh": 1,
             "regex": "",
             "skipUrlSync": false,
-            "sort": 1,
-            "tagValuesQuery": "",
-            "tags": [],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
+            "sort": 0,
+            "type": "query"
           },
           {
             "current": {
               "selected": false,
-              "text": "All",
-              "value": "$__all"
+              "text": "",
+              "value": ""
             },
-            "datasource": "Prometheus",
-            "definition": "label_values(azure_cost_by_resource_usd, resource_type)",
+            "datasource": "Azure Monitor data source",
+            "definition": "",
             "hide": 0,
-            "includeAll": true,
-            "label": "Resource Type",
-            "multi": true,
-            "name": "resource_type",
+            "includeAll": false,
+            "label": "Workspace",
+            "multi": false,
+            "name": "workspace",
             "options": [],
             "query": {
-              "query": "label_values(azure_cost_by_resource_usd, resource_type)",
-              "refId": "Prometheus-resource_type-Variable-Query"
+              "azureLogAnalytics": {
+                "query": "",
+                "resource": "/subscriptions/$subscription/resourceGroups/$resourceGroup/providers/Microsoft.OperationalInsights/workspaces"
+              },
+              "queryType": "Azure Workspaces",
+              "refId": "A",
+              "subscription": "$subscription",
+              "resourceGroup": "$resourceGroup"
             },
             "refresh": 1,
             "regex": "",
             "skipUrlSync": false,
-            "sort": 1,
-            "tagValuesQuery": "",
-            "tags": [],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
+            "sort": 0,
+            "type": "query"
+          },
+          {
+            "current": {
+              "selected": false,
+              "text": "",
+              "value": ""
+            },
+            "datasource": "Azure Monitor data source",
+            "definition": "",
+            "hide": 0,
+            "includeAll": false,
+            "label": "Storage Account",
+            "multi": false,
+            "name": "storageAccount",
+            "options": [],
+            "query": {
+              "azureLogAnalytics": {
+                "query": "",
+                "resource": "/subscriptions/$subscription/resourceGroups/$resourceGroup/providers/Microsoft.Storage/storageAccounts"
+              },
+              "queryType": "Azure Resource Names",
+              "refId": "A",
+              "subscription": "$subscription",
+              "resourceGroup": "$resourceGroup",
+              "metricDefinition": "Microsoft.Storage/storageAccounts"
+            },
+            "refresh": 1,
+            "regex": "",
+            "skipUrlSync": false,
+            "sort": 0,
+            "type": "query"
           },
           {
             "current": {
