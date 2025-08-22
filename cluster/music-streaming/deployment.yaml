@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: gonic
-          image: sentriz/gonic:v0.17.0
+          image: ghcr.io/sentriz/gonic:v0.17.0
           ports:
             - containerPort: 4747
               name: http
