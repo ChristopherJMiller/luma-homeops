@@ -4,7 +4,6 @@ kind: Kustomization
 namespace: music-streaming
 resources:
   - namespace.yaml
-  - storageclass.yaml
   - pvcs.yaml
   - deployment.yaml
   - service.yaml

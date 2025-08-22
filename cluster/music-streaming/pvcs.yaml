@@ -5,8 +5,8 @@ metadata:
   namespace: music-streaming
 spec:
   accessModes:
-    - ReadWriteMany
-  storageClassName: cephfs-gonic
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block
   resources:
     requests:
       storage: 300Gi
@@ -19,7 +19,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: cephfs-gonic
+  storageClassName: rook-ceph-block
   resources:
     requests:
       storage: 60Gi
@@ -32,7 +32,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: cephfs-gonic
+  storageClassName: rook-ceph-block
   resources:
     requests:
       storage: 5Gi
@@ -45,7 +45,7 @@ metadata:
 spec:
   accessModes:
     - ReadWriteOnce
-  storageClassName: cephfs-gonic
+  storageClassName: rook-ceph-block
   resources:
     requests:
       storage: 1Gi
