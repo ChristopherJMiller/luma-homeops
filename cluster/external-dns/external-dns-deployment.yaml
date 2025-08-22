@@ -12,7 +12,7 @@ spec:
             - --source=ingress
             - --registry=txt
             - --provider=cloudflare
-            - --policy=sync
+            - --policy=upsert-only
             - --txt-owner-id=luma
             - --domain-filter=.chrismiller.xyz
             - --domain-filter=.realliance.net
