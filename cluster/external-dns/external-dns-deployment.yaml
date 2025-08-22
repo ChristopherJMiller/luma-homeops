@@ -14,14 +14,10 @@ spec:
             - --provider=cloudflare
             - --policy=sync
             - --txt-owner-id=luma
-            - --domain-filter=chrismiller.xyz
-            - --domain-filter=realliance.net
-            - --domain-filter=buttert.art
-            - --domain-filter=werethemille.rs
-            - --exclude-domains=chrismiller.xyz
-            - --exclude-domains=realliance.net
-            - --exclude-domains=buttert.art
-            - --exclude-domains=werethemille.rs
+            - --domain-filter=.chrismiller.xyz
+            - --domain-filter=.realliance.net
+            - --domain-filter=.buttert.art
+            - --domain-filter=.werethemille.rs
             - --log-level=debug
           name: external-dns
           env:
