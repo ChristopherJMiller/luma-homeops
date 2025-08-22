@@ -1,0 +1,15 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  creationTimestamp: null
+  name: webdav-music-pass
+  namespace: music-streaming
+spec:
+  encryptedData:
+    password: AgCLfZD3qrX4X1L5HpVKb42DmFwUmq71ZJmFZxsQ2m47ZrqNudm+SfNXlorR62NXm6O38uV45kGfE6sIHV23DK3WzGgP916jgFNg3eFBM0YMuBAfbBc046lLwlhXl38WV3CjS10XgiATRB4FmfnCWiatjroOeiLGQI8RMJ+RHxE3wZR5BAn5EyFrrlAo8Kxm0WjH2ZPAr+sdEnk1lkWLIvdx8Fh9RaXye5LLIb2X6FM5cCtE8iYA6hNpthT6ebEBRkP5ROnq46gSMGTKVGoaSIWJdbLWNLAVbFAinPZOjOcC9Sk2zMwx/wo07MJ+N02oNI5JeblLBAu30jQxQFKDv6CaGXEUA78L+xaczqM1rkGZQ+qWZmThs6Y43hHedn1+EHnd7bi3OdWgUkEi6h78uRSpqF28aWGIrXakmMzBGcBaZs7FiIcOuqO7pCI2m6NewpYNjVry+PZ+g/dzFVWHZc7uDHnnNUPkZqOvusOIC51w7dNuRlQHJjlt2s6OUEMKtRYAxfPcNG+Wk++DNNFEvU+ScBgAcKAKZjOyRapcsiyhCenmbfYrDXe8Qk2HVaxOBvqjiCsws4h4E/EcIZpN2zOQVLDN7StVYEX+ywHG678m8xgWEqxCNP6G7a3dXo64m8ubZS2bLJ9cOL6AnjKvn3Jq6Oqd9gM3ol938YKRag1NIqn0d98h3ZmZL8BvpbKOny1cbnYx32hekBVIeKt8tOhLRDzpbF5VaWDp0Z5LNwM590sUfg6wa7djLDGQ
+  template:
+    metadata:
+      creationTimestamp: null
+      name: webdav-music-pass
+      namespace: music-streaming

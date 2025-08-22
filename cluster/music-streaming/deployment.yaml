@@ -31,6 +31,22 @@ spec:
           ports:
             - containerPort: 80
               name: http
+        - name: webdav
+          image: ugeek/webdav:arm64
+          ports:
+            - containerPort: 8080
+              name: webdav
+          env:
+            - name: USERNAME
+              value: "music"
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: webdav-music-pass
+                  key: password
+          volumeMounts:
+            - name: music-storage
+              mountPath: /media
           env:
             - name: GONIC_MUSIC_PATH
               value: "/music"

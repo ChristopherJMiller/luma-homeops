@@ -26,6 +26,13 @@ spec:
                 name: gonic
                 port:
                   number: 80
+          - path: /webdav
+            pathType: Prefix
+            backend:
+              service:
+                name: gonic
+                port:
+                  number: 8080
 ---
 apiVersion: cert-manager.io/v1
 kind: Certificate
