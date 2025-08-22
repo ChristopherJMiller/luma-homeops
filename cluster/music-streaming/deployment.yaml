@@ -25,31 +25,21 @@ spec:
           volumeMounts:
             - name: playlists-storage
               mountPath: /playlists
+        - name: init-music
+          image: busybox:1
+          command: ["sh", "-c", "mkdir -p /music/data"]
+          volumeMounts:
+            - name: music-storage
+              mountPath: /music
       containers:
         - name: gonic
           image: ghcr.io/sentriz/gonic:v0.17.0
           ports:
             - containerPort: 80
               name: http
-        - name: webdav
-          image: ugeek/webdav:arm64
-          ports:
-            - containerPort: 8080
-              name: webdav
-          env:
-            - name: USERNAME
-              value: "music"
-            - name: PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: webdav-music-pass
-                  key: password
-          volumeMounts:
-            - name: music-storage
-              mountPath: /media
           env:
             - name: GONIC_MUSIC_PATH
-              value: "/music"
+              value: "/music/data"
             - name: GONIC_CACHE_PATH
               value: "/cache"
             - name: GONIC_DB_PATH
@@ -91,6 +81,22 @@ spec:
               port: 80
             initialDelaySeconds: 5
             periodSeconds: 5
+        - name: webdav
+          image: ugeek/webdav:arm64
+          ports:
+            - containerPort: 8080
+              name: webdav
+          env:
+            - name: USERNAME
+              value: "music"
+            - name: PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: webdav-music-pass
+                  key: password
+          volumeMounts:
+            - name: music-storage
+              mountPath: /media
       volumes:
         - name: music-storage
           persistentVolumeClaim:

@@ -32,6 +32,9 @@ spec:
                     sleep 60
                   done
 
+                  # Create data directory if it doesn't exist
+                  mkdir -p /data/dst/data
+
                   # Optimized rsync for music files
                   rsync -avh \
                     --partial \
@@ -44,11 +47,11 @@ spec:
                     --exclude='Thumbs.db' \
                     --stats \
                     --log-file=/logs/sync-$(date +%Y%m%d-%H%M%S).log \
-                    /data/src/ /data/dst/
+                    /data/src/ /data/dst/data/
 
                   # Verify sync
                   echo "Source files: $(find /data/src -type f \( -name '*.flac' -o -name '*.mp3' -o -name '*.m4a' -o -name '*.opus' -o -name '*.ogg' \) 2>/dev/null | wc -l)"
-                  echo "Dest files: $(find /data/dst -type f \( -name '*.flac' -o -name '*.mp3' -o -name '*.m4a' -o -name '*.opus' -o -name '*.ogg' \) 2>/dev/null | wc -l)"
+                  echo "Dest files: $(find /data/dst/data -type f \( -name '*.flac' -o -name '*.mp3' -o -name '*.m4a' -o -name '*.opus' -o -name '*.ogg' \) 2>/dev/null | wc -l)"
                   echo "Sync completed at $(date)"
               volumeMounts:
                 - name: lidarr-music
