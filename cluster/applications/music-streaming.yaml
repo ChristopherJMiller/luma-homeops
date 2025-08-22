@@ -1,0 +1,48 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: music-streaming
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/music-streaming
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: music-streaming
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: privileged
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - RespectIgnoreDifferences=true
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/progressDeadlineSeconds
+        - /spec/template/spec/containers/0/imagePullPolicy
+        - /spec/template/spec/containers/0/startupProbe/failureThreshold
+        - /spec/template/spec/containers/0/startupProbe/successThreshold
+        - /spec/template/spec/containers/0/startupProbe/timeoutSeconds
+        - /spec/template/spec/containers/0/terminationMessagePath
+        - /spec/template/spec/containers/0/terminationMessagePolicy
+        - /spec/template/spec/dnsPolicy
+        - /spec/template/spec/restartPolicy
+        - /spec/template/spec/schedulerName
+        - /spec/template/spec/securityContext
+        - /spec/template/spec/terminationGracePeriodSeconds
+        - /spec/strategy/rollingUpdate/maxSurge
+    - group: ""
+      kind: PersistentVolumeClaim
+      managedFieldsManagers:
+        - kube-controller-manager

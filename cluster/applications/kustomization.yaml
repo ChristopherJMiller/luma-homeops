@@ -22,6 +22,7 @@ resources:
   - media.yaml
   - mega-media-release.yaml
   - media-webdav.yaml
+  - music-streaming.yaml
   - metallb.yaml
   - metrics-server.yaml
   - ingress-nginx.yaml

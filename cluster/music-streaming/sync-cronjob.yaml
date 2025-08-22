@@ -1,0 +1,77 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: music-sync
+  namespace: music-streaming
+spec:
+  schedule: "0 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 300
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: rsync-sync
+              image: instrumentisto/rsync-ssh:alpine
+              command: ["/bin/sh"]
+              args:
+                - -c
+                - |
+                  set -e
+                  echo "Starting music sync at $(date)"
+
+                  # Wait for file stability (no active downloads)
+                  while find /data/src -name "*.tmp" -o -name "*.part" 2>/dev/null | grep -q .; do
+                    echo "Waiting for downloads to complete..."
+                    sleep 60
+                  done
+
+                  # Optimized rsync for music files
+                  rsync -avh \
+                    --partial \
+                    --inplace \
+                    --no-compress \
+                    --delete-after \
+                    --exclude='*.tmp' \
+                    --exclude='*.part' \
+                    --exclude='.DS_Store' \
+                    --exclude='Thumbs.db' \
+                    --stats \
+                    --log-file=/logs/sync-$(date +%Y%m%d-%H%M%S).log \
+                    /data/src/ /data/dst/
+
+                  # Verify sync
+                  echo "Source files: $(find /data/src -type f \( -name '*.flac' -o -name '*.mp3' -o -name '*.m4a' -o -name '*.opus' -o -name '*.ogg' \) 2>/dev/null | wc -l)"
+                  echo "Dest files: $(find /data/dst -type f \( -name '*.flac' -o -name '*.mp3' -o -name '*.m4a' -o -name '*.opus' -o -name '*.ogg' \) 2>/dev/null | wc -l)"
+                  echo "Sync completed at $(date)"
+              volumeMounts:
+                - name: lidarr-music
+                  mountPath: /data/src
+                  readOnly: true
+                - name: gonic-music
+                  mountPath: /data/dst
+                - name: sync-logs
+                  mountPath: /logs
+              resources:
+                requests:
+                  memory: "256Mi"
+                  cpu: "200m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
+          volumes:
+            - name: lidarr-music
+              persistentVolumeClaim:
+                claimName: lidarr-music-pvc
+            - name: gonic-music
+              persistentVolumeClaim:
+                claimName: gonic-music-pvc
+            - name: sync-logs
+              persistentVolumeClaim:
+                claimName: sync-logs-pvc

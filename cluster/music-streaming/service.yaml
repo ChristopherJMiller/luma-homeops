@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: gonic
+  namespace: music-streaming
+  labels:
+    app: gonic
+spec:
+  selector:
+    app: gonic
+  ports:
+    - name: http
+      port: 80
+      targetPort: 4747
+      protocol: TCP
+  type: ClusterIP

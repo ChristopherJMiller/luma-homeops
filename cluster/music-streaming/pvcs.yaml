@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gonic-music-pvc
+  namespace: music-streaming
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: cephfs-gonic
+  resources:
+    requests:
+      storage: 300Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gonic-cache-pvc
+  namespace: music-streaming
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: cephfs-gonic
+  resources:
+    requests:
+      storage: 60Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gonic-data-pvc
+  namespace: music-streaming
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: cephfs-gonic
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sync-logs-pvc
+  namespace: music-streaming
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: cephfs-gonic
+  resources:
+    requests:
+      storage: 1Gi

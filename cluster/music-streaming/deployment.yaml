@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gonic
+  namespace: music-streaming
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: gonic
+  template:
+    metadata:
+      labels:
+        app: gonic
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4747"
+    spec:
+      containers:
+        - name: gonic
+          image: sentriz/gonic:v0.17.0
+          ports:
+            - containerPort: 4747
+              name: http
+          env:
+            - name: GONIC_MUSIC_PATH
+              value: "/music"
+            - name: GONIC_CACHE_PATH
+              value: "/cache"
+            - name: GONIC_DB_PATH
+              value: "/data/gonic.db"
+            - name: GONIC_SCAN_INTERVAL
+              value: "1440"
+            - name: GONIC_SCAN_AT_START_ENABLED
+              value: "false"
+            - name: GONIC_SCAN_WATCHER_ENABLED
+              value: "true"
+          volumeMounts:
+            - name: music-storage
+              mountPath: /music
+              readOnly: true
+            - name: cache-storage
+              mountPath: /cache
+            - name: data-storage
+              mountPath: /data
+          resources:
+            requests:
+              memory: 4Gi
+              cpu: 500m
+            limits:
+              memory: 4Gi
+              cpu: 2000m
+          livenessProbe:
+            httpGet:
+              path: /rest/ping
+              port: 4747
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /rest/ping
+              port: 4747
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: music-storage
+          persistentVolumeClaim:
+            claimName: gonic-music-pvc
+        - name: cache-storage
+          persistentVolumeClaim:
+            claimName: gonic-cache-pvc
+        - name: data-storage
+          persistentVolumeClaim:
+            claimName: gonic-data-pvc

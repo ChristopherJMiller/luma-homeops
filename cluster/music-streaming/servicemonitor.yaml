@@ -1,0 +1,63 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: gonic
+  namespace: music-streaming
+  labels:
+    app: gonic
+spec:
+  selector:
+    matchLabels:
+      app: gonic
+  endpoints:
+    - port: http
+      interval: 30s
+      path: /metrics
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: gonic-alerts
+  namespace: music-streaming
+  labels:
+    app: gonic
+spec:
+  groups:
+    - name: gonic
+      interval: 30s
+      rules:
+        - alert: GonicDown
+          expr: up{job="gonic"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Gonic service is down"
+            description: "Gonic has been down for more than 5 minutes"
+
+        - alert: GonicHighLatency
+          expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="gonic"}[5m])) > 5
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Gonic response time > 5s at 95th percentile"
+            description: "Gonic is experiencing high latency (> 5s at p95)"
+
+        - alert: GonicHighMemoryUsage
+          expr: container_memory_usage_bytes{pod=~"gonic-.*"} / container_spec_memory_limit_bytes{pod=~"gonic-.*"} > 0.9
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Gonic memory usage > 90%"
+            description: "Gonic pod {{ $labels.pod }} memory usage is above 90% of limit"
+
+        - alert: MusicSyncJobFailed
+          expr: kube_job_status_failed{job_name=~"music-sync-.*"} > 0
+          for: 1m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Music sync job failed"
+            description: "The music sync cronjob has failed"
