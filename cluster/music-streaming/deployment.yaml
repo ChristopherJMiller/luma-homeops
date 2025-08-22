@@ -37,6 +37,8 @@ spec:
               value: "false"
             - name: GONIC_SCAN_WATCHER_ENABLED
               value: "true"
+            - name: GONIC_PLAYLISTS_PATH
+              value: "/playlists"
           volumeMounts:
             - name: music-storage
               mountPath: /music
@@ -45,6 +47,8 @@ spec:
               mountPath: /cache
             - name: data-storage
               mountPath: /data
+            - name: playlists-storage
+              mountPath: /playlists
           resources:
             requests:
               memory: 2Gi
@@ -74,3 +78,6 @@ spec:
         - name: data-storage
           persistentVolumeClaim:
             claimName: gonic-data-pvc
+        - name: playlists-storage
+          persistentVolumeClaim:
+            claimName: gonic-playlists-pvc
