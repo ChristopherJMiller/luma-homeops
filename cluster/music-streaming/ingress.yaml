@@ -26,8 +26,30 @@ spec:
                 name: gonic
                 port:
                   number: 80
-          - path: /webdav
-            pathType: Prefix
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gonic-webdav
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - music.chrismiller.xyz
+      secretName: gonic-tls
+  rules:
+    - host: music.chrismiller.xyz
+      http:
+        paths:
+          - path: /webdav(/|$)(.*)
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: gonic
