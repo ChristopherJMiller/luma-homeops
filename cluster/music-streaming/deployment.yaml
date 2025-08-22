@@ -82,7 +82,7 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
         - name: webdav
-          image: ugeek/webdav:arm64
+          image: ghcr.io/christopherjmiller/docker-webdav:latest
           ports:
             - containerPort: 8080
               name: webdav
@@ -94,6 +94,10 @@ spec:
                 secretKeyRef:
                   name: webdav-music-pass
                   key: password
+            - name: UID
+              value: "1000"
+            - name: GID
+              value: "1000"
           volumeMounts:
             - name: music-storage
               mountPath: /media
