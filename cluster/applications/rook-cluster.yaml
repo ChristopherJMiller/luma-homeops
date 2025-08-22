@@ -19,3 +19,4 @@ spec:
       allowEmpty: true
     syncOptions:
       - PrunePropagationPolicy=foreground
+      - ServerSideApply=true
