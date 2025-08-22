@@ -88,7 +88,7 @@ spec:
               name: webdav
           env:
             - name: USERNAME
-              value: "music"
+              value: "media"
             - name: PASSWORD
               valueFrom:
                 secretKeyRef:
