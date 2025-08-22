@@ -12,13 +12,9 @@ spec:
             - --source=ingress
             - --registry=txt
             - --provider=cloudflare
-            - --policy=upsert-only
+            - --policy=sync
             - --txt-owner-id=luma
-            - --domain-filter=.chrismiller.xyz
-            - --domain-filter=.realliance.net
-            - --domain-filter=.buttert.art
-            - --domain-filter=.werethemille.rs
-            - --log-level=debug
+            - --domain-filter=.chrismiller.xyz,.realliance.net,.buttert.art,.werethemille.rs
           name: external-dns
           env:
             - name: CF_API_TOKEN
