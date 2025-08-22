@@ -10,3 +10,4 @@ resources:
   - sync-cronjob.yaml
   - ingress.yaml
   - servicemonitor.yaml
+  - webdav.yaml
