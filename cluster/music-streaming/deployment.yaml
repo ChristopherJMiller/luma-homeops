@@ -4,7 +4,7 @@ metadata:
   name: gonic
   namespace: music-streaming
 spec:
-  replicas: 1
+  replicas: 0
   strategy:
     type: Recreate
   selector:
