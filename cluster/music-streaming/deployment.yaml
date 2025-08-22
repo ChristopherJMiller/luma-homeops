@@ -47,11 +47,10 @@ spec:
               mountPath: /data
           resources:
             requests:
-              memory: 4Gi
-              cpu: 500m
+              memory: 2Gi
+              cpu: 1
             limits:
-              memory: 4Gi
-              cpu: 2000m
+              memory: 2Gi
           livenessProbe:
             httpGet:
               path: /rest/ping
