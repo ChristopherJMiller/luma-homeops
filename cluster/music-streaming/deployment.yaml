@@ -101,6 +101,7 @@ spec:
           volumeMounts:
             - name: music-storage
               mountPath: /media
+              subPath: data
       volumes:
         - name: music-storage
           persistentVolumeClaim:
