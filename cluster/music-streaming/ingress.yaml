@@ -37,19 +37,18 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-body-size: "0"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
-    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: nginx
   tls:
     - hosts:
-        - music.chrismiller.xyz
-      secretName: gonic-tls
+        - dav.music.chrismiller.xyz
+      secretName: gonic-webdav-tls
   rules:
-    - host: music.chrismiller.xyz
+    - host: dav.music.chrismiller.xyz
       http:
         paths:
-          - path: /webdav(/|$)(.*)
-            pathType: ImplementationSpecific
+          - path: /
+            pathType: Prefix
             backend:
               service:
                 name: gonic
@@ -68,6 +67,23 @@ spec:
   commonName: music.chrismiller.xyz
   dnsNames:
     - music.chrismiller.xyz
+  privateKey:
+    rotationPolicy: Always
+    algorithm: ECDSA
+    size: 384
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: gonic-webdav-tls
+spec:
+  secretName: gonic-webdav-tls
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+  commonName: dav.music.chrismiller.xyz
+  dnsNames:
+    - dav.music.chrismiller.xyz
   privateKey:
     rotationPolicy: Always
     algorithm: ECDSA
