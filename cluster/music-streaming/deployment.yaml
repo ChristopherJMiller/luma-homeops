@@ -82,7 +82,7 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
         - name: webdav
-          image: ghcr.io/christopherjmiller/docker-webdav:master-eeb25a7
+          image: ghcr.io/christopherjmiller/docker-webdav:master-5831339
           ports:
             - containerPort: 8080
               name: webdav
