@@ -88,7 +88,7 @@ spec:
           transcode:
             storageClassName: rook-ceph-block
         sabnzbd:
-          tag: nightly-2956e8e 
+          tag: release-28cfd5e
           livenessProbe:
             periodSeconds: 30
             timeoutSeconds: 10
