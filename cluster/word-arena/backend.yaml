@@ -1,0 +1,59 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordarena-backend
+  labels:
+    app: wordarena-backend
+    service: web
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: wordarena-backend
+  template:
+    metadata:
+      labels:
+        app: wordarena-backend
+        service: web
+    spec:
+      securityContext:
+        runAsUser: 101
+        runAsGroup: 101
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+        - name: cache
+          emptyDir:
+            medium: Memory
+      containers:
+        - name: wordarena-backend
+          image: ghcr.io/christopherjmiller/word-arena-backend:main-353fcbc
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsUser: 101
+            runAsGroup: 101
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordarena-backend
+  labels:
+    service: web
+spec:
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: wordarena-backend

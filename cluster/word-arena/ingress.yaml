@@ -1,0 +1,29 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wordarena-ingress
+  labels:
+    service: web
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_clear_headers "Content-Security-Policy";
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - wordarena.chrismiller.xyz
+      secretName: wordarena-tls
+  rules:
+    - host: wordarena.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: home
+                port:
+                  number: 80

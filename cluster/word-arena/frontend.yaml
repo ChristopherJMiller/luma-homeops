@@ -1,0 +1,74 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordarena-frontend
+  labels:
+    app: wordarena-frontend
+    service: web
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: wordarena-frontend
+  template:
+    metadata:
+      labels:
+        app: wordarena-frontend
+        service: web
+    spec:
+      securityContext:
+        runAsUser: 101
+        runAsGroup: 101
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory
+        - name: cache
+          emptyDir:
+            medium: Memory
+      containers:
+        - name: wordarena-frontend
+          image: ghcr.io/christopherjmiller/word-arena-frontend:main-353fcbc
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsUser: 101
+            runAsGroup: 101
+          volumeMounts:
+            - mountPath: /tmp
+              name: tmp
+            - mountPath: /var/cache/nginx
+              name: cache
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          lifecycle:
+            preStop:
+              exec:
+                command: [/usr/sbin/nginx, -s, quit]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordarena-frontend
+  labels:
+    service: web
+spec:
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    app: wordarena-frontend
