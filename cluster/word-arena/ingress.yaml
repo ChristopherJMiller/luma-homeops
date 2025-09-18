@@ -27,7 +27,7 @@ spec:
                 name: wordarena-frontend
                 port:
                   number: 80
-          - path: /api
+          - path: /game
             pathType: Prefix
             backend:
               service:
