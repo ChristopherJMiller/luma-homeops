@@ -49,6 +49,10 @@ spec:
               value: debug
             - name: HOST
               value: 0.0.0.0
+            - name: AZURE_TENANT_ID
+              value: ee0a571a-7499-4994-b349-164a9150b094
+            - name: AZURE_CLIENT_ID
+              value: 72da9d9f-22a6-45c3-82ec-7b214eca7590
 ---
 apiVersion: v1
 kind: Service
