@@ -44,7 +44,7 @@ spec:
             runAsGroup: 101
           env:
             - name: DATABASE_URL
-              value: sqlite::memory:
+              value: "sqlite::memory:"
             - name: RUST_LOG
               value: info
 ---
