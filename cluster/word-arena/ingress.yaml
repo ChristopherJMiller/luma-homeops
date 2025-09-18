@@ -34,3 +34,10 @@ spec:
                 name: wordarena-backend
                 port:
                   number: 80
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: wordarena-backend
+                port:
+                  number: 80
