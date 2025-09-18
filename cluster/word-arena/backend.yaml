@@ -42,6 +42,11 @@ spec:
             readOnlyRootFilesystem: true
             runAsUser: 101
             runAsGroup: 101
+          env:
+            - name: DATABASE_URL
+              value: sqlite::memory:
+            - name: RUST_LOG
+              value: info
 ---
 apiVersion: v1
 kind: Service

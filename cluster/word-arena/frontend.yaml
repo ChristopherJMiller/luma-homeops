@@ -32,6 +32,8 @@ spec:
         - name: cache
           emptyDir:
             medium: Memory
+        - name: run
+          emptyDir: {}
       containers:
         - name: wordarena-frontend
           image: ghcr.io/christopherjmiller/word-arena-frontend:main-daaa969
@@ -47,6 +49,8 @@ spec:
               name: tmp
             - mountPath: /var/cache/nginx
               name: cache
+            - mountPath: /run
+              name: run
           livenessProbe:
             httpGet:
               path: /health
