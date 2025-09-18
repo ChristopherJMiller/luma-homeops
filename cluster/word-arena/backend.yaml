@@ -34,7 +34,7 @@ spec:
             medium: Memory
       containers:
         - name: wordarena-backend
-          image: ghcr.io/christopherjmiller/word-arena-backend:main-5a50511
+          image: ghcr.io/christopherjmiller/word-arena-backend:main-60fe457
           ports:
             - containerPort: 8080
               protocol: TCP
