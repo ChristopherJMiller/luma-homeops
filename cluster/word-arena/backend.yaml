@@ -34,7 +34,7 @@ spec:
             medium: Memory
       containers:
         - name: wordarena-backend
-          image: ghcr.io/christopherjmiller/word-arena-backend:main-6ff77ed
+          image: ghcr.io/christopherjmiller/word-arena-backend:main-0490e4b
           ports:
             - containerPort: 8080
               protocol: TCP
@@ -46,7 +46,7 @@ spec:
             - name: DATABASE_URL
               value: "sqlite::memory:"
             - name: RUST_LOG
-              value: info
+              value: debug
             - name: HOST
               value: 0.0.0.0
 ---
