@@ -34,7 +34,7 @@ spec:
             medium: Memory
       containers:
         - name: wordarena-backend
-          image: ghcr.io/christopherjmiller/word-arena-backend:main-ddebb0a
+          image: ghcr.io/christopherjmiller/word-arena-backend:main-7d83370
           ports:
             - containerPort: 8080
               protocol: TCP
@@ -50,7 +50,7 @@ spec:
             - name: HOST
               value: 0.0.0.0
             - name: AZURE_TENANT_ID
-              value: ee0a571a-7499-4994-b349-164a9150b094
+              value: common
             - name: AZURE_CLIENT_ID
               value: 72da9d9f-22a6-45c3-82ec-7b214eca7590
 ---
