@@ -33,7 +33,7 @@ spec:
               mountPath: /music
       containers:
         - name: gonic
-          image: ghcr.io/sentriz/gonic:v0.17.0
+          image: ghcr.io/sentriz/gonic:v0.18.0@sha256:fc7f3dee29c97be82f0558080637c61ef418437dd4ec760cb7a802a0efe38c20
           ports:
             - containerPort: 80
               name: http
