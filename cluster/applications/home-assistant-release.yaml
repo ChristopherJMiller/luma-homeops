@@ -14,7 +14,7 @@ spec:
       releaseName: ha
       valuesObject:
         image:
-          tag: 2025.7
+          tag: 2025.10.0
         hacs: true
         postgresql:
           enabled: false
