@@ -32,6 +32,14 @@ spec:
           circadian_lighting:
             transition: 5
 
+          sensor:
+            - platform: derivative
+              source: sensor.living_room_temperature
+              name: "Living Room Temperature Rate"
+              round: 2
+              unit_time: h  # degrees per hour
+              time_window: "00:30:00"  # 30 minute window
+
           switch:
             - name: Circadian Lighting Enable
               platform: circadian_lighting
