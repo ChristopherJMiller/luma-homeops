@@ -14,12 +14,12 @@ spec:
   spiloRunAsGroup: 103
   spiloFSGroup: 103
   postgresql:
-    version: '16'
+    version: "16"
   teamId: acid
   users:
     postgres: []
   volume:
-    size: 20Gi
+    size: 100Gi
   sidecars:
     - name: postgres-exporter
       image: quay.io/prometheuscommunity/postgres-exporter:v0.18.1@sha256:fb96c4413985d4b23ab02b19022b3d70a86c8e0a62f41ab15ebb6f4673781a5d
