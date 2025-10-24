@@ -3,6 +3,7 @@
 - name: Configure DHCP server
   vyos.vyos.vyos_config:
     lines:
+      - "set service dhcp-server hostfile-update"
       - "set service dhcp-server shared-network-name {{ dhcp.shared_network }} subnet {{ dhcp.subnet }} lease '{{ dhcp.lease_time }}'"
       - "set service dhcp-server shared-network-name {{ dhcp.shared_network }} subnet {{ dhcp.subnet }} option default-router '{{ dhcp.default_router }}'"
       - "set service dhcp-server shared-network-name {{ dhcp.shared_network }} subnet {{ dhcp.subnet }} option name-server '{{ dhcp.name_server }}'"
