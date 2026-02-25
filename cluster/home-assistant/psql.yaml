@@ -22,7 +22,7 @@ spec:
     size: 10Gi
   sidecars:
     - name: postgres-exporter
-      image: quay.io/prometheuscommunity/postgres-exporter:v0.19.0@sha256:e8a170b85eab07c75c2b0f3aa2806be5c2fe5bba46fd0336914e1f36572cde08
+      image: quay.io/prometheuscommunity/postgres-exporter:v0.19.1@sha256:e96064f876226d94bb6ce48a4c4b3dd76edba91168ec1ab024e5c4b959310b0f
       ports:
         - name: metrics
           containerPort: 9187
