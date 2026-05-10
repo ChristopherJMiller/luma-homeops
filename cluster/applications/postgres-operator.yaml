@@ -4,8 +4,6 @@ kind: Application
 metadata:
   name: postgres-operator
   namespace: argo-cd
-  annotations:
-    argocd.argoproj.io/compare-options: ServerSideDiff=true,IncludeMutationWebhook=true
 spec:
   project: default
   source:
@@ -23,7 +21,7 @@ spec:
           enable_persistent_volume_claim_deletion: false
           enable_sidecars: true
           share_pgsocket_with_sidecars: false
-        configGeneral:
+        configDebug:
           enable_database_access: true
           debug_logging: true
   destination:
@@ -38,4 +36,3 @@ spec:
       - CreateNamespace=true
       - PrunePropagationPolicy=foreground
       - PruneLast=true
-      - ServerSideDiff=true
