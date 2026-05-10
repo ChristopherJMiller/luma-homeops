@@ -1,0 +1,127 @@
+---
+# Declarative NFS exports for satellites.
+#
+# CephNFS (in ceph-nfs.yaml) spins up the Ganesha server but does NOT
+# declare which CephFS paths get exported — that's done via the `ceph nfs
+# export` API. This Job runs that API call idempotently from Git, applied
+# by Argo. To add a satellite that needs network storage, add a stanza to
+# the EXPORTS heredoc below and let Argo re-sync.
+#
+# The Job runs as an Argo Sync hook with BeforeHookCreation deletion so it
+# re-runs on every sync (picking up new exports). `ceph nfs export apply`
+# with a JSON spec is the idempotent operation — `create` would error on
+# the second run.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: satellites-nfs-exports
+  namespace: rook
+  annotations:
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: '1'
+spec:
+  ttlSecondsAfterFinished: 600
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      serviceAccountName: rook-ceph-default
+      containers:
+        - name: apply-exports
+          image: quay.io/ceph/ceph:v19.2.3
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 2016
+            runAsGroup: 2016
+          env:
+            - name: ROOK_CEPH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: rook-ceph-mon
+                  key: ceph-username
+          volumeMounts:
+            - mountPath: /etc/ceph
+              name: ceph-config
+            - mountPath: /etc/rook
+              name: mon-endpoint-volume
+            - mountPath: /var/lib/rook-ceph-mon
+              name: ceph-admin-secret
+              readOnly: true
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -euo pipefail
+
+              # Bootstrap the same /etc/ceph the rook-ceph-tools pod uses.
+              ceph_secret=$(cat /var/lib/rook-ceph-mon/secret.keyring)
+              cat > /etc/ceph/keyring <<EOF
+              [${ROOK_CEPH_USERNAME}]
+              key = ${ceph_secret}
+              EOF
+              mon_endpoints=$(sed 's/[a-z0-9_-]\+=//g' /etc/rook/mon-endpoints)
+              cat > /etc/ceph/ceph.conf <<EOF
+              [global]
+              mon_host = ${mon_endpoints}
+              [client.admin]
+              keyring = /etc/ceph/keyring
+              EOF
+
+              echo ">> Waiting for CephNFS cluster 'satellites' to be registered..."
+              for i in $(seq 1 60); do
+                if ceph nfs cluster ls 2>/dev/null | grep -qw satellites; then
+                  break
+                fi
+                sleep 5
+              done
+
+              # Per-satellite exports. Each line: <pseudo>|<fs_name>|<fs_path>|<client_cidr>
+              # The fs_path is created if it doesn't exist (Ganesha mkdir).
+              EXPORTS=$(cat <<'EXPORT_LIST'
+              /satellites/octoprint|fs-pool|/satellites/octoprint|192.168.0.243/32
+              EXPORT_LIST
+              )
+
+              echo "$EXPORTS" | while IFS='|' read -r pseudo fs path cidr; do
+                [ -z "${pseudo:-}" ] && continue
+                echo ">> Applying export pseudo=$pseudo fs=$fs path=$path cidr=$cidr"
+                cat <<EOF | ceph nfs export apply satellites -i -
+              {
+                "path": "$path",
+                "pseudo": "$pseudo",
+                "cluster_id": "satellites",
+                "access_type": "NONE",
+                "squash": "no_root_squash",
+                "protocols": [4],
+                "transports": ["TCP"],
+                "fsal": { "name": "CEPH", "fs_name": "$fs" },
+                "clients": [
+                  {
+                    "addresses": ["$cidr"],
+                    "access_type": "RW",
+                    "squash": "no_root_squash"
+                  }
+                ]
+              }
+              EOF
+              done
+
+              echo ">> Exports now configured on cluster 'satellites':"
+              ceph nfs export ls satellites
+      volumes:
+        - name: ceph-admin-secret
+          secret:
+            secretName: rook-ceph-mon
+            optional: false
+            items:
+              - key: ceph-secret
+                path: secret.keyring
+        - name: mon-endpoint-volume
+          configMap:
+            name: rook-ceph-mon-endpoints
+            items:
+              - key: data
+                path: mon-endpoints
+        - name: ceph-config
+          emptyDir: {}

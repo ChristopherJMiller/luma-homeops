@@ -6,4 +6,6 @@ resources:
   - block-pool.yaml
   - cluster.yaml
   - fs-pool.yaml
+  - ceph-nfs.yaml
+  - ceph-nfs-exports.yaml
   - rook-ceph-tools.yaml

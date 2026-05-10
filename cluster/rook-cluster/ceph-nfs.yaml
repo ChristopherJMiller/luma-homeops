@@ -1,0 +1,46 @@
+---
+# CephNFS spins up an NFS-Ganesha server backed by CephFS so non-k8s
+# clients (satellites) can mount cluster-backed storage. Per-export
+# configuration lives in ceph-nfs-exports.yaml as a declarative Argo
+# Sync-hook Job (Rook's CRD doesn't expose exports directly).
+apiVersion: ceph.rook.io/v1
+kind: CephNFS
+metadata:
+  name: satellites
+  namespace: rook
+  annotations:
+    argocd.argoproj.io/sync-wave: '0'
+spec:
+  rados:
+    pool: builtin-mgr
+    namespace: nfs-satellites
+  server:
+    active: 1
+    logLevel: NIV_INFO
+---
+# Pin the auto-created NFS Service to a known IP from the lan-internal
+# MetalLB pool. We deliberately request 192.168.0.230 so satellites can
+# bake the address into their config.
+#
+# Rook creates a ClusterIP Service named `rook-ceph-nfs-satellites-a` per
+# active server. We add a sibling LoadBalancer Service that targets the
+# same pod selector so the LAN sees a stable IP.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rook-ceph-nfs-satellites-lb
+  namespace: rook
+  annotations:
+    metallb.universe.tf/address-pool: lan-internal
+    metallb.universe.tf/loadBalancerIPs: 192.168.0.230
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 192.168.0.230
+  externalTrafficPolicy: Local
+  selector:
+    app: rook-ceph-nfs
+    ceph_nfs: satellites
+  ports:
+    - name: nfs
+      port: 2049
+      protocol: TCP

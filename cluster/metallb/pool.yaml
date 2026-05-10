@@ -17,3 +17,27 @@ metadata:
 spec:
   ipAddressPools:
     - pool
+---
+# lan-internal: cluster services exposed to the LAN but not the public
+# internet — e.g. NFS for satellites. Range carved out of what used to be
+# the upper end of the DHCP dynamic range. autoAssign=false so this pool
+# only allocates to services that explicitly request it via the
+# metallb.universe.tf/address-pool annotation.
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: lan-internal
+  namespace: metallb-system
+spec:
+  autoAssign: false
+  addresses:
+    - 192.168.0.230-192.168.0.239
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: lan-internal
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - lan-internal

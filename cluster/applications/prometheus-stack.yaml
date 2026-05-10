@@ -102,6 +102,14 @@ spec:
                     target_label: instance
                   - target_label: __address__
                     replacement: prometheus-snmp-exporter:9116
+              # Satellites (upper orbit) — node-exporter on each. Add new
+              # device IPs here when scaling beyond octoprint.
+              - job_name: satellites
+                static_configs:
+                  - targets:
+                      - 192.168.0.243:9100  # octoprint
+                    labels:
+                      group: satellites
             storageSpec:
               volumeClaimTemplate:
                 spec:
