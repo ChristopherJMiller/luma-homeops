@@ -35,7 +35,6 @@ metadata:
     metallb.universe.tf/loadBalancerIPs: 192.168.0.230
 spec:
   type: LoadBalancer
-  loadBalancerIP: 192.168.0.230
   externalTrafficPolicy: Local
   selector:
     app: rook-ceph-nfs
