@@ -40,9 +40,14 @@ kubectl -n rook exec "$TOOLS" -- ceph health detail
 # 5. etcd member health (all 3 should report Running/Healthy)
 TALOSCONFIG=nodes/talosconfig talosctl -n 192.168.0.240,192.168.0.241,192.168.0.242 service etcd
 
-# 6. take an etcd snapshot before any k8s upgrade
-TALOSCONFIG=nodes/talosconfig talosctl -n 192.168.0.5 etcd snapshot /tmp/etcd-pre-upgrade-$(date +%Y%m%d-%H%M).db
+# 6. take an etcd snapshot before any k8s upgrade (dedicated path)
+mkdir -p ~/etcd-snapshots
+TALOSCONFIG=nodes/talosconfig talosctl -n 192.168.0.5 etcd snapshot \
+  ~/etcd-snapshots/galaxy-$(date +%Y%m%d-%H%M).db
+ls -la ~/etcd-snapshots/ | tail -5  # confirm it landed
 ```
+
+Snapshots accumulate; manually trim when there are >10 and you have a known-good cluster.
 
 If anything above is not green, **stop**. Surface to user.
 
