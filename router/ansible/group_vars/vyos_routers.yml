@@ -7,18 +7,18 @@ networks:
   lan:
     interface: eth2
     address: 192.168.0.1/24
-    description: "LAN"
-    hw_id: "20:7c:14:f2:f4:fb"
+    description: LAN
+    hw_id: 20:7c:14:f2:f4:fb
   wan:
     interface: eth0
     address: dhcp
-    description: "OUTSIDE"
-    hw_id: "20:7c:14:f2:f4:fd"
+    description: OUTSIDE
+    hw_id: 20:7c:14:f2:f4:fd
   unused_interfaces:
     - interface: eth3
-      hw_id: "20:7c:14:f2:f4:fc"
+      hw_id: 20:7c:14:f2:f4:fc
     - interface: eth4
-      hw_id: "20:7c:14:f2:f4:fe"
+      hw_id: 20:7c:14:f2:f4:fe
       offload: true
 
 # DNS Settings
@@ -39,9 +39,9 @@ system:
   hostname: vyos
   commit_revisions: 100
   console_speed: 115200
-  ssh_key: "AAAAC3NzaC1lZDI1NTE5AAAAICHR4q3amhKDhCF6+xa3oTXJX2ycN503+cEo/gpnOkFt"
+  ssh_key: AAAAC3NzaC1lZDI1NTE5AAAAICHR4q3amhKDhCF6+xa3oTXJX2ycN503+cEo/gpnOkFt
   ssh_key_type: ssh-ed25519
-  ssh_key_name: "git@chrismiller.xyz"
+  ssh_key_name: git@chrismiller.xyz
 
 # DHCP Configuration
 dhcp:
@@ -49,19 +49,28 @@ dhcp:
   subnet: 192.168.0.0/24
   lease_time: 86400
   range_start: 192.168.0.9
-  range_stop: 192.168.0.239
+  # .230-.239 carved out for MetalLB pool "lan-internal" (cluster services
+  # exposed to LAN, e.g. CephNFS for satellites). Do not widen above .229
+  # without first shrinking that MetalLB pool.
+  range_stop: 192.168.0.229
   default_router: 192.168.0.1
   name_server: 192.168.0.1
   static_mappings:
     - name: top
-      mac: "9c:6b:00:70:58:bd"
+      mac: 9c:6b:00:70:58:bd
       ip: 192.168.0.240
     - name: middle
-      mac: "9c:6b:00:70:58:b8"
+      mac: 9c:6b:00:70:58:b8
       ip: 192.168.0.241
     - name: bottom
-      mac: "9c:6b:00:70:58:fd"
+      mac: 9c:6b:00:70:58:fd
       ip: 192.168.0.242
+    # Upper orbit (.243-.254): satellites — non-k8s NixOS devices managed
+    # from satellites/ in this repo. MAC must match the device. Get it from
+    # the Pi's first boot or by running `ip link` on the device.
+    - name: octoprint
+      mac: b8:27:eb:e3:af:ab    # Pi 3B (Raspberry Pi Foundation OUI b8:27:eb)
+      ip: 192.168.0.243
 
 # Firewall Groups
 firewall_groups:
@@ -78,14 +87,14 @@ firewall_groups:
 nat:
   destination_rules:
     - rule: 200
-      description: "HTTP Port Forward"
+      description: HTTP Port Forward
       port: 80
       protocol: tcp_udp
       inbound_interface: eth0
       translation_address: 192.168.0.6
       translation_port: 80
     - rule: 210
-      description: "NAT Reflection: HTTP"
+      description: 'NAT Reflection: HTTP'
       destination_address: 152.44.247.88
       port: 80
       protocol: tcp_udp
@@ -93,14 +102,14 @@ nat:
       translation_address: 192.168.0.6
       translation_port: 80
     - rule: 300
-      description: "HTTPS Port Forward"
+      description: HTTPS Port Forward
       port: 443
       protocol: tcp_udp
       inbound_interface: eth0
       translation_address: 192.168.0.6
       translation_port: 443
     - rule: 310
-      description: "NAT Reflection: HTTPS"
+      description: 'NAT Reflection: HTTPS'
       destination_address: 152.44.247.88
       port: 443
       protocol: tcp_udp
@@ -113,7 +122,7 @@ nat:
       source_address: 192.168.0.0/24
       translation: masquerade
     - rule: 110
-      description: "NAT Reflection: LAN"
+      description: 'NAT Reflection: LAN'
       destination_address: 192.168.0.0/24
       outbound_interface: eth2
       protocol: tcp
@@ -126,7 +135,7 @@ containers:
     image: koenkk/zigbee2mqtt
     allow_host_networks: true
     environment:
-      TZ: "Etc/UTC"
+      TZ: Etc/UTC
     devices:
       - source: /dev/ttyUSB0
         destination: /dev/ttyUSB0
