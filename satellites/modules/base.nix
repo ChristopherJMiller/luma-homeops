@@ -1,5 +1,8 @@
 { config, lib, pkgs, ... }:
 
+let
+  recipients = import ../secrets/recipients.nix;
+in
 {
   system.stateVersion = "25.11";
 
@@ -27,9 +30,7 @@
   users.users.admin = {
     isNormalUser = true;
     extraGroups = [ "wheel" "dialout" ];
-    openssh.authorizedKeys.keys = [
-      # Operator SSH key for break-glass admin access. Populated per-deploy.
-    ];
+    openssh.authorizedKeys.keys = builtins.attrValues recipients.operators;
   };
   security.sudo.wheelNeedsPassword = false;
 
