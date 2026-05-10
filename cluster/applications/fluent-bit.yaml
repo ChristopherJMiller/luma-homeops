@@ -17,7 +17,7 @@ spec:
         replicaCount: 1
         image:
           repository: fluent/fluent-bit
-          tag: "2.2.2"
+          tag: 2.2.2
         serviceAccount:
           create: true
         rbac:
@@ -37,6 +37,12 @@ spec:
           - key: node-role.kubernetes.io/control-plane
             operator: Exists
             effect: NoSchedule
+        extraVolumes:
+          - name: state
+            emptyDir: {}
+        extraVolumeMounts:
+          - name: state
+            mountPath: /var/fluent-bit/state
         env:
           - name: AZURE_WORKSPACE_ID
             valueFrom:
