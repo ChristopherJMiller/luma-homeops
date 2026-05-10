@@ -77,11 +77,20 @@ spec:
               done
 
               # Per-satellite exports. Each line: <pseudo>|<fs_name>|<fs_path>|<client_cidr>
-              # The fs_path is created if it doesn't exist (Ganesha mkdir).
+              # ceph nfs export apply requires the fs_path to pre-exist, so we
+              # mkdir each path via cephfs-shell (libcephfs, no kernel mount
+              # needed) before declaring the export.
               EXPORTS=$(cat <<'EXPORT_LIST'
               /satellites/octoprint|fs-pool|/satellites/octoprint|192.168.0.243/32
               EXPORT_LIST
               )
+
+              echo ">> Ensuring CephFS directories exist via cephfs-shell..."
+              echo "$EXPORTS" | while IFS='|' read -r pseudo fs path cidr; do
+                [ -z "${pseudo:-}" ] && continue
+                echo "   mkdir -p $path on fs=$fs"
+                cephfs-shell --fs "$fs" -c "mkdir -p $path" 2>&1 | sed 's/^/     /' || true
+              done
 
               echo "$EXPORTS" | while IFS='|' read -r pseudo fs path cidr; do
                 [ -z "${pseudo:-}" ] && continue
