@@ -97,15 +97,11 @@ The deploy flow for runtime secrets:
 
 These are real problems in the current cluster — flag, don't silently fix:
 
-1. **Ceph `HEALTH_ERR`**: 2 PGs report possible data damage, 4 scrub errors, 2 OSDs with spurious read errors. Investigate before any upgrade work. Affected: `rook` namespace.
-2. **Argo CD application-controller OOMKilled** repeatedly (~5300+ restarts). Memory limit needs to go up.
-3. **9 PVs in `Released` state** — orphaned but not reclaimed (default policy is Retain, intentional). Audit and clean up after backup verification.
-4. **Many `mm-plex` pods stuck `UnexpectedAdmissionError`** in `media` ns — likely PSA `baseline` enforcement clashing with the workload.
-5. **`cert-manager` namespace is empty** but the Argo app is "Healthy"; cert-manager actually runs in `dns` ns. Stale namespace, OK to clean up.
-6. **`ingress-nginx` v1.15.1**: ingress-nginx is in maintenance until **March 2026** and then EOL. **InGate (the planned successor) was also abandoned.** Migration target is **Gateway API** with a real controller (Envoy Gateway, Cilium, Traefik). Not a same-day move; plan it.
-7. **Talos v1.7.6 / k8s v1.30.3**: 4–5 minor versions behind on each. Upgrade path requires staggered minor jumps (Talos 1.7→1.8→…→1.11; k8s 1.30→1.31→…→1.34), one node at a time, with Ceph healthy between each. Do not skip versions.
-8. **Argo CD chart 7.9.1** — Renovate has open 8.x PRs; review before merging (8.x has CRD changes).
-9. **MetalLB pool only has 5 IPs** (`.6`-`.10`). Any new LoadBalancer service competes for them.
+1. **Ceph `BLUESTORE_SPURIOUS_READ_ERRORS`** (HEALTH_WARN): osd.4 + osd.6 each show 1 retry. Confirmed noise — kernel reports zero ATA/SCSI/I-O errors on the underlying drives. Will auto-clear over time. (Earlier HEALTH_ERR with 2 inconsistent PGs in `media/mm-media` resolved 2026-05-10 via `pg repair`.)
+2. **`ingress-nginx` v1.15.1**: ingress-nginx is in maintenance until **March 2026** and then EOL. **InGate (the planned successor) was also abandoned.** Migration target chosen: **Traefik on the Ingress API** (see #2507). Not a same-day move; sequenced after Talos/k8s upgrade.
+3. **Talos v1.7.6 / k8s v1.30.3**: 4–6 minor versions behind on each. Upgrade path requires staggered minor jumps (Talos 1.7→…→1.11 for Phase 1, →1.13 for Phase 2; k8s 1.30→…→1.34→1.36), one node at a time, with Ceph healthy between each. Do not skip versions. See #2506 for the runbook.
+4. **Argo CD chart 7.9.1** — needs bump to 9.x before Phase 1 k8s upgrade. Renovate PR #2494 only bumps the chart version; values.yaml needs ingress-block edits for 8.x (see review on #2494).
+5. **kube-prometheus-stack 65.x** — ~20 minor versions stale. Stepwise upgrade required (#2515) before Phase 1 k8s past 1.32.
 
 ---
 
