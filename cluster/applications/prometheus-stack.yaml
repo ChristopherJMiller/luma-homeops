@@ -8,7 +8,7 @@ spec:
   project: default
   source:
     repoURL: https://prometheus-community.github.io/helm-charts
-    targetRevision: 65.1.x
+    targetRevision: 66.7.x
     chart: kube-prometheus-stack
     helm:
       releaseName: prometheus
@@ -86,13 +86,12 @@ spec:
                 kubernetes_sd_configs:
                   - role: pod
                 relabel_configs:
-                  - source_labels:
-                      [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+                  - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
                     action: keep
                     regex: true
               - job_name: vyos-snmp
                 static_configs:
-                  - targets: ["192.168.0.1:161"]
+                  - targets: [192.168.0.1:161]
                 metrics_path: /snmp
                 params:
                   module: [vyos]
@@ -113,7 +112,7 @@ spec:
                       storage: 200Gi
         grafana:
           admin:
-            existingSecret: "grafana-admin-secret"
+            existingSecret: grafana-admin-secret
             userKey: admin-user
             passwordKey: admin-password
           envFromSecret: azure-monitor-credentials
