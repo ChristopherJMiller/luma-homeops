@@ -13,12 +13,14 @@ When this guide and a tool/agent default conflict, **this guide wins**.
 | Router | VyOS 1.5-rolling, `192.168.0.1` | SSH `chris@192.168.0.1`, `~/.ssh/id_ed25519` (must be in agent — `ssh-add` if needed). Op-mode commands need `/opt/vyatta/bin/vyatta-op-cmd-wrapper`. Config-as-code in `router/ansible/`. |
 | Control-plane VIP | `192.168.0.5:6443` | Talos KubePrism + shared VIP across all 3 nodes |
 | Nodes | `top` .240, `middle` .241, `bottom` .242 | All control-plane, all schedulable. Talos v1.7.6, k8s v1.30.3. |
-| Ingress LB | `192.168.0.6` | MetalLB pool is `192.168.0.6-.10` (only 5 IPs — tight) |
+| Ingress LB | `192.168.0.6` | MetalLB pool `default` is `192.168.0.6-.8` (3 IPs — tight, for public ingress) |
+| LAN-internal LB | `192.168.0.230-.239` | MetalLB pool `lan-internal` (autoAssign=false). For cluster services exposed to LAN but not WAN — currently CephNFS at `.230`. |
 | WAN | `eth0`, `152.44.247.88/25` | Port-forward 80/443 → .6 (ingress) |
-| Storage | Rook-Ceph (RBD + CephFS) | OSDs across all 3 nodes, `rook-ceph-block` is default SC, reclaim=Retain |
+| Storage | Rook-Ceph (RBD + CephFS) | OSDs across all 3 nodes, `rook-ceph-block` is default SC, reclaim=Retain. CephNFS export at `192.168.0.230` for satellites. |
 | GitOps | Argo CD app-of-apps | Root: `cluster/applications/applications.yaml`. Self-heal + prune ON. |
 | Talos | `nodes/talosconfig`, `nodes/controlplane.yaml` | Encrypted at rest via git-crypt (see "Secrets") |
-| Secrets | git-crypt + Sealed Secrets | `*.secret.yaml` + `nodes/*` are git-crypt encrypted (`.gitattributes`). For runtime secrets, edit `*.secret.yaml`, run `./sign.sh` to generate the SealedSecret `*.yaml` Argo deploys. Sealed-Secrets controller in `sealed-secrets` ns decrypts in-cluster. |
+| Secrets | git-crypt + Sealed Secrets + agenix | `*.secret.yaml` + `nodes/*` + `satellites/.keys/*` are git-crypt encrypted (`.gitattributes`). For runtime cluster secrets, edit `*.secret.yaml`, run `./sign.sh` → SealedSecret for Argo. For satellite secrets, agenix (recipients in `satellites/secrets/recipients.nix`). |
+| Satellites | NixOS edge devices at `192.168.0.243-.254` ("upper orbit") | Pull-based GitOps via comin from `satellites/`. NOT Argo-managed. See `satellites/README.md` and the Satellites section below. |
 
 `shell.nix` provides the toolchain. Run anything that needs `talosctl`/`helm`/`argocd` through `nix-shell shell.nix --run '…'`. There is no flake — `nix develop` will not work.
 
@@ -90,6 +92,42 @@ The deploy flow for runtime secrets:
 2. Run `./sign.sh` (or `./sign-all.sh` to re-seal everything — the latter requires confirmation)
 3. Commit both the `.secret.yaml` (encrypted) and the generated `.yaml` (SealedSecret, plaintext but only the controller's private key can open it)
 4. Argo applies the SealedSecret; the in-cluster controller writes the real Secret.
+
+---
+
+## Satellites (NixOS edge devices)
+
+`satellites/` is a separate subsystem from `cluster/`. Where Argo CD pushes from this repo into the cluster, **comin pulls from this repo onto each satellite** every ~60s. Same GitOps mindset, opposite direction.
+
+Each Pi (or other SBC) runs a `nixosConfigurations.<hostname>` from `satellites/flake.nix`, selected by its `networking.hostName`. SD image is built once on the dev machine via aarch64 binfmt emulation; after first boot the device is hands-off. Per-device SSH host keys live in `satellites/.keys/` (git-crypt encrypted); agenix uses them to decrypt per-device secrets.
+
+Hardware support comes from `nvmd/nixos-raspberrypi` (Pi Zero 2 W, Pi 3/3B, Pi 4, Pi 5). The older `nix-community/raspberry-pi-nix` does NOT support BCM2837 — do not switch back to it without checking.
+
+### Satellite safety rules
+
+**SAT1. Pull, never push.** comin owns satellite filesystems. Don't `ssh ... nixos-rebuild` to a satellite — your change will be overwritten on next poll. Edit `satellites/hosts/<h>/`, sign-tag, push.
+
+**SAT2. Sign your commits.** Devices verify against `services.comin.gpgPublicKeyPaths` baked into the image. Unsigned tags do not deploy.
+
+**SAT3. Touch `satellites/modules/base.nix` carefully.** A bad networking change there can leave a device unable to phone home — only remedy is re-flash. Treat it like `nodes/controlplane.yaml`.
+
+**SAT4. Don't widen `lan-internal` MetalLB without shrinking DHCP first.** The range `192.168.0.230-.239` is carved out of what was DHCP space. If you grow it down, edit `router/ansible/group_vars/vyos_routers.yml` and apply ansible BEFORE the MetalLB change syncs.
+
+**SAT5. Verify rollback before you need it.** Pin the comin branch to a known-good prior tag, confirm the device reverts. Test once on `octoprint`; trust it on the rest.
+
+### Quick commands (satellites)
+
+```bash
+# Build an SD image for a satellite (requires aarch64 binfmt on dev machine)
+nix build path:./satellites#sdImage-<hostname>
+
+# Scaffold a new host
+./satellites/scripts/new-host.sh <hostname> <board>
+
+# Inspect a satellite over SSH (read-only ops — don't modify state)
+ssh admin@192.168.0.243 systemctl status comin
+ssh admin@192.168.0.243 nixos-rebuild list-generations
+```
 
 ---
 

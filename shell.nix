@@ -1,6 +1,6 @@
-{ pkgs ? import <nixpkgs> { 
+{ pkgs ? import <nixpkgs> {
     config.allowUnfree = true;
-  } 
+  }
 }:
 
 pkgs.mkShell {
@@ -20,5 +20,10 @@ pkgs.mkShell {
     ansible
     azure-cli
     terraform
+
+    # satellites/: zstd for flash.sh image decompression. agenix is not in
+    # nixpkgs as a top-level pkg; invoke it directly with:
+    #   nix run github:ryantm/agenix -- -e satellites/secrets/<file>.age
+    zstd
   ];
 }

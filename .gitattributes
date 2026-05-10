@@ -1,2 +1,3 @@
 *.secret.yaml filter=git-crypt diff=git-crypt
 nodes/* filter=git-crypt diff=git-crypt
+satellites/.keys/* filter=git-crypt diff=git-crypt
