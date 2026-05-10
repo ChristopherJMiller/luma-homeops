@@ -74,12 +74,16 @@ argo-cd:
           release: prometheus
     ingress:
       enabled: true
+      ingressClassName: nginx
       annotations:
-        kubernetes.io/ingress.class: nginx
         external-dns.alpha.kubernetes.io/target: chrismiller.xyz
         nginx.ingress.kubernetes.io/backend-protocol: HTTPS
-      hostname: ci.chrismiller.xyz
-      tls: true
+      # hostname removed — derived from global.domain
+      # tls: true replaced with extraTls for chart 8.x+ schema
+      extraTls:
+        - hosts:
+            - ci.chrismiller.xyz
+          secretName: argocd-server-tls
   repoServer:
     autoscaling:
       enabled: true
