@@ -31,7 +31,7 @@
   boot.kernelPatches = [{
     name = "pi3-satellite-strip";
     patch = null;
-    extraStructuredConfig = with lib.kernel; {
+    structuredExtraConfig = with lib.kernel; {
       # --- Other-vendor GPU drivers (Pi has VC4 only) ---
       DRM_AMDGPU = lib.mkForce no;
       DRM_RADEON = lib.mkForce no;
