@@ -15,6 +15,12 @@ on:
       - .github/workflows/satellites-sd-images.yml
   workflow_dispatch:
 
+# Newer pushes supersede in-flight builds of the same ref to avoid wasted
+# 60-minute kernel compiles on every iteration.
+concurrency:
+  group: satellites-sd-images-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
