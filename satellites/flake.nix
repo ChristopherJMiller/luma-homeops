@@ -23,9 +23,13 @@
   };
 
   nixConfig = {
-    extra-substituters = [ "https://nixos-raspberrypi.cachix.org" ];
+    extra-substituters = [
+      "https://nixos-raspberrypi.cachix.org"
+      "https://christopherjmiller.cachix.org"
+    ];
     extra-trusted-public-keys = [
       "nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI="
+      "christopherjmiller.cachix.org-1:SpwpBjcK+4KV9+rd6V5+01ivGMu4KPBytdgbst3GNnE="
     ];
   };
 

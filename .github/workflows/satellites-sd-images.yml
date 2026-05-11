@@ -1,0 +1,62 @@
+---
+name: satellites SD images
+
+# Build SD bootstrap images for each satellite on native aarch64 GitHub
+# runners and push every resulting store path (kernel, initrd, system
+# closure) to christopherjmiller.cachix.org. Future local `nix build` of
+# the same image substitutes from the cache instead of recompiling under
+# qemu emulation.
+
+on:
+  push:
+    branches: [main, satellites/release]
+    paths:
+      - satellites/**
+      - .github/workflows/satellites-sd-images.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [octoprint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            substituters = https://cache.nixos.org https://nixos-raspberrypi.cachix.org https://christopherjmiller.cachix.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI= christopherjmiller.cachix.org-1:SpwpBjcK+4KV9+rd6V5+01ivGMu4KPBytdgbst3GNnE=
+
+      - uses: cachix/cachix-action@v15
+        with:
+          name: christopherjmiller
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build SD image
+        working-directory: satellites
+        run: |
+          nix build --print-build-logs \
+            'path:.#packages.aarch64-linux.sdImage-${{ matrix.host }}'
+
+      - name: Locate built image
+        id: image
+        working-directory: satellites
+        run: |
+          img=$(readlink -f result | xargs -I{} find {} -maxdepth 3 -name '*.img.zst' | head -1)
+          echo "path=$img" >> "$GITHUB_OUTPUT"
+          ls -lh "$img"
+
+      - name: Upload SD image as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdImage-${{ matrix.host }}
+          path: ${{ steps.image.outputs.path }}
+          retention-days: 30
+          if-no-files-found: error
