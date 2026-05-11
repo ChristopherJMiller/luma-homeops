@@ -5,9 +5,10 @@
 let
   boardModule = ../modules/boards + "/${board}.nix";
 in
-inputs.nixos-raspberrypi.lib.nixosInstaller {
+inputs.nixos-raspberrypi.lib.nixosSystem {
   inherit system;
   modules = [
+    inputs.nixos-raspberrypi.nixosModules.sd-image
     ../modules/base.nix
     ../modules/immutable.nix
     ../modules/minimal.nix
