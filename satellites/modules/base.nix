@@ -13,6 +13,19 @@ in
   nix.settings = {
     experimental-features = [ "nix-command" "flakes" ];
     auto-optimise-store = true;
+    # Trust the same substituters CI pushes to, so comin's on-device
+    # nixos-rebuild substitutes our kernel + system closure instead of
+    # recompiling under aarch64 on a Pi (which would take hours).
+    substituters = [
+      "https://cache.nixos.org/"
+      "https://nixos-raspberrypi.cachix.org"
+      "https://christopherjmiller.cachix.org"
+    ];
+    trusted-public-keys = [
+      "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+      "nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI="
+      "christopherjmiller.cachix.org-1:SpwpBjcK+4KV9+rd6V5+01ivGMu4KPBytdgbst3GNnE="
+    ];
   };
   nix.gc.automatic = false;
   nix.channel.enable = false;
