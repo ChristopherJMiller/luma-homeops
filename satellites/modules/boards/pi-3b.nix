@@ -7,8 +7,19 @@
 
   networking.useNetworkd = true;
   networking.useDHCP = false;
+  # Wired Ethernet first if a cable is plugged in.
   systemd.network.networks."10-eth0" = {
     matchConfig.Name = "eth0";
+    networkConfig.DHCP = "yes";
+  };
+  # WiFi as fallback. PSK is NOT in the Nix closure: scripts/flash.sh
+  # writes /var/lib/iwd/<SSID>.psk to the SD card's root partition at
+  # flash time, and iwd reads it on boot. The PSK persists across comin
+  # generation switches because /var/lib/iwd is not part of the system
+  # closure.
+  networking.wireless.iwd.enable = true;
+  systemd.network.networks."20-wlan0" = {
+    matchConfig.Name = "wlan0";
     networkConfig.DHCP = "yes";
   };
 
