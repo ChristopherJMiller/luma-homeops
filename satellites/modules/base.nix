@@ -59,6 +59,20 @@ in
 
   networking.firewall.enable = true;
 
+  # mDNS / Avahi: each satellite advertises <hostname>.local on the LAN.
+  # Lets Cura / OctoPrint clients / SSH point at "octoprint.local" instead
+  # of a DHCP-lease-of-the-week IP.
+  services.avahi = {
+    enable = true;
+    nssmdns4 = true;
+    publish = {
+      enable = true;
+      addresses = true;
+      workstation = true;
+    };
+    openFirewall = true;
+  };
+
   environment.systemPackages = with pkgs; [
     htop
     tmux
