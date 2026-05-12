@@ -30,7 +30,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        host: [octoprint]
+        host: [octoprint, printer]
     steps:
       - uses: actions/checkout@v4
 

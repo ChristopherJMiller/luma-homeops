@@ -1,6 +1,7 @@
 let
   hosts = {
     # octoprint = "ssh-ed25519 AAAA... populated by scripts/new-host.sh";
+    printer = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGvyf2VytdO7iHCrJDT7y7ZSAv3NUggoDqsNjxZQk5le satellite:printer";
   };
 
   operators = {

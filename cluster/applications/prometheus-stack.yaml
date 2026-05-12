@@ -108,6 +108,7 @@ spec:
                 static_configs:
                   - targets:
                       - 192.168.0.243:9100  # octoprint
+                      - 192.168.0.244:9100  # printer
                     labels:
                       group: satellites
               # comin's GitOps deploy state per satellite (last_deployment,
@@ -116,6 +117,7 @@ spec:
                 static_configs:
                   - targets:
                       - 192.168.0.243:4243  # octoprint
+                      - 192.168.0.244:4243  # printer
                     labels:
                       group: satellites
                       component: comin

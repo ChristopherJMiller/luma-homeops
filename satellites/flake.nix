@@ -54,6 +54,11 @@
           board = "pi-3b";
           modules = [ ./hosts/octoprint ];
         };
+        printer = mkHost {
+          hostName = "printer";
+          board = "pi-3b";
+          modules = [ ./hosts/printer ];
+        };
       };
 
       # BOOTSTRAP SD images — what we flash. Identical hostName so comin
@@ -61,6 +66,10 @@
       packages.aarch64-linux = {
         sdImage-octoprint = (mkBootstrap {
           hostName = "octoprint";
+          board = "pi-3b";
+        }).config.system.build.sdImage;
+        sdImage-printer = (mkBootstrap {
+          hostName = "printer";
           board = "pi-3b";
         }).config.system.build.sdImage;
       };
