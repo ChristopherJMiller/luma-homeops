@@ -3,7 +3,10 @@
 {
   imports = [
     "${modulesPath}/profiles/minimal.nix"
-    "${modulesPath}/profiles/perlless.nix"
+    # NB: profiles/perlless.nix is tempting but fails the build via a
+    # closure-assertion if ANY transitive dep pulls Perl in — and `git`
+    # (which comin depends on) does. We'd save ~150 MB but break the
+    # build. Revisit only with a Perl-free git override.
   ];
 
   documentation.enable = false;
