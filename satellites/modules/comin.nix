@@ -7,7 +7,7 @@ in
   options.satellites.comin = {
     repoUrl = lib.mkOption {
       type = lib.types.str;
-      default = "https://github.com/chrisemiller/luma-homeops";
+      default = "https://github.com/ChristopherJMiller/luma-homeops";
       description = "HTTPS URL of the repository comin pulls from.";
     };
 
