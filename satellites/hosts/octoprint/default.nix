@@ -46,6 +46,28 @@
     ip saddr 192.168.0.0/24 tcp dport 8080 accept comment "OctoPrint webcam stream from LAN"
   '';
 
+  # mDNS service advertisement so Cura's "OctoPrint Connection" plugin
+  # auto-discovers this printer. base.nix already enables avahi + hostname
+  # publishing (so octoprint.local resolves); this adds the service-type
+  # records that printer-discovery tools look for.
+  services.avahi.extraServiceFiles.octoprint = ''
+    <?xml version="1.0" standalone='no'?>
+    <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+    <service-group>
+      <name replace-wildcards="yes">OctoPrint on %h</name>
+      <service>
+        <type>_octoprint._tcp</type>
+        <port>5000</port>
+        <txt-record>path=/</txt-record>
+      </service>
+      <service>
+        <type>_http._tcp</type>
+        <port>5000</port>
+        <txt-record>path=/</txt-record>
+      </service>
+    </service-group>
+  '';
+
   # --- Deferred (re-enable once the cluster-side CephNFS export Job is fixed) ---
   #
   # satellites.nfsMounts."/var/lib/octoprint/uploads" = {
