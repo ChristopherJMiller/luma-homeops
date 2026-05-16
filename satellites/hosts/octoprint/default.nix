@@ -19,20 +19,21 @@
 
   users.users.octoprint.extraGroups = [ "dialout" "video" ];
 
-  # USB webcam streaming. Point OctoPrint's webcam settings (or Cura's
-  # OctoPrint plugin) at:
-  #   stream URL:   http://octoprint.local:8080/?action=stream
-  #   snapshot URL: http://octoprint.local:8080/?action=snapshot
-  systemd.services.mjpg-streamer = {
-    description = "MJPG-Streamer for OctoPrint webcam";
+  # ustreamer, not mjpg-streamer: nixpkgs' mjpg-streamer input_uvc.so has an
+  # undefined-symbol dlopen failure (`resolutions_help`).
+  systemd.services.ustreamer = {
+    description = "uStreamer for OctoPrint webcam";
     after = [ "network.target" ];
     wantedBy = [ "multi-user.target" ];
     serviceConfig = {
       Type = "simple";
       ExecStart = ''
-        ${pkgs.mjpg-streamer}/bin/mjpg_streamer \
-          -i "input_uvc.so -d /dev/video0 -r 640x480 -f 10" \
-          -o "output_http.so -p 8080 -w ${pkgs.mjpg-streamer}/share/mjpg-streamer/www"
+        ${pkgs.ustreamer}/bin/ustreamer \
+          --device=/dev/video0 \
+          --resolution=640x480 \
+          --desired-fps=10 \
+          --host=127.0.0.1 \
+          --port=8080
       '';
       Restart = "on-failure";
       RestartSec = 5;
@@ -41,15 +42,38 @@
     };
   };
 
+  # nginx on :80 fronts OctoPrint (:5000) + webcam (:8080) — matches OctoPi's
+  # haproxy layout, so OctoPrint's stock webcam settings ("/webcam/?action=…")
+  # work and ustreamer's native /stream + /snapshot are reachable under /webcam/.
+  services.nginx = {
+    enable = true;
+    recommendedProxySettings = true;
+    virtualHosts."octoprint" = {
+      default = true;
+      locations."/" = {
+        proxyPass = "http://127.0.0.1:5000";
+        proxyWebsockets = true;
+        extraConfig = ''
+          client_max_body_size 0;
+          proxy_read_timeout 600s;
+          proxy_send_timeout 600s;
+        '';
+      };
+      locations."/webcam/" = {
+        proxyPass = "http://127.0.0.1:8080/";
+        extraConfig = ''
+          proxy_buffering off;
+        '';
+      };
+    };
+  };
+
   networking.firewall.extraInputRules = ''
-    ip saddr 192.168.0.0/24 tcp dport 5000 accept comment "OctoPrint web UI from LAN"
-    ip saddr 192.168.0.0/24 tcp dport 8080 accept comment "OctoPrint webcam stream from LAN"
+    ip saddr 192.168.0.0/24 tcp dport 80   accept comment "OctoPrint web UI (nginx) from LAN"
+    ip saddr 192.168.0.0/24 tcp dport 5000 accept comment "OctoPrint direct (fallback) from LAN"
   '';
 
-  # mDNS service advertisement so Cura's "OctoPrint Connection" plugin
-  # auto-discovers this printer. base.nix already enables avahi + hostname
-  # publishing (so octoprint.local resolves); this adds the service-type
-  # records that printer-discovery tools look for.
+  # Advertise port 80 (nginx) — OctoPi-style frontend port.
   services.avahi.extraServiceFiles.octoprint = ''
     <?xml version="1.0" standalone='no'?>
     <!DOCTYPE service-group SYSTEM "avahi-service.dtd">
@@ -57,12 +81,12 @@
       <name replace-wildcards="yes">OctoPrint on %h</name>
       <service>
         <type>_octoprint._tcp</type>
-        <port>5000</port>
+        <port>80</port>
         <txt-record>path=/</txt-record>
       </service>
       <service>
         <type>_http._tcp</type>
-        <port>5000</port>
+        <port>80</port>
         <txt-record>path=/</txt-record>
       </service>
     </service-group>
