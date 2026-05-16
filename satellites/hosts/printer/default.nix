@@ -26,8 +26,8 @@
     defaultShared = true;
     webInterface = true;
     drivers = with pkgs; [
+      # gutenprintBin (cups-gutenprint-binary) is x86_64-only; printer is aarch64.
       gutenprint
-      gutenprintBin
       hplip
       brlaser
       epson-escpr
