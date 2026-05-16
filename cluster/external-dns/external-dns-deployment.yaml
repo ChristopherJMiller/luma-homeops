@@ -34,6 +34,15 @@ spec:
             - --domain-filter=realliance.net
             - --domain-filter=buttert.art
             - --domain-filter=werethemille.rs
+            # cloudflareddns owns the apex A records for every zone above;
+            # external-dns manages CNAMEs only. Without this, external-dns
+            # would discover stale `a-<zone>` TXT ownership markers from a
+            # previous era when it did manage the apex, decide it owns the
+            # apex A record, see no matching source endpoint (the apex
+            # ingresses opt out via the controller annotation), and DELETE
+            # the A record on every reconcile — fighting cloudflareddns.
+            - --managed-record-types=CNAME
+            - --managed-record-types=TXT
           name: external-dns
           env:
             - name: CF_API_TOKEN
