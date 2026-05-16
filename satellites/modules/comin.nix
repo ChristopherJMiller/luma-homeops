@@ -76,6 +76,15 @@ in
       }];
     };
 
+    # Yield CPU/IO to interactive services (esp. sshd) during evaluation,
+    # substitution, and switch-to-configuration. Without this, deploys on
+    # the Pi 3Bs peg all 4 cores and new SSH handshakes time out.
+    systemd.services.comin.serviceConfig = {
+      Nice = 10;
+      CPUWeight = 20;
+      IOWeight = 20;
+    };
+
     systemd.services."satellites-reboot-if-needed" = lib.mkIf cfg.autoReboot.enable {
       description = "Reboot satellite if booted generation is stale (kernel/initrd update pending)";
       serviceConfig = {
