@@ -51,6 +51,17 @@ jobs:
           nix build --print-build-logs \
             'path:.#packages.aarch64-linux.sdImage-${{ matrix.host }}'
 
+      # Also build what comin actually pulls at runtime — the full per-host
+      # toplevel (`nixosConfigurations.<host>.config.system.build.toplevel`).
+      # The SD image is the bootstrap; comin then switches into THIS closure.
+      # Building it here means cachix-action pushes every derivation, so the
+      # Pi never has to compile unit files / nginx configs / etc. on-device.
+      - name: Build per-host toplevel (comin's target)
+        working-directory: satellites
+        run: |
+          nix build --no-link --print-build-logs \
+            'path:.#nixosConfigurations.${{ matrix.host }}.config.system.build.toplevel'
+
       - name: Locate built image
         id: image
         working-directory: satellites
