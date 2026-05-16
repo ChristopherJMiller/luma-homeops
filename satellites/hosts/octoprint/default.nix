@@ -19,8 +19,17 @@
 
   users.users.octoprint.extraGroups = [ "dialout" "video" ];
 
+  # A skipped serial write during a print = layer shift. Guarantee CPU/IO
+  # for OctoPrint under any contention (comin deploy, plugin work, etc.).
+  systemd.services.octoprint.serviceConfig = {
+    Nice = -5;
+    CPUWeight = 500;
+    IOWeight = 500;
+  };
+
   # ustreamer, not mjpg-streamer: nixpkgs' mjpg-streamer input_uvc.so has an
-  # undefined-symbol dlopen failure (`resolutions_help`).
+  # undefined-symbol dlopen failure (`resolutions_help`). Lower CPUWeight
+  # so a busy webcam can never starve the print loop.
   systemd.services.ustreamer = {
     description = "uStreamer for OctoPrint webcam";
     after = [ "network.target" ];
@@ -39,6 +48,7 @@
       RestartSec = 5;
       User = "octoprint";
       SupplementaryGroups = [ "video" ];
+      CPUWeight = 50;
     };
   };
 
