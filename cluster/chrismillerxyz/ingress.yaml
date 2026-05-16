@@ -9,6 +9,10 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
     nginx.ingress.kubernetes.io/enable-cors: 'true'
+    # cloudflareddns owns the apex A record (points at the WAN IP, not the
+    # cluster LB). Without this opt-out, external-dns would push the LB IP
+    # and fight cloudflareddns on every reconcile.
+    external-dns.alpha.kubernetes.io/controller: cloudflareddns
 spec:
   ingressClassName: nginx
   tls:
