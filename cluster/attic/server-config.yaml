@@ -1,0 +1,42 @@
+---
+# atticd server config — non-secret bits only. Sensitive fields (RS256 key,
+# DB URL) come in via env from attic-server / attic-db Secrets at runtime.
+# Schema: https://github.com/zhaofengli/attic/blob/main/server/src/config-template.toml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: attic-server-config
+  namespace: attic
+data:
+  server.toml: |
+    listen = "[::]:8080"
+
+    allowed-hosts = ["attic.chrismiller.xyz"]
+    api-endpoint = "https://attic.chrismiller.xyz/"
+
+    require-proof-of-possession = true
+
+    [database]
+      url = "%database_url%"
+      heartbeat = false
+
+    [storage]
+      type = "local"
+      path = "/var/lib/atticd/storage"
+
+    [chunking]
+      nar-size-threshold = 65536
+      min-size = 16384
+      avg-size = 65536
+      max-size = 262144
+
+    [compression]
+      type = "zstd"
+
+    [garbage-collection]
+      interval = "12 hours"
+
+    [jwt]
+
+    [jwt.signing]
+      token-rs256-secret-base64 = "%token_rs256_secret_base64%"

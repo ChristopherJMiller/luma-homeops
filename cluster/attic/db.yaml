@@ -1,0 +1,15 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: attic-db
+  namespace: attic
+spec:
+  encryptedData:
+    database_url:
+      AgA7oab4bTwJRb5pAy0KCKI3Y+rnPX1MCKv7mZTHC7DhfTep6Z0c69PYGK1t8D1aN2drD4kr1zFXVSkoy8KENtH57jS+OgmF4BBwe9VZ0mKL9jHvS9dkJzkuiIkr1clIaqHgW67fxS+jrJ5pzxMv7PI+5q1CvEWccqahQWfqOHxFc0PApTrD8Q5+gjvYRWrgLhRsYur4J+zg6+OISUUFupYuSuRY3lN+e1JprOJBsZAmELMlF3WV8lxeBpnMtWXJAVrSakgUH/NskELN+fbAoshj9IpXKf1lgBrZVyL5K8e3w4x27+1FDRQVC8ff3qOaHvlheqUTouumbwdInUSA1Sjk2tFM8KslYkxTXHWel5B/5RFiD1oLUlnBonQIoYqmCJjEQES+yS8eGnxeXDRz86S12os6czcQ2qGpzqubif9KlqvV+4FFnEPfi0vRaXDza/qlUiR8TayHCvBdRIrlYWFIpCDWFSJSoNZBwwUA5/R0GcKDXh7jne5vloA6zqWifw+JRC2cd7pV5RLujnnP3w2L85Xx4S0+rYkXN9CqOBz0SF+f2Iip2KLlJsw5ab/pa+XeOl3VvY4ibFZRcabkQEl3X/DSxs9qbKP8IIAzs27GHnltTZEkpjOpPbXtzm4R3SBMt5tpx6x2rbqmSPnx2nn7V37CO97jJAKvtyFhFRkvzSV5MCY1Eio9/0q12E/dZarzh5fc0Hki/PE2vlTD3Vdy/WZ3Sq6NAFU/cYAwu7eQGlaOiJDzNnyEYmjMWgcRjGSngKwMh6m/OHZnChW4EEZTzDJQMrSBTdbw+fdU5KIjY83pGax8is23ANdWv5YxPASvG0bkWvElxlZE4Z37hdCS
+  template:
+    metadata:
+      name: attic-db
+      namespace: attic
+    type: Opaque
