@@ -1,0 +1,33 @@
+---
+# Spilo Postgres for attic. Same pattern as royaltracker — single instance,
+# small footprint. attic uses Postgres for cache config + chunk dedup
+# metadata; NAR blobs live in the StatefulSet's PVC, not the DB.
+apiVersion: acid.zalan.do/v1
+kind: postgresql
+metadata:
+  name: acid-attic
+  labels:
+    app: postgresql
+    cluster: acid-attic
+spec:
+  databases:
+    attic: attic
+  numberOfInstances: 1
+  spiloRunAsUser: 101
+  spiloRunAsGroup: 103
+  spiloFSGroup: 103
+  postgresql:
+    version: '16'
+  teamId: acid
+  users:
+    attic:
+      - superuser
+      - createdb
+  volume:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi

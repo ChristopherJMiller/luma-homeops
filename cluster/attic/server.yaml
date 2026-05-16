@@ -1,0 +1,95 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: attic
+  namespace: attic
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+  selector:
+    app: attic
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: attic
+  namespace: attic
+spec:
+  serviceName: attic
+  replicas: 1
+  selector:
+    matchLabels:
+      app: attic
+  template:
+    metadata:
+      labels:
+        app: attic
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: atticd
+          # renovate: datasource=docker depName=ghcr.io/zhaofengli/attic
+          image: ghcr.io/zhaofengli/attic:cf7294607583a8d9f06026007da1ced564d43c86
+          args:
+            - --config
+            - /etc/atticd/server.toml
+            - --mode
+            - monolithic
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: ATTIC_SERVER_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: attic-db
+                  key: database_url
+            - name: ATTIC_SERVER_TOKEN_RS256_SECRET_BASE64
+              valueFrom:
+                secretKeyRef:
+                  name: attic-server
+                  key: ATTIC_SERVER_TOKEN_RS256_SECRET_BASE64
+          volumeMounts:
+            - name: config
+              mountPath: /etc/atticd
+              readOnly: true
+            - name: storage
+              mountPath: /var/lib/atticd/storage
+          # TCP probe — atticd has no documented HTTP health endpoint yet,
+          # and an HTTP GET / returns 404 by design (root is unhandled).
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+      volumes:
+        - name: config
+          configMap:
+            name: attic-server-config
+  volumeClaimTemplates:
+    - metadata:
+        name: storage
+      spec:
+        accessModes: [ReadWriteOnce]
+        storageClassName: rook-ceph-block
+        resources:
+          requests:
+            storage: 50Gi

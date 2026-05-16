@@ -5,6 +5,7 @@ resources:
   - argo-cd.yaml
   - amd-gpu-plugin-release.yaml
   - applications.yaml
+  - attic.yaml
   - authentik.yaml
   - authentik-release.yaml
   - cert-approver.yaml
