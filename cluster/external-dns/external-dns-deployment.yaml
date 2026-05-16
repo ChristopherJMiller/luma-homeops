@@ -25,6 +25,7 @@ spec:
             # changed IDNA normalization, which silently no-op'd every new
             # ingress added after the bump.)
             - --domain-filter=chrismiller.xyz,realliance.net,buttert.art,werethemille.rs
+            - --log-level=debug
           name: external-dns
           env:
             - name: CF_API_TOKEN
