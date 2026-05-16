@@ -62,6 +62,38 @@ jobs:
           nix build --no-link --print-build-logs \
             'path:.#nixosConfigurations.${{ matrix.host }}.config.system.build.toplevel'
 
+      # Best-effort push to self-hosted attic alongside cachix. Gated on
+      # `vars.ATTIC_PUSH_ENABLED == 'true'` so cold-bootstrap (no attic yet)
+      # and total cluster rebuilds don't fail the workflow. `continue-on-error`
+      # so even when enabled, an attic outage doesn't block builds — cachix
+      # is the resilient default.
+      - name: Push to attic (best-effort)
+        if: vars.ATTIC_PUSH_ENABLED == 'true'
+        continue-on-error: true
+        env:
+          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
+          ATTIC_ENDPOINT: ${{ vars.ATTIC_ENDPOINT }}
+          ATTIC_CACHE: ${{ vars.ATTIC_CACHE }}
+        working-directory: satellites
+        run: |
+          set -eu
+          if [ -z "${ATTIC_TOKEN:-}" ]; then
+            echo "::warning::ATTIC_TOKEN secret missing — skipping attic push"
+            exit 0
+          fi
+          if [ -z "${ATTIC_ENDPOINT:-}" ] || [ -z "${ATTIC_CACHE:-}" ]; then
+            echo "::warning::ATTIC_ENDPOINT / ATTIC_CACHE var missing — skipping attic push"
+            exit 0
+          fi
+          nix run --refresh github:zhaofengli/attic#attic-client -- \
+            login server "$ATTIC_ENDPOINT" "$ATTIC_TOKEN"
+          toplevel=$(nix path-info \
+            'path:.#nixosConfigurations.${{ matrix.host }}.config.system.build.toplevel')
+          sdimage=$(nix path-info \
+            'path:.#packages.aarch64-linux.sdImage-${{ matrix.host }}')
+          nix run github:zhaofengli/attic#attic-client -- \
+            push "server:$ATTIC_CACHE" "$toplevel" "$sdimage"
+
       - name: Locate built image
         id: image
         working-directory: satellites
