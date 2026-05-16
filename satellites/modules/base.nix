@@ -20,11 +20,16 @@ in
       "https://cache.nixos.org/"
       "https://nixos-raspberrypi.cachix.org"
       "https://christopherjmiller.cachix.org"
+      # Self-hosted attic (cluster-internal -> LAN-fast for satellites).
+      # nix fails-soft on unreachable substituters, so a cluster outage
+      # falls through to the cachix mirrors above without breaking deploys.
+      "https://attic.chrismiller.xyz/satellites"
     ];
     trusted-public-keys = [
       "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
       "nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI="
       "christopherjmiller.cachix.org-1:SpwpBjcK+4KV9+rd6V5+01ivGMu4KPBytdgbst3GNnE="
+      "satellites:sp9Ozvdr2daxB2tbfW3AeGFFuYpyf5tSKNqbGzEOjHA="
     ];
   };
   nix.gc.automatic = false;
