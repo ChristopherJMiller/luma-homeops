@@ -17,7 +17,10 @@ data:
     require-proof-of-possession = true
 
     [database]
-      url = "%database_url%"
+      # url is set via ATTIC_SERVER_DATABASE_URL env from attic-db secret.
+      # Omitted from TOML because the template's literal "%database_url%"
+      # placeholder fails TOML parse — atticd evaluates env overrides AFTER
+      # parsing the file.
       heartbeat = false
 
     [storage]
@@ -37,6 +40,6 @@ data:
       interval = "12 hours"
 
     [jwt]
-
-    [jwt.signing]
-      token-rs256-secret-base64 = "%token_rs256_secret_base64%"
+    # Signing key is set via ATTIC_SERVER_TOKEN_RS256_SECRET_BASE64 env
+    # from attic-server secret (RSA-4096 PEM PKCS1, base64-encoded).
+    # See note above re: omitting placeholder from TOML.
