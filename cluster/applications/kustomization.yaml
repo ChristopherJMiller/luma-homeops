@@ -31,6 +31,8 @@ resources:
   - realmic.yaml
   - rook.yaml
   - rook-cluster.yaml
+  - royaltracker.yaml
+  - royaltracker-helm.yaml
   - postgres-operator.yaml
   - prometheus-stack.yaml
   - prometheus-stack-config.yaml

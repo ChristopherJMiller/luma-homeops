@@ -1,0 +1,45 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: royaltracker-helm
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/royaltracker.git
+    path: charts/royaltracker
+    targetRevision: main
+    helm:
+      releaseName: royaltracker
+      valuesObject:
+        publicUrl: https://rccl-tracker.chrismiller.xyz
+        image:
+          tag: latest
+        ingress:
+          enabled: true
+          className: nginx
+          host: rccl-tracker.chrismiller.xyz
+          externalDnsTarget: chrismiller.xyz
+          tls:
+            enabled: true
+            issuerKind: ClusterIssuer
+            issuerName: letsencrypt-prod
+        database:
+          secretName: royaltracker-db
+          secretKey: database_url
+        configSecret:
+          name: royaltracker-config
+        bot:
+          replicas: 1
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: royaltracker
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

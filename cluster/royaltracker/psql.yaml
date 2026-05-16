@@ -1,0 +1,30 @@
+---
+apiVersion: acid.zalan.do/v1
+kind: postgresql
+metadata:
+  name: acid-royaltracker
+  labels:
+    app: postgresql
+    cluster: acid-royaltracker
+spec:
+  databases:
+    royaltracker: royaltracker
+  numberOfInstances: 1
+  spiloRunAsUser: 101
+  spiloRunAsGroup: 103
+  spiloFSGroup: 103
+  postgresql:
+    version: '16'
+  teamId: acid
+  users:
+    royaltracker:
+      - superuser
+      - createdb
+  volume:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi

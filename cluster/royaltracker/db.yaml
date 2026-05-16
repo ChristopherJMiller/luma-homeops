@@ -1,0 +1,15 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: royaltracker-db
+  namespace: royaltracker
+spec:
+  encryptedData:
+    database_url:
+      AgCucnJX6Thr8yUs64IRpQEL3woJLT6tHEZEKPNDnim6QAGvRWIJ6kLBl3ZnZfEKNSTs0iM8TsuDcROhWPu3Tf/lS1c612T7strFbwVYBalMhAsfJw0JO6FUhNtXN0UyfeMN2yNIcVkiI8FEnptn7kJulJdV0DN2JqHFGhP56z0rKirFzNE9IU6OZVW/o/8TwjoBGtLRWe98yO6vKD9m/cgVtRFMk7CQxQsvZ8HwrMkbYHab0wm3tj8ZtRg+eK5miPyRZS6qUgViRaeozqeCfPFdbpYMF1YGcAhD+oo6VrSrLc1ETBv5zFi2DfPlgoaSIBnU1WpgP5zwCtlLc4KnQEofzQy+9ZOeogpdWLKSPjCcSEHTPpWMaB3hRxKU41fbLZN2buboDmyncsqDSngj2DZHRfslB4Jjs/2a60CeW0wq7k0mJVtL4a6U0oshfn4lc5Q9Udtw8YacxzR55yB0NYQPPivfH9KuJ+UqHc/KMDPM9w/6pBTzqoKjJfRDnHqY7aboaD+yVPZkT1lItSB2J6H3rAwfH8ZCAXvow0ko1TwF7epsQFR5xa8C6zv6+9wOUEMedGhKLHSib5vzmyvmH6/Iwv4Z2jFEMVjO9f2Ovg9qmEtC/E3FlOtOfTGMnrjadJB2KLWBe5gb5F7von1zp7yc3o11vv405Bo+ChpEfCGL39zQSiFDNL5xx+JO8iyhnfrkUnNJagjgjB7lMIVxudcnNWyhNoA6lNwl4AQ1XJYZ8WfFSRkIcG4bUTJwIKe37SekJUkyrd+3VIsmXqBtDyKtRs21zS9spOGYNwZ/9hXICHmApNgl/pXFB58zdi7ZLYkcOKBHmyeyRz81uymzFuioUMlxp+FSTedNxlykzbz7nEBGykWBeoiuDsva0Ae5Z28Pa6ks+B2UVhpTaG2azFnEuisu7gHwjwYF+CM=
+  template:
+    metadata:
+      name: royaltracker-db
+      namespace: royaltracker
+    type: Opaque
