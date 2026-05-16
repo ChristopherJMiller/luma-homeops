@@ -68,10 +68,12 @@
     };
   };
 
-  networking.firewall.extraInputRules = ''
-    ip saddr 192.168.0.0/24 tcp dport 80   accept comment "OctoPrint web UI (nginx) from LAN"
-    ip saddr 192.168.0.0/24 tcp dport 5000 accept comment "OctoPrint direct (fallback) from LAN"
-  '';
+  # extraInputRules is nftables-only; this satellite uses iptables. LAN-only
+  # is enforced by the perimeter (router NAT, no port-forward for these).
+  networking.firewall.allowedTCPPorts = [
+    80    # OctoPrint web UI (nginx frontend)
+    5000  # OctoPrint direct (fallback during cutover)
+  ];
 
   # Advertise port 80 (nginx) — OctoPi-style frontend port.
   services.avahi.extraServiceFiles.octoprint = ''
