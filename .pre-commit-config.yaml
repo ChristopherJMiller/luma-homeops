@@ -1,10 +1,16 @@
 ---
+# Vendored upstream manifests are exempted from formatting/whitespace hooks
+# so they stay byte-identical with their GitHub releases (easier bumps).
+# - cluster/rabbitmq-cluster-operator/{cluster-operator,messaging-topology-operator}.yaml
+#   yamlfmt reflows CRD description strings and adds trailing whitespace,
+#   which trailing-whitespace then strips, looping forever.
 repos:
   - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
     rev: 0.2.1
     hooks:
       - id: yamlfmt
         args: [--mapping, '2', --sequence, '4', --offset, '2']
+        exclude: ^cluster/rabbitmq-cluster-operator/(cluster-operator|messaging-topology-operator)\.yaml$
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.0.1
     hooks:
@@ -16,8 +22,10 @@ repos:
       - id: check-symlinks
       - id: destroyed-symlinks
       - id: end-of-file-fixer
+        exclude: ^cluster/rabbitmq-cluster-operator/(cluster-operator|messaging-topology-operator)\.yaml$
       - id: fix-byte-order-marker
         name: Fix UTF-8 byte order marker
       - id: mixed-line-ending
         args: [--fix, lf]
       - id: trailing-whitespace
+        exclude: ^cluster/rabbitmq-cluster-operator/(cluster-operator|messaging-topology-operator)\.yaml$

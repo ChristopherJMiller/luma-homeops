@@ -1,0 +1,20 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Upstream RabbitMQ Cluster Operator + Messaging Topology Operator,
+# vendored from the projects' GitHub releases. Both ship images on
+# ghcr.io — no docker.io rate-limit exposure. Migrated off Bitnami's
+# rabbitmq-cluster-operator chart (deprecated catalog).
+#
+# Pinned versions:
+#   cluster-operator        v2.21.0  (ghcr.io/rabbitmq/cluster-operator:2.21.0)
+#   topology operator       v1.19.2  (ghcr.io/rabbitmq/messaging-topology-operator:1.19.2)
+#
+# To bump:
+#   curl -LO https://github.com/rabbitmq/cluster-operator/releases/download/vX.Y.Z/cluster-operator-ghcr-io.yml -o cluster-operator.yaml
+#   curl -LO https://github.com/rabbitmq/messaging-topology-operator/releases/download/vX.Y.Z/messaging-topology-operator-ghcr-io.yaml -o messaging-topology-operator.yaml
+#   then strip the duplicate `Namespace: rabbitmq-system` from messaging-topology-operator.yaml.
+resources:
+  - cluster-operator.yaml
+  - messaging-topology-operator.yaml

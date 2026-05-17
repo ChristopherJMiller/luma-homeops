@@ -7,24 +7,16 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: registry-1.docker.io/bitnamicharts
-    targetRevision: 4.3.x
-    chart: rabbitmq-cluster-operator
-    helm:
-      releaseName: rabbitmqco
-      valuesObject:
-        clusterOperator:
-          metrics:
-            service:
-              enabled: true
-        msgTopologyOperator:
-          metrics:
-            service:
-              enabled: true
-        useCertManager: true
+    # Vendored upstream manifests (was Bitnami's rabbitmq-cluster-operator
+    # chart — moved off the deprecated, docker.io-rate-limited Bitnami OCI
+    # catalog). Both operators pull from ghcr.io now. Cert-manager-issued
+    # webhook certs (the upstream "-ghcr-io" variant still includes the
+    # cert-manager Certificate/Issuer for the topology operator webhook).
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/rabbitmq-cluster-operator
   destination:
     server: https://kubernetes.default.svc
-    namespace: rabbitmq-cluster-operator
+    namespace: rabbitmq-system
   syncPolicy:
     automated:
       prune: true
@@ -32,5 +24,6 @@ spec:
       allowEmpty: true
     syncOptions:
       - CreateNamespace=true
+      - ServerSideApply=true
       - PrunePropagationPolicy=foreground
       - PruneLast=true
