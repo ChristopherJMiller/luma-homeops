@@ -17,6 +17,12 @@ RUN python3.12 -m pip install --no-cache-dir --upgrade pip \
 
 COPY src/ ./src/
 
+# kopf calls getpass.getuser() at startup; that fails with KeyError when
+# the running UID has no /etc/passwd entry. Add one for UID 2016 so kopf
+# can derive its identity field.
+RUN echo 'operator:x:2016:2016::/app:/sbin/nologin' >> /etc/passwd \
+ && echo 'operator:x:2016:' >> /etc/group
+
 # Match the rook-ceph-tools UID so volume mounts (rook-ceph-mon secret,
 # mon-endpoints ConfigMap) are readable without chowning.
 USER 2016:2016
