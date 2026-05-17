@@ -11,6 +11,10 @@
 # re-runs on every sync (picking up new exports). `ceph nfs export apply`
 # with a JSON spec is the idempotent operation — `create` would error on
 # the second run.
+#
+# Re-render trigger 2026-05-16: argocd-repo-server was caching an older
+# (pre-cephfs-shell-mkdir) render of this Job; bumping a comment to force
+# a fresh re-render after restarting repo-server.
 apiVersion: batch/v1
 kind: Job
 metadata:
