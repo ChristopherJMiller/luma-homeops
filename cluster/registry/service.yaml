@@ -12,8 +12,9 @@ metadata:
     metallb.universe.tf/address-pool: lan-internal
     metallb.universe.tf/loadBalancerIPs: 192.168.0.231
 spec:
+  # LB IP comes from the metallb annotation above (Service.spec.loadBalancerIP
+  # is the legacy Kubernetes field, MetalLB rejects setting both).
   type: LoadBalancer
-  loadBalancerIP: 192.168.0.231
   selector:
     app: registry
   ports:
