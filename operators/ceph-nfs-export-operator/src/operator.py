@@ -84,6 +84,13 @@ def _ensure_dir(fs_name: str, path: str, logger: logging.Logger) -> None:
         conffile=os.path.join(CEPH_CONF_DIR, "ceph.conf"),
         auth_id=auth_id,
     )
+    # The CephFS root is owned by root:root (mode 755). The operator runs
+    # as UID 2016, so libcephfs's POSIX check would deny mkdir at /
+    # despite our client.admin cephx caps. Tell libcephfs to identify as
+    # UID/GID 0 — POSIX-clean, and cephx still enforces real authorization
+    # at the MDS.
+    client.conf_set("client_mount_uid", "0")
+    client.conf_set("client_mount_gid", "0")
     try:
         client.init()
         client.mount(b"/", filesystem_name=fs_name)

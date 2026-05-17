@@ -31,6 +31,9 @@ USER 2016:2016
 ENV PYTHONUNBUFFERED=1
 
 # --liveness exposes /healthz on :8080 for the kubelet probe.
+# --all-namespaces is required explicitly in kopf 1.38+ (omitting it
+# emits a FutureWarning about becoming an error in a future release).
 ENTRYPOINT ["python3", "-m", "kopf", "run", "--standalone", \
+            "--all-namespaces", \
             "--liveness=http://0.0.0.0:8080/healthz", \
             "/app/src/operator.py"]
