@@ -8,11 +8,38 @@ spec:
   project: default
   source:
     chart: metallb
-    repoURL: registry-1.docker.io/bitnamicharts
-    targetRevision: 6.3.x
+    # Upstream chart (was Bitnami's bitnamicharts/metallb 6.3.x — moved off
+    # docker.io because the Bitnami OCI catalog is rate-limited / deprecated).
+    # Images now from quay.io/metallb/{controller,speaker}.
+    repoURL: https://metallb.github.io/metallb
+    targetRevision: 0.15.x
+    helm:
+      releaseName: metallb
+      valuesObject:
+        speaker:
+          # L2-only deployment; no BGP, no FRR sidecar.
+          frr:
+            enabled: false
+        prometheus:
+          serviceMonitor:
+            controller:
+              enabled: true
+              additionalLabels:
+                release: prometheus
+            speaker:
+              enabled: true
+              additionalLabels:
+                release: prometheus
+          rbacPrometheus: true
+          namespace: prometheus
+          serviceAccount: prometheus-kube-prometheus-prometheus
+        crds:
+          enabled: true
   destination:
     server: https://kubernetes.default.svc
     namespace: metallb-system
+  # Conversion-webhook caBundles get injected by cert-manager and drift
+  # against the chart's empty default. Same as the prior Bitnami-era config.
   ignoreDifferences:
     - group: apiextensions.k8s.io
       kind: CustomResourceDefinition
@@ -26,6 +53,7 @@ spec:
         - /spec/conversion/webhook/clientConfig/caBundle
   syncPolicy:
     automated:
+      prune: true
       selfHeal: true
     syncOptions:
       - ServerSideApply=true
