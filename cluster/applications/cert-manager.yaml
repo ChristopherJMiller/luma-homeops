@@ -23,6 +23,39 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: dns
+  # cert-manager ships CRDs annotated `helm.sh/resource-policy: keep` and with
+  # large OpenAPI schemas that Argo serializes differently from the live form,
+  # producing perpetual OutOfSync. Workload itself is fine. Ignore drift on the
+  # 4 cert-manager CRDs — they're upgraded explicitly by chart version bumps.
+  ignoreDifferences:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      name: certificaterequests.cert-manager.io
+      jqPathExpressions:
+        - .spec.versions[].schema
+        - .metadata.annotations."helm.sh/resource-policy"
+        - .metadata.labels
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      name: certificates.cert-manager.io
+      jqPathExpressions:
+        - .spec.versions[].schema
+        - .metadata.annotations."helm.sh/resource-policy"
+        - .metadata.labels
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      name: challenges.acme.cert-manager.io
+      jqPathExpressions:
+        - .spec.versions[].schema
+        - .metadata.annotations."helm.sh/resource-policy"
+        - .metadata.labels
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      name: orders.acme.cert-manager.io
+      jqPathExpressions:
+        - .spec.versions[].schema
+        - .metadata.annotations."helm.sh/resource-policy"
+        - .metadata.labels
   syncPolicy:
     automated:
       prune: true
