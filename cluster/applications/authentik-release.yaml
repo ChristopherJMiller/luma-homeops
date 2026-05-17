@@ -105,7 +105,7 @@ spec:
         redis:
           enabled: true
           architecture: standalone
-          commonConfiguration: ""
+          commonConfiguration: ''
           master:
             resources:
               requests:
@@ -115,19 +115,13 @@ spec:
                 memory: 512Mi
             persistence:
               enabled: false
+          # Bitnami pulled redis-exporter:1.63.0-debian-12-r1 from Docker Hub
+          # in 2025 (move to Bitnami Secure Images). The sidecar blocked the
+          # pod's Ready, emptying the redis Service endpoints and crashlooping
+          # authentik. Disabled until we either switch chart or wire an
+          # alternative exporter image.
           metrics:
-            enabled: true
-            resources:
-              requests:
-                cpu: 50m
-                memory: 64Mi
-              limits:
-                memory: 64Mi
-            serviceMonitor:
-              enabled: true
-              namespace: authentik
-              labels:
-                release: prometheus
+            enabled: false
   destination:
     server: https://kubernetes.default.svc
     namespace: authentik
