@@ -1,0 +1,83 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ceph-nfs-export-operator
+  namespace: rook
+  labels:
+    app: ceph-nfs-export-operator
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate                      # single-leader; avoid two reconcilers racing
+  selector:
+    matchLabels:
+      app: ceph-nfs-export-operator
+  template:
+    metadata:
+      labels:
+        app: ceph-nfs-export-operator
+    spec:
+      serviceAccountName: ceph-nfs-export-operator
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 2016
+        runAsGroup: 2016
+        fsGroup: 2016
+      containers:
+        - name: operator
+          # Pinned to :latest until Renovate's docker:pinDigests bumps this
+          # to :latest@sha256:<digest> on first run. CI rebuilds :latest on
+          # every operator-source change; Renovate then opens a PR for the
+          # new digest, which is the audit trail for code changes.
+          image: ghcr.io/christopherjmiller/ceph-nfs-export-operator:latest
+          imagePullPolicy: Always
+          env:
+            - name: ROOK_CEPH_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: rook-ceph-mon
+                  key: ceph-username
+          ports:
+            - name: healthz
+              containerPort: 8080
+          livenessProbe:
+            httpGet: {path: /healthz, port: healthz}
+            periodSeconds: 30
+            initialDelaySeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet: {path: /healthz, port: healthz}
+            periodSeconds: 10
+            initialDelaySeconds: 5
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 256Mi}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false   # ceph CLI writes /etc/ceph at startup
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - {name: ceph-config, mountPath: /etc/ceph}
+            - {name: mon-endpoint-volume, mountPath: /etc/rook}
+            - {name: ceph-admin-secret, mountPath: /var/lib/rook-ceph-mon, readOnly: true}
+      volumes:
+        - name: ceph-admin-secret
+          secret:
+            secretName: rook-ceph-mon
+            optional: false
+            items:
+              - {key: ceph-secret, path: secret.keyring}
+        - name: mon-endpoint-volume
+          configMap:
+            name: rook-ceph-mon-endpoints
+            items:
+              - {key: data, path: mon-endpoints}
+        - name: ceph-config
+          emptyDir: {}
+      tolerations:
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: 5

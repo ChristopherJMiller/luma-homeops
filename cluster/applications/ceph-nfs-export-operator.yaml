@@ -1,0 +1,26 @@
+---
+# A small kopf reconciler that turns `CephNFSExport` CRs into
+# `ceph nfs export apply` calls. Replaces the satellites-nfs-exports Job
+# hook in cluster/rook-cluster/. Operator source lives under
+# operators/ceph-nfs-export-operator/.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ceph-nfs-export-operator
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/ceph-nfs-export-operator
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: rook
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
+      - ServerSideApply=true

@@ -8,4 +8,5 @@ resources:
   - fs-pool.yaml
   - ceph-nfs.yaml
   - ceph-nfs-exports.yaml
+  - satellites-octoprint-export.yaml
   - rook-ceph-tools.yaml

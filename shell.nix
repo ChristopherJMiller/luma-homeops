@@ -25,5 +25,13 @@ pkgs.mkShell {
     # nixpkgs as a top-level pkg; invoke it directly with:
     #   nix run github:ryantm/agenix -- -e satellites/secrets/<file>.age
     zstd
+
+    # operators/ceph-nfs-export-operator/: kopf-based reconciler.
+    # python3 + uv for dep management; ruff for lint; docker for local image
+    # build/test before pushing to ghcr.
+    python313
+    uv
+    ruff
+    docker
   ];
 }

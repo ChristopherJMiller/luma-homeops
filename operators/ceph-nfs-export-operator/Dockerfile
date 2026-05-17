@@ -1,0 +1,28 @@
+# Built on the ceph image so `ceph` + `cephfs-shell` are present without
+# fighting Debian's stale ceph-common. Trade-off: ~1 GB base layer. For a
+# single-replica operator that's fine; pulled once per node.
+FROM quay.io/ceph/ceph:v19.2.3
+
+# python3 ships in the base image; we only need pip + our two libs.
+RUN dnf install -y python3-pip \
+ && dnf clean all \
+ && rm -rf /var/cache/dnf
+
+WORKDIR /app
+
+COPY requirements.txt ./
+RUN python3 -m pip install --no-cache-dir --upgrade pip \
+ && python3 -m pip install --no-cache-dir -r requirements.txt
+
+COPY src/ ./src/
+
+# Match the rook-ceph-tools UID so volume mounts (rook-ceph-mon secret,
+# mon-endpoints ConfigMap) are readable without chowning.
+USER 2016:2016
+
+ENV PYTHONUNBUFFERED=1
+
+# --liveness exposes /healthz on :8080 for the kubelet probe.
+ENTRYPOINT ["kopf", "run", "--standalone", \
+            "--liveness=http://0.0.0.0:8080/healthz", \
+            "/app/src/operator.py"]

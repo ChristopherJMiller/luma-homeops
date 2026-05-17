@@ -14,5 +14,14 @@
   ],
   "kubernetes": {
     "fileMatch": ["cluster/.+\\.yaml$"]
-  }
+  },
+  "packageRules": [
+    {
+      "matchPackageNames": [
+        "ghcr.io/christopherjmiller/ceph-nfs-export-operator"
+      ],
+      "groupName": "ceph-nfs-export-operator",
+      "schedule": ["at any time"]
+    }
+  ]
 }

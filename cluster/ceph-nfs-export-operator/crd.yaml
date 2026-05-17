@@ -1,0 +1,102 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: cephnfsexports.nfs.luma-homelab.io
+  annotations:
+    argocd.argoproj.io/sync-wave: '-10'
+spec:
+  group: nfs.luma-homelab.io
+  scope: Namespaced
+  names:
+    kind: CephNFSExport
+    listKind: CephNFSExportList
+    plural: cephnfsexports
+    singular: cephnfsexport
+    shortNames:
+      - cnfsx
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Cluster
+          type: string
+          jsonPath: .spec.cluster
+        - name: FS
+          type: string
+          jsonPath: .spec.fs
+        - name: Pseudo
+          type: string
+          jsonPath: .spec.pseudo
+        - name: Applied
+          type: boolean
+          jsonPath: .status.applied
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [cluster, fs, path, pseudo, clients]
+              properties:
+                cluster:
+                  type: string
+                  description: CephNFS cluster_id (matches a Rook CephNFS .metadata.name).
+                fs:
+                  type: string
+                  description: CephFS filesystem name (matches a Rook CephFilesystem).
+                path:
+                  type: string
+                  description: Path inside the CephFS to export. Created if absent.
+                  pattern: ^/.*
+                pseudo:
+                  type: string
+                  description: NFS pseudo-path mount clients use.
+                  pattern: ^/.*
+                accessType:
+                  type: string
+                  enum: [NONE, RO, RW]
+                  default: NONE
+                squash:
+                  type: string
+                  enum: [no_root_squash, root_squash, all_squash]
+                  default: no_root_squash
+                protocols:
+                  type: array
+                  items: {type: integer}
+                  default: [4]
+                transports:
+                  type: array
+                  items: {type: string, enum: [TCP, UDP]}
+                  default: [TCP]
+                clients:
+                  type: array
+                  minItems: 1
+                  items:
+                    type: object
+                    required: [addresses]
+                    properties:
+                      addresses:
+                        type: array
+                        minItems: 1
+                        items: {type: string}
+                      accessType:
+                        type: string
+                        enum: [RO, RW]
+                        default: RW
+                      squash:
+                        type: string
+                        enum: [no_root_squash, root_squash, all_squash]
+                        default: no_root_squash
+            status:
+              type: object
+              properties:
+                applied:
+                  type: boolean

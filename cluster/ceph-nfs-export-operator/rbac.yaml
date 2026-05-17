@@ -1,0 +1,44 @@
+---
+# RBAC for the kopf reconciler. Runs in the `rook` namespace so it can
+# bind-mount the existing `rook-ceph-mon` Secret + `rook-ceph-mon-endpoints`
+# ConfigMap that the rook-ceph-tools pod uses for ceph auth.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ceph-nfs-export-operator
+  namespace: rook
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ceph-nfs-export-operator
+rules:
+  # kopf framework needs CRUD on its watched CRDs + status subresource.
+  - apiGroups: [nfs.luma-homelab.io]
+    resources: [cephnfsexports]
+    verbs: [get, list, watch, patch, update]
+  - apiGroups: [nfs.luma-homelab.io]
+    resources: [cephnfsexports/status]
+    verbs: [get, patch, update]
+  # kopf event posting (for kubectl describe / Argo "Events" tab).
+  - apiGroups: ['']
+    resources: [events]
+    verbs: [create, patch]
+  # kopf peering / leader-ish coordination: it queries its own CRD set
+  # at startup. Read-only on CRDs themselves so it can introspect.
+  - apiGroups: [apiextensions.k8s.io]
+    resources: [customresourcedefinitions]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ceph-nfs-export-operator
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ceph-nfs-export-operator
+subjects:
+  - kind: ServiceAccount
+    name: ceph-nfs-export-operator
+    namespace: rook

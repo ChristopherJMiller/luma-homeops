@@ -1,0 +1,26 @@
+---
+# Declarative NFS export for the octoprint satellite, reconciled by the
+# ceph-nfs-export-operator (cluster/ceph-nfs-export-operator/). To add a
+# new satellite that needs network storage, drop a sibling file here.
+#
+# Until ceph-nfs-exports.yaml (the legacy Sync-hook Job) is removed, this
+# CR and the Job both target the same export — `ceph nfs export apply`
+# is idempotent so they don't fight. The Job stays as a fallback during
+# operator burn-in; remove it once the operator has reconciled at least
+# once cleanly.
+apiVersion: nfs.luma-homelab.io/v1alpha1
+kind: CephNFSExport
+metadata:
+  name: satellites-octoprint
+  namespace: rook
+spec:
+  cluster: satellites
+  fs: fs-pool
+  path: /satellites/octoprint
+  pseudo: /satellites/octoprint
+  squash: no_root_squash
+  accessType: NONE
+  clients:
+    - addresses: [192.168.0.243/32]
+      accessType: RW
+      squash: no_root_squash
