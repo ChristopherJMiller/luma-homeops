@@ -85,6 +85,11 @@ spec:
               - job_name: kubernetes-pods
                 kubernetes_sd_configs:
                   - role: pod
+                # Prom 3 rejects scrape responses with unknown Content-Type
+                # (e.g. text/html from accidentally-annotated targets); the
+                # fallback restores Prom 2.x leniency — scrape succeeds, no
+                # series are ingested if the body doesn't parse as metrics.
+                fallback_scrape_protocol: PrometheusText0.0.4
                 relabel_configs:
                   - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
                     action: keep
