@@ -1,0 +1,27 @@
+---
+# Self-hosted OCI pull-through cache for docker.io. Exposed at
+# 192.168.0.231:5000 on the LAN (lan-internal MetalLB pool). Talos nodes
+# point their containerd at this for docker.io image pulls — avoids the
+# Docker Hub rate-limit hot path. See cluster/registry/ for the config.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: registry
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/registry
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: registry
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ServerSideApply=true

@@ -1,0 +1,54 @@
+---
+# distribution/distribution config — single-purpose pull-through cache
+# for docker.io. The proxy.remoteurl is what makes this a cache rather
+# than a standalone registry (an attempt to push here errors with
+# 405 Method Not Allowed, intentionally).
+#
+# Cluster pulls flow:
+#   containerd on Talos node
+#     -> http://192.168.0.231:5000   (this registry, LAN MetalLB IP)
+#       -> https://registry-1.docker.io   (origin, fetched once + cached)
+#
+# Only docker.io is mirrored. quay.io / ghcr.io don't have aggressive
+# rate limits and are left direct.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: registry-config
+  namespace: registry
+data:
+  config.yml: |
+    version: 0.1
+    log:
+      level: info
+      fields:
+        service: registry
+    storage:
+      filesystem:
+        rootdirectory: /var/lib/registry
+      cache:
+        blobdescriptor: inmemory
+      delete:
+        enabled: true
+      maintenance:
+        readonly:
+          enabled: false
+    http:
+      addr: :5000
+      headers:
+        X-Content-Type-Options: [nosniff]
+      debug:
+        addr: :5001
+        prometheus:
+          enabled: true
+          path: /metrics
+    health:
+      storagedriver:
+        enabled: true
+        interval: 10s
+        threshold: 3
+    proxy:
+      remoteurl: https://registry-1.docker.io
+      # Anonymous Docker Hub pulls work for public images. If we ever
+      # need authenticated rate-limit-free pulls, mount creds via a
+      # SealedSecret and set username/password here.

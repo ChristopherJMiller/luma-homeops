@@ -1,0 +1,57 @@
+---
+# LAN-internal LoadBalancer — pinned to 192.168.0.231 (lan-internal pool
+# is 192.168.0.230-.239, .230 is taken by CephNFS). Talos nodes pull
+# images via this IP — they're on the LAN, not in the cluster network,
+# so they can't resolve cluster DNS.
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry
+  namespace: registry
+  annotations:
+    metallb.universe.tf/address-pool: lan-internal
+    metallb.universe.tf/loadBalancerIPs: 192.168.0.231
+spec:
+  type: LoadBalancer
+  loadBalancerIP: 192.168.0.231
+  selector:
+    app: registry
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
+      protocol: TCP
+---
+# ClusterIP for the prometheus metrics endpoint (not exposed externally).
+apiVersion: v1
+kind: Service
+metadata:
+  name: registry-metrics
+  namespace: registry
+  labels:
+    app: registry
+spec:
+  type: ClusterIP
+  selector:
+    app: registry
+  ports:
+    - name: debug
+      port: 5001
+      targetPort: debug
+      protocol: TCP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: registry
+  namespace: registry
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: registry
+  endpoints:
+    - port: debug
+      path: /metrics
+      interval: 30s

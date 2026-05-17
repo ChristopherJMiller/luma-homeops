@@ -30,6 +30,7 @@ resources:
   - logging-secrets.yaml
   - realliance-net.yaml
   - realmic.yaml
+  - registry.yaml
   - rook.yaml
   - rook-cluster.yaml
   - royaltracker.yaml

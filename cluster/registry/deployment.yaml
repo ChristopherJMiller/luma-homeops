@@ -1,0 +1,64 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: registry
+  namespace: registry
+  labels:
+    app: registry
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate  # PVC is RWO; can't run two replicas anyway
+  selector:
+    matchLabels:
+      app: registry
+  template:
+    metadata:
+      labels:
+        app: registry
+    spec:
+      containers:
+        - name: registry
+          image: registry:3
+          ports:
+            - name: http
+              containerPort: 5000
+            - name: debug
+              containerPort: 5001
+          env:
+            # Pull-through cache with replicas=1 — HTTP_SECRET only needs
+            # to be stable across restarts, doesn't need to be confidential
+            # (no uploads, no multi-instance coordination).
+            - name: REGISTRY_HTTP_SECRET
+              value: galaxy-registry-cache-2026
+          volumeMounts:
+            - name: config
+              mountPath: /etc/distribution
+            - name: cache
+              mountPath: /var/lib/registry
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: registry-config
+        - name: cache
+          persistentVolumeClaim:
+            claimName: registry-cache

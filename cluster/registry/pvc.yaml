@@ -1,0 +1,16 @@
+---
+# Backing store for the pull-through cache. Generously sized — typical
+# images are 100MB-1GB, this comfortably holds the long tail without
+# eviction churn. Eviction is handled by distribution's storage driver
+# (LRU-ish) if it ever fills up.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: registry-cache
+  namespace: registry
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 50Gi
