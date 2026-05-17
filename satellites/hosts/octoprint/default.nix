@@ -15,6 +15,16 @@
     enable = true;
     host = "0.0.0.0";
     port = 5000;
+    # Tolerate brief USB-serial stalls on the Pi 3B's shared USB hub. The
+    # smsc95xx turbo_mode=N kernel param (see pi-3b.nix) prevents most of
+    # them; these higher thresholds let a print survive any that still slip
+    # through (URB recovery is typically 1–3s, default 18s ceiling killed it).
+    extraConfig = {
+      serial = {
+        timeout = { communication = 60; };
+        maxCommunicationTimeouts = { printing = 10; };
+      };
+    };
   };
 
   users.users.octoprint.extraGroups = [ "dialout" "video" ];

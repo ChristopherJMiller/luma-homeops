@@ -5,6 +5,15 @@
     raspberry-pi-3.base
   ];
 
+  # smsc95xx (the USB-attached ethernet chip on Pi 3B) defaults turbo_mode=Y
+  # in mainline. On a Pi 3 the ethernet shares one internal USB 2.0 hub with
+  # every other USB device — including USB-serial printers and webcams — and
+  # turbo lets ethernet grab multi-frame bulk transfers that starve bulk-IN
+  # on the other devices. On octoprint this manifested as `urb stopped: -32`
+  # stalls on the CH340 mid-print, killing prints after 6 OctoPrint timeouts.
+  # Disabling turbo costs ~50% ethernet throughput which satellites don't use.
+  boot.kernelParams = [ "smsc95xx.turbo_mode=N" ];
+
   networking.useNetworkd = true;
   networking.useDHCP = false;
   # Wired Ethernet first if a cable is plugged in.
