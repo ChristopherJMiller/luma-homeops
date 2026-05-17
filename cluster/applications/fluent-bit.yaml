@@ -24,6 +24,19 @@ spec:
           create: true
         podSecurityPolicy:
           create: false
+        # /api/v1/health flips to 500 whenever any output is in retry —
+        # the syslog→VyOS UDP path retries often (UDP is lossy by design),
+        # which left pods flapping 0/1 → 1/1 every few seconds. There's
+        # no Service in front of a DaemonSet, so readiness should reflect
+        # "process is up" (uptime endpoint), not output-health (which is
+        # surfaced through the fluentbit_output_retries_failed_total Prom
+        # metric instead).
+        readinessProbe:
+          httpGet:
+            path: /api/v1/uptime
+            port: http
+            scheme: HTTP
+          periodSeconds: 10
         resources:
           limits:
             memory: 200Mi
