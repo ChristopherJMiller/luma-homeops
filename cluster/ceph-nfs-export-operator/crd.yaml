@@ -97,6 +97,12 @@ spec:
                         default: no_root_squash
             status:
               type: object
+              x-kubernetes-preserve-unknown-fields: true
+              # kopf stores handler tracking state under status.kopf and
+              # other dynamic keys; preserving unknown fields keeps it
+              # from getting pruned by k8s schema validation (which would
+              # otherwise generate "Patching failed with inconsistencies"
+              # warnings and break retry tracking).
               properties:
                 applied:
                   type: boolean
