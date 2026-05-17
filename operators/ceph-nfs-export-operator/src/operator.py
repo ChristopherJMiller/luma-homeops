@@ -66,20 +66,46 @@ def _run(argv: list[str], stdin: str | None = None) -> subprocess.CompletedProce
     )
 
 
-def _ensure_dir(fs_name: str, path: str, logger: logging.Logger) -> None:
-    """mkdir -p the export path inside the CephFS via cephfs-shell.
+# libcephfs's Python binding (python3-cephfs) in the ceph base image is
+# compiled against Python 3.9 only. The operator itself runs on Python
+# 3.12 (kopf >=1.39 requires it), so we shell out to /usr/bin/python3
+# (3.9) to do the mkdir via libcephfs. cephfs-shell isn't packaged in the
+# ceph image, so this is the cleanest path that doesn't pull a kernel
+# mount or ceph-fuse into the container.
+_MKDIR_PY = """
+import sys, cephfs
+fs_name = sys.argv[1]
+path = sys.argv[2].encode()
+c = cephfs.LibCephFS(conffile='/etc/ceph/ceph.conf')
+c.init()
+c.mount(b'/', filesystem_name=fs_name)
+try:
+    c.mkdirs(path, 0o755)
+finally:
+    c.unmount()
+    c.shutdown()
+"""
 
-    `ceph nfs export apply` requires the path to exist already. cephfs-shell
-    uses libcephfs so it works without a kernel mount.
+
+def _ensure_dir(fs_name: str, path: str, logger: logging.Logger) -> None:
+    """mkdir -p the export path inside the CephFS via libcephfs.
+
+    `ceph nfs export apply` requires the path to pre-exist. Uses the
+    system Python 3.9 (which has the python3-cephfs C extension) as a
+    one-shot script.
     """
-    cp = _run(["cephfs-shell", "--fs", fs_name, "-c", f"mkdir -p {path}"])
-    if cp.returncode != 0 and "exists" not in (cp.stderr + cp.stdout).lower():
-        # Surface as a temporary error — the export apply below will fail
-        # explicitly if the path really isn't there, and we want to retry.
+    cp = subprocess.run(
+        ["/usr/bin/python3", "-c", _MKDIR_PY, fs_name, path],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if cp.returncode != 0:
         raise kopf.TemporaryError(
-            f"cephfs-shell mkdir failed (rc={cp.returncode}): {cp.stderr.strip()}",
+            f"libcephfs mkdir failed (rc={cp.returncode}): {cp.stderr.strip()}",
             delay=30,
         )
+    logger.info("ensured %s on fs %s", path, fs_name)
 
 
 def _export_payload(spec: dict[str, Any]) -> dict[str, Any]:
