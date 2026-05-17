@@ -19,6 +19,7 @@ import os
 import subprocess
 from typing import Any
 
+import cephfs
 import kopf
 
 GROUP = "nfs.luma-homelab.io"
@@ -66,45 +67,24 @@ def _run(argv: list[str], stdin: str | None = None) -> subprocess.CompletedProce
     )
 
 
-# libcephfs's Python binding (python3-cephfs) in the ceph base image is
-# compiled against Python 3.9 only. The operator itself runs on Python
-# 3.12 (kopf >=1.39 requires it), so we shell out to /usr/bin/python3
-# (3.9) to do the mkdir via libcephfs. cephfs-shell isn't packaged in the
-# ceph image, so this is the cleanest path that doesn't pull a kernel
-# mount or ceph-fuse into the container.
-_MKDIR_PY = """
-import sys, cephfs
-fs_name = sys.argv[1]
-path = sys.argv[2].encode()
-c = cephfs.LibCephFS(conffile='/etc/ceph/ceph.conf')
-c.init()
-c.mount(b'/', filesystem_name=fs_name)
-try:
-    c.mkdirs(path, 0o755)
-finally:
-    c.unmount()
-    c.shutdown()
-"""
-
-
 def _ensure_dir(fs_name: str, path: str, logger: logging.Logger) -> None:
     """mkdir -p the export path inside the CephFS via libcephfs.
 
-    `ceph nfs export apply` requires the path to pre-exist. Uses the
-    system Python 3.9 (which has the python3-cephfs C extension) as a
-    one-shot script.
+    `ceph nfs export apply` requires the path to pre-exist. `LibCephFS.mkdirs`
+    is the libcephfs equivalent of `mkdir -p` (idempotent on existing dirs).
     """
-    cp = subprocess.run(
-        ["/usr/bin/python3", "-c", _MKDIR_PY, fs_name, path],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if cp.returncode != 0:
-        raise kopf.TemporaryError(
-            f"libcephfs mkdir failed (rc={cp.returncode}): {cp.stderr.strip()}",
-            delay=30,
-        )
+    client = cephfs.LibCephFS(conffile=os.path.join(CEPH_CONF_DIR, "ceph.conf"))
+    try:
+        client.init()
+        client.mount(b"/", filesystem_name=fs_name)
+        try:
+            client.mkdirs(path.encode(), 0o755)
+        finally:
+            client.unmount()
+    except Exception as e:
+        raise kopf.TemporaryError(f"libcephfs mkdir failed: {e}", delay=30) from e
+    finally:
+        client.shutdown()
     logger.info("ensured %s on fs %s", path, fs_name)
 
 

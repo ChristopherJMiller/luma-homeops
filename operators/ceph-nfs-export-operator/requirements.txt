@@ -1,2 +1,6 @@
-kopf==1.44.5
+# kopf 1.39+ requires Python >= 3.10. The ceph base image ships
+# python3-cephfs built only for the system Python (3.9 on CentOS Stream
+# 9), so we stay on the 1.38.x series. Renovate is configured to honor
+# this in .renovaterc.json (allowedVersions: "<1.39").
+kopf==1.38.0
 kubernetes==31.0.0

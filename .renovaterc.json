@@ -22,6 +22,12 @@
       ],
       "groupName": "ceph-nfs-export-operator",
       "schedule": ["at any time"]
+    },
+    {
+      "matchPackageNames": ["kopf"],
+      "matchFileNames": ["operators/ceph-nfs-export-operator/requirements.txt"],
+      "allowedVersions": "<1.39",
+      "description": "kopf 1.39+ requires python>=3.10; ceph base image ships python3-cephfs only for system python 3.9. Unpin when ceph base bumps to a newer Stream."
     }
   ]
 }
