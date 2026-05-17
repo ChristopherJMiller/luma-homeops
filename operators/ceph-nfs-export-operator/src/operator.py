@@ -72,8 +72,18 @@ def _ensure_dir(fs_name: str, path: str, logger: logging.Logger) -> None:
 
     `ceph nfs export apply` requires the path to pre-exist. `LibCephFS.mkdirs`
     is the libcephfs equivalent of `mkdir -p` (idempotent on existing dirs).
+
+    auth_id is set explicitly to the local part of ROOK_CEPH_USERNAME
+    (e.g. "client.admin" -> "admin") so libcephfs binds to the same cephx
+    identity we bootstrapped into the keyring, instead of falling back to
+    a default that may not have caps on the CephFS root.
     """
-    client = cephfs.LibCephFS(conffile=os.path.join(CEPH_CONF_DIR, "ceph.conf"))
+    username = os.environ["ROOK_CEPH_USERNAME"]
+    auth_id = username.split(".", 1)[1] if username.startswith("client.") else username
+    client = cephfs.LibCephFS(
+        conffile=os.path.join(CEPH_CONF_DIR, "ceph.conf"),
+        auth_id=auth_id,
+    )
     try:
         client.init()
         client.mount(b"/", filesystem_name=fs_name)
