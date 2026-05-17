@@ -85,15 +85,28 @@ spec:
               - job_name: kubernetes-pods
                 kubernetes_sd_configs:
                   - role: pod
-                # Prom 3 rejects scrape responses with unknown Content-Type
-                # (e.g. text/html from accidentally-annotated targets); the
-                # fallback restores Prom 2.x leniency — scrape succeeds, no
-                # series are ingested if the body doesn't parse as metrics.
-                fallback_scrape_protocol: PrometheusText0.0.4
                 relabel_configs:
                   - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
                     action: keep
                     regex: true
+                  # Honor prometheus.io/port — rewrite the SD-provided
+                  # <pod-ip>:<containerPort> to <pod-ip>:<annotated-port>.
+                  # Without this, every container port on an annotated
+                  # pod is scraped, which is how gonic ended up being
+                  # scraped on its HTML :80 and forced Prom 3 to fall
+                  # back to text/plain leniency.
+                  - source_labels:
+                      - __address__
+                      - __meta_kubernetes_pod_annotation_prometheus_io_port
+                    action: replace
+                    regex: ([^:]+)(?::\d+)?;(\d+)
+                    replacement: $1:$2
+                    target_label: __address__
+                  # Honor prometheus.io/path.
+                  - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+                    action: replace
+                    target_label: __metrics_path__
+                    regex: (.+)
               - job_name: vyos-snmp
                 static_configs:
                   - targets: [192.168.0.1:161]

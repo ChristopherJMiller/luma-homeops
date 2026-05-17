@@ -1,3 +1,4 @@
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,20 +15,17 @@ spec:
     metadata:
       labels:
         app: gonic
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "80"
     spec:
       initContainers:
         - name: init-playlists
           image: busybox:1
-          command: ["sh", "-c", "mkdir -p /playlists/data"]
+          command: [sh, -c, mkdir -p /playlists/data]
           volumeMounts:
             - name: playlists-storage
               mountPath: /playlists
         - name: init-music
           image: busybox:1
-          command: ["sh", "-c", "mkdir -p /music/data"]
+          command: [sh, -c, mkdir -p /music/data]
           volumeMounts:
             - name: music-storage
               mountPath: /music
@@ -39,19 +37,19 @@ spec:
               name: http
           env:
             - name: GONIC_MUSIC_PATH
-              value: "/music/data"
+              value: /music/data
             - name: GONIC_CACHE_PATH
-              value: "/cache"
+              value: /cache
             - name: GONIC_DB_PATH
-              value: "/data/gonic.db"
+              value: /data/gonic.db
             - name: GONIC_SCAN_INTERVAL
-              value: "1440"
+              value: '1440'
             - name: GONIC_SCAN_AT_START_ENABLED
-              value: "false"
+              value: 'false'
             - name: GONIC_SCAN_WATCHER_ENABLED
-              value: "true"
+              value: 'true'
             - name: GONIC_PLAYLISTS_PATH
-              value: "/playlists/data"
+              value: /playlists/data
           volumeMounts:
             - name: music-storage
               mountPath: /music
@@ -88,16 +86,16 @@ spec:
               name: webdav
           env:
             - name: USERNAME
-              value: "media"
+              value: media
             - name: PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: webdav-music-pass
                   key: password
             - name: UID
-              value: "1000"
+              value: '1000'
             - name: GID
-              value: "1000"
+              value: '1000'
           volumeMounts:
             - name: music-storage
               mountPath: /media
