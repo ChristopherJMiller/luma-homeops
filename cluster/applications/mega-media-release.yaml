@@ -51,10 +51,12 @@ spec:
               key: lidarr
           readarr:
             enabled: true
-            # chart 0.8.x defaults to tag: release, but hotio/readarr has no
-            # release channel (Readarr upstream has no stable release). Pin
-            # back to nightly.
-            tag: nightly
+            # hotio yanked their readarr container — ghcr.io/hotio/readarr
+            # token endpoint returns 403 DENIED for every tag. Switch to
+            # linuxserver's maintained build (develop channel; readarr
+            # upstream has no stable release).
+            image: ghcr.io/linuxserver/readarr
+            tag: develop
             apiKey:
               name: api-keys
               key: readarr
