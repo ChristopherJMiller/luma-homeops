@@ -32,6 +32,18 @@ spec:
             # (no uploads, no multi-instance coordination).
             - name: REGISTRY_HTTP_SECRET
               value: galaxy-registry-cache-2026
+            # Docker Hub PAT — lifts anonymous 100/6h rate limit to 200/6h.
+            # Overrides proxy.username/password in config.yml.
+            - name: REGISTRY_PROXY_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: dockerhub-pat
+                  key: username
+            - name: REGISTRY_PROXY_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: dockerhub-pat
+                  key: password
           volumeMounts:
             - name: config
               mountPath: /etc/distribution
