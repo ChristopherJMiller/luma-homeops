@@ -52,11 +52,11 @@ spec:
           readarr:
             enabled: true
             # hotio yanked their readarr container — ghcr.io/hotio/readarr
-            # token endpoint returns 403 DENIED for every tag. Switch to
-            # linuxserver's maintained build (develop channel; readarr
-            # upstream has no stable release).
+            # token endpoint returns 403 DENIED for every tag.
+            # LSIO's floating tags (develop, nightly) have empty manifest
+            # lists at the moment — pin to a versioned tag with linux/amd64.
             image: ghcr.io/linuxserver/readarr
-            tag: develop
+            tag: nightly-0.1.0.1082-ls47
             apiKey:
               name: api-keys
               key: readarr
