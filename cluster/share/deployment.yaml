@@ -1,0 +1,69 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: filebrowser
+  labels:
+    app.kubernetes.io/name: filebrowser
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: filebrowser
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: filebrowser
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: middle
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+      containers:
+        - name: filebrowser
+          image: filebrowser/filebrowser:v2.63.4
+          args:
+            - --database=/database/filebrowser.db
+            - --root=/srv
+            - --address=0.0.0.0
+            - --port=80
+            - --auth.method=noauth
+            - --log=stdout
+          ports:
+            - name: http
+              containerPort: 80
+          volumeMounts:
+            - name: media
+              mountPath: /srv
+              readOnly: true
+            - name: database
+              mountPath: /database
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+      volumes:
+        - name: media
+          persistentVolumeClaim:
+            claimName: mm-media
+        - name: database
+          persistentVolumeClaim:
+            claimName: filebrowser-data

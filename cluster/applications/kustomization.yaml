@@ -41,5 +41,6 @@ resources:
   - prometheus-stack-config.yaml
   - prometheus-snmp-exporter.yaml
   - sealed-secrets.yaml
+  - share.yaml
   - trivy-operator.yaml
   - word-arena.yaml
