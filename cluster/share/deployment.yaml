@@ -30,7 +30,7 @@ spec:
         # 500 "the resource does not exist". Initialize the DB, ensure
         # an admin user exists, and force auth.method=noauth.
         - name: seed-config
-          image: filebrowser/filebrowser:v2.63.3
+          image: filebrowser/filebrowser:v2.63.4@sha256:69131aef9a415cbb0d62ada500ffdfbfe1a535ab860b429fd360676c00f84d1b
           command: [sh, -c]
           args:
             - |
@@ -48,7 +48,7 @@ spec:
               mountPath: /database
       containers:
         - name: filebrowser
-          image: filebrowser/filebrowser:v2.63.3
+          image: filebrowser/filebrowser:v2.63.4@sha256:69131aef9a415cbb0d62ada500ffdfbfe1a535ab860b429fd360676c00f84d1b
           args:
             - --database=/database/filebrowser.db
             - --root=/srv
