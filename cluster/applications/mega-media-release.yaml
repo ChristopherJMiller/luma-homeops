@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://realliance.github.io/helm-mega-media
     chart: mega-media
-    targetRevision: 0.4.1
+    targetRevision: 0.8.3
     helm:
       releaseName: mm
       valuesObject:
@@ -23,7 +23,12 @@ spec:
           passwordFromSecretKeyRef:
             name: postgres.acid-media.credentials.postgresql.acid.zalan.do
             key: password
+        reconciler:
+          enabled: true
         arrs:
+          config:
+            storageClassName: rook-ceph-block
+            size: 8Gi
           sonarr:
             enabled: true
             apiKey:
@@ -34,37 +39,21 @@ spec:
                 memory: 400Mi
               limits:
                 memory: 400Mi
-            mediaCovers:
-              enabled: true
-              storageClassName: rook-ceph-block
-              size: 4Gi
           radarr:
             enabled: true
             apiKey:
               name: api-keys
               key: radarr
-            mediaCovers:
-              enabled: true
-              storageClassName: rook-ceph-block
-              size: 4Gi
           lidarr:
             enabled: true
             apiKey:
               name: api-keys
               key: lidarr
-            mediaCovers:
-              enabled: true
-              storageClassName: rook-ceph-block
-              size: 4Gi
           readarr:
             enabled: true
             apiKey:
               name: api-keys
               key: readarr
-            mediaCovers:
-              enabled: true
-              storageClassName: rook-ceph-block
-              size: 4Gi
           prowlarr:
             enabled: true
             apiKey:
@@ -503,10 +492,6 @@ spec:
         media:
           storageClassName: rook-ceph-block
           size: 3000Gi
-        mediaCovers:
-          enabled: true
-          storageClassName: rook-ceph-block
-          size: 4Gi
         ingress:
           className: nginx
           endpoints:
