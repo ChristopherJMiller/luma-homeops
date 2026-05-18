@@ -40,7 +40,7 @@ jobs:
             substituters = https://cache.nixos.org https://nixos-raspberrypi.cachix.org https://christopherjmiller.cachix.org
             trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI= christopherjmiller.cachix.org-1:SpwpBjcK+4KV9+rd6V5+01ivGMu4KPBytdgbst3GNnE=
 
-      - uses: cachix/cachix-action@v15
+      - uses: cachix/cachix-action@v17
         with:
           name: christopherjmiller
           authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
