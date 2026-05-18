@@ -1,7 +1,9 @@
 ---
-# Public, no-auth ingress for share links. Only the paths Filebrowser uses
-# for unauthenticated share rendering are exposed here; everything else
-# falls through to share-admin (Authentik-gated).
+# Public, no-auth ingress — only /share/<token> is exposed without
+# Authentik. /static/* and /api/public/* fall through to share-admin
+# (Authentik-gated), which breaks the SPA-rendered share page for
+# unauthenticated friends. Direct file download at
+# /api/public/dl/<hash> also requires auth.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -9,9 +11,8 @@ metadata:
   annotations:
     kubernetes.io/ingress.class: nginx
     external-dns.alpha.kubernetes.io/target: chrismiller.xyz
-    nginx.ingress.kubernetes.io/proxy-body-size: '0'
-    nginx.ingress.kubernetes.io/proxy-read-timeout: '3600'
-    nginx.ingress.kubernetes.io/proxy-send-timeout: '3600'
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_clear_headers "Content-Security-Policy";
 spec:
   ingressClassName: nginx
   tls:
@@ -23,20 +24,6 @@ spec:
       http:
         paths:
           - path: /share
-            pathType: Prefix
-            backend:
-              service:
-                name: filebrowser
-                port:
-                  number: 80
-          - path: /api/public
-            pathType: Prefix
-            backend:
-              service:
-                name: filebrowser
-                port:
-                  number: 80
-          - path: /static
             pathType: Prefix
             backend:
               service:
