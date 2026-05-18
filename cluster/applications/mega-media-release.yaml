@@ -213,7 +213,7 @@ spec:
             action_on_unwanted_extensions = 2
             unwanted_extensions_mode = 0
             new_nzb_on_failure = 0
-            history_retention = "0"
+            history_retention = ""
             history_retention_option = all
             history_retention_number = 0
             quota_size = ""
