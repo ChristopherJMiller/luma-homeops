@@ -25,8 +25,10 @@ spec:
         runAsGroup: 1000
         runAsNonRoot: true
       initContainers:
-        # auth.method is a DB-only setting in v2.63+; seed it before the
-        # server starts. Idempotent on subsequent restarts.
+        # noauth in v2.63 still needs at least one user in the DB to be
+        # the "auto-logged-in" identity; without it /api/login returns
+        # 500 "the resource does not exist". Initialize the DB, ensure
+        # an admin user exists, and force auth.method=noauth.
         - name: seed-config
           image: filebrowser/filebrowser:v2.63.3
           command: [sh, -c]
@@ -37,6 +39,9 @@ spec:
               if [ ! -f "$DB" ]; then
                 filebrowser -d "$DB" config init
               fi
+              # Password is unused under noauth; "users add" errors if
+              # admin already exists, which we ignore.
+              filebrowser -d "$DB" users add admin "$(head -c 32 /dev/urandom | base64)" --perm.admin || true
               filebrowser -d "$DB" config set --auth.method=noauth
           volumeMounts:
             - name: database
