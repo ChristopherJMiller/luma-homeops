@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://realliance.github.io/helm-mega-media
     chart: mega-media
-    targetRevision: 0.8.6
+    targetRevision: 0.8.7
     helm:
       releaseName: mm
       valuesObject:
@@ -28,7 +28,7 @@ spec:
           # chart defaults tag: latest + pullPolicy: IfNotPresent, which
           # leaves the kubelet using a cached `:latest` after the upstream
           # image is rebuilt. Pin to the current build sha to force a pull.
-          tag: fed3f67
+          tag: 44e7fe4
         arrs:
           config:
             storageClassName: rook-ceph-block
