@@ -61,7 +61,6 @@ spec:
           volumeMounts:
             - name: media
               mountPath: /srv
-              readOnly: true
             - name: database
               mountPath: /database
           resources:
