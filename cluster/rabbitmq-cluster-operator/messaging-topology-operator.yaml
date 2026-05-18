@@ -2443,7 +2443,7 @@ spec:
             - --health-probe-bind-address=:8081
           command:
             - /manager
-          image: ghcr.io/rabbitmq/messaging-topology-operator:1.19.2
+          image: ghcr.io/rabbitmq/messaging-topology-operator:1.19.2@sha256:c115f5c67b093cbf34c8b77ef232aa9742f67ce51ec0113bdc98fbee0b341783
           livenessProbe:
             httpGet:
               path: /healthz

@@ -36,7 +36,7 @@ spec:
       containers:
         - name: atticd
           # renovate: datasource=docker depName=ghcr.io/zhaofengli/attic
-          image: ghcr.io/zhaofengli/attic:cf7294607583a8d9f06026007da1ced564d43c86
+          image: ghcr.io/zhaofengli/attic:cf7294607583a8d9f06026007da1ced564d43c86@sha256:4781271f8bedc37bdf6c082c468348f277f95e1f368473f7f9f88776142c9660
           args:
             - --config
             - /etc/atticd/server.toml
