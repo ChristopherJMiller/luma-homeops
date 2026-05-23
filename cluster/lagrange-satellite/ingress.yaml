@@ -20,8 +20,9 @@ metadata:
     # ingress LB at 192.168.0.6). external-dns only manages CNAME+TXT
     # records, so it needs the target spelled out.
     external-dns.alpha.kubernetes.io/target: chrismiller.xyz
-    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
-    nginx.ingress.kubernetes.io/proxy-ssl-verify: off
+    # lagrange-admin speaks plain HTTP on :8443 (the port number is high
+    # but the protocol is not TLS). nginx terminates the public TLS; the
+    # upstream hop is HTTP all the way through socat to 10.99.0.2:8443.
 spec:
   ingressClassName: nginx
   tls:
