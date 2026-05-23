@@ -1,0 +1,15 @@
+---
+# Public WireGuard peer info for the cluster-side gateway. The cluster's
+# own [Interface] section (Address/ListenPort/PrivateKey) is assembled by
+# the deployment's init container — the PrivateKey lives in the wg-gateway
+# Secret (SealedSecret-backed). Only PUBLIC values go here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wg-gateway
+  namespace: ops
+data:
+  peers.conf: |
+    [Peer]
+    PublicKey  = Ib85sHJ1/xPrSuuQiVH+hhx29RBjApKcGPRzaZlfOAs=
+    AllowedIPs = 10.99.0.2/32

@@ -1,0 +1,15 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: wg-gateway
+  namespace: ops
+spec:
+  encryptedData:
+    privatekey:
+      AgBn+wDaxRTBYD/nXfeoDYZV8RXa7hR1sMiTxZvazQDdfwdgxdvFA4c6j/zNJEpUHl9Ph58Ey+Q/6GtnCg8xS7mxlaIdd82PjDALlwPmFnt+0c/IPShKW05NyexlOkXkuwxKr0tD7a6XLbvaeODPFaj8Wr9Jf4YEkkKNNXyMWl+wkjeheJSC6KPpMxLoFgBzg2Y14DQK7iYH7U3JrOgPdZyDZRXZOblggKN/T6z6gLS8NA7SOGvOj7kGmkg8c15W9s4lDadeCf8ightGpTojLlfBQMI4bi/s+N7Mz49vup+OVf5W3Ye6EMJMLtPkSpeqAI1EFsfE9X9yQUBLdrcUCGMkr/lgFysiXizNO+RITUXurAwqbsgqcoDqNeJXjSHNqYaE/3ZRphdk/Ql3+CSE/05ncR28igaUSb8g0OC0KioTLqGSVBd091ZAMII6Jb6Rl/o5HYULz9xWwLBfOUMdxAgbrxK0cEznBxzQUPmLKJj+q/BstPntnFHkdH0v+R+w4OEQwnTn87r/3CSEIExOGnVyUtEzixb5xbtwzLVf+v+wlWKOsD3JfkjhRn17WpV/0P7BPQu4DGk90WVCLl7ODRnVHJXmjjVZFwbR3pvi6MCrg9H4d+sbkZPd7u3TgHA+Oy/gWGy/fVh6rv8G/8GjzRgRTP9P+plf2A2ca7hrIHtWJ3e+upUEXIVIxuDckHzuCyUiUSeDYCPs8vA5KhIqibMrkOR7iCIeWnJ9yoGn4LYqibtWLtu7GPvTiyv9Og==
+  template:
+    metadata:
+      name: wg-gateway
+      namespace: ops
+    type: Opaque

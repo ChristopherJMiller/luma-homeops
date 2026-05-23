@@ -1,0 +1,35 @@
+---
+# Public ingress for the Lagrange admin API. Auth is bearer-token only
+# for now — the client sends Authorization: Bearer <token> directly; the
+# token lives in the lagrange-admin-token Secret (SealedSecret-backed) and
+# matches what's in the Lagrange host's sops-encrypted satellite.yaml.
+#
+# external-dns will provision lagrange.chrismiller.xyz pointing at the
+# ingress LB (192.168.0.6 / Cloudflare). Authentik SSO is intentionally
+# deferred — re-add an auth-url annotation here once an nginx-mode outpost
+# is set up in the authentik namespace.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lagrange-admin
+  namespace: ops
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+    nginx.ingress.kubernetes.io/proxy-ssl-verify: off
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [lagrange.chrismiller.xyz]
+      secretName: lagrange-admin-tls
+  rules:
+    - host: lagrange.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: lagrange-admin
+                port:
+                  number: 8443

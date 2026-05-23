@@ -1,0 +1,29 @@
+---
+# Cluster-side WireGuard gateway + admin proxy for the Lagrange compute
+# satellite (hostname `lagrange` at 192.168.0.244). Lagrange itself is
+# managed from a separate repo (github:christopherjmiller/lagrange) — only
+# the cluster-side glue lives here.
+#
+# See cluster/lagrange-satellite/ for manifests.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: lagrange-satellite
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/lagrange-satellite
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ops
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
+      - ServerSideApply=true

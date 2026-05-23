@@ -1,0 +1,12 @@
+---
+# `ops` is the cluster-side landing zone for satellite (and future ops-only)
+# workloads. Privileged PSS because the wg-gateway pod needs NET_ADMIN +
+# hostPath to bring up the WireGuard interface.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ops
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged

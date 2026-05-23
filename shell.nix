@@ -26,6 +26,12 @@ pkgs.mkShell {
     #   nix run github:ryantm/agenix -- -e satellites/secrets/<file>.age
     zstd
 
+    # lagrange satellite glue: sops to decrypt the lagrange repo's
+    # secrets/satellite.yaml (admin token, wg-private-key) and wg/wg-pubkey
+    # to derive/inspect WireGuard keys for cluster/lagrange-satellite/.
+    sops
+    wireguard-tools
+
     # operators/ceph-nfs-export-operator/: kopf-based reconciler.
     # python3 + uv for dep management; ruff for lint; docker for local image
     # build/test before pushing to ghcr.

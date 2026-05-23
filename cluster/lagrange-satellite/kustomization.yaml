@@ -1,0 +1,12 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ops
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - wg-gateway.yaml
+  - lagrange-admin-token.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml

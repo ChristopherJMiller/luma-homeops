@@ -1,0 +1,15 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: lagrange-admin-token
+  namespace: ops
+spec:
+  encryptedData:
+    token:
+      AgDOr05qWaDqmYfqRs67SkNuAyt2EF8PPXg5LZC9nmtm71a5Cd4rLIE6d2Gr34SUBeNZfPj0muVZDQkBg1ZMN2Kh7SVGsllWPpyrIMJ558cP2ekK5VEukTb4kRQjgXPgzd1nYoQg7+cAc0ADpnMrB3Dj//na40Jm/YSPTuReXz1aPMfyec8TTO2yPPXdhihWZIriAErVod1vpmCdPGj0kZGLpvO5s9sMFKBySnfZg47L3m/uyrpd2bK7jATlZf/49iUWU6YyfVgQupZvk4MlyyC3jcqF74x5vrouKWTZbIq1qeaAvLo83pwYJo9xbQS7L+bIaw2q3bDZK66uFxtpFvqgOqoea0sRZYahOKAQg8IIpHemYX5DDClfbPcJzp5d9xJWDJI02BmyR4CHJXHjwcDfb7TiRiPZU/Alr0IFihP5GJf+JNkHSVYgeb2yefcSuLAL5c2tykKkaYiwazaW4XQCifjRGohf6P9U/xyC+Uv+3N5sDeaz+7uXfla0wTE7kkjlJWWjYuiY7Uer6dPLRecDxD4ojb2DTJxfujEGU5Zk15Tz2KlR5ookIp6YTPnb0XEWv589iJ7vvD8HK8+I9DT6wk3rYz9TT688Spf9/FMuO+SiE0Xx1ukNAu6yXH5QPkrQYutu3/Okj5g9/C8ZRRDsoEx2NYxkCTKYAuk6V+jXO9MQ0NbnIcq19AHdfSPDFn5o7wOq9GhtSbm/hglBO/S+GXU1mOBXj7V6dKalM2j2wzRdFyy01G3wz2LNQfXJ6X6OyZ0EeW8LeViUmKmb6mPR
+  template:
+    metadata:
+      name: lagrange-admin-token
+      namespace: ops
+    type: Opaque
