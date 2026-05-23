@@ -71,6 +71,9 @@ dhcp:
     - name: octoprint
       mac: b8:27:eb:e3:af:ab    # Pi 3B (Raspberry Pi Foundation OUI b8:27:eb)
       ip: 192.168.0.243
+    - name: lagrange            # compute satellite — managed from a separate repo
+      mac: d8:5e:d3:f8:2a:7c
+      ip: 192.168.0.244
 
 # Firewall Groups
 firewall_groups:
