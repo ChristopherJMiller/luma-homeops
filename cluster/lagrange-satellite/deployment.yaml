@@ -78,6 +78,20 @@ spec:
               command: [sh, -c, wg show wg0 peers | grep -q .]
             initialDelaySeconds: 5
             periodSeconds: 10
+        # Cluster pods can't route to 10.99.0.2 directly (only the
+        # wg-gateway pod's namespace has the wg0 route), so this sidecar
+        # exposes 8443 on the pod's eth0 and forwards through wg0. The
+        # lagrange-admin Service selects on app=wg-gateway and lands here.
+        - name: admin-proxy
+          image: alpine/socat:1.8.0.3
+          args:
+            - -d
+            - TCP-LISTEN:8443,reuseaddr,fork
+            - TCP:10.99.0.2:8443
+          ports:
+            - containerPort: 8443
+              protocol: TCP
+              name: admin
       volumes:
         - name: secret
           secret:

@@ -24,10 +24,11 @@ spec:
       targetPort: 51820
       protocol: UDP
 ---
-# Headless Service that fronts the Lagrange admin API for in-cluster
-# callers. The Endpoints object below pins it to 10.99.0.2 — Lagrange's
-# WG IP — which is only routable from pods because the wg-gateway
-# Deployment terminates the tunnel.
+# In-cluster front for the Lagrange admin API. Selects the wg-gateway pod,
+# whose admin-proxy sidecar (socat) terminates the connection on :8443 and
+# forwards it through wg0 to 10.99.0.2:8443 on Lagrange. We don't use a
+# headless Service + manual Endpoints object because 10.99.0.2 isn't
+# routable from cluster pods on its own — only from inside the gateway pod.
 apiVersion: v1
 kind: Service
 metadata:
@@ -35,22 +36,10 @@ metadata:
   namespace: ops
 spec:
   type: ClusterIP
-  clusterIP: None
+  selector:
+    app: wg-gateway
   ports:
     - name: https
       port: 8443
-      targetPort: 8443
+      targetPort: admin
       protocol: TCP
----
-apiVersion: v1
-kind: Endpoints
-metadata:
-  name: lagrange-admin
-  namespace: ops
-subsets:
-  - addresses:
-      - ip: 10.99.0.2
-    ports:
-      - name: https
-        port: 8443
-        protocol: TCP
