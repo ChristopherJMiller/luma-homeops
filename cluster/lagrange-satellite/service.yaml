@@ -34,6 +34,12 @@ kind: Service
 metadata:
   name: lagrange-admin
   namespace: ops
+  annotations:
+    # Service.spec.clusterIP is immutable, so when we switched away from
+    # the original `clusterIP: None` headless variant Argo couldn't apply
+    # in place. Replace=true asks Argo to recreate this one resource.
+    # Safe here because no client traffic depends on it yet.
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
 spec:
   type: ClusterIP
   selector:
