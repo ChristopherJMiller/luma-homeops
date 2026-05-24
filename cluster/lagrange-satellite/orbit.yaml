@@ -38,7 +38,7 @@ spec:
         fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: orbit
-          image: ghcr.io/christopherjmiller/lagrange-orbit:sha-8446afd
+          image: ghcr.io/christopherjmiller/lagrange-orbit:sha-8b89054
           ports:
             - containerPort: 8080
               protocol: TCP
