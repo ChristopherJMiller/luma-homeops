@@ -46,6 +46,20 @@ spec:
     - host: lagrange.chrismiller.xyz
       http:
         paths:
+          # /orbit/* — Vite SPA, served by the orbit pod's own nginx.
+          # Listed first as a doc-order hint but ingress-nginx matches by
+          # longest prefix regardless of ordering.
+          - path: /orbit
+            pathType: Prefix
+            backend:
+              service:
+                name: orbit
+                port:
+                  number: 8080
+          # Everything else — including /v1/* (the admin API) and the
+          # bare host — falls through to lagrange-admin. The orbit SPA
+          # itself redirects / → /orbit/ for browser users; automation
+          # hitting /v1/health directly still lands on the admin service.
           - path: /
             pathType: Prefix
             backend:

@@ -8,5 +8,6 @@ resources:
   - wg-gateway.yaml
   - lagrange-admin-token.yaml
   - deployment.yaml
+  - orbit.yaml
   - service.yaml
   - ingress.yaml

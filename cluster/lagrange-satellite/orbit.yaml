@@ -1,0 +1,76 @@
+---
+# Orbit — the Lagrange mission-control SPA. Vite + React build served by
+# a baked-in nginx; image source is the lagrange repo's orbit/ directory.
+# The SPA is built with `base: '/orbit/'` so all asset URLs are absolute
+# under that prefix; we just forward /orbit/* to this Service from the
+# shared Ingress and orbit's internal nginx routes from there. The SPA
+# itself calls /v1/* relative to the page URL, and the Ingress fans those
+# requests off to lagrange-admin — orbit's own nginx returns 502 on /v1
+# as a defence-in-depth tripwire if /v1 ever lands on this pod.
+#
+# Auth is inherited from the Ingress's authentik forward-auth annotations
+# (orbit itself does no auth). The authentik_proxy_* cookie is set at
+# Domain=chrismiller.xyz so SSO state is shared across /orbit and /v1.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: orbit
+  namespace: ops
+  labels:
+    app: orbit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: orbit
+  template:
+    metadata:
+      labels:
+        app: orbit
+    spec:
+      containers:
+        - name: orbit
+          image: ghcr.io/christopherjmiller/lagrange-orbit:sha-0095d80
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+              name: http
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop: [ALL]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orbit
+  namespace: ops
+spec:
+  type: ClusterIP
+  selector:
+    app: orbit
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
