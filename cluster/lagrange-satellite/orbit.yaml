@@ -35,6 +35,17 @@ spec:
             - containerPort: 8080
               protocol: TCP
               name: http
+          # Workaround: the upstream image runs `USER nginx` but never
+          # chowns /var/cache/nginx or /var/run, so nginx can't create
+          # client_temp / the pid file at startup and crashes with EACCES.
+          # Mount writable emptyDirs over those paths. Remove these once
+          # the orbit image switches to nginxinc/nginx-unprivileged (or
+          # chowns the dirs in its Dockerfile).
+          volumeMounts:
+            - name: nginx-cache
+              mountPath: /var/cache/nginx
+            - name: nginx-run
+              mountPath: /var/run
           readinessProbe:
             httpGet:
               path: /healthz
@@ -59,6 +70,11 @@ spec:
             readOnlyRootFilesystem: false
             capabilities:
               drop: [ALL]
+      volumes:
+        - name: nginx-cache
+          emptyDir: {}
+        - name: nginx-run
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
