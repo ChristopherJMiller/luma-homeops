@@ -28,24 +28,30 @@ spec:
       labels:
         app: orbit
     spec:
+      # emptyDir volumes default to root-owned and would shadow the
+      # image's chown of /var/cache/nginx and /var/run/nginx. fsGroup
+      # tells the kubelet to chgrp the mount to gid 101 (the nginx group
+      # in the image) on mount; OnRootMismatch limits that traversal to
+      # the first mount so repeated restarts don't redo it.
+      securityContext:
+        fsGroup: 101
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: orbit
-          image: ghcr.io/christopherjmiller/lagrange-orbit:sha-0095d80
+          image: ghcr.io/christopherjmiller/lagrange-orbit:sha-a81ae8d
           ports:
             - containerPort: 8080
               protocol: TCP
               name: http
-          # Workaround: the upstream image runs `USER nginx` but never
-          # chowns /var/cache/nginx or /var/run, so nginx can't create
-          # client_temp / the pid file at startup and crashes with EACCES.
-          # Mount writable emptyDirs over those paths. Remove these once
-          # the orbit image switches to nginxinc/nginx-unprivileged (or
-          # chowns the dirs in its Dockerfile).
+          # Mount writable emptyDirs over the paths nginx needs at runtime
+          # (matches the orbit repo's own k8s template). The image itself
+          # is fixed to be readOnlyRootFilesystem-capable as of sha-a81ae8d;
+          # we can flip that on later if we want full RO root.
           volumeMounts:
             - name: nginx-cache
               mountPath: /var/cache/nginx
             - name: nginx-run
-              mountPath: /var/run
+              mountPath: /var/run/nginx
           readinessProbe:
             httpGet:
               path: /healthz
