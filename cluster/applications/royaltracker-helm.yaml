@@ -15,7 +15,7 @@ spec:
       valuesObject:
         publicUrl: https://rccl-tracker.chrismiller.xyz
         image:
-          tag: f811c961252ae35c9edc0a7a1663b4a92ad356e6
+          tag: 89b1645f8e310617a731f55af005df5b14bf7192
         ingress:
           enabled: true
           className: nginx
