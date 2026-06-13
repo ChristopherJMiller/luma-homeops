@@ -18,13 +18,13 @@ spec:
     spec:
       initContainers:
         - name: init-playlists
-          image: busybox:1
+          image: busybox:1@sha256:fd8d9aa63ba2f0982b5304e1ee8d3b90a210bc1ffb5314d980eb6962f1a9715d
           command: [sh, -c, mkdir -p /playlists/data]
           volumeMounts:
             - name: playlists-storage
               mountPath: /playlists
         - name: init-music
-          image: busybox:1
+          image: busybox:1@sha256:fd8d9aa63ba2f0982b5304e1ee8d3b90a210bc1ffb5314d980eb6962f1a9715d
           command: [sh, -c, mkdir -p /music/data]
           volumeMounts:
             - name: music-storage
@@ -80,7 +80,7 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
         - name: webdav
-          image: ghcr.io/christopherjmiller/docker-webdav:master-5831339
+          image: ghcr.io/christopherjmiller/docker-webdav:master-5831339@sha256:4ad95544cffffa771bd5cc1b046c18e61bffa93eefcb72e66d45f997bcec2124
           ports:
             - containerPort: 8080
               name: webdav
