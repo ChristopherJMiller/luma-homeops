@@ -38,6 +38,6 @@ pkgs.mkShell {
     python313
     uv
     ruff
-    docker
+    docker_29
   ];
 }
