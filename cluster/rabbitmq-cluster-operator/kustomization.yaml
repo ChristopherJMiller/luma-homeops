@@ -8,7 +8,7 @@ kind: Kustomization
 # rabbitmq-cluster-operator chart (deprecated catalog).
 #
 # Pinned versions:
-#   cluster-operator        v2.21.0  (ghcr.io/rabbitmq/cluster-operator:2.21.0)
+#   cluster-operator        v2.22.1  (ghcr.io/rabbitmq/cluster-operator:2.22.1)
 #   topology operator       v1.19.2  (ghcr.io/rabbitmq/messaging-topology-operator:1.19.2)
 #
 # To bump:
