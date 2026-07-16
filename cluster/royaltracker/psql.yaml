@@ -15,6 +15,10 @@ spec:
   spiloFSGroup: 103
   postgresql:
     version: '16'
+    parameters:
+      synchronous_commit: "off"
+  patroni:
+    failsafe_mode: true
   teamId: acid
   users:
     royaltracker:

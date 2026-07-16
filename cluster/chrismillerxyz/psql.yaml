@@ -15,6 +15,8 @@ spec:
   spiloFSGroup: 103
   postgresql:
     version: '16'
+    parameters:
+      synchronous_commit: "off"
   teamId: acid
   resources:
     requests:
@@ -28,6 +30,7 @@ spec:
   volume:
     size: 3Gi
   patroni:
+    failsafe_mode: true
     pg_hba:
       - local     all  all  trust
       - host      all  all  all  trust
