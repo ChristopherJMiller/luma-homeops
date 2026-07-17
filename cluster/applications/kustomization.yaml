@@ -43,5 +43,7 @@ resources:
   - prometheus-snmp-exporter.yaml
   - sealed-secrets.yaml
   - share.yaml
+  - traefik.yaml
+  - traefik-release.yaml
   - trivy-operator.yaml
   - word-arena.yaml

@@ -15,6 +15,10 @@ spec:
       valuesObject:
         service:
           type: LoadBalancer
+          annotations:
+            # Pin the IP mosquitto already holds by allocation — without
+            # this a restart could grab .7, which Traefik needs (#2507).
+            metallb.universe.tf/loadBalancerIPs: 192.168.0.8
         persistence:
           storageClass: rook-ceph-block
           size: 5Gi
