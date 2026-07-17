@@ -14,6 +14,10 @@ spec:
       releaseName: trivy-operator
       valuesObject:
         operator:
+          # node-collector can never run here: trivy-system enforces PodSecurity
+          # baseline (hostPID + hostPath denied) and Talos lacks the host paths
+          # it inspects anyway. Disable instead of spamming FailedCreate forever.
+          infraAssessmentScannerEnabled: false
           resources:
             requests:
               cpu: 100m
