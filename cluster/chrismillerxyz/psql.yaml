@@ -32,6 +32,9 @@ spec:
   patroni:
     failsafe_mode: true
     pg_hba:
+      # "all" as database does NOT match replication connections — the standby
+      # needs an explicit entry or pg_basebackup from the replica fails.
+      - host      replication  standby  all  md5
       - local     all  all  trust
       - host      all  all  all  trust
       - hostnossl all  all  all  trust
