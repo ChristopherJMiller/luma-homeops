@@ -1,0 +1,8 @@
+---
+# TEMPORARY (#2507 phase 2): duplicate Ingresses on the traefik class for
+# validation via 192.168.0.7 while public traffic stays on nginx/.6.
+# Delete this whole app in phase 4 when the originals are rewritten.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - realmic.yaml

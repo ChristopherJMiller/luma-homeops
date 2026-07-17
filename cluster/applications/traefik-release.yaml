@@ -58,11 +58,12 @@ spec:
             metallb.universe.tf/loadBalancerIPs: 192.168.0.7
         ports:
           web:
-            redirections:
-              entryPoint:
-                to: websecure
-                scheme: https
-                permanent: true
+            http:
+              redirections:
+                entryPoint:
+                  to: websecure
+                  scheme: https
+                  permanent: true
             transport:
               respondingTimeouts:
                 # Traefik v3 defaults to 60s for the ENTIRE request incl.
@@ -78,9 +79,8 @@ spec:
         # either (backend-protocol: HTTPS with no CA config).
         additionalArguments:
           - --serversTransport.insecureSkipVerify=true
-        logs:
-          access:
-            enabled: true
+        accessLog:
+          enabled: true
         metrics:
           prometheus:
             serviceMonitor:
