@@ -30,7 +30,7 @@ spec:
           # to :latest@sha256:<digest> on first run. CI rebuilds :latest on
           # every operator-source change; Renovate then opens a PR for the
           # new digest, which is the audit trail for code changes.
-          image: ghcr.io/christopherjmiller/ceph-nfs-export-operator:latest@sha256:f0b8f02322dde9d37800a093ec0869fcc8887b8078a6d2ebc41164e1f146594e
+          image: ghcr.io/christopherjmiller/ceph-nfs-export-operator:latest@sha256:70a0c4094f86ee63845d8ed74a4c1664d4c450a9773d73452ccab5d57bc560dc
           imagePullPolicy: Always
           env:
             - name: ROOK_CEPH_USERNAME
