@@ -1,0 +1,100 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik-release
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://traefik.github.io/charts
+    targetRevision: 41.x.x
+    chart: traefik
+    helm:
+      releaseName: traefik
+      valuesObject:
+        deployment:
+          kind: Deployment
+          replicas: 2
+        podDisruptionBudget:
+          enabled: true
+          minAvailable: 1
+        affinity:
+          podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: traefik
+                  topologyKey: kubernetes.io/hostname
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            memory: 256Mi
+        ingressClass:
+          enabled: true
+          # nginx stays the default until the router cutover bakes (#2507
+          # phase 4); flip only after nginx is decommissioned.
+          isDefaultClass: false
+          name: traefik
+        providers:
+          kubernetesIngress:
+            enabled: true
+            publishedService:
+              enabled: true
+          kubernetesCRD:
+            enabled: true
+            # Ingresses in media/ops/share reference the shared ForwardAuth
+            # Middleware living in the authentik namespace.
+            allowCrossNamespace: true
+          kubernetesGateway:
+            enabled: false
+        service:
+          annotations:
+            metallb.universe.tf/address-pool: pool
+            metallb.universe.tf/loadBalancerIPs: 192.168.0.7
+        ports:
+          web:
+            redirections:
+              entryPoint:
+                to: websecure
+                scheme: https
+                permanent: true
+            transport:
+              respondingTimeouts:
+                # Traefik v3 defaults to 60s for the ENTIRE request incl.
+                # body — would break attic multi-GB pushes and webdav
+                # uploads. 0 restores nginx-era behavior; per-router
+                # timeouts don't exist (#2507 flagged trade-off).
+                readTimeout: 0
+          websecure:
+            transport:
+              respondingTimeouts:
+                readTimeout: 0
+        # argo-cd's backend is self-signed HTTPS; nginx never verified it
+        # either (backend-protocol: HTTPS with no CA config).
+        additionalArguments:
+          - --serversTransport.insecureSkipVerify=true
+        logs:
+          access:
+            enabled: true
+        metrics:
+          prometheus:
+            serviceMonitor:
+              enabled: true
+              additionalLabels:
+                release: prometheus
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: traefik
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
