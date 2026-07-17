@@ -75,7 +75,9 @@ spec:
               cpu: 2
             limits:
               memory: 4Gi
-              amd.com/gpu: 1
+              # amd.com/gpu: 1  # TEMP removed 2026-07-16: middle's GPU fails init
+              # on Talos 1.9 kernel 6.12 ("Unable to locate a BIOS ROM") — plex
+              # was hard-down with 0 schedulable pods. Restore once GPU works.
           config:
             storageClassName: rook-ceph-block
           transcode:
