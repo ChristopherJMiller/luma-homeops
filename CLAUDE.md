@@ -131,15 +131,15 @@ ssh admin@192.168.0.243 nixos-rebuild list-generations
 
 ---
 
-## Known sharp edges (current state, 2026-05)
+## Known sharp edges (current state, 2026-07)
 
 These are real problems in the current cluster — flag, don't silently fix:
 
-1. **Ceph `BLUESTORE_SPURIOUS_READ_ERRORS`** (HEALTH_WARN): osd.4 + osd.6 each show 1 retry. Confirmed noise — kernel reports zero ATA/SCSI/I-O errors on the underlying drives. Will auto-clear over time. (Earlier HEALTH_ERR with 2 inconsistent PGs in `media/mm-media` resolved 2026-05-10 via `pg repair`.)
-2. **`ingress-nginx` v1.15.1**: ingress-nginx is in maintenance until **March 2026** and then EOL. **InGate (the planned successor) was also abandoned.** Migration target chosen: **Traefik on the Ingress API** (see #2507). Not a same-day move; sequenced after Talos/k8s upgrade.
-3. **Talos v1.7.6 / k8s v1.30.3**: 4–6 minor versions behind on each. Upgrade path requires staggered minor jumps (Talos 1.7→…→1.11 for Phase 1, →1.13 for Phase 2; k8s 1.30→…→1.34→1.36), one node at a time, with Ceph healthy between each. Do not skip versions. See #2506 for the runbook.
-4. **Argo CD chart 7.9.1** — needs bump to 9.x before Phase 1 k8s upgrade. Renovate PR #2494 only bumps the chart version; values.yaml needs ingress-block edits for 8.x (see review on #2494).
-5. **kube-prometheus-stack 65.x** — ~20 minor versions stale. Stepwise upgrade required (#2515) before Phase 1 k8s past 1.32.
+1. **Ceph on SMR HDDs**: OSDs are ST8000DM004 (SMR) with BlueStore data+DB+WAL all on the spinners — chronic `BLUESTORE_SLOW_OP_ALERT` HEALTH_WARN noise is expected and non-blocking unless it escalates to ERR or PGs leave active+clean. Postgres fsync pain mitigated in software 2026-07 (#2587: `synchronous_commit=off` + patroni `failsafe_mode`). Real fix needs added flash per node (the NVMe is the Talos system disk + etcd — not usable). Buy CMR drives for replacements.
+2. **`ingress-nginx` is past EOL** (maintenance ended March 2026). Migration target: **Traefik on the Ingress API** (#2507 — full design + 26-ingress inventory done 2026-07). Side-by-side prep on MetalLB `.7` can proceed; final WAN cutover via router NAT flip after early #2506 hops.
+3. **Talos v1.8.4 / k8s v1.30.3**: k8s is >1 year past EOL. Hop sequence (no skips, one node at a time, Ceph healthy between): Talos 1.9 → 1.10 → k8s 1.31 → 1.32 → 1.33 → Talos 1.11 (etcd 3.5→3.6!) → k8s 1.34 → Talos 1.12 → 1.13 → k8s 1.35 → 1.36. See #2506 + the talos-upgrade skill (corrected 2026-07: factory installer image, not ghcr).
+4. **authentik 2024.12.3, chart pinned `2024.x.x`** — Renovate never offers 2025.x+. Upgrade path is strictly sequential (8 hops to 2026.5); per-hop pg_dump is non-negotiable (Django migrations don't roll back). No automated backup of acid-auth exists (`enableLogicalBackup` unset).
+5. **kube-prometheus-stack 79.12.0** — one stepwise hop to ~84.x remains (#2515).
 
 ---
 

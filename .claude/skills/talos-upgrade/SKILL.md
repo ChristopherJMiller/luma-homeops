@@ -57,17 +57,22 @@ For each node in order (`top` → `middle` → `bottom`):
 
 ```bash
 NODE_IP=192.168.0.240   # top
-NEW_INSTALLER=ghcr.io/siderolabs/installer:v1.X.Y
 
-# Pre-pull the installer to fail fast on bad image references
+# ⚠ ALWAYS the Image Factory installer with our schematic — NEVER
+# ghcr.io/siderolabs/installer, which strips the amdgpu-firmware/amd-ucode
+# extensions and breaks middle's GPU (see nodes/controlplane.yaml comment).
+# The schematic ID is version-independent; only the tag changes per hop.
+NEW_INSTALLER=factory.talos.dev/installer/173d42f096f07f5cc709f795178189dc64aa76ccad1a2193e5b3473f73f02a3e:v1.X.Y
+
+# Reference check (fail fast on a bad tag; doesn't warm the system namespace cache)
 TALOSCONFIG=nodes/talosconfig talosctl -n "$NODE_IP" image pull "$NEW_INSTALLER"
 
-# Trigger the upgrade with --preserve (keep machineConfig) and --reboot (immediate)
+# Trigger the upgrade. Reboot is implicit (there is no --reboot flag);
+# machine config is preserved by default (--preserve is deprecated since 1.13).
 TALOSCONFIG=nodes/talosconfig talosctl upgrade \
   -n "$NODE_IP" \
-  --preserve \
-  --reboot \
-  --image "$NEW_INSTALLER"
+  --image "$NEW_INSTALLER" \
+  --wait
 ```
 
 Talos will auto-cordon, drain, install, reboot, rejoin, uncordon. Refuses if quorum would break.
@@ -78,11 +83,12 @@ Use `Monitor` (or background bash) — **don't** busy-loop:
 
 1. **Node Ready**: `kubectl wait --for=condition=Ready node/<name> --timeout=10m`
 2. **Talos version**: `talosctl -n $NODE_IP version` returns the new version
-3. **etcd member**: `talosctl -n $NODE_IP service etcd` is Running/Healthy
-4. **Pods back**: `kubectl get pods -A -o wide --field-selector spec.nodeName=<name>` — count matches pre-upgrade, none Pending
-5. **Ceph settles**: `ceph -s` returns to its prior baseline. For `middle` specifically, both osd.4 and osd.6 must be `up` and any PGs that were `degraded` during the reboot must be back to clean.
+3. **Extensions survived**: `talosctl -n $NODE_IP get extensions` still lists amdgpu/amd-ucode (critical on `middle`)
+4. **etcd member**: `talosctl -n $NODE_IP service etcd` is Running/Healthy
+5. **Pods back**: `kubectl get pods -A -o wide --field-selector spec.nodeName=<name>` — count matches pre-upgrade, none Pending
+6. **Ceph settles**: `ceph -s` returns to its prior baseline. For `middle` specifically, both osd.4 and osd.6 must be `up` and any PGs that were `degraded` during the reboot must be back to clean.
 
-Only after all 5 pass: proceed to the next node.
+Only after all 6 pass: proceed to the next node.
 
 If any of these fails for > 15 min, stop and surface.
 
@@ -107,6 +113,16 @@ This upgrades apiserver, controller-manager, scheduler, proxy, kubelet, coredns 
 3. All Argo apps Synced + Healthy: `kubectl -n argo-cd get applications.argoproj.io -o wide`
 4. Run a deprecated-API scan (next minor's removals). Tools: `kubent`, or k8s API server logs for `deprecated_apis` warnings
 5. Wait 24h before the next minor — soak time catches latent breakage
+
+## Hop-specific hazards (researched 2026-07, Talos 1.9→1.13)
+
+- **1.8→1.9**: amdgpu moved from base image to extension; factory auto-migrates our schematic, but verify `middle`'s GPU (`get extensions` + dmesg) after the hop.
+- **1.10→1.11**: **etcd 3.5→3.6 major bump** rides along. Mandatory fresh etcd snapshot before node 1; scrutinize etcd health between every node.
+- **1.11→1.12**: kernel 6.12→6.18 (watch amdgpu + SATA controllers on middle), `module.sig_enforce=1`, stricter KSPP sysctls. `.machine.registries` (our docker.io pull-through mirror) deprecated — still works, migrate to `RegistryMirrorConfig` doc later.
+- **1.13**: use the latest patch (≥1.13.3) — 1.13.2 had a k8s-1.36 scheduler-config rendering bug (siderolabs/talos#13350). Use a talosctl ≥1.13 client.
+- **k8s must reach 1.31 before Talos 1.13** (its minimum). Full sequence: Talos 1.9 → 1.10 → k8s 1.31 → 1.32 → 1.33 → Talos 1.11 → k8s 1.34 → Talos 1.12 → 1.13 → k8s 1.35 → 1.36.
+- **After every Talos hop**: bump the `install.image` tag in `nodes/controlplane.yaml` and `talosctl apply-config` (no reboot for that field) — `talosctl upgrade --image` alone does not persist.
+- `upgrade-k8s` rewrites component image tags in machineconfig itself — no manual tag edits needed.
 
 ## Repo-side updates after upgrade
 
