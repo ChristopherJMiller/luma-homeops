@@ -5,8 +5,12 @@ metadata:
   name: notion-sync
 spec:
   schedule: 0 */6 * * *
+  concurrencyPolicy: Forbid
   jobTemplate:
     spec:
+      # DB-unreachable failures aren't fixed by immediate retries — cap them
+      # (2026-07-14 outage produced 7 error pods per scheduled run).
+      backoffLimit: 2
       template:
         spec:
           securityContext:
