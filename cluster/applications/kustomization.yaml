@@ -28,6 +28,7 @@ resources:
   - metallb.yaml
   - metrics-server.yaml
   - ingress-nginx.yaml
+  - ipmi-exporter.yaml
   - lagrange-satellite.yaml
   - logging-secrets.yaml
   - realliance-net.yaml

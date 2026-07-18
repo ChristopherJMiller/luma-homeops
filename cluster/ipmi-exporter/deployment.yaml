@@ -1,0 +1,56 @@
+---
+# Remote (LAN 2.0) IPMI scraping of the node BMCs — no host access needed,
+# so this runs as a plain restricted pod. Config (with credentials) comes
+# from the ipmi-exporter-config SealedSecret.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ipmi-exporter
+  namespace: prometheus
+  labels:
+    app: ipmi-exporter
+spec:
+  replicas: 1
+  revisionHistoryLimit: 1
+  selector:
+    matchLabels:
+      app: ipmi-exporter
+  template:
+    metadata:
+      labels:
+        app: ipmi-exporter
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ipmi-exporter
+          image: quay.io/prometheuscommunity/ipmi-exporter:v1.10.1
+          args:
+            - --config.file=/config/config.yml
+          ports:
+            - name: http
+              containerPort: 9290
+              protocol: TCP
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 64Mi
+      volumes:
+        - name: config
+          secret:
+            secretName: ipmi-exporter-config
