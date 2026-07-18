@@ -1,6 +1,12 @@
+---
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: prometheus
+# PrometheusRule CRDs — selected by the operator (ruleSelector matches
+# prometheus=kube-prometheus + role=alert-rules). The configMapGenerator below
+# is a legacy path the operator does not load; new rules go here as resources.
+resources:
+  - media-pipeline-alerts.yaml
 configMapGenerator:
   - name: luma-homelab-alert-rules
     files:

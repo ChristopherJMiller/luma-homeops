@@ -1,0 +1,113 @@
+---
+# Media pipeline alerts (exportarr + mega-media reconciler).
+# PrometheusRule, NOT a ConfigMap: the Prometheus ruleSelector matches
+# {prometheus: kube-prometheus, role: alert-rules} on PrometheusRule CRDs — the
+# same shape as cluster/ipmi-exporter/prometheusrule.yaml. (The configMapGenerator
+# rules in this dir are not selected by the operator and do not load.)
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: media-pipeline-alerts
+  namespace: prometheus
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: media-exporters
+      interval: 60s
+      rules:
+        - alert: MediaExporterDown
+          # exportarr sidecar or reconciler target unreachable
+          expr: up{job=~"mm-.*"} == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: Media exporter {{ $labels.job }} is down
+            description: >-
+              Prometheus cannot scrape {{ $labels.job }} ({{ $labels.pod }}) for
+              10m — queue/throughput telemetry for that service is blind.
+
+    - name: media-reconciler
+      interval: 60s
+      rules:
+        - alert: MegaMediaReconcilerStale
+          # deployment mode reconciles every 300s; 30m stale = loop wedged
+          expr: time() - max(megamedia_last_reconcile_timestamp_seconds) > 1800
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: mega-media reconciler has not run in 30m
+            description: >-
+              Last successful reconcile was {{ $value | humanizeDuration }} ago
+              (interval is 300s). The reconciler Deployment may be wedged or
+              crashlooping — *arr config drift will not be corrected.
+        - alert: MegaMediaServiceUnreachable
+          expr: megamedia_service_reachable == 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: mega-media service {{ $labels.service }} unreachable from reconciler
+            description: >-
+              The reconciler has been unable to reach {{ $labels.service }} for
+              30m — that *arr may be down, misconfigured, or its API key rotated.
+
+    - name: media-sabnzbd
+      interval: 60s
+      rules:
+        - alert: SABnzbdStalled
+          # items queued but no throughput and not intentionally paused
+          expr: sum(sabnzbd_queue_length) > 0 and sum(sabnzbd_speed_bps) == 0 and max(sabnzbd_paused) == 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: SABnzbd queue is stalled
+            description: >-
+              SABnzbd has {{ $value }} item(s) queued but 0 B/s throughput for 30m
+              while not paused — check the Usenet provider connection, disk, or a
+              wedged post-processing job.
+        - alert: SABnzbdArticleFailureHigh
+          expr: |
+            (sum(rate(sabnzbd_server_articles_total[1h])) - sum(rate(sabnzbd_server_articles_success[1h])))
+              / clamp_min(sum(rate(sabnzbd_server_articles_total[1h])), 1) > 0.15
+            and sum(rate(sabnzbd_server_articles_total[1h])) > 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: SABnzbd article failure rate > 15%
+            description: >-
+              More than 15% of downloaded articles failed over the last hour —
+              provider retention/completion problems or connection limits.
+        - alert: SABnzbdDiskLow
+          expr: max(sabnzbd_disk_used_bytes / sabnzbd_disk_total_bytes) > 0.9
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: SABnzbd /media volume over 90% full
+            description: >-
+              The download volume is {{ $value | humanizePercentage }} full —
+              completed imports may stall. Free space or expand the media PVC.
+
+    - name: media-prowlarr
+      interval: 60s
+      rules:
+        - alert: ProwlarrIndexerQueryFailures
+          expr: |
+            sum(rate(prowlarr_indexer_failed_queries_total[1h]))
+              / clamp_min(sum(rate(prowlarr_indexer_queries_total[1h])), 1) > 0.5
+            and sum(rate(prowlarr_indexer_queries_total[1h])) > 0
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: Prowlarr indexer query failure ratio > 50%
+            description: >-
+              Over half of Prowlarr indexer queries failed in the last hour —
+              indexers may be down, rate-limiting, or credentials expired. New
+              releases will not be found.

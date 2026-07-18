@@ -1,0 +1,107 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-media-pipeline
+  namespace: prometheus
+  labels:
+    grafana_dashboard: '1'
+data:
+  media-pipeline.json: |
+    {
+      "annotations": { "list": [ { "builtIn": 1, "datasource": "-- Grafana --", "enable": true, "hide": true, "name": "Annotations & Alerts", "type": "dashboard" } ] },
+      "description": "Media namespace pipeline health: SABnzbd throughput, *arr queues/backlog, Prowlarr indexer performance, service health and the mega-media reconciler.",
+      "editable": true,
+      "schemaVersion": 27,
+      "style": "dark",
+      "tags": ["media", "mega-media", "exportarr"],
+      "time": { "from": "now-24h", "to": "now" },
+      "refresh": "1m",
+      "timezone": "",
+      "title": "Media Pipeline",
+      "uid": "media-pipeline",
+      "templating": { "list": [] },
+      "panels": [
+        { "type": "row", "title": "SABnzbd — downloader", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 }, "id": 100 },
+        { "type": "stat", "title": "Download speed", "datasource": "Prometheus", "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 }, "id": 1,
+          "fieldConfig": { "defaults": { "unit": "Bps", "color": { "mode": "thresholds" }, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] } } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "area" },
+          "targets": [ { "datasource": "Prometheus", "expr": "sum(sabnzbd_speed_bps)", "legendFormat": "speed" } ] },
+        { "type": "stat", "title": "Queue items", "datasource": "Prometheus", "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 }, "id": 2,
+          "fieldConfig": { "defaults": { "unit": "short" } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+          "targets": [ { "datasource": "Prometheus", "expr": "sum(sabnzbd_queue_length)", "legendFormat": "queued" } ] },
+        { "type": "stat", "title": "Queue remaining", "datasource": "Prometheus", "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 }, "id": 3,
+          "fieldConfig": { "defaults": { "unit": "bytes" } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+          "targets": [ { "datasource": "Prometheus", "expr": "sum(sabnzbd_remaining_bytes)", "legendFormat": "remaining" } ] },
+        { "type": "stat", "title": "ETA", "datasource": "Prometheus", "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 }, "id": 4,
+          "fieldConfig": { "defaults": { "unit": "s" } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+          "targets": [ { "datasource": "Prometheus", "expr": "max(sabnzbd_time_estimate_seconds)", "legendFormat": "eta" } ] },
+        { "type": "stat", "title": "Disk used (/media)", "datasource": "Prometheus", "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 }, "id": 5,
+          "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.8 }, { "color": "red", "value": 0.9 } ] } } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "targets": [ { "datasource": "Prometheus", "expr": "max(sabnzbd_disk_used_bytes / sabnzbd_disk_total_bytes)", "legendFormat": "disk" } ] },
+        { "type": "stat", "title": "Article failure rate (1h)", "datasource": "Prometheus", "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 }, "id": 6,
+          "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 0.05 }, { "color": "red", "value": 0.15 } ] } } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "targets": [ { "datasource": "Prometheus", "expr": "(sum(rate(sabnzbd_server_articles_total[1h])) - sum(rate(sabnzbd_server_articles_success[1h]))) / clamp_min(sum(rate(sabnzbd_server_articles_total[1h])), 1)", "legendFormat": "fail rate" } ] },
+        { "type": "timeseries", "title": "Download speed", "datasource": "Prometheus", "gridPos": { "h": 7, "w": 12, "x": 0, "y": 5 }, "id": 7,
+          "fieldConfig": { "defaults": { "unit": "Bps", "custom": { "drawStyle": "line", "fillOpacity": 20, "lineWidth": 1 } } },
+          "targets": [ { "datasource": "Prometheus", "expr": "sum(sabnzbd_speed_bps)", "legendFormat": "download" } ] },
+        { "type": "timeseries", "title": "Article success ratio", "datasource": "Prometheus", "gridPos": { "h": 7, "w": 12, "x": 12, "y": 5 }, "id": 8,
+          "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 } } },
+          "targets": [ { "datasource": "Prometheus", "expr": "sum(rate(sabnzbd_server_articles_success[15m])) / clamp_min(sum(rate(sabnzbd_server_articles_total[15m])), 1)", "legendFormat": "success" } ] },
+
+        { "type": "row", "title": "*arr — queues & backlog", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 12 }, "id": 101 },
+        { "type": "timeseries", "title": "Queue depth per service", "datasource": "Prometheus", "gridPos": { "h": 7, "w": 12, "x": 0, "y": 13 }, "id": 9,
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "bars", "fillOpacity": 60, "stacking": { "mode": "normal" } } } },
+          "targets": [
+            { "datasource": "Prometheus", "expr": "sum(sonarr_queue_total) or vector(0)", "legendFormat": "sonarr" },
+            { "datasource": "Prometheus", "expr": "sum(radarr_queue_total) or vector(0)", "legendFormat": "radarr" },
+            { "datasource": "Prometheus", "expr": "sum(lidarr_queue_total) or vector(0)", "legendFormat": "lidarr" },
+            { "datasource": "Prometheus", "expr": "sum(readarr_queue_total) or vector(0)", "legendFormat": "readarr" }
+          ] },
+        { "type": "timeseries", "title": "Missing / wanted backlog", "datasource": "Prometheus", "gridPos": { "h": 7, "w": 12, "x": 12, "y": 13 }, "id": 10,
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 } } },
+          "targets": [
+            { "datasource": "Prometheus", "expr": "sum(sonarr_episode_missing_total) or vector(0)", "legendFormat": "sonarr episodes" },
+            { "datasource": "Prometheus", "expr": "sum(radarr_movie_missing_total) or vector(0)", "legendFormat": "radarr movies" }
+          ] },
+        { "type": "timeseries", "title": "Grab rate (per hour, from history)", "datasource": "Prometheus", "gridPos": { "h": 7, "w": 24, "x": 0, "y": 20 }, "id": 11,
+          "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 } } },
+          "targets": [
+            { "datasource": "Prometheus", "expr": "sum by (media_service) (rate(sonarr_history_total[1h]) * 3600)", "legendFormat": "sonarr" },
+            { "datasource": "Prometheus", "expr": "sum by (media_service) (rate(radarr_history_total[1h]) * 3600)", "legendFormat": "radarr" }
+          ] },
+
+        { "type": "row", "title": "Prowlarr — indexers", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 27 }, "id": 102 },
+        { "type": "timeseries", "title": "Indexer avg response time", "datasource": "Prometheus", "gridPos": { "h": 7, "w": 12, "x": 0, "y": 28 }, "id": 12,
+          "fieldConfig": { "defaults": { "unit": "ms", "custom": { "drawStyle": "line", "fillOpacity": 0, "lineWidth": 1 } } },
+          "targets": [ { "datasource": "Prometheus", "expr": "prowlarr_indexer_average_response_time_ms", "legendFormat": "{{ indexer }}" } ] },
+        { "type": "timeseries", "title": "Indexer query failure ratio (1h)", "datasource": "Prometheus", "gridPos": { "h": 7, "w": 12, "x": 12, "y": 28 }, "id": 13,
+          "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 } } },
+          "targets": [ { "datasource": "Prometheus", "expr": "sum(rate(prowlarr_indexer_failed_queries_total[1h])) / clamp_min(sum(rate(prowlarr_indexer_queries_total[1h])), 1)", "legendFormat": "fail ratio" } ] },
+
+        { "type": "row", "title": "Health & reconciler", "gridPos": { "h": 1, "w": 24, "x": 0, "y": 35 }, "id": 103 },
+        { "type": "stat", "title": "Open health issues", "datasource": "Prometheus", "gridPos": { "h": 4, "w": 6, "x": 0, "y": 36 }, "id": 14,
+          "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 1 }, { "color": "red", "value": 5 } ] } } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "targets": [ { "datasource": "Prometheus", "expr": "sum(sonarr_system_health_issues) + sum(radarr_system_health_issues) + sum(prowlarr_system_health_issues) + sum(lidarr_system_health_issues) + sum(readarr_system_health_issues)", "legendFormat": "issues" } ] },
+        { "type": "stat", "title": "Reconciler last run age", "datasource": "Prometheus", "gridPos": { "h": 4, "w": 6, "x": 6, "y": 36 }, "id": 15,
+          "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "yellow", "value": 900 }, { "color": "red", "value": 1800 } ] } } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none" },
+          "targets": [ { "datasource": "Prometheus", "expr": "time() - max(megamedia_last_reconcile_timestamp_seconds)", "legendFormat": "age" } ] },
+        { "type": "stat", "title": "Reconcile failures (total)", "datasource": "Prometheus", "gridPos": { "h": 4, "w": 6, "x": 12, "y": 36 }, "id": 16,
+          "fieldConfig": { "defaults": { "unit": "short", "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } } },
+          "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "value", "graphMode": "none" },
+          "targets": [ { "datasource": "Prometheus", "expr": "sum(megamedia_reconcile_failures)", "legendFormat": "failures" } ] },
+        { "type": "timeseries", "title": "Service reachable (reconciler view)", "datasource": "Prometheus", "gridPos": { "h": 7, "w": 12, "x": 0, "y": 40 }, "id": 17,
+          "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 1, "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 0 } } },
+          "targets": [ { "datasource": "Prometheus", "expr": "megamedia_service_reachable", "legendFormat": "{{ service }}" } ] },
+        { "type": "timeseries", "title": "Media pod memory (working set)", "datasource": "Prometheus", "gridPos": { "h": 7, "w": 12, "x": 12, "y": 40 }, "id": 18,
+          "fieldConfig": { "defaults": { "unit": "bytes", "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 1 } } },
+          "targets": [ { "datasource": "Prometheus", "expr": "sum by (pod) (container_memory_working_set_bytes{namespace=\"media\", container!=\"\", container!=\"POD\"})", "legendFormat": "{{ pod }}" } ] }
+      ]
+    }
