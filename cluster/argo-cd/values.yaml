@@ -59,6 +59,11 @@ argo-cd:
     pdb:
       enabled: true
       minAvailable: 1
+    service:
+      # Traefik reaches the backend over TLS (#2507); nginx keeps using its
+      # backend-protocol annotation until cutover.
+      annotations:
+        traefik.ingress.kubernetes.io/service.serversscheme: https
     resources:
       limits:
         memory: 256Mi

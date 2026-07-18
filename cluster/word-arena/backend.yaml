@@ -60,6 +60,12 @@ metadata:
   name: wordarena-backend
   labels:
     service: web
+  # Sticky sessions for the traefik-class Ingress (#2507); nginx ignores
+  # these and keeps using its affinity annotations until cutover.
+  annotations:
+    traefik.ingress.kubernetes.io/service.sticky.cookie: "true"
+    traefik.ingress.kubernetes.io/service.sticky.cookie.name: word-arena-session
+    traefik.ingress.kubernetes.io/service.sticky.cookie.maxage: "86400"
 spec:
   ports:
     - port: 80
