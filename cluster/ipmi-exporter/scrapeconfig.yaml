@@ -1,0 +1,29 @@
+---
+# BMC targets: .151 = bottom; .117/.119 = top/middle (which-is-which unmapped
+# — see #2603; correlate via SEL timestamps on next reboot).
+# The exporter proxies: Prometheus hits /ipmi?target=<bmc-ip> on the Service.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: ipmi-exporter-bmcs
+  namespace: prometheus
+  labels:
+    release: prometheus
+spec:
+  metricsPath: /ipmi
+  scrapeInterval: 60s
+  scrapeTimeout: 45s
+  params:
+    module: [default]
+  staticConfigs:
+    - targets:
+        - 192.168.0.117
+        - 192.168.0.119
+        - 192.168.0.151
+  relabelings:
+    - sourceLabels: [__address__]
+      targetLabel: __param_target
+    - sourceLabels: [__param_target]
+      targetLabel: instance
+    - targetLabel: __address__
+      replacement: ipmi-exporter.prometheus.svc:9290

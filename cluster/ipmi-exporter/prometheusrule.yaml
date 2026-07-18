@@ -1,0 +1,48 @@
+---
+# No SEL-fill alert yet: top/middle SELs are known-full (pending clear,
+# needs Chris's ok) and would page immediately. Add one after the clears.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ipmi-alerts
+  namespace: prometheus
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: ipmi-bmc
+      interval: 60s
+      rules:
+        - alert: NodeCPUTempHigh
+          expr: ipmi_temperature_celsius{name="CPU Temp"} > 85
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CPU temperature high on BMC {{ $labels.instance }}"
+            description: >-
+              CPU at {{ $value }}°C for 5m (BMC {{ $labels.instance }};
+              .151=bottom). bottom thermal-tripped at ~95°C on 2026-07-17 —
+              investigate cooling before it wedges the node.
+        - alert: BMCScrapeFailed
+          expr: ipmi_up == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "IPMI collector {{ $labels.collector }} failing for {{ $labels.instance }}"
+            description: >-
+              ipmi-exporter cannot collect from BMC {{ $labels.instance }}
+              (collector {{ $labels.collector }}) for 15m — BMC unreachable
+              or credentials rejected. Temperature alerting is blind.
+        - alert: BMCTargetDown
+          expr: up{instance=~"192\\.168\\.0\\.(117|119|151)"} == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "BMC scrape target {{ $labels.instance }} down"
+            description: >-
+              Prometheus cannot scrape ipmi-exporter for BMC
+              {{ $labels.instance }} for 15m. Temperature alerting is blind.

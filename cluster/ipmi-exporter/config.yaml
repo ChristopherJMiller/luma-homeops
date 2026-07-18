@@ -1,0 +1,14 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: ipmi-exporter-config
+  namespace: prometheus
+spec:
+  encryptedData:
+    config.yml: AgBsQs242p0P1YZB9VkLLiW4z7fo3AHWlm/6Psh13eL7PiPADhTJvUFZsPGwNyMnt6icaAEic8524Jrznc/TqEun9fXsLx6RL5gXeYd5ORB/+LhvaqZ6SZwGcHpizacJeReAqpw59Qrn53FjKQpbN/mJQ5FkiKaxvn05DFvUS+yvzWZbfgP4d8oD8bR9rx6f234/NyjZnl5NOIdshnAye2VO9lRxm4CnDUzaMPyQ7Us0FcpZk5ilVuDnPESsPGkQdnh70HqWZ/gCipUa+XMRQFtrswSwPaVUppVvmgJ4C+tAXZ12r7oOL/VhWscj2d0qFx3hAZFa0RHYsrWoiE8OVJfJhcp4ea8oxvVQgbaP72KP5zKJzJ5nvG8K6NYuD+7mbpqyb48hybvF136nF2Umty4SIbTbmE7VXNYzYwo233WMsecuqmsokONCzpJ1mWs5C6w1LnaHe2UGuNb4EH9EH8/HsrunYMXZh+FfoZnsI5XMezNk/MaUa1V5o7jiPUCc6OfO1XZ/Ary0mCW2aWBD0/3h1aeYKc+PCZjANp5XB3Ctlb5Vc/KwnBNlVMyzlh7ytRQkXp+RSbe3lI/qYHAj/PDVx4FHYgYV8Ub01vtAX8Cz0W75JSlnJ1MIx/pxRPJl1i9ICuKfrN+WLJ4+TTdI6bEx/tIGrCsAEM48OjvUrZCF7+MC9WdD0SKynCrIV6rANtmxHx4FKXbRAhRMGQWGMiPn3hgEX0vk+t5aMkB5T7oAr8Snxh0tzzgnHySwyLuo70V51kLY+pDiaIiU3P223EBAVE3oBassu98DWBG3+gDP/nPQyCRn+v0uk3SgexyEo+TvKQacA+LE0y3UleKbwmA1+PVoWjiSeDY9G2O50VCKWFpo+FeINe4XwbdwAN9v7kHOgpi8MwGVGM9dY0Wh/4AqXrxHaMyXMaTVXr1Yq60yHGPxZiVP0Pk=
+  template:
+    metadata:
+      name: ipmi-exporter-config
+      namespace: prometheus
+    type: Opaque
