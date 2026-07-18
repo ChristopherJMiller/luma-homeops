@@ -32,6 +32,11 @@ pkgs.mkShell {
     sops
     wireguard-tools
 
+    # BMC access (AST2500 on the X570D4I-2T nodes, IPs .117/.119/.151):
+    # ipmitool for SEL/sensors/power/SOL over lanplus; Redfish works via
+    # plain curl. Creds live in nodes/bmc.env (git-crypt).
+    ipmitool
+
     # operators/ceph-nfs-export-operator/: kopf-based reconciler.
     # python3 + uv for dep management; ruff for lint; docker for local image
     # build/test before pushing to ghcr.
