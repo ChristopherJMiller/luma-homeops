@@ -12,7 +12,7 @@ When this guide and a tool/agent default conflict, **this guide wins**.
 |-------|-------|-------|
 | Router | VyOS 1.5-rolling, `192.168.0.1` | SSH `chris@192.168.0.1`, `~/.ssh/id_ed25519` (must be in agent — `ssh-add` if needed). Op-mode commands need `/opt/vyatta/bin/vyatta-op-cmd-wrapper`. Config-as-code in `router/ansible/`. |
 | Control-plane VIP | `192.168.0.5:6443` | Talos KubePrism + shared VIP across all 3 nodes |
-| Nodes | `top` .240, `middle` .241, `bottom` .242 | All control-plane, all schedulable. Talos v1.7.6, k8s v1.30.3. |
+| Nodes | `top` .240, `middle` .241, `bottom` .242 | All control-plane, all schedulable. Talos v1.10.9, k8s v1.33.13. |
 | Ingress LB | `192.168.0.6` | MetalLB pool `default` is `192.168.0.6-.8` (3 IPs — tight, for public ingress) |
 | LAN-internal LB | `192.168.0.230-.239` | MetalLB pool `lan-internal` (autoAssign=false). For cluster services exposed to LAN but not WAN — currently CephNFS at `.230`. |
 | WAN | `eth0`, `152.44.247.88/25` | Port-forward 80/443 → .6 (ingress) |
@@ -136,8 +136,8 @@ ssh admin@192.168.0.243 nixos-rebuild list-generations
 These are real problems in the current cluster — flag, don't silently fix:
 
 1. **Ceph on SMR HDDs**: OSDs are ST8000DM004 (SMR) with BlueStore data+DB+WAL all on the spinners — chronic `BLUESTORE_SLOW_OP_ALERT` HEALTH_WARN noise is expected and non-blocking unless it escalates to ERR or PGs leave active+clean. Postgres fsync pain mitigated in software 2026-07 (#2587: `synchronous_commit=off` + patroni `failsafe_mode`). Real fix needs added flash per node (the NVMe is the Talos system disk + etcd — not usable). Buy CMR drives for replacements.
-2. **`ingress-nginx` is past EOL** (maintenance ended March 2026). Migration target: **Traefik on the Ingress API** (#2507 — full design + 26-ingress inventory done 2026-07). Side-by-side prep on MetalLB `.7` can proceed; final WAN cutover via router NAT flip after early #2506 hops.
-3. **Talos v1.8.4 / k8s v1.30.3**: k8s is >1 year past EOL. Hop sequence (no skips, one node at a time, Ceph healthy between): Talos 1.9 → 1.10 → k8s 1.31 → 1.32 → 1.33 → Talos 1.11 (etcd 3.5→3.6!) → k8s 1.34 → Talos 1.12 → 1.13 → k8s 1.35 → 1.36. See #2506 + the talos-upgrade skill (corrected 2026-07: factory installer image, not ghcr).
+2. **`ingress-nginx` is past EOL** (maintenance ended March 2026). Traefik v3.7 runs side-by-side on `.7` with all 26 ingresses duplicated and curl-validated (#2507 phase 2 complete 2026-07-17). Remaining: interactive forward-auth login test, then the WAN cutover via router NAT flip (rules 200/210/300/310 `.6→.7`) — a gated, propose-first step. After a 1–2 week bake: canonicalize the originals and decommission nginx.
+3. **Talos v1.10.9 / k8s v1.33.13** (hops through 2026-07-17, #2506): k8s is at Talos 1.10's max supported minor. Remaining sequence (no skips, one node at a time, Ceph healthy between): Talos 1.11 (**etcd 3.5→3.6 rides along — snapshot first!**) → k8s 1.34 → Talos 1.12 → 1.13 → k8s 1.35 → 1.36. See #2506 + the talos-upgrade skill (factory installer image, not ghcr). Gotcha: `upgrade-k8s` watches through the VIP can dead-stall at "waiting for kubelet restart" while the cluster is actually fine — run it with `-n 192.168.0.240 -e 192.168.0.240` (a direct node IP), and if stalled, kill + re-run (idempotent).
 4. **authentik 2024.12.3, chart pinned `2024.x.x`** — Renovate never offers 2025.x+. Upgrade path is strictly sequential (8 hops to 2026.5); per-hop pg_dump is non-negotiable (Django migrations don't roll back). No automated backup of acid-auth exists (`enableLogicalBackup` unset).
 5. **kube-prometheus-stack 79.12.0** — one stepwise hop to ~84.x remains (#2515).
 
