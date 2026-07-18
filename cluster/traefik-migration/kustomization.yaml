@@ -8,3 +8,4 @@ resources:
   - realmic.yaml
   - middlewares-extra.yaml
   - batch2.yaml
+  - batch3.yaml

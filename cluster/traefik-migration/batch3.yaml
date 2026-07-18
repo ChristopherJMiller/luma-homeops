@@ -1,0 +1,346 @@
+---
+# Phase-2 batch 3 (final): the hard group — forward-auth ×8, share path-split,
+# word-arena (sticky moves to Service annotations on wordarena-backend; WS is
+# native), argo-cd (HTTPS backend via service.serversscheme annotation on the
+# chart Service), authentik dual-path.
+# auth-url/auth-signin/auth-snippet translate to the shared ForwardAuth
+# middleware authentik/authentik-forward-auth (already deployed); Traefik
+# handles the sign-in redirect itself. proxy-body-size / timeouts dropped as
+# in batch 2 (no default limit; entrypoints run readTimeout=0).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lidarr-traefik
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [lidarr.chrismiller.xyz]
+      secretName: lidarr-tls
+  rules:
+    - host: lidarr.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mm-lidarr
+                port:
+                  number: 8686
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: prowlarr-traefik
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [prowlarr.chrismiller.xyz]
+      secretName: prowlarr-tls
+  rules:
+    - host: prowlarr.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mm-prowlarr
+                port:
+                  number: 9696
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: radarr-traefik
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [radarr.chrismiller.xyz]
+      secretName: radarr-tls
+  rules:
+    - host: radarr.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mm-radarr
+                port:
+                  number: 7878
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: readarr-traefik
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [readarr.chrismiller.xyz]
+      secretName: readarr-tls
+  rules:
+    - host: readarr.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mm-readarr
+                port:
+                  number: 8787
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sabnzbd-traefik
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [sabnzbd.chrismiller.xyz]
+      secretName: sabnzbd-tls
+  rules:
+    - host: sabnzbd.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mm-sabnzbd
+                port:
+                  number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: sonarr-traefik
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [sonarr.chrismiller.xyz]
+      secretName: sonarr-tls
+  rules:
+    - host: sonarr.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mm-sonarr
+                port:
+                  number: 8989
+---
+# share.chrismiller.xyz splits by path: / is authed (admin), /share is public.
+# Traefik router priority (longer rule wins) reproduces nginx longest-prefix.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: share-admin-traefik
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [share.chrismiller.xyz]
+      secretName: share-tls
+  rules:
+    - host: share.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: filebrowser
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: share-public-traefik
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [share.chrismiller.xyz]
+      secretName: share-tls
+  rules:
+    - host: share.chrismiller.xyz
+      http:
+        paths:
+          - path: /share
+            pathType: Prefix
+            backend:
+              service:
+                name: filebrowser
+                port:
+                  number: 80
+---
+# cert-manager annotation intentionally omitted: the original Ingress owns the
+# lagrange-admin-tls Certificate; the duplicate only references the secret.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: lagrange-admin-traefik
+  namespace: ops
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [lagrange.chrismiller.xyz]
+      secretName: lagrange-admin-tls
+  rules:
+    - host: lagrange.chrismiller.xyz
+      http:
+        paths:
+          - path: /orbit
+            pathType: Prefix
+            backend:
+              service:
+                name: orbit
+                port:
+                  number: 8080
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: lagrange-admin
+                port:
+                  number: 8443
+---
+# Sticky session config lives on the wordarena-backend Service annotations
+# (cluster/word-arena/backend.yaml); WS needs no annotation in Traefik.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wordarena-traefik
+  namespace: word-arena
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [wordarena.chrismiller.xyz]
+      secretName: wordarena-tls
+  rules:
+    - host: wordarena.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: wordarena-frontend
+                port:
+                  number: 80
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: wordarena-backend
+                port:
+                  number: 80
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: wordarena-backend
+                port:
+                  number: 80
+---
+# HTTPS to the argo-cd backend comes from service.serversscheme on the chart
+# Service (cluster/argo-cd/values.yaml server.service.annotations); the global
+# serversTransport already skips verify for its self-signed cert.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-traefik
+  namespace: argo-cd
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [ci.chrismiller.xyz]
+      secretName: argocd-server-tls
+  rules:
+    - host: ci.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argo-install-argocd-server
+                port:
+                  number: 443
+---
+# authentik: outpost path must route to the outpost Service, everything else
+# to the server — same shape as the nginx extraPaths original.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: authentik-traefik
+  namespace: authentik
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [auth.chrismiller.xyz]
+      secretName: auth-tls
+  rules:
+    - host: auth.chrismiller.xyz
+      http:
+        paths:
+          - path: /outpost.goauthentik.io
+            pathType: Prefix
+            backend:
+              service:
+                name: ak-outpost-media-outpost
+                port:
+                  number: 9000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: a-authentik-server
+                port:
+                  number: 80
