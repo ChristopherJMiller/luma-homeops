@@ -1,0 +1,26 @@
+---
+# Scrapes the mega-media reconciler (>=0.9.0, mode: deployment) which serves
+# Prometheus metrics on port `metrics` (8000) at /metrics — series megamedia_*.
+# It's a bare Deployment (no Service), so a PodMonitor is used rather than a
+# ServiceMonitor. Completed post-upgrade hook Job pods share the
+# `media/service: reconciler` label but expose no ready endpoint, so they yield
+# no scrape targets.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: mega-media-reconciler
+  namespace: media
+  labels:
+    release: prometheus
+    app.kubernetes.io/part-of: mega-media
+spec:
+  namespaceSelector:
+    matchNames:
+      - media
+  selector:
+    matchLabels:
+      media/service: reconciler
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics

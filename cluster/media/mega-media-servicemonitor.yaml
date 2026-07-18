@@ -1,0 +1,28 @@
+---
+# Scrapes the exportarr sidecars added by mega-media >=0.9.0 (metrics.enabled).
+# Each *arr + SABnzbd Service exposes a named `metrics` port (9707); Services
+# without that port (plex, media, postgresql) simply produce no targets.
+# `release: prometheus` is required — the kube-prometheus-stack Prometheus CR
+# selects monitors with serviceMonitorSelector matchLabels {release: prometheus}.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mega-media-exportarr
+  namespace: media
+  labels:
+    release: prometheus
+    app.kubernetes.io/part-of: mega-media
+spec:
+  namespaceSelector:
+    matchNames:
+      - media
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: mm
+  # Carry the per-service label onto every series (sanitized to media_service).
+  targetLabels:
+    - media/service
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics

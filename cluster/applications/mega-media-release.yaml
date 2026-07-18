@@ -9,11 +9,15 @@ spec:
   source:
     repoURL: https://realliance.github.io/helm-mega-media
     chart: mega-media
-    targetRevision: 0.8.8
+    targetRevision: 0.9.0
     helm:
       releaseName: mm
       valuesObject:
         nodeName: middle
+        # exportarr sidecars on every *arr + SABnzbd (named `metrics` port :9707),
+        # scraped by the ServiceMonitor in cluster/media. Chart default is off.
+        metrics:
+          enabled: true
         postgresql:
           enabled: false
         externalPostgres:
@@ -25,10 +29,13 @@ spec:
             key: password
         reconciler:
           enabled: true
-          # chart defaults tag: latest + pullPolicy: IfNotPresent, which
-          # leaves the kubelet using a cached `:latest` after the upstream
-          # image is rebuilt. Pin to the current build sha to force a pull.
-          tag: a680168
+          # 0.9.0 runs the reconciler as a long-running Deployment that serves
+          # /metrics on metricsPort 8000 (scraped by the reconciler PodMonitor in
+          # cluster/media). The older pinned sha predates the metrics endpoint, so
+          # advance the pin to a metrics-serving build. Pinning (vs :latest) still
+          # forces the kubelet to pull instead of reusing a cached `:latest`.
+          mode: deployment
+          tag: 0d0a5e1
         arrs:
           config:
             storageClassName: rook-ceph-block
