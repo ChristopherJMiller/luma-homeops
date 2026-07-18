@@ -61,7 +61,11 @@ spec:
               name: api-keys
               key: lidarr
           readarr:
-            enabled: true
+            # Disabled 2026-07-18: Readarr is EOL upstream (Servarr archived it)
+            # and was broken here (no indexers / no download client). Chart 0.9.0
+            # default-disables it too. Argo will prune the deployment, service,
+            # exportarr sidecar and config PVC (RBD reclaim=Retain keeps the PV).
+            enabled: false
             apiKey:
               name: api-keys
               key: readarr
