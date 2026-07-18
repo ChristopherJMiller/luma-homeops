@@ -1,0 +1,322 @@
+---
+# Phase-2 batch: trivial/medium ingresses duplicated on the traefik class.
+# proxy-body-size / read/send-timeout annotations are intentionally dropped:
+# Traefik has no default body limit and the entrypoints run readTimeout=0.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: attic-traefik
+  namespace: attic
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [attic.chrismiller.xyz]
+      secretName: attic-tls
+  rules:
+    - host: attic.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: attic
+                port:
+                  number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chrismillerxyz-traefik
+  namespace: chrismillerxyz
+  annotations:
+    external-dns.alpha.kubernetes.io/controller: cloudflareddns
+    traefik.ingress.kubernetes.io/router.middlewares: chrismillerxyz-cors@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [chrismiller.xyz]
+      secretName: chrismillerxyz-tls
+  rules:
+    - host: chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mysite
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: www-chrismillerxyz-traefik
+  namespace: chrismillerxyz
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: chrismillerxyz-cors@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [www.chrismiller.xyz]
+      secretName: chrismillerxyz-tls
+  rules:
+    - host: www.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mysite
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: fittrackee-traefik
+  namespace: fit
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [fit.chrismiller.xyz]
+      secretName: fit-tls
+  rules:
+    - host: fit.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: fit-fittrackee
+                port:
+                  number: 5000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: home-assistant-traefik
+  namespace: home-assistant
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [home.chrismiller.xyz]
+      secretName: home-tls
+  rules:
+    - host: home.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ha-home-assistant
+                port:
+                  number: 8123
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: plex-traefik
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [plex.chrismiller.xyz]
+      secretName: plex-tls
+  rules:
+    - host: plex.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mm-plex
+                port:
+                  number: 32400
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mediadav-traefik
+  namespace: media
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [mediadav.chrismiller.xyz]
+      secretName: mediadav-tls
+  rules:
+    - host: mediadav.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: webdav
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gonic-traefik
+  namespace: music-streaming
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [music.chrismiller.xyz]
+      secretName: gonic-tls
+  rules:
+    - host: music.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gonic
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gonic-webdav-traefik
+  namespace: music-streaming
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [dav.music.chrismiller.xyz]
+      secretName: gonic-webdav-tls
+  rules:
+    - host: dav.music.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gonic
+                port:
+                  number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-traefik
+  namespace: prometheus
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [dashboard.chrismiller.xyz]
+      secretName: dashboard-tls
+  rules:
+    - host: dashboard.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: prometheus-grafana
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: realliance-traefik
+  namespace: realliance-net
+  annotations:
+    external-dns.alpha.kubernetes.io/controller: cloudflareddns
+    traefik.ingress.kubernetes.io/router.middlewares: realliance-net-set-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [realliance.net]
+      secretName: realliance-tls
+  rules:
+    - host: realliance.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: home
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: www-realliance-traefik
+  namespace: realliance-net
+  annotations:
+    external-dns.alpha.kubernetes.io/target: realliance.net
+    traefik.ingress.kubernetes.io/router.middlewares: realliance-net-set-csp@kubernetescrd
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [www.realliance.net]
+      secretName: chrismillerxyz-tls
+  rules:
+    - host: www.realliance.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: home
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: royaltracker-traefik
+  namespace: royaltracker
+  annotations:
+    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [rccl-tracker.chrismiller.xyz]
+      secretName: royaltracker-tls
+  rules:
+    - host: rccl-tracker.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: royaltracker-bot
+                port:
+                  number: 80
