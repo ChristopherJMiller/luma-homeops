@@ -31,6 +31,11 @@ spec:
           image: quay.io/prometheuscommunity/ipmi-exporter:v1.10.1
           args:
             - --config.file=/config/config.yml
+          env:
+            # freeipmi writes its SDR cache under $HOME/.freeipmi; without a
+            # writable HOME every collector fails with "read-only file system".
+            - name: HOME
+              value: /tmp
           ports:
             - name: http
               containerPort: 9290
@@ -44,6 +49,8 @@ spec:
             - name: config
               mountPath: /config
               readOnly: true
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 10m
@@ -54,3 +61,6 @@ spec:
         - name: config
           secret:
             secretName: ipmi-exporter-config
+        - name: tmp
+          emptyDir:
+            medium: Memory
