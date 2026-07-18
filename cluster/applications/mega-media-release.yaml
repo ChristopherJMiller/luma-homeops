@@ -77,9 +77,16 @@ spec:
           readinessProbe:
             failureThreshold: 25
           resources:
+            # `middle` is a single node pinned by RWO media storage, and its
+            # memory *requests* run near 100% while real usage sits ~44%. Plex
+            # idles at ~100Mi and only needs headroom during transcode, so the
+            # request is decoupled from the limit: request enough to schedule,
+            # keep the 4Gi ceiling for transcode bursts. (Reverting to
+            # request==limit re-pins 4Gi and OOM-rejects Plex on restart — this
+            # bit us on the 0.9.0 rollout, 783 OutOfmemory pods.)
             requests:
-              memory: 4Gi
-              cpu: 2
+              memory: 2Gi
+              cpu: 1
             limits:
               memory: 4Gi
               # amd.com/gpu: 1  # TEMP removed 2026-07-16: middle's GPU fails init
@@ -111,8 +118,11 @@ spec:
           config:
             storageClassName: rook-ceph-block
           resources:
+            # Decoupled request/limit for the same reason as Plex (see above):
+            # SABnzbd idles ~80Mi and only grows toward its 1G article cache +
+            # par2 repair under load. Request 1Gi to schedule, keep 2Gi ceiling.
             requests:
-              memory: 2Gi
+              memory: 1Gi
               cpu: 1
             limits:
               memory: 2Gi
