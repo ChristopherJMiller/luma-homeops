@@ -98,6 +98,11 @@ spec:
               # was hard-down with 0 schedulable pods. Restore once GPU works.
           config:
             storageClassName: rook-ceph-block
+            # Plex metadata + thumbnails + databases + daily DB backups live here.
+            # The chart default (1Gi) is far too small — it filled to 81% and
+            # starved thumbnail/artwork generation. rook-ceph-block allows online
+            # expansion; RBD is thin-provisioned so this reserves nothing upfront.
+            size: 30Gi
           transcode:
             storageClassName: rook-ceph-block
         sabnzbd:
