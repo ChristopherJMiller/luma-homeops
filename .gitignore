@@ -2,4 +2,10 @@ cluster/vpn
 cluster/democratic-csi
 router/ansible/backups/
 router/ansible/ansible.log
-.claude/
+# Track shareable Claude Code config (skills, project settings, docs) but keep
+# personal/local overrides out of git.
+.claude/*
+!.claude/skills/
+!.claude/settings.json
+!.claude/MCP.md
+.claude/settings.local.json
