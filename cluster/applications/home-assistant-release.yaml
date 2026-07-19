@@ -29,6 +29,13 @@ spec:
           storageClassName: rook-ceph-block
           size: 5Gi
         haconfig:
+          homeassistant:
+            # Give HA its canonical external URL so get_url() resolves behind
+            # the Cloudflare+ingress proxy chain. Without this, HA emits
+            # relative endpoints and drops `issuer` from the OAuth
+            # authorization-server metadata, breaking MCP OAuth discovery.
+            external_url: https://home.chrismiller.xyz
+
           circadian_lighting:
             transition: 5
 
