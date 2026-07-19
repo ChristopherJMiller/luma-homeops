@@ -1,0 +1,26 @@
+# Adaptive Lighting — replaces the abandoned circadian_lighting custom component
+# (which hard-fails on HA 2026.7.2: cannot import ATTR_COLOR_TEMP).
+#
+# GitOps source of truth (see bedroom.yaml header for the mount mechanism).
+# Requires the `adaptive_lighting` HACS integration code to be installed on the
+# volume (HACS -> Adaptive Lighting -> download). This YAML replaces the old
+# `switch: platform: circadian_lighting` + `circadian_lighting:` blocks that used
+# to live in the release valuesObject haconfig.
+#
+# Creates switch.adaptive_lighting_circadian (main enable), which the morning
+# routine toggles off (Phase 1) and on (Phase 2).
+adaptive_lighting:
+  - name: circadian
+    lights:
+      - light.dresser_lamp
+      - light.floor_lamp
+      - light.floor_lamp_a
+      - light.floor_lamp_b
+      - light.ground_spot
+      - light.nightstand_lamp
+      - light.tv_accent
+    min_color_temp: 2200
+    max_color_temp: 5500
+    transition: 45
+    take_over_control: true       # respect manual changes (e.g. the morning warm dim)
+    detect_non_ha_changes: false

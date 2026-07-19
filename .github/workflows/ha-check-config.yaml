@@ -39,6 +39,16 @@ jobs:
           printf 'homeassistant:\n  packages: !include_dir_named packages/\n' > hacheck/configuration.yaml
           : > hacheck/secrets.yaml
 
+      - name: Fetch custom integrations referenced by packages
+        run: |
+          # Custom components aren't in the vanilla HA image; check_config needs
+          # them present to validate their config schemas. Add new ones here as
+          # packages start using them.
+          mkdir -p hacheck/custom_components
+          # adaptive_lighting -> packages/lighting.yaml
+          git clone --depth 1 https://github.com/basnijholt/adaptive-lighting /tmp/adaptive-lighting
+          cp -r /tmp/adaptive-lighting/custom_components/adaptive_lighting hacheck/custom_components/
+
       - name: check_config
         run: |
           # NOTE: `check_config` exits 0 even when it finds config errors — it

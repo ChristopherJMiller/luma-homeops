@@ -17,6 +17,7 @@ configMapGenerator:
       - packages/bedroom.yaml
       - packages/plant_blinds.yaml
       - packages/morning_routine.yaml
+      - packages/lighting.yaml
 
 generatorOptions:
   disableNameSuffixHash: true
