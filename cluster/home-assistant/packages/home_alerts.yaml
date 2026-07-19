@@ -1,0 +1,108 @@
+---
+# Home safety/hygiene alerts — leak, fridge/freezer ajar, door unlocked,
+# low-battery digest. Notify-only (no actuation) by design.
+#
+# GitOps source of truth (see bedroom.yaml header for the mount mechanism).
+
+automation:
+  # Water leak → critical push (alarm_stream bypasses silent mode — a leak
+  # is worth waking up for).
+  - id: alert_leak_detected
+    alias: Alert - Water Leak Detected
+    description: Kitchen sink or water heater moisture sensor tripped.
+    triggers:
+      - trigger: state
+        entity_id:
+          - binary_sensor.kitchen_sink_leak_sensor
+          - binary_sensor.water_heater_leak_sensor
+        to: "on"
+    actions:
+      - action: notify.mobile_app_pixel_9_pro_xl
+        data:
+          title: 💧 Leak detected
+          message: "{{ trigger.to_state.attributes.friendly_name }} is reporting water!"
+          data:
+            ttl: 0
+            priority: high
+            channel: alarm_stream
+    mode: parallel
+
+  # Fridge/freezer door ajar 5 min → push.
+  - id: alert_fridge_freezer_ajar
+    alias: Alert - Fridge/Freezer Door Ajar
+    triggers:
+      - trigger: state
+        entity_id:
+          - binary_sensor.fridge_door_contact
+          - binary_sensor.freezer_door_contact
+        to: "on"
+        for: "00:05:00"
+    actions:
+      - action: notify.mobile_app_pixel_9_pro_xl
+        data:
+          title: 🧊 Door ajar
+          message: "{{ trigger.to_state.attributes.friendly_name }} has been open for 5 minutes."
+          data:
+            ttl: 0
+            priority: high
+    mode: parallel
+
+  # Front door unlocked 10 min while it matters (late night, or not home).
+  # Notify-only — no auto-lock.
+  - id: alert_front_door_unlocked
+    alias: Alert - Front Door Unlocked
+    triggers:
+      - trigger: state
+        entity_id: lock.front_door_lock
+        to: unlocked
+        for: "00:10:00"
+    conditions:
+      - condition: or
+        conditions:
+          - condition: time
+            after: "22:00:00"
+            before: "06:00:00"
+          - condition: not
+            conditions:
+              - condition: zone
+                entity_id: person.chris_m
+                zone: zone.home
+    actions:
+      - action: notify.mobile_app_pixel_9_pro_xl
+        data:
+          title: 🔓 Front door unlocked
+          message: The front door has been unlocked for 10 minutes.
+          data:
+            ttl: 0
+            priority: high
+    mode: single
+
+  # Saturday 10:00 low-battery digest (<30%, phones excluded).
+  - id: alert_low_battery_digest
+    alias: Alert - Weekly Low Battery Digest
+    triggers:
+      - trigger: time
+        at: "10:00:00"
+    conditions:
+      - condition: time
+        weekday:
+          - sat
+      - condition: template
+        value_template: "{{ low_batteries | count > 0 }}"
+    variables:
+      low_batteries: >-
+        {% set ns = namespace(items=[]) %}
+        {% for s in states.sensor
+           if s.attributes.device_class == 'battery'
+           and 'pixel' not in s.entity_id
+           and s.state | is_number
+           and s.state | float < 30 %}
+          {% set ns.items = ns.items + [s.name ~ ' (' ~ s.state ~ '%)'] %}
+        {% endfor %}
+        {{ ns.items }}
+    actions:
+      - action: notify.mobile_app_pixel_9_pro_xl
+        data:
+          title: 🔋 Low batteries
+          message: "{{ low_batteries | join(', ') }}"
+    mode: single

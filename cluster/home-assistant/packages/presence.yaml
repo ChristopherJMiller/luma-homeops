@@ -1,0 +1,45 @@
+---
+# Presence — lights off when leaving, warm light on evening arrival.
+# Arrival does a BARE light.turn_on: adaptive lighting (intercept: true)
+# adapts brightness/color for the time of day on its own, so no scene is
+# needed and manual-control pause is not triggered.
+#
+# GitOps source of truth (see bedroom.yaml header for the mount mechanism).
+
+automation:
+  - id: presence_away_lights_off
+    alias: Presence - Lights Off When Away
+    description: Everything off 5 minutes after Chris leaves home.
+    triggers:
+      - trigger: state
+        entity_id: person.chris_m
+        from: home
+        for: "00:05:00"
+    actions:
+      - action: light.turn_off
+        target:
+          entity_id:
+            - light.living_room
+            - light.tv
+            - light.sidetable_lamp
+            - light.desk_underlight
+            - light.bedroom
+            - light.kitchen_underlight
+    mode: single
+
+  - id: presence_arrival_evening_lights
+    alias: Presence - Evening Arrival Lights
+    description: Arriving after sunset turns the living room on (adaptive lighting sets the warmth).
+    triggers:
+      - trigger: state
+        entity_id: person.chris_m
+        to: home
+    conditions:
+      - condition: state
+        entity_id: sun.sun
+        state: below_horizon
+    actions:
+      - action: light.turn_on
+        target:
+          entity_id: light.living_room
+    mode: single

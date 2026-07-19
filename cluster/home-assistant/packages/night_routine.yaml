@@ -1,0 +1,33 @@
+---
+# Night routine — drive adaptive lighting's sleep mode (1% / 1000K on the
+# managed lamps) on a schedule. Complements morning_routine.yaml, which
+# clears sleep mode in its "Start Your Day" phase; the 10:00 fallback here
+# covers days when that phase never fires (no alarm, away, slept in).
+# The Bedroom dashboard's "Sleep" chip toggles the same switch manually.
+#
+# GitOps source of truth (see bedroom.yaml header for the mount mechanism).
+
+automation:
+  - id: night_sleep_mode_on
+    alias: Night - Sleep Mode On
+    description: Lights turned on after 22:30 come up dim and candle-warm.
+    triggers:
+      - trigger: time
+        at: "22:30:00"
+    actions:
+      - action: switch.turn_on
+        target:
+          entity_id: switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian
+    mode: single
+
+  - id: night_sleep_mode_off_fallback
+    alias: Night - Sleep Mode Off (fallback)
+    description: Safety net if the morning routine didn't clear sleep mode.
+    triggers:
+      - trigger: time
+        at: "10:00:00"
+    actions:
+      - action: switch.turn_off
+        target:
+          entity_id: switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian
+    mode: single

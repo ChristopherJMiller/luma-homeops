@@ -69,7 +69,9 @@ automation:
       re-enable circadian lighting and turn on the living room.
     triggers:
       - trigger: state
-        entity_id: switch.bedroom_light_switch
+        # z2m entity is bedroom_bedroom_* — the short id never existed,
+        # so this phase had never been able to fire
+        entity_id: switch.bedroom_bedroom_light_switch
         from: "off"
         to: "on"
     conditions:
@@ -80,6 +82,11 @@ automation:
       - action: input_boolean.turn_off
         target:
           entity_id: input_boolean.wake_up_pending
+      # clear bedtime sleep mode (night_routine.yaml) before re-enabling
+      # adaptation, or the day would start at 1% / 1000K
+      - action: switch.turn_off
+        target:
+          entity_id: switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian
       - action: switch.turn_on
         target:
           entity_id: switch.circadian_adaptive_lighting_circadian

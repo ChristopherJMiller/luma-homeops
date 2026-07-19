@@ -1,0 +1,24 @@
+---
+# Zigbee hygiene — never leave permit_join enabled indefinitely (an open
+# pairing window lets any nearby device join the mesh).
+#
+# GitOps source of truth (see bedroom.yaml header for the mount mechanism).
+
+automation:
+  - id: zigbee_permit_join_auto_off
+    alias: Zigbee - Auto-disable Permit Join
+    description: Turn pairing mode off 15 minutes after it was enabled.
+    triggers:
+      - trigger: state
+        entity_id: switch.zigbee2mqtt_bridge_permit_join
+        to: "on"
+        for: "00:15:00"
+    actions:
+      - action: switch.turn_off
+        target:
+          entity_id: switch.zigbee2mqtt_bridge_permit_join
+      - action: notify.mobile_app_pixel_9_pro_xl
+        data:
+          title: 📡 Zigbee pairing closed
+          message: permit_join was on for 15 minutes — auto-disabled.
+    mode: single

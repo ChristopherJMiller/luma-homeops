@@ -6,18 +6,55 @@
 # extraConfigMounts. HA loads it via `homeassistant.packages`. Edit HERE, not in
 # the HA UI (the UI editor is read-only for package-defined automations).
 automation:
+  # Plain sync automation. This used the alexdelprete/linked-entities
+  # blueprint, but that blueprint's unquoted `from: off/on` triggers fail
+  # schema validation on HA 2026.7 — and its input referenced
+  # switch.bedroom_light_switch, an entity_id that never existed (the z2m
+  # entity is bedroom_bedroom_*). Doubly dead; now a ~20-line automation.
   - id: '1741747401508'
     alias: Sync Bedroom Switch and Lights
-    description: ''
-    use_blueprint:
-      path: alexdelprete/ha-blueprint-linked-entities.yaml
-      input:
-        linked_entity:
-          - switch.bedroom_light_switch
+    description: Mirror on/off state among the wall switch and the three lamps.
+    variables:
+      linked:
+        - switch.bedroom_bedroom_light_switch
+        - light.nightstand_lamp
+        - light.dresser_lamp
+        - light.floor_lamp
+    triggers:
+      - trigger: state
+        entity_id:
+          - switch.bedroom_bedroom_light_switch
           - light.nightstand_lamp
           - light.dresser_lamp
           - light.floor_lamp
-        delay_miliseconds: 0
+        from: "off"
+        to: "on"
+      - trigger: state
+        entity_id:
+          - switch.bedroom_bedroom_light_switch
+          - light.nightstand_lamp
+          - light.dresser_lamp
+          - light.floor_lamp
+        from: "on"
+        to: "off"
+    conditions:
+      # ignore state changes this automation itself caused (loop guard)
+      - condition: template
+        value_template: "{{ trigger.to_state.context.id != this.context.id }}"
+    actions:
+      - choose:
+          - conditions: "{{ trigger.to_state.state == 'on' }}"
+            sequence:
+              - action: homeassistant.turn_on
+                target:
+                  entity_id: "{{ linked | reject('eq', trigger.entity_id) | list }}"
+          - conditions: "{{ trigger.to_state.state == 'off' }}"
+            sequence:
+              - action: homeassistant.turn_off
+                target:
+                  entity_id: "{{ linked | reject('eq', trigger.entity_id) | list }}"
+    mode: restart
+    max_exceeded: silent
 
 # NOTE: the old fixed-time "WAKE UP EARLY" automation was superseded by the
 # phone-alarm-driven morning routine in morning_routine.yaml (Phase 1 now does a

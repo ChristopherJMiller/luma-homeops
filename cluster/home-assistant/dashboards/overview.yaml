@@ -321,13 +321,6 @@ views:
               service: switch.toggle
               target:
                 entity_id: switch.circadian_adaptive_lighting_circadian
-          - type: template
-            entity: binary_sensor.slider_door_contact
-            content: "{{ 'Slider open' if is_state('binary_sensor.slider_door_contact','on') else 'Slider closed' }}"
-            icon: "{{ 'mdi:door-sliding-open' if is_state('binary_sensor.slider_door_contact','on') else 'mdi:door-sliding' }}"
-            icon_color: "{{ 'amber' if is_state('binary_sensor.slider_door_contact','on') else '' }}"
-            tap_action:
-              action: more-info
   - type: vertical-stack
     view_layout:
       grid-area: lights

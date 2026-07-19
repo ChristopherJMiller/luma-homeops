@@ -9,16 +9,21 @@ resources:
 
 # HA config packages (git-tracked source of truth). Rendered into a ConfigMap
 # that the ha-helm chart mounts at /config/packages via extraConfigMounts.
-# Stable name (no hash suffix) so the chart can reference it directly; reload on
-# change is handled by a stakater/reloader annotation on the HA deployment.
+# Stable name (no hash suffix) so the chart can reference it directly. NOTE:
+# no reloader is deployed — package changes need a manual
+# `kubectl -n home-assistant rollout restart deploy/ha-home-assistant`.
 configMapGenerator:
   - name: ha-packages
     files:
       - packages/bedroom.yaml
       - packages/plant_blinds.yaml
       - packages/morning_routine.yaml
+      - packages/night_routine.yaml
       - packages/lighting.yaml
       - packages/overview_brain.yaml
+      - packages/home_alerts.yaml
+      - packages/presence.yaml
+      - packages/zigbee_hygiene.yaml
   - name: ha-dashboards
     files:
       - dashboards/overview.yaml
