@@ -46,7 +46,8 @@ spec:
         lovelace:
           enabled: true
           dashboards:
-            - urlPath: home
+            # url_path MUST contain a hyphen (HA rejects hyphenless custom paths).
+            - urlPath: home-ops
               filename: dashboards/overview.yaml
               title: Home
               icon: mdi:home
