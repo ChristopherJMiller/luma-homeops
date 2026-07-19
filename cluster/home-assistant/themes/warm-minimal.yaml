@@ -1,0 +1,64 @@
+# Warm-minimal — a calm, paper-like theme with a single terracotta accent.
+# Git-tracked; mounted at /config/themes and loaded via frontend.themes.
+# Select it in HA -> Profile -> Themes -> "Warm Minimal".
+Warm Minimal:
+  # -- accent --
+  primary-color: "#C2703D"                # terracotta
+  accent-color: "#C2703D"
+  light-primary-color: "#E7CDB8"
+  dark-primary-color: "#A85C2E"
+
+  # -- surfaces (warm cream, paper) --
+  primary-background-color: "#EFE7D9"     # page
+  secondary-background-color: "#E7DDCB"   # sidebar / wells
+  card-background-color: "#FBF7EF"        # cards
+  ha-card-background: "#FBF7EF"
+  divider-color: "rgba(58,52,44,0.08)"
+
+  # -- card shape: rounded, borderless, soft shadow --
+  ha-card-border-radius: "22px"
+  ha-card-border-width: "0px"
+  ha-card-box-shadow: "0 2px 14px rgba(58,52,44,0.07)"
+  mush-card-primary-font-weight: "600"
+  mush-border-radius: "18"
+  mush-icon-border-radius: "14"
+
+  # -- text (warm dark on cream) --
+  primary-text-color: "#3A342C"
+  secondary-text-color: "#8C8477"
+  text-primary-color: "#FBF7EF"           # text on accent
+  disabled-text-color: "#B7AE9F"
+
+  # -- header --
+  app-header-background-color: "#EFE7D9"
+  app-header-text-color: "#3A342C"
+  app-header-selection-bar-color: "#C2703D"
+
+  # -- sidebar --
+  sidebar-background-color: "#EBE2D2"
+  sidebar-text-color: "#5A5348"
+  sidebar-icon-color: "#8C8477"
+  sidebar-selected-text-color: "#C2703D"
+  sidebar-selected-icon-color: "#C2703D"
+
+  # -- icons / states --
+  state-icon-color: "#7A7264"
+  paper-item-icon-color: "#7A7264"
+  state-icon-active-color: "#C2703D"
+
+  # -- controls (switches, sliders) --
+  switch-checked-color: "#C2703D"
+  switch-unchecked-color: "#C4BAA8"
+  paper-toggle-button-checked-button-color: "#C2703D"
+  slider-color: "#C2703D"
+  slider-track-color: "#DED3C0"
+
+  # -- inputs / chips --
+  input-fill-color: "#F3ECE0"
+  chip-background-color: "rgba(58,52,44,0.06)"
+
+  # -- mushroom accent RGBs (warm) --
+  rgb-primary-color: "194,112,61"
+  rgb-accent-color: "194,112,61"
+  rgb-state-light: "216,154,91"
+  rgb-state-climate: "138,154,123"

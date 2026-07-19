@@ -41,6 +41,9 @@ spec:
           - name: dashboards
             configMap: ha-dashboards
             mountPath: /config/dashboards
+          - name: themes
+            configMap: ha-themes
+            mountPath: /config/themes
         # Git-tracked YAML-mode dashboard alongside the storage-mode default
         # (global mode stays storage so HACS custom-card resources keep working).
         lovelace:
