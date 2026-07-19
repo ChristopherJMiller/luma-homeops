@@ -18,6 +18,7 @@ configMapGenerator:
       - packages/plant_blinds.yaml
       - packages/morning_routine.yaml
       - packages/lighting.yaml
+      - packages/overview_brain.yaml
   - name: ha-dashboards
     files:
       - dashboards/overview.yaml

@@ -1,0 +1,126 @@
+# Overview "brain" — the logic behind the top-of-mind glance dashboard.
+#
+# GitOps source of truth (see bedroom.yaml header for the mount mechanism).
+# All the "which city / is it a workday / coat or umbrella / which commute"
+# reasoning lives HERE as template + workday sensors; the dashboard only
+# DISPLAYS these entities. Keeps presentation thin and logic centralized.
+#
+# EXTERNAL entities this expects (add via HA UI where noted):
+#   weather.forecast_home         Seattle / Capitol Hill (Met.no)     — exists
+#   weather.toronto               Toronto / Yonge+Eglinton (Met.no)   — ADD via UI
+#   sensor.seattle_work_commute   Capitol Hill -> Redmond Bldg 25     — exists (Waze)
+#   sensor.toronto_work_commute   Yonge+Eg -> CIBC Square (transit)   — ADD (google_travel_time)
+#   calendar.chris_is_not_in_seattle_calendar   Toronto-presence tell — exists
+
+binary_sensor:
+  # Holiday-aware workday per country. If workday YAML is rejected on this HA
+  # version, create these two via the UI with the same names instead.
+  - platform: workday
+    name: Workday Seattle
+    country: US
+    province: WA
+  - platform: workday
+    name: Workday Toronto
+    country: CA
+    province: ON
+
+template:
+  # ---- Location: which city, and which entities are "active" ----
+  - sensor:
+      - name: Current City
+        unique_id: current_city
+        state: >-
+          {% if is_state('calendar.chris_is_not_in_seattle_calendar', 'on') %}Toronto{% else %}Seattle{% endif %}
+        icon: >-
+          {% if is_state('calendar.chris_is_not_in_seattle_calendar', 'on') %}mdi:tower-fire{% else %}mdi:space-needle{% endif %}
+        attributes:
+          weather_entity: >-
+            {% if is_state('calendar.chris_is_not_in_seattle_calendar','on') %}weather.toronto{% else %}weather.forecast_home{% endif %}
+          commute_entity: >-
+            {% if is_state('calendar.chris_is_not_in_seattle_calendar','on') %}sensor.toronto_work_commute{% else %}sensor.seattle_work_commute{% endif %}
+          workday_entity: >-
+            {% if is_state('calendar.chris_is_not_in_seattle_calendar','on') %}binary_sensor.workday_toronto{% else %}binary_sensor.workday_seattle{% endif %}
+
+      - name: Active Temperature
+        unique_id: active_temperature
+        unit_of_measurement: "°F"
+        device_class: temperature
+        state: >-
+          {% set w = state_attr('sensor.current_city','weather_entity') %}
+          {% if w and states(w) not in ['unknown','unavailable','none'] %}{{ state_attr(w,'temperature') | round(0) }}{% endif %}
+
+      - name: Active Commute
+        unique_id: active_commute
+        unit_of_measurement: min
+        icon: mdi:car-clock
+        state: >-
+          {% set c = state_attr('sensor.current_city','commute_entity') %}
+          {% if c and states(c) not in ['unknown','unavailable','none'] %}{{ states(c) | round(0) }}{% endif %}
+
+      - name: Show Commute
+        unique_id: show_commute
+        # Only surface the commute when it's a workday in the active city AND
+        # you're home (no point once you've left).
+        state: >-
+          {% set wd = state_attr('sensor.current_city','workday_entity') %}
+          {{ is_state(wd,'on') and is_state('person.chris_m','home') }}
+
+  # ---- Weather forecast for the active city (precip chance + amount today) ----
+  - trigger:
+      - platform: homeassistant
+        event: start
+      - platform: time_pattern
+        minutes: "/20"
+      - platform: state
+        entity_id: sensor.current_city
+    variables:
+      w: "{{ state_attr('sensor.current_city','weather_entity') }}"
+    condition:
+      - condition: template
+        value_template: "{{ w and states(w) not in ['unknown','unavailable','none'] }}"
+    action:
+      - service: weather.get_forecasts
+        target:
+          entity_id: "{{ w }}"
+        data:
+          type: daily
+        response_variable: fc
+    sensor:
+      - name: Active Rain Chance Today
+        unique_id: active_rain_chance_today
+        unit_of_measurement: "%"
+        state: >-
+          {% set f = (fc.values()|list|first).forecast[0] if fc else none %}
+          {{ f.precipitation_probability | default(0) if f else 0 }}
+      - name: Active Precip Today
+        unique_id: active_precip_today
+        unit_of_measurement: "in"
+        state: >-
+          {% set f = (fc.values()|list|first).forecast[0] if fc else none %}
+          {{ ((f.precipitation | default(0) | float) / 25.4) | round(2) if f else 0 }}
+
+  # ---- The verdicts the dashboard shows ----
+  - binary_sensor:
+      - name: Coat Needed
+        unique_id: coat_needed
+        icon: mdi:coat-rack
+        state: >-
+          {{ (states('sensor.active_temperature') | float(99) < 65)
+             or (states('sensor.active_rain_chance_today') | float(0) > 75) }}
+      - name: Umbrella Needed
+        unique_id: umbrella_needed
+        icon: mdi:umbrella
+        state: "{{ states('sensor.active_precip_today') | float(0) >= 0.1 }}"
+
+  - sensor:
+      # One-line plain-language summary for the top of the glance.
+      - name: Outfit Advice
+        unique_id: outfit_advice
+        icon: mdi:hanger
+        state: >-
+          {% set coat = is_state('binary_sensor.coat_needed','on') %}
+          {% set umb = is_state('binary_sensor.umbrella_needed','on') %}
+          {% if coat and umb %}Coat + umbrella
+          {% elif coat %}Grab a coat
+          {% elif umb %}Umbrella today
+          {% else %}You're good{% endif %}
