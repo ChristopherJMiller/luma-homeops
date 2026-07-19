@@ -12,17 +12,10 @@
 #   sensor.toronto_work_commute   Yonge+Eg -> CIBC Square (transit)   — ADD (google_travel_time)
 #   calendar.chris_is_not_in_seattle_calendar   Toronto-presence tell — exists
 
-binary_sensor:
-  # Holiday-aware workday per country. If workday YAML is rejected on this HA
-  # version, create these two via the UI with the same names instead.
-  - platform: workday
-    name: Workday Seattle
-    country: US
-    province: WA
-  - platform: workday
-    name: Workday Toronto
-    country: CA
-    province: ON
+# Workday is config-flow-only in HA 2026.x (no YAML). Add these TWO Workday
+# integrations via the UI, naming their entities to match the references below:
+#   binary_sensor.workday_seattle   Country United States, subdivision Washington
+#   binary_sensor.workday_toronto   Country Canada, subdivision Ontario
 
 template:
   # ---- Location: which city, and which entities are "active" ----
