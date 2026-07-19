@@ -1,168 +1,247 @@
 views:
+# =====================================================================
+# HOME — warm-minimal glance. Deterministic 6-track grid via layout-card
+# (named areas; collapses to one column ≤800px). The logic lives in
+# packages/overview_brain.yaml — this view only displays those entities.
+# =====================================================================
 - title: Home
-  type: sections
-  max_columns: 2
-  sections:
-    # ---------- HERO: outfit verdict + weather + slim sun arc ----------
-    - type: grid
-      column_span: 2
-      cards:
-        - type: vertical-stack
-          grid_options:
-            columns: 12
-          cards:
-            - type: custom:mushroom-template-card
-              primary: "{{ states('sensor.outfit_advice') }}"
-              secondary: >-
-                {{ states('sensor.current_city') }}  ·  {{ states('sensor.active_temperature') }}°
-                {{ states('weather.forecast_home') | replace('-', ' ') | title }}
-              icon: >-
-                {% set c = states('weather.forecast_home') %}
-                {% set m = {'sunny':'mdi:weather-sunny','clear-night':'mdi:weather-night',
-                'cloudy':'mdi:weather-cloudy','partlycloudy':'mdi:weather-partly-cloudy',
-                'rainy':'mdi:weather-rainy','pouring':'mdi:weather-pouring',
-                'snowy':'mdi:weather-snowy','fog':'mdi:weather-fog','windy':'mdi:weather-windy'} %}
-                {{ m.get(c, 'mdi:weather-partly-cloudy') }}
-              icon_color: amber
-              card_mod:
-                style: |
-                  ha-card {
-                    background:
-                      radial-gradient(130% 200% at 10% -20%, rgba(221,161,94,0.22), transparent 60%),
-                      var(--card-background-color);
-                    border-radius: 24px 24px 6px 6px;
-                    --mush-icon-size: 52px;
-                  }
-                  mushroom-state-info $ .primary { font-size: 22px; font-weight: 700; }
-                  mushroom-state-info $ .secondary { font-size: 14px; }
-            - type: custom:horizon-card
-              moon: false
-              fields:
-                sunrise: true
-                sunset: true
-                dawn: false
-                noon: false
-                dusk: false
-                azimuth: false
-                sun_azimuth: false
-                elevation: false
-                sun_elevation: false
-                moonrise: false
-                moonset: false
-                moon_phase: false
-              card_mod:
-                style: |
-                  ha-card {
-                    border-radius: 6px 6px 24px 24px;
-                    --hc-card-padding: 6px 14px 10px;
-                  }
-    # ---------- TODAY: transit (work days only) + mail ----------
-    - type: grid
-      column_span: 1
-      cards:
-        - type: custom:mushroom-title-card
-          title: Today
-        - type: conditional
-          conditions:
-            - condition: state
-              entity: binary_sensor.show_commute
-              state: "on"
-          card:
-            type: custom:mushroom-template-card
-            primary: "{{ states('sensor.commute_transit') }}"
-            secondary: >-
-              ~{% if is_state('sensor.current_city','Toronto') %}40{% else %}50{% endif %} min to the office
-            icon: mdi:subway-variant
-            icon_color: amber
-            card_mod:
-              style: "ha-card { border-radius: 20px; }"
-        - type: custom:mushroom-chips-card
-          alignment: start
-          chips:
-            - type: entity
-              entity: sensor.mail_usps_mail
-              icon: mdi:mailbox
-            - type: entity
-              entity: sensor.mail_amazon_packages
-              icon: mdi:package
-            - type: entity
-              entity: sensor.mail_amazon_packages_delivered
-              icon: mdi:package-check
-    # ---------- AGENDA ----------
-    - type: grid
-      column_span: 1
-      cards:
-        - type: custom:mushroom-title-card
-          title: Agenda
-        - type: custom:calendar-card-pro
-          entities:
-            - entity: calendar.cmiller548_gmail_com
-              color: '#DDA15E'
-            - entity: calendar.family
-              color: '#96A884'
-            - entity: calendar.chris_is_not_in_seattle_calendar
-              label: ✈️
-              color: '#C2703D'
-            - entity: calendar.birthdays
-              label: 🎂
-              color: '#C79BD6'
-          days_to_show: 5
-          compact_events_to_show: 4
+  type: custom:grid-layout
+  layout:
+    grid-template-columns: repeat(6, minmax(0, 1fr))
+    grid-gap: 12px
+    margin: 12px auto 28px
+    max-width: 1180px
+    grid-template-areas: |
+      "hero hero hero hero hero hero"
+      "today today today agenda agenda agenda"
+      "playing playing playing reminders reminders reminders"
+      "rooms rooms rooms rooms rooms rooms"
+      "room-lr room-lr room-br room-br room-kt room-kt"
+    mediaquery:
+      "(max-width: 800px)":
+        grid-template-columns: minmax(0, 1fr)
+        grid-gap: 10px
+        margin: 8px 10px 24px
+        grid-template-areas: |
+          "hero"
+          "today"
+          "agenda"
+          "playing"
+          "reminders"
+          "rooms"
+          "room-lr"
+          "room-br"
+          "room-kt"
+  cards:
+  # ---------- HERO: outfit verdict + weather + slim sun arc ----------
+  - type: vertical-stack
+    view_layout:
+      grid-area: hero
+    cards:
+      - type: custom:mushroom-template-card
+        primary: "{{ states('sensor.outfit_advice') }}"
+        secondary: >-
+          {{ states('sensor.current_city') }}  ·  {{ states('sensor.active_temperature') }}°
+          {{ states('weather.forecast_home') | replace('-', ' ') | title }}
+        icon: >-
+          {% set c = states('weather.forecast_home') %}
+          {% set m = {'sunny':'mdi:weather-sunny','clear-night':'mdi:weather-night',
+          'cloudy':'mdi:weather-cloudy','partlycloudy':'mdi:weather-partly-cloudy',
+          'rainy':'mdi:weather-rainy','pouring':'mdi:weather-pouring',
+          'snowy':'mdi:weather-snowy','fog':'mdi:weather-fog','windy':'mdi:weather-windy'} %}
+          {{ m.get(c, 'mdi:weather-partly-cloudy') }}
+        icon_color: amber
+        card_mod:
+          style: |
+            ha-card {
+              background:
+                radial-gradient(130% 200% at 10% -20%, rgba(221,161,94,0.22), transparent 60%),
+                var(--card-background-color);
+              border-radius: 24px 24px 6px 6px;
+              --mush-icon-size: 52px;
+            }
+            mushroom-shape-icon { --shape-color: transparent; }
+            mushroom-state-info $ .primary { font-size: 22px; font-weight: 700; }
+            mushroom-state-info $ .secondary { font-size: 14px; }
+      - type: custom:horizon-card
+        moon: false
+        fields:
+          sunrise: true
+          sunset: true
+          dawn: false
+          noon: false
+          dusk: false
+          azimuth: false
+          sun_azimuth: false
+          elevation: false
+          sun_elevation: false
+          moonrise: false
+          moonset: false
+          moon_phase: false
+        card_mod:
+          style: |
+            ha-card {
+              border-radius: 6px 6px 24px 24px;
+              --hc-card-padding: 6px 14px 10px;
+            }
+  # ---------- TODAY: transit (work days only) + mail ----------
+  - type: vertical-stack
+    view_layout:
+      grid-area: today
+    cards:
+      - type: custom:mushroom-title-card
+        title: Today
+      - type: conditional
+        conditions:
+          - condition: state
+            entity: binary_sensor.show_commute
+            state: "on"
+        card:
+          type: custom:mushroom-template-card
+          primary: "{{ states('sensor.commute_transit') }}"
+          secondary: >-
+            ~{% if is_state('sensor.current_city','Toronto') %}40{% else %}50{% endif %} min to the office
+          icon: mdi:subway-variant
+          icon_color: amber
           card_mod:
-            style: "ha-card { border-radius: 22px; }"
-    # ---------- ROOMS (drill-down) ----------
-    - type: grid
-      column_span: 2
-      cards:
-        - type: custom:mushroom-title-card
-          title: Rooms
-          grid_options:
-            columns: 12
-        - type: custom:mushroom-template-card
-          primary: Living Room
-          secondary: "{{ states('sensor.living_room_temperature') }}° · {{ states('sensor.living_room_humidity') }}%"
-          icon: mdi:sofa
-          icon_color: amber
-          grid_options:
-            columns: 4
-          tap_action:
-            action: navigate
-            navigation_path: /home-ops/1
-          card_mod: &roomtile
             style: |
-              ha-card {
-                background:
-                  radial-gradient(120% 130% at 20% 0%, rgba(221,161,94,0.13), transparent 62%),
-                  var(--card-background-color);
-                border-radius: 22px;
-                transition: transform .18s ease, box-shadow .18s ease;
-              }
-              ha-card:hover {
-                transform: translateY(-2px);
-                box-shadow: 0 8px 20px rgba(0,0,0,0.28);
-              }
-        - type: custom:mushroom-template-card
-          primary: Bedroom
-          secondary: "{{ states('sensor.bedroom_temperature') }}° · {{ states('sensor.bedroom_humidity') }}%"
-          icon: mdi:bed
-          icon_color: amber
-          grid_options:
-            columns: 4
-          tap_action:
-            action: navigate
-            navigation_path: /home-ops/2
-          card_mod: *roomtile
-        - type: custom:mushroom-template-card
-          primary: Kitchen
-          secondary: Tap to open
-          icon: mdi:silverware-fork-knife
-          icon_color: amber
-          grid_options:
-            columns: 4
-          tap_action:
-            action: navigate
-            navigation_path: /home-ops/3
-          card_mod: *roomtile
+              ha-card { border-radius: 20px; }
+              mushroom-shape-icon { --shape-color: transparent; }
+      - type: custom:mushroom-chips-card
+        alignment: start
+        chips:
+          - type: entity
+            entity: sensor.mail_usps_mail
+            icon: mdi:mailbox
+          - type: entity
+            entity: sensor.mail_amazon_packages
+            icon: mdi:package
+          - type: entity
+            entity: sensor.mail_amazon_packages_delivered
+            icon: mdi:package-check
+  # ---------- AGENDA ----------
+  - type: vertical-stack
+    view_layout:
+      grid-area: agenda
+    cards:
+      - type: custom:mushroom-title-card
+        title: Agenda
+      - type: custom:calendar-card-pro
+        entities:
+          - entity: calendar.cmiller548_gmail_com
+            color: '#DDA15E'
+          - entity: calendar.family
+            color: '#96A884'
+          - entity: calendar.chris_is_not_in_seattle_calendar
+            label: ✈️
+            color: '#C2703D'
+          - entity: calendar.birthdays
+            label: 🎂
+            color: '#C79BD6'
+        days_to_show: 5
+        compact_events_to_show: 4
+        card_mod:
+          style: "ha-card { border-radius: 22px; }"
+  # ---------- NOW PLAYING (Plex creates per-client players dynamically;
+  #            scan the domain instead of hardcoding entity_ids) ----------
+  - type: vertical-stack
+    view_layout:
+      grid-area: playing
+    cards:
+      - type: custom:mushroom-title-card
+        title: Now Playing
+      - type: custom:mushroom-template-card
+        primary: >-
+          {% set p = (states.media_player | selectattr('state','eq','playing') | list
+            + states.media_player | selectattr('state','eq','paused') | list)
+            | first | default(none) %}
+          {% if p %}{{ p.attributes.media_title | default(p.name) }}{% else %}Nothing playing{% endif %}
+        secondary: >-
+          {% set p = (states.media_player | selectattr('state','eq','playing') | list
+            + states.media_player | selectattr('state','eq','paused') | list)
+            | first | default(none) %}
+          {% if p %}{% set sub = p.attributes.media_series_title | default(p.attributes.media_artist | default('')) %}{{ (sub ~ ' · ') if sub else '' }}{{ p.state | title }}{% else %}Plex is quiet{% endif %}
+        icon: mdi:plex
+        icon_color: >-
+          {% if states.media_player | selectattr('state','eq','playing') | list | count > 0 %}amber{% endif %}
+        picture: >-
+          {% set p = (states.media_player | selectattr('state','eq','playing') | list
+            + states.media_player | selectattr('state','eq','paused') | list)
+            | first | default(none) %}
+          {{ p.attributes.entity_picture | default('') if p else '' }}
+        card_mod:
+          style: |
+            ha-card { border-radius: 22px; }
+            mushroom-shape-icon { --shape-color: transparent; }
+  # ---------- REMINDERS ----------
+  - type: vertical-stack
+    view_layout:
+      grid-area: reminders
+    cards:
+      - type: custom:mushroom-title-card
+        title: Reminders
+      - type: todo-list
+        entity: todo.shopping_list
+        hide_completed: true
+        hide_create: true
+        card_mod:
+          style: |
+            ha-card {
+              border-radius: 22px;
+              max-height: 320px;
+              overflow-y: auto;
+            }
+  # ---------- ROOMS (drill-down) ----------
+  - type: custom:mushroom-title-card
+    title: Rooms
+    view_layout:
+      grid-area: rooms
+  - type: custom:mushroom-template-card
+    view_layout:
+      grid-area: room-lr
+    primary: Living Room
+    secondary: "{{ states('sensor.living_room_temperature') }}° · {{ states('sensor.living_room_humidity') }}%"
+    icon: mdi:sofa
+    icon_color: amber
+    tap_action:
+      action: navigate
+      navigation_path: /home-ops/1
+    card_mod: &roomtile
+      style: |
+        ha-card {
+          background:
+            radial-gradient(120% 130% at 20% 0%, rgba(221,161,94,0.13), transparent 62%),
+            var(--card-background-color);
+          border-radius: 22px;
+          transition: transform .18s ease, box-shadow .18s ease;
+        }
+        ha-card:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 20px rgba(0,0,0,0.28);
+        }
+        mushroom-shape-icon { --shape-color: transparent; }
+  - type: custom:mushroom-template-card
+    view_layout:
+      grid-area: room-br
+    primary: Bedroom
+    secondary: "{{ states('sensor.bedroom_temperature') }}° · {{ states('sensor.bedroom_humidity') }}%"
+    icon: mdi:bed
+    icon_color: amber
+    tap_action:
+      action: navigate
+      navigation_path: /home-ops/2
+    card_mod: *roomtile
+  - type: custom:mushroom-template-card
+    view_layout:
+      grid-area: room-kt
+    primary: Kitchen
+    secondary: Tap to open
+    icon: mdi:silverware-fork-knife
+    icon_color: amber
+    tap_action:
+      action: navigate
+      navigation_path: /home-ops/3
+    card_mod: *roomtile
 - title: Living Room
   cards:
   - type: custom:mushroom-title-card
