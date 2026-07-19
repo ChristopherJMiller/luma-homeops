@@ -12,10 +12,9 @@
 #   sensor.toronto_work_commute   Yonge+Eg -> CIBC Square (transit)   — ADD (google_travel_time)
 #   calendar.chris_is_not_in_seattle_calendar   Toronto-presence tell — exists
 
-# Workday is config-flow-only in HA 2026.x (no YAML). Add these TWO Workday
-# integrations via the UI, naming their entities to match the references below:
-#   binary_sensor.workday_seattle   Country United States, subdivision Washington
-#   binary_sensor.workday_toronto   Country Canada, subdivision Ontario
+# Workday is config-flow-only in HA 2026.x (no YAML). Added via the UI:
+#   binary_sensor.workday_sensor_us_wa   United States / Washington (Seattle)
+#   binary_sensor.workday_sensor_ca_on   Canada / Ontario (Toronto)
 
 template:
   # ---- Location: which city, and which entities are "active" ----
@@ -32,7 +31,7 @@ template:
           commute_entity: >-
             {% if is_state('calendar.chris_is_not_in_seattle_calendar','on') %}sensor.toronto_work_commute{% else %}sensor.seattle_work_commute{% endif %}
           workday_entity: >-
-            {% if is_state('calendar.chris_is_not_in_seattle_calendar','on') %}binary_sensor.workday_toronto{% else %}binary_sensor.workday_seattle{% endif %}
+            {% if is_state('calendar.chris_is_not_in_seattle_calendar','on') %}binary_sensor.workday_sensor_ca_on{% else %}binary_sensor.workday_sensor_us_wa{% endif %}
 
       - name: Active Temperature
         unique_id: active_temperature
