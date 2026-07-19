@@ -9,15 +9,13 @@ spec:
   source:
     repoURL: https://github.com/ChristopherJMiller/ha-helm.git
     path: ./
-    targetRevision: main
+    targetRevision: v0.4.1
     helm:
       releaseName: ha
       valuesObject:
         image:
           tag: 2026.7.2
         hacs: true
-        postgresql:
-          enabled: false
         externalPostgres:
           host: acid-ha
           port: 5432
@@ -28,17 +26,23 @@ spec:
         haConfigStorage:
           storageClassName: rook-ceph-block
           size: 5Gi
+        # Canonical external URL so get_url() resolves behind the Cloudflare +
+        # ingress proxy chain (fixes OAuth authorization-server metadata for MCP).
+        externalUrl: https://home.chrismiller.xyz
+        # Git-tracked config packages, mounted from the ha-packages ConfigMap
+        # (built by cluster/home-assistant kustomize). Automations/helpers/etc.
+        # live in cluster/home-assistant/packages/, edited in-repo not the UI.
+        packages:
+          enabled: true
+        extraConfigMounts:
+          - name: packages
+            configMap: ha-packages
+            mountPath: /config/packages
+        # Fail-fast: a bad automation/package blocks pod start instead of taking
+        # HA down. Validated clean pre-cutover (circadian_lighting removed).
+        checkConfig:
+          enabled: true
         haconfig:
-          homeassistant:
-            # Give HA its canonical external URL so get_url() resolves behind
-            # the Cloudflare+ingress proxy chain. Without this, HA emits
-            # relative endpoints and drops `issuer` from the OAuth
-            # authorization-server metadata, breaking MCP OAuth discovery.
-            external_url: https://home.chrismiller.xyz
-
-          circadian_lighting:
-            transition: 5
-
           sensor:
             - platform: derivative
               source: sensor.living_room_temperature
@@ -46,18 +50,6 @@ spec:
               round: 2
               unit_time: h  # degrees per hour
               time_window: 00:30:00    # 30 minute window
-
-          switch:
-            - name: Circadian Lighting Enable
-              platform: circadian_lighting
-              lights_ct:
-                - light.dresser_lamp
-                - light.floor_lamp
-                - light.floor_lamp_a
-                - light.floor_lamp_b
-                - light.ground_spot
-                - light.nightstand_lamp
-                - light.tv_accent
 
           http:
             use_x_forwarded_for: true
