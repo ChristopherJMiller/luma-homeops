@@ -14,7 +14,7 @@ spec:
       releaseName: ha
       valuesObject:
         image:
-          tag: 2025.10.0
+          tag: 2026.7.2
         hacs: true
         postgresql:
           enabled: false
@@ -35,10 +35,10 @@ spec:
           sensor:
             - platform: derivative
               source: sensor.living_room_temperature
-              name: "Living Room Temperature Rate"
+              name: Living Room Temperature Rate
               round: 2
               unit_time: h  # degrees per hour
-              time_window: "00:30:00"  # 30 minute window
+              time_window: 00:30:00    # 30 minute window
 
           switch:
             - name: Circadian Lighting Enable
