@@ -65,6 +65,22 @@ kubectl -n home-assistant rollout restart deploy/ha-home-assistant
 ```
 Watch the rollout with the `safe-rollout` skill / `Monitor`. The `check-config` **init container** re-validates before the main container starts — a non-zero exit there stalls the pod (HA down on this RWO volume), so validate first.
 
+## Dashboards (YAML mode)
+
+Dashboards live in `cluster/home-assistant/dashboards/*.yaml`, built into the `ha-dashboards` ConfigMap (kustomize), mounted at `/config/dashboards`, and declared via the chart `lovelace` value:
+```yaml
+lovelace:
+  enabled: true
+  dashboards:
+    - urlPath: home-ops        # MUST contain a hyphen — HA rejects hyphenless custom paths
+      filename: dashboards/overview.yaml
+      title: Home
+      showInSidebar: true
+```
+- **Never flip global `lovelace: mode: yaml`** — it disables the UI custom-card **resource registry** cluster-wide, breaking HACS cards (mushroom, etc.) on every dashboard. Global mode stays `storage`; add YAML-mode dashboards *alongside* it. In this mixed mode the UI-registered resources still apply to the YAML dashboards.
+- To export an existing storage dashboard: `json.load('/config/.storage/lovelace.lovelace')['data']['config']` → `yaml.dump`.
+- `check_config` validates the `lovelace:` schema (this is how the missing-hyphen error is caught pre-start) but NOT the dashboard file contents — verify custom cards render in the browser after deploy.
+
 ## Hard rules / gotchas
 - **Never edit package automations in the HA UI** — it reports "Only automations in automations.yaml can be deleted"; they're read-only there by design.
 - **yamlfmt corrupts HA YAML**: it strips quotes, and YAML 1.1 then coerces `'on'`→bool and `'HH:MM:SS'`→sexagesimal int. HA config dirs are excluded from yamlfmt in `.pre-commit-config.yaml`; keep them excluded and keep `'on'`/`'off'`/times quoted in packages. (Values inside the Argo `valuesObject` are safe — Go YAML re-quotes on render.)
