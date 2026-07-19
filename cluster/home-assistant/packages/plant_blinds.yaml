@@ -1,0 +1,66 @@
+---
+# Plant blinds smart solar control.
+#
+# GitOps source of truth (see bedroom.yaml header for the mount mechanism).
+#
+# Depends on `sensor.living_room_temperature_rate` (a derivative sensor) and the
+# derivative helper, currently defined in configuration.yaml via the release
+# valuesObject (cluster/applications/home-assistant-release.yaml `haconfig`).
+# TODO at cutover: consolidate that sensor into this package so the whole
+# feature lives in one file.
+automation:
+  - id: '1759515080942'
+    alias: Plant Blinds - Smart Solar Control
+    description: >-
+      Automatically adjust plant blinds based on indoor temperature changes and
+      outdoor weather forecast to prevent overheating
+    triggers:
+      - trigger: time_pattern
+        minutes: /15
+      - trigger: state
+        entity_id: sensor.living_room_temperature
+      - trigger: state
+        entity_id: sensor.living_room_temperature_rate
+    conditions:
+      - condition: time
+        after: "07:00:00"
+        before: "19:00:00"
+    actions:
+      - choose:
+          # Close (tilt 0) if temp is rising fast or already hot AND it's sunny
+          - conditions:
+              - condition: template
+                value_template: |-
+                  {% set temp_now = states('sensor.living_room_temperature') | float(0) %}
+                  {% set temp_rate = states('sensor.living_room_temperature_rate') | float(0) %}
+                  {% set outdoor_temp = state_attr('weather.forecast_home', 'temperature') | float(0) %}
+                  {% set forecast_condition = state_attr('weather.forecast_home', 'forecast')[0].condition if state_attr('weather.forecast_home', 'forecast') else 'unknown' %}
+                  {% set is_sunny = forecast_condition in ['sunny', 'clear-day', 'partlycloudy'] %}
+                  {# Close if: (temp rising >2°F/hour OR indoor >78°F) AND sunny forecast #}
+                  {{ (temp_rate > 2 or temp_now > 78) and is_sunny }}
+            sequence:
+              - action: cover.set_cover_tilt_position
+                target:
+                  entity_id: cover.plant_blinds
+                data:
+                  tilt_position: 0
+          # Open (tilt 100) if cloudy or cool-and-stable AND blinds are closed
+          - conditions:
+              - condition: template
+                value_template: |-
+                  {% set temp_now = states('sensor.living_room_temperature') | float(0) %}
+                  {% set temp_rate = states('sensor.living_room_temperature_rate') | float(0) %}
+                  {% set outdoor_temp = state_attr('weather.forecast_home', 'temperature') | float(0) %}
+                  {% set forecast_condition = state_attr('weather.forecast_home', 'forecast')[0].condition if state_attr('weather.forecast_home', 'forecast') else 'unknown' %}
+                  {% set is_cloudy = forecast_condition in ['cloudy', 'overcast', 'fog', 'rainy', 'pouring'] %}
+                  {% set current_position = state_attr('cover.plant_blinds', 'current_position') | int(0) %}
+                  {# Open if: (cloudy weather OR (temp <77°F AND not rising fast)) AND blinds closed #}
+                  {{ (is_cloudy or (temp_now < 77 and temp_rate < 1)) and current_position < 50 }}
+            sequence:
+              - action: cover.set_cover_tilt_position
+                target:
+                  entity_id: cover.plant_blinds
+                data:
+                  tilt_position: 100
+        default: []
+    mode: single

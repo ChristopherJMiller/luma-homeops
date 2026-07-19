@@ -1,0 +1,24 @@
+---
+# Bedroom lighting automations.
+#
+# GitOps source of truth. Rendered into /config/packages/bedroom.yaml in the HA
+# pod via the `ha-packages` ConfigMap (kustomization.yaml) + the chart's
+# extraConfigMounts. HA loads it via `homeassistant.packages`. Edit HERE, not in
+# the HA UI (the UI editor is read-only for package-defined automations).
+automation:
+  - id: '1741747401508'
+    alias: Sync Bedroom Switch and Lights
+    description: ''
+    use_blueprint:
+      path: alexdelprete/ha-blueprint-linked-entities.yaml
+      input:
+        linked_entity:
+          - switch.bedroom_light_switch
+          - light.nightstand_lamp
+          - light.dresser_lamp
+          - light.floor_lamp
+        delay_miliseconds: 0
+
+# NOTE: the old fixed-time "WAKE UP EARLY" automation was superseded by the
+# phone-alarm-driven morning routine in morning_routine.yaml (Phase 1 now does a
+# gentle warm dim at alarm-minus-1min instead of 100% at 07:00).

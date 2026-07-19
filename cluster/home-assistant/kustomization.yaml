@@ -6,3 +6,17 @@ resources:
   - psql.yaml
   - postgres-podmonitor.yaml
   - tls.yaml
+
+# HA config packages (git-tracked source of truth). Rendered into a ConfigMap
+# that the ha-helm chart mounts at /config/packages via extraConfigMounts.
+# Stable name (no hash suffix) so the chart can reference it directly; reload on
+# change is handled by a stakater/reloader annotation on the HA deployment.
+configMapGenerator:
+  - name: ha-packages
+    files:
+      - packages/bedroom.yaml
+      - packages/plant_blinds.yaml
+      - packages/morning_routine.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true

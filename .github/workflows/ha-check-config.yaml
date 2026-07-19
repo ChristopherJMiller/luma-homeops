@@ -1,0 +1,53 @@
+---
+name: HA config check
+
+# Validates the git-tracked Home Assistant packages (and blueprints) with HA's
+# own `check_config`, in the SAME image version deployed via Argo. This is the
+# pre-merge gate so a bad automation/template can't reach the cluster.
+
+on:
+  pull_request:
+    paths:
+      - cluster/home-assistant/packages/**
+      - cluster/home-assistant/blueprints/**
+      - .github/workflows/ha-check-config.yaml
+  push:
+    branches: [main]
+    paths:
+      - cluster/home-assistant/packages/**
+      - cluster/home-assistant/blueprints/**
+
+jobs:
+  check-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve HA image tag from the Argo release
+        id: tag
+        run: |
+          tag=$(grep -oE 'tag: [0-9]{4}\.[0-9]+\.[0-9]+' \
+            cluster/applications/home-assistant-release.yaml | head -1 | awk '{print $2}')
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "Validating against HA $tag"
+
+      - name: Assemble config (packages + blueprints, like the pod)
+        run: |
+          mkdir -p hacheck/packages hacheck/blueprints
+          cp cluster/home-assistant/packages/*.yaml hacheck/packages/
+          cp -r cluster/home-assistant/blueprints/. hacheck/blueprints/ 2>/dev/null || true
+          printf 'homeassistant:\n  packages: !include_dir_named packages/\n' > hacheck/configuration.yaml
+          : > hacheck/secrets.yaml
+
+      - name: check_config
+        run: |
+          # NOTE: `check_config` exits 0 even when it finds config errors — it
+          # only prints them. So we capture the output and fail on error markers.
+          docker run --rm -v "$PWD/hacheck":/config \
+            "docker.io/homeassistant/home-assistant:${{ steps.tag.outputs.tag }}" \
+            python -m homeassistant --script check_config -c /config 2>&1 | tee check.log
+          if grep -qiE 'ERROR|Invalid config|could not be validated|will not be initialized|invalid slug|Setup of package .* failed|Failed to' check.log; then
+            echo "::error::Home Assistant check_config reported problems (see log above)"
+            exit 1
+          fi
+          echo "check_config clean ✓"

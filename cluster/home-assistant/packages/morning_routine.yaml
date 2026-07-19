@@ -1,0 +1,102 @@
+---
+# Morning routine — phone-alarm-driven wake-up light + "start your day" trigger.
+#
+# GitOps source of truth (see bedroom.yaml header for the mount mechanism).
+#
+# Two phases, armed by input_boolean.wake_up_pending so a daytime flip of the
+# bedroom switch never triggers "start your day":
+#   Phase 1 (Gentle)  — 1 min before the phone alarm: disable circadian, ease the
+#                       bedroom into a warm dim glow, and ARM the routine.
+#   Phase 2 (Start)   — flipping the bedroom light switch WHILE ARMED re-enables
+#                       circadian and turns on the living room, then disarms.
+# A timeout auto-disarms if the switch flip never happens.
+
+input_boolean:
+  wake_up_pending:
+    name: Wake Up Pending
+    icon: mdi:weather-sunset-up
+
+template:
+  - sensor:
+      # Next alarm on the phone, minus 1 minute. Empty when no alarm is set, so
+      # the Phase 1 time trigger simply doesn't fire.
+      - name: Wake Up Light Time
+        unique_id: wake_up_light_time
+        device_class: timestamp
+        state: >-
+          {% set a = states('sensor.pixel_9_pro_xl_next_alarm') %}
+          {% if a not in ['unknown', 'unavailable', 'none', ''] %}
+            {{ (as_datetime(a) - timedelta(minutes=1)).isoformat() }}
+          {% endif %}
+
+automation:
+  # Phase 1 — gentle pre-alarm wake light
+  - id: morning_wake_up_gentle
+    alias: Morning - Wake Up Gentle Light
+    description: >-
+      One minute before the phone alarm, disable circadian lighting and ease the
+      bedroom into a warm dim glow, then arm the "start your day" trigger.
+    triggers:
+      - trigger: time
+        at: sensor.wake_up_light_time
+    conditions:
+      - condition: zone
+        entity_id: person.chris_m
+        zone: zone.home
+    actions:
+      - action: switch.turn_off
+        target:
+          entity_id: switch.circadian_lighting_circadian_lighting_enable
+      - action: light.turn_on
+        target:
+          area_id: bedroom
+        data:
+          brightness_pct: 15
+          color_temp_kelvin: 2200
+          transition: 60
+      - action: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.wake_up_pending
+    mode: single
+
+  # Phase 2 — flipping the bedroom switch while armed = "start your day"
+  - id: morning_start_your_day
+    alias: Morning - Start Your Day
+    description: >-
+      When the bedroom light switch is turned on while the routine is armed,
+      re-enable circadian lighting and turn on the living room.
+    triggers:
+      - trigger: state
+        entity_id: switch.bedroom_light_switch
+        from: "off"
+        to: "on"
+    conditions:
+      - condition: state
+        entity_id: input_boolean.wake_up_pending
+        state: "on"
+    actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.wake_up_pending
+      - action: switch.turn_on
+        target:
+          entity_id: switch.circadian_lighting_circadian_lighting_enable
+      - action: light.turn_on
+        target:
+          entity_id: light.living_room
+    mode: single
+
+  # Safety — auto-disarm if the switch flip never happens (e.g. slept in / away)
+  - id: morning_disarm_timeout
+    alias: Morning - Disarm Wake Pending (timeout)
+    description: Clear the armed flag 3 hours after Phase 1 if Start Your Day never ran.
+    triggers:
+      - trigger: state
+        entity_id: input_boolean.wake_up_pending
+        to: "on"
+        for: 03:00:00
+    actions:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.wake_up_pending
+    mode: single
