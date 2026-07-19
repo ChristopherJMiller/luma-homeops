@@ -235,204 +235,504 @@ views:
       action: navigate
       navigation_path: /home-ops/3
     card_mod: *roomtile
+# =====================================================================
+# ROOM PAGES — same grid grammar as Home: gutter-centered named areas,
+# hero band + chips, lights column (4 tracks) + side column (2 tracks),
+# single column ≤800px. Amber = state accent only.
+# =====================================================================
 - title: Living Room
+  type: custom:grid-layout
+  layout:
+    grid-template-columns: minmax(16px, 1fr) repeat(6, minmax(0, 185px)) minmax(16px, 1fr)
+    grid-gap: 12px
+    margin: 12px 0 28px
+    grid-template-areas: |
+      ". hero hero hero hero hero hero ."
+      ". lights lights lights lights side side ."
+      ". ent ent ent ent ent ent ."
+    mediaquery:
+      "(max-width: 800px)":
+        grid-template-columns: minmax(0, 1fr)
+        grid-gap: 10px
+        margin: 8px 10px 24px
+        grid-template-areas: |
+          "hero"
+          "lights"
+          "side"
+          "ent"
   cards:
-  - type: custom:mushroom-title-card
-    title: Living Room
-    subtitle: '{{ states("sensor.living_room_temperature") }}°F | {{ states("sensor.living_room_humidity") }}%'
-  - type: horizontal-stack
-    cards:
-    - type: custom:mushroom-climate-card
-      entity: climate.living_room
-      show_temperature_control: true
-    - type: custom:mushroom-entity-card
-      entity: switch.vent_fan_switch
-      icon: mdi:fan
-  - type: custom:mushroom-chips-card
-    chips:
-    - type: light
-      entity: light.living_room
-      content_info: name
-    - type: light
-      entity: light.floor_lamp_a
-      content_info: name
-    - type: light
-      entity: light.floor_lamp_b
-      content_info: name
-    - type: light
-      entity: light.sidetable_lamp
-      content_info: name
-    - type: light
-      entity: light.desk_underlight
-      content_info: name
-    - type: light
-      entity: light.ground_spot
-      content_info: name
-  - type: custom:mushroom-chips-card
-    chips:
-    - type: template
-      content: Bright
-      icon: mdi:brightness-7
-      icon_color: yellow
-      tap_action:
-        action: call-service
-        service: scene.turn_on
-        data:
-          entity_id: scene.living_room_bright
-    - type: template
-      content: Relax
-      icon: mdi:sofa
-      icon_color: orange
-      tap_action:
-        action: call-service
-        service: scene.turn_on
-        data:
-          entity_id: scene.living_room_relax
-    - type: template
-      content: Movie
-      icon: mdi:movie
-      icon_color: purple
-      tap_action:
-        action: call-service
-        service: scene.turn_on
-        data:
-          entity_id: scene.living_room_dimmed
   - type: vertical-stack
+    view_layout:
+      grid-area: hero
     cards:
-    - type: custom:mushroom-title-card
-      title: Entertainment
-    - type: horizontal-stack
-      cards:
+      - type: custom:mushroom-template-card
+        primary: Living Room
+        secondary: >-
+          {{ states('sensor.living_room_temperature') }}° · {{ states('sensor.living_room_humidity') }}%
+          · {{ expand('light.living_room', 'light.sidetable_lamp', 'light.desk_underlight')
+               | selectattr('state','eq','on') | list | count }} lights on
+        icon: mdi:sofa
+        icon_color: amber
+        card_mod: &roomhero
+          style: |
+            ha-card {
+              background:
+                radial-gradient(130% 200% at 10% -20%, rgba(221,161,94,0.16), transparent 60%),
+                var(--card-background-color);
+              border-radius: 24px;
+              --mush-icon-size: 44px;
+            }
+            mushroom-shape-icon { --shape-color: transparent; }
+            mushroom-state-info $ .primary { font-size: 20px; font-weight: 700; }
+      - type: custom:mushroom-chips-card
+        alignment: start
+        chips:
+          - type: template
+            content: All on
+            icon: mdi:lightbulb-group
+            tap_action:
+              action: call-service
+              service: light.turn_on
+              target:
+                entity_id:
+                  - light.living_room
+                  - light.sidetable_lamp
+                  - light.desk_underlight
+          - type: template
+            content: All off
+            icon: mdi:lightbulb-group-off
+            tap_action:
+              action: call-service
+              service: light.turn_off
+              target:
+                entity_id:
+                  - light.living_room
+                  - light.tv
+                  - light.sidetable_lamp
+                  - light.desk_underlight
+          # whole-home adaptive lighting master (amber when adapting)
+          - type: template
+            entity: switch.circadian_adaptive_lighting_circadian
+            content: Adaptive
+            icon: mdi:sun-clock
+            icon_color: "{{ 'amber' if is_state('switch.circadian_adaptive_lighting_circadian','on') else '' }}"
+            tap_action:
+              action: call-service
+              service: switch.toggle
+              target:
+                entity_id: switch.circadian_adaptive_lighting_circadian
+          - type: template
+            entity: binary_sensor.slider_door_contact
+            content: "{{ 'Slider open' if is_state('binary_sensor.slider_door_contact','on') else 'Slider closed' }}"
+            icon: "{{ 'mdi:door-sliding-open' if is_state('binary_sensor.slider_door_contact','on') else 'mdi:door-sliding' }}"
+            icon_color: "{{ 'amber' if is_state('binary_sensor.slider_door_contact','on') else '' }}"
+            tap_action:
+              action: more-info
+  - type: vertical-stack
+    view_layout:
+      grid-area: lights
+    cards:
+      - type: custom:mushroom-title-card
+        title: Lights
       - type: custom:mushroom-light-card
-        entity: light.tv
+        entity: light.living_room
+        name: All Hue
         show_brightness_control: true
         use_light_color: true
-        icon: mdi:television
-      - type: custom:mushroom-light-card
-        entity: light.tv_accent
-        show_brightness_control: true
-        use_light_color: true
-        icon: mdi:television-ambient-light
-    - type: custom:mushroom-entity-card
-      entity: sensor.plex_chrismiller_xyz
-      name: Plex Server
-      icon: mdi:plex
-      icon_color: orange
-    - type: custom:mushroom-chips-card
-      chips:
-      - type: template
-        content: TV Bright
-        icon: mdi:brightness-7
-        icon_color: yellow
+        card_mod: &lighttile
+          style: |
+            ha-card { border-radius: 18px; }
+            mushroom-shape-icon { --shape-color: transparent; }
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: custom:mushroom-light-card
+            entity: light.floor_lamp_a
+            show_brightness_control: true
+            use_light_color: true
+            card_mod: *lighttile
+          - type: custom:mushroom-light-card
+            entity: light.floor_lamp_b
+            show_brightness_control: true
+            use_light_color: true
+            card_mod: *lighttile
+          - type: custom:mushroom-light-card
+            entity: light.ground_spot
+            show_brightness_control: true
+            use_light_color: true
+            card_mod: *lighttile
+          - type: custom:mushroom-light-card
+            entity: light.sidetable_lamp
+            show_brightness_control: true
+            card_mod: *lighttile
+          - type: custom:mushroom-light-card
+            entity: light.desk_underlight
+            show_brightness_control: true
+            use_light_color: true
+            card_mod: *lighttile
+      - type: custom:mushroom-chips-card
+        alignment: start
+        chips:
+          - type: template
+            content: Bright
+            icon: mdi:brightness-7
+            tap_action:
+              action: call-service
+              service: scene.turn_on
+              target:
+                entity_id: scene.living_room_bright
+          - type: template
+            content: Relax
+            icon: mdi:sofa
+            tap_action:
+              action: call-service
+              service: scene.turn_on
+              target:
+                entity_id: scene.living_room_relax
+          - type: template
+            content: Movie
+            icon: mdi:movie
+            tap_action:
+              action: call-service
+              service: scene.turn_on
+              target:
+                entity_id: scene.living_room_dimmed
+          - type: template
+            content: Read
+            icon: mdi:book-open-variant
+            tap_action:
+              action: call-service
+              service: scene.turn_on
+              target:
+                entity_id: scene.living_room_read
+  - type: vertical-stack
+    view_layout:
+      grid-area: side
+    cards:
+      - type: custom:mushroom-title-card
+        title: Climate
+      - type: custom:mushroom-climate-card
+        entity: climate.living_room
+        show_temperature_control: true
+        collapsible_controls: true
+      - type: custom:mushroom-climate-card
+        entity: climate.air_conditioner
+        name: A/C
+        icon: mdi:air-conditioner
+        collapsible_controls: true
+      - type: custom:mushroom-entity-card
+        entity: switch.vent_fan_switch
+        name: Vent Fan
+        icon: mdi:fan
         tap_action:
-          action: call-service
-          service: scene.turn_on
-          data:
-            entity_id: scene.tv_bright
-      - type: template
-        content: TV Movie
-        icon: mdi:movie
-        icon_color: purple
+          action: toggle
+      - type: custom:mushroom-entity-card
+        entity: switch.floor_fan
+        name: Floor Fan
+        icon: mdi:fan
         tap_action:
-          action: call-service
-          service: scene.turn_on
-          data:
-            entity_id: scene.tv_dimmed
-      - type: template
-        content: Ambient
-        icon: mdi:lava-lamp
-        icon_color: pink
+          action: toggle
+      - type: custom:mushroom-entity-card
+        entity: switch.camp_lamp
+        name: Camp Lamp
+        icon: mdi:lamp
         tap_action:
-          action: call-service
-          service: scene.turn_on
-          data:
-            entity_id: scene.tv_cozy_dani
+          action: toggle
+      - type: custom:mushroom-cover-card
+        entity: cover.plant_blinds
+        name: Plant Blinds
+        show_tilt_position_control: true
+  - type: vertical-stack
+    view_layout:
+      grid-area: ent
+    cards:
+      - type: custom:mushroom-title-card
+        title: Entertainment
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: custom:mushroom-light-card
+            entity: light.tv
+            show_brightness_control: true
+            use_light_color: true
+            icon: mdi:television
+            card_mod: *lighttile
+          - type: custom:mushroom-light-card
+            entity: light.tv_accent
+            show_brightness_control: true
+            use_light_color: true
+            icon: mdi:television-ambient-light
+            card_mod: *lighttile
+      - type: custom:mushroom-chips-card
+        alignment: start
+        chips:
+          - type: template
+            content: TV Bright
+            icon: mdi:brightness-7
+            tap_action:
+              action: call-service
+              service: scene.turn_on
+              target:
+                entity_id: scene.tv_bright
+          - type: template
+            content: TV Movie
+            icon: mdi:movie
+            tap_action:
+              action: call-service
+              service: scene.turn_on
+              target:
+                entity_id: scene.tv_dimmed
+          - type: template
+            content: Ambient
+            icon: mdi:lava-lamp
+            tap_action:
+              action: call-service
+              service: scene.turn_on
+              target:
+                entity_id: scene.tv_cozy_dani
+      - type: custom:mushroom-entity-card
+        entity: sensor.plex_chrismiller_xyz
+        name: Plex Server
+        icon: mdi:plex
 - title: Bedroom
+  type: custom:grid-layout
+  layout:
+    grid-template-columns: minmax(16px, 1fr) repeat(6, minmax(0, 185px)) minmax(16px, 1fr)
+    grid-gap: 12px
+    margin: 12px 0 28px
+    grid-template-areas: |
+      ". hero hero hero hero hero hero ."
+      ". lights lights lights lights side side ."
+    mediaquery:
+      "(max-width: 800px)":
+        grid-template-columns: minmax(0, 1fr)
+        grid-gap: 10px
+        margin: 8px 10px 24px
+        grid-template-areas: |
+          "hero"
+          "lights"
+          "side"
   cards:
-  - type: custom:mushroom-title-card
-    title: Bedroom
-    subtitle: '{{ states("sensor.bedroom_temperature") }}°F | {{ states("sensor.bedroom_humidity") }}%'
-  - type: horizontal-stack
+  - type: vertical-stack
+    view_layout:
+      grid-area: hero
     cards:
-    - type: custom:mushroom-climate-card
-      entity: climate.bedroom
-      show_temperature_control: true
-    - type: custom:mushroom-entity-card
-      entity: switch.bedroom_light_switch
-      name: Light Switch
-      icon: mdi:light-switch
-  - type: custom:mushroom-chips-card
-    chips:
-    - type: light
-      entity: light.bedroom
-      content_info: name
-    - type: light
-      entity: light.dresser_lamp
-      content_info: name
-    - type: light
-      entity: light.floor_lamp
-      content_info: name
-    - type: light
-      entity: light.nightstand_lamp
-      content_info: name
-  - type: custom:mushroom-chips-card
-    chips:
-    - type: template
-      content: Bright
-      icon: mdi:brightness-7
-      icon_color: yellow
-      tap_action:
-        action: call-service
-        service: scene.turn_on
-        data:
-          entity_id: scene.bedroom_bright
-    - type: template
-      content: Relax
-      icon: mdi:bed
-      icon_color: orange
-      tap_action:
-        action: call-service
-        service: scene.turn_on
-        data:
-          entity_id: scene.bedroom_relax
-    - type: template
-      content: Night
-      icon: mdi:weather-night
-      icon_color: indigo
-      tap_action:
-        action: call-service
-        service: scene.turn_on
-        data:
-          entity_id: scene.bedroom_nightlight
-    - type: template
-      content: Sunset
-      icon: mdi:weather-sunset
-      icon_color: red
-      tap_action:
-        action: call-service
-        service: scene.turn_on
-        data:
-          entity_id: scene.bedroom_sundown
+      - type: custom:mushroom-template-card
+        primary: Bedroom
+        secondary: >-
+          {{ states('sensor.bedroom_temperature') }}° · {{ states('sensor.bedroom_humidity') }}%
+          · {{ expand('light.bedroom') | selectattr('state','eq','on') | list | count }} lights on
+        icon: mdi:bed
+        icon_color: amber
+        card_mod: *roomhero
+      - type: custom:mushroom-chips-card
+        alignment: start
+        chips:
+          - type: template
+            content: All on
+            icon: mdi:lightbulb-group
+            tap_action:
+              action: call-service
+              service: light.turn_on
+              target:
+                entity_id: light.bedroom
+          - type: template
+            content: All off
+            icon: mdi:lightbulb-group-off
+            tap_action:
+              action: call-service
+              service: light.turn_off
+              target:
+                entity_id: light.bedroom
+          - type: template
+            entity: switch.circadian_adaptive_lighting_circadian
+            content: Adaptive
+            icon: mdi:sun-clock
+            icon_color: "{{ 'amber' if is_state('switch.circadian_adaptive_lighting_circadian','on') else '' }}"
+            tap_action:
+              action: call-service
+              service: switch.toggle
+              target:
+                entity_id: switch.circadian_adaptive_lighting_circadian
+          # adaptive-lighting sleep mode: 1% @ 1000K on the managed lamps
+          - type: template
+            entity: switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian
+            content: Sleep
+            icon: mdi:power-sleep
+            icon_color: "{{ 'amber' if is_state('switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian','on') else '' }}"
+            tap_action:
+              action: call-service
+              service: switch.toggle
+              target:
+                entity_id: switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian
+  - type: vertical-stack
+    view_layout:
+      grid-area: lights
+    cards:
+      - type: custom:mushroom-title-card
+        title: Lights
+      - type: custom:mushroom-light-card
+        entity: light.bedroom
+        name: All Lights
+        show_brightness_control: true
+        use_light_color: true
+        card_mod: *lighttile
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: custom:mushroom-light-card
+            entity: light.dresser_lamp
+            show_brightness_control: true
+            use_light_color: true
+            card_mod: *lighttile
+          - type: custom:mushroom-light-card
+            entity: light.floor_lamp
+            show_brightness_control: true
+            use_light_color: true
+            card_mod: *lighttile
+          - type: custom:mushroom-light-card
+            entity: light.nightstand_lamp
+            show_brightness_control: true
+            use_light_color: true
+            card_mod: *lighttile
+      - type: custom:mushroom-chips-card
+        alignment: start
+        chips:
+          - type: template
+            content: Bright
+            icon: mdi:brightness-7
+            tap_action:
+              action: call-service
+              service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_bright
+          - type: template
+            content: Relax
+            icon: mdi:bed
+            tap_action:
+              action: call-service
+              service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_relax
+          - type: template
+            content: Night
+            icon: mdi:weather-night
+            tap_action:
+              action: call-service
+              service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_nightlight
+          - type: template
+            content: Sunset
+            icon: mdi:weather-sunset
+            tap_action:
+              action: call-service
+              service: scene.turn_on
+              target:
+                entity_id: scene.bedroom_sundown
+  - type: vertical-stack
+    view_layout:
+      grid-area: side
+    cards:
+      - type: custom:mushroom-title-card
+        title: Climate
+      - type: custom:mushroom-climate-card
+        entity: climate.bedroom
+        show_temperature_control: true
+        collapsible_controls: true
+      - type: custom:mushroom-cover-card
+        entity: cover.bedroom_blinds
+        name: Blinds
+        show_tilt_position_control: true
+      # z2m entity_id is bedroom_bedroom_* — the short bedroom_light_switch
+      # id referenced previously does not exist
+      - type: custom:mushroom-entity-card
+        entity: switch.bedroom_bedroom_light_switch
+        name: Wall Switch
+        icon: mdi:light-switch
+        tap_action:
+          action: toggle
 - title: Kitchen
+  type: custom:grid-layout
+  layout:
+    grid-template-columns: minmax(16px, 1fr) repeat(6, minmax(0, 185px)) minmax(16px, 1fr)
+    grid-gap: 12px
+    margin: 12px 0 28px
+    grid-template-areas: |
+      ". hero hero hero hero hero hero ."
+      ". lights lights lights lights side side ."
+    mediaquery:
+      "(max-width: 800px)":
+        grid-template-columns: minmax(0, 1fr)
+        grid-gap: 10px
+        margin: 8px 10px 24px
+        grid-template-areas: |
+          "hero"
+          "lights"
+          "side"
   cards:
-  - type: custom:mushroom-title-card
-    title: Kitchen
-  - type: custom:mushroom-light-card
-    entity: light.kitchen_underlight
-    show_brightness_control: true
-    show_color_control: true
-    use_light_color: true
-  - type: horizontal-stack
+  - type: vertical-stack
+    view_layout:
+      grid-area: hero
     cards:
-    - type: custom:mushroom-entity-card
-      entity: binary_sensor.fridge_door_contact
-      icon_color: blue
-    - type: custom:mushroom-entity-card
-      entity: binary_sensor.freezer_door_contact
-      icon_color: cyan
-  - type: custom:mushroom-entity-card
-    entity: switch.kitchen_underlight_do_not_disturb
-    icon: mdi:bell-off
+      - type: custom:mushroom-template-card
+        primary: Kitchen
+        secondary: >-
+          {% set f = states('binary_sensor.fridge_door_contact') %}
+          {% set z = states('binary_sensor.freezer_door_contact') %}
+          {{ 'Fridge open' if f == 'on' else 'Fridge closed' if f == 'off' else 'Fridge —' }}
+          · {{ 'Freezer open' if z == 'on' else 'Freezer closed' if z == 'off' else 'Freezer —' }}
+        icon: mdi:silverware-fork-knife
+        icon_color: amber
+        card_mod: *roomhero
+      - type: custom:mushroom-chips-card
+        alignment: start
+        chips:
+          - type: template
+            entity: switch.kitchen_underlight_do_not_disturb
+            content: Do not disturb
+            icon: mdi:bell-off
+            icon_color: "{{ 'amber' if is_state('switch.kitchen_underlight_do_not_disturb','on') else '' }}"
+            tap_action:
+              action: call-service
+              service: switch.toggle
+              target:
+                entity_id: switch.kitchen_underlight_do_not_disturb
+  - type: vertical-stack
+    view_layout:
+      grid-area: lights
+    cards:
+      - type: custom:mushroom-title-card
+        title: Lights
+      - type: custom:mushroom-light-card
+        entity: light.kitchen_underlight
+        show_brightness_control: true
+        show_color_control: true
+        use_light_color: true
+        card_mod: *lighttile
+  - type: vertical-stack
+    view_layout:
+      grid-area: side
+    cards:
+      - type: custom:mushroom-title-card
+        title: Sensors
+      - type: custom:mushroom-entity-card
+        entity: binary_sensor.fridge_door_contact
+        name: Fridge Door
+      - type: custom:mushroom-entity-card
+        entity: binary_sensor.freezer_door_contact
+        name: Freezer Door
+      - type: custom:mushroom-entity-card
+        entity: binary_sensor.kitchen_sink_leak_sensor
+        name: Sink Leak
+        icon: mdi:water-alert
+      - type: custom:mushroom-entity-card
+        entity: binary_sensor.water_heater_leak_sensor
+        name: Water Heater Leak
+        icon: mdi:water-alert
 - title: Calendar
   icon: mdi:calendar
   cards:
