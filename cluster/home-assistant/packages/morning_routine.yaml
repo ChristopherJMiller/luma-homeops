@@ -18,16 +18,18 @@ input_boolean:
 
 template:
   - sensor:
-      # Next alarm on the phone, minus 1 minute. Empty when no alarm is set, so
-      # the Phase 1 time trigger simply doesn't fire.
+      # Next alarm on the phone, minus 1 minute. Unavailable (not errored) when
+      # no alarm is set, so the Phase 1 time trigger simply doesn't fire. A
+      # timestamp sensor rejects an empty state, hence the availability guard.
       - name: Wake Up Light Time
         unique_id: wake_up_light_time
         device_class: timestamp
+        availability: >-
+          {{ states('sensor.pixel_9_pro_xl_next_alarm') not in
+             ['unknown', 'unavailable', 'none', ''] }}
         state: >-
-          {% set a = states('sensor.pixel_9_pro_xl_next_alarm') %}
-          {% if a not in ['unknown', 'unavailable', 'none', ''] %}
-            {{ (as_datetime(a) - timedelta(minutes=1)).isoformat() }}
-          {% endif %}
+          {{ (as_datetime(states('sensor.pixel_9_pro_xl_next_alarm'))
+             - timedelta(minutes=1)).isoformat() }}
 
 automation:
   # Phase 1 — gentle pre-alarm wake light
@@ -46,7 +48,7 @@ automation:
     actions:
       - action: switch.turn_off
         target:
-          entity_id: switch.adaptive_lighting_circadian
+          entity_id: switch.circadian_adaptive_lighting_circadian
       - action: light.turn_on
         target:
           area_id: bedroom
@@ -80,7 +82,7 @@ automation:
           entity_id: input_boolean.wake_up_pending
       - action: switch.turn_on
         target:
-          entity_id: switch.adaptive_lighting_circadian
+          entity_id: switch.circadian_adaptive_lighting_circadian
       - action: light.turn_on
         target:
           entity_id: light.living_room
