@@ -21,7 +21,7 @@ repos:
           (?x)^(
             cluster/rabbitmq-cluster-operator/(cluster-operator|messaging-topology-operator)\.yaml
             |nodes/.*\.yaml
-            |cluster/home-assistant/(packages|blueprints)/.*\.yaml
+            |cluster/home-assistant/(packages|blueprints|dashboards)/.*\.yaml
           )$
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.0.1

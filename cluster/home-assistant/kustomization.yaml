@@ -18,6 +18,9 @@ configMapGenerator:
       - packages/plant_blinds.yaml
       - packages/morning_routine.yaml
       - packages/lighting.yaml
+  - name: ha-dashboards
+    files:
+      - dashboards/overview.yaml
 
 generatorOptions:
   disableNameSuffixHash: true

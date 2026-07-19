@@ -33,9 +33,10 @@ jobs:
 
       - name: Assemble config (packages + blueprints, like the pod)
         run: |
-          mkdir -p hacheck/packages hacheck/blueprints
+          mkdir -p hacheck/packages hacheck/blueprints hacheck/dashboards
           cp cluster/home-assistant/packages/*.yaml hacheck/packages/
           cp -r cluster/home-assistant/blueprints/. hacheck/blueprints/ 2>/dev/null || true
+          cp cluster/home-assistant/dashboards/*.yaml hacheck/dashboards/ 2>/dev/null || true
           printf 'homeassistant:\n  packages: !include_dir_named packages/\n' > hacheck/configuration.yaml
           : > hacheck/secrets.yaml
 

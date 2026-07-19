@@ -38,6 +38,19 @@ spec:
           - name: packages
             configMap: ha-packages
             mountPath: /config/packages
+          - name: dashboards
+            configMap: ha-dashboards
+            mountPath: /config/dashboards
+        # Git-tracked YAML-mode dashboard alongside the storage-mode default
+        # (global mode stays storage so HACS custom-card resources keep working).
+        lovelace:
+          enabled: true
+          dashboards:
+            - urlPath: home
+              filename: dashboards/overview.yaml
+              title: Home
+              icon: mdi:home
+              showInSidebar: true
         # Fail-fast: a bad automation/package blocks pod start instead of taking
         # HA down. Validated clean pre-cutover (circadian_lighting removed).
         checkConfig:

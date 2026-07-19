@@ -1,0 +1,496 @@
+views:
+- title: Home
+  cards:
+  - type: custom:horizon-card
+    fields:
+      sunrise: true
+      sunset: true
+      sun_azimuth: true
+      sun_elevation: true
+      moonrise: true
+      moonset: true
+  - type: custom:mushroom-chips-card
+    chips:
+    - type: entity
+      entity: switch.circadian_adaptive_lighting_circadian
+      icon: mdi:white-balance-sunny
+    - type: template
+      entity: sensor.u_s_air_quality_index
+      content: 'AQI: {{ states("sensor.u_s_air_quality_index") }}'
+      icon: mdi:air-filter
+      icon_color: "{% set aqi = states('sensor.u_s_air_quality_index') | int %} {% if aqi <= 50 %}\n  green\n{% elif aqi <=\
+        \ 100 %}\n  yellow\n{% elif aqi <= 150 %}\n  orange\n{% elif aqi <= 200 %}\n  red\n{% elif aqi <= 300 %}\n  purple\n\
+        {% else %}\n  deep-purple\n{% endif %}\n"
+    - type: weather
+      entity: weather.forecast_home
+      show_conditions: true
+      show_temperature: true
+  - type: horizontal-stack
+    cards:
+    - type: custom:mushroom-template-card
+      primary: Living Room
+      secondary: '{{ states("sensor.living_room_temperature") }}°F | {{ states("sensor.living_room_humidity") }}%'
+      icon: mdi:sofa
+      icon_color: green
+      tap_action:
+        action: navigate
+        navigation_path: /lovelace/1
+      card_mod:
+        style: "ha-card {\n  padding: 16px;\n}\n"
+    - type: custom:mushroom-template-card
+      primary: Bedroom
+      secondary: '{{ states("sensor.bedroom_temperature") }}°F | {{ states("sensor.bedroom_humidity") }}%'
+      icon: mdi:bed
+      icon_color: blue
+      tap_action:
+        action: navigate
+        navigation_path: /lovelace/2
+      card_mod:
+        style: "ha-card {\n  padding: 16px;\n}\n"
+  - type: horizontal-stack
+    cards:
+    - type: custom:mushroom-template-card
+      primary: Kitchen
+      secondary: '{{ is_state("binary_sensor.fridge_door_contact", "on") or is_state("binary_sensor.freezer_door_contact",
+        "on") }}'
+      icon: mdi:silverware-fork-knife
+      icon_color: orange
+      tap_action:
+        action: navigate
+        navigation_path: /lovelace/3
+      card_mod:
+        style: "ha-card {\n  padding: 16px;\n}\n"
+  - type: custom:mushroom-title-card
+    title: Quick Actions
+  - type: grid
+    columns: 4
+    cards:
+    - type: custom:mushroom-entity-card
+      entity: light.living_room
+      primary_info: none
+      secondary_info: none
+      icon: mdi:lightbulb-group
+      icon_color: amber
+      tap_action:
+        action: toggle
+    - type: custom:mushroom-entity-card
+      entity: light.bedroom
+      primary_info: none
+      secondary_info: none
+      icon: mdi:bed
+      icon_color: blue
+      tap_action:
+        action: toggle
+    - type: custom:mushroom-entity-card
+      entity: climate.living_room
+      primary_info: none
+      secondary_info: none
+      icon: mdi:thermostat
+      icon_color: green
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-entity-card
+      entity: climate.bedroom
+      primary_info: none
+      secondary_info: none
+      icon: mdi:thermostat
+      icon_color: purple
+      tap_action:
+        action: more-info
+    - type: custom:mushroom-entity-card
+      entity: cover.bedroom_blinds
+      primary_info: none
+      secondary_info: none
+      icon: mdi:window-closed-variant
+      icon_color: deep-purple
+  - type: custom:mushroom-title-card
+    title: Scenes
+  - type: custom:mushroom-chips-card
+    chips:
+    - type: template
+      content: Bright
+      icon: mdi:brightness-7
+      icon_color: yellow
+      tap_action:
+        action: call-service
+        service: light.turn_on
+        data:
+          entity_id: all
+          brightness_pct: 100
+    - type: template
+      content: Relax
+      icon: mdi:sofa
+      icon_color: orange
+      tap_action:
+        action: call-service
+        service: scene.turn_on
+        data:
+          entity_id: scene.living_room_relax
+    - type: template
+      content: Movie
+      icon: mdi:movie
+      icon_color: purple
+      tap_action:
+        action: call-service
+        service: light.turn_on
+        data:
+          entity_id: all
+          brightness_pct: 20
+    - type: template
+      content: Night
+      icon: mdi:weather-night
+      icon_color: indigo
+      tap_action:
+        action: call-service
+        service: light.turn_off
+        data:
+          entity_id: all
+  - type: custom:mushroom-title-card
+    title: Devices
+  - type: vertical-stack
+    cards:
+    - type: custom:mushroom-entity-card
+      entity: binary_sensor.slider_door_contact
+      name: Sliding Door
+      icon_color: green
+    - type: custom:mushroom-entity-card
+      entity: binary_sensor.fridge_door_contact
+      name: Fridge Door
+      icon_color: blue
+    - type: custom:mushroom-entity-card
+      entity: binary_sensor.freezer_door_contact
+      name: Freezer Door
+      icon_color: cyan
+    - type: custom:mushroom-entity-card
+      entity: switch.floor_fan
+      name: Floor Fan
+      icon_color: teal
+    - type: custom:mushroom-entity-card
+      entity: switch.humidifier
+      name: Humidifier
+      icon_color: indigo
+    - type: custom:mushroom-entity-card
+      entity: todo.shopping_list
+      name: Shopping List
+      icon: mdi:cart
+      icon_color: orange
+      tap_action:
+        action: more-info
+  - type: custom:mushroom-title-card
+    title: Today's Events
+  - type: custom:mushroom-entity-card
+    entity: calendar.chris_is_not_in_seattle_calendar
+    name: Travel Status
+    icon: mdi:airplane
+    icon_color: blue
+  - type: custom:calendar-card-pro
+    entities:
+    - entity: calendar.cmiller548_gmail_com
+      label: 📅
+      color: '#4CAF50'
+      show_time: true
+      show_location: true
+    - entity: calendar.chris_is_not_in_seattle_calendar
+      label: ✈️
+      color: '#2196F3'
+      show_time: true
+    - entity: calendar.birthdays
+      label: 🎂
+      color: '#FF9800'
+      show_time: false
+    - entity: calendar.holidays_in_united_states
+      label: 🇺🇸
+      color: '#9C27B0'
+      show_time: false
+    days_to_show: 7
+    compact_events_to_show: 5
+    compact_days_to_show: 3
+    filter_duplicates: true
+    tap_action:
+      action: navigate
+      navigation_path: /lovelace/4
+  - type: vertical-stack
+    cards:
+    - type: custom:mushroom-title-card
+      title: Mail & Packages
+    - type: horizontal-stack
+      cards:
+      - type: custom:mushroom-entity-card
+        entity: sensor.mail_usps_mail
+        name: USPS Mail
+        icon: mdi:mailbox
+        icon_color: blue
+        layout: vertical
+      - type: custom:mushroom-entity-card
+        entity: sensor.mail_amazon_packages
+        name: Amazon
+        icon: mdi:package
+        icon_color: orange
+        layout: vertical
+      - type: custom:mushroom-entity-card
+        entity: sensor.mail_amazon_packages_delivered
+        name: Delivered
+        icon: mdi:package-check
+        icon_color: green
+        layout: vertical
+- title: Living Room
+  cards:
+  - type: custom:mushroom-title-card
+    title: Living Room
+    subtitle: '{{ states("sensor.living_room_temperature") }}°F | {{ states("sensor.living_room_humidity") }}%'
+  - type: horizontal-stack
+    cards:
+    - type: custom:mushroom-climate-card
+      entity: climate.living_room
+      show_temperature_control: true
+    - type: custom:mushroom-entity-card
+      entity: switch.vent_fan_switch
+      icon: mdi:fan
+  - type: custom:mushroom-chips-card
+    chips:
+    - type: light
+      entity: light.living_room
+      content_info: name
+    - type: light
+      entity: light.floor_lamp_a
+      content_info: name
+    - type: light
+      entity: light.floor_lamp_b
+      content_info: name
+    - type: light
+      entity: light.sidetable_lamp
+      content_info: name
+    - type: light
+      entity: light.desk_underlight
+      content_info: name
+    - type: light
+      entity: light.ground_spot
+      content_info: name
+  - type: custom:mushroom-chips-card
+    chips:
+    - type: template
+      content: Bright
+      icon: mdi:brightness-7
+      icon_color: yellow
+      tap_action:
+        action: call-service
+        service: scene.turn_on
+        data:
+          entity_id: scene.living_room_bright
+    - type: template
+      content: Relax
+      icon: mdi:sofa
+      icon_color: orange
+      tap_action:
+        action: call-service
+        service: scene.turn_on
+        data:
+          entity_id: scene.living_room_relax
+    - type: template
+      content: Movie
+      icon: mdi:movie
+      icon_color: purple
+      tap_action:
+        action: call-service
+        service: scene.turn_on
+        data:
+          entity_id: scene.living_room_dimmed
+  - type: vertical-stack
+    cards:
+    - type: custom:mushroom-title-card
+      title: Entertainment
+    - type: horizontal-stack
+      cards:
+      - type: custom:mushroom-light-card
+        entity: light.tv
+        show_brightness_control: true
+        use_light_color: true
+        icon: mdi:television
+      - type: custom:mushroom-light-card
+        entity: light.tv_accent
+        show_brightness_control: true
+        use_light_color: true
+        icon: mdi:television-ambient-light
+    - type: custom:mushroom-entity-card
+      entity: sensor.plex_chrismiller_xyz
+      name: Plex Server
+      icon: mdi:plex
+      icon_color: orange
+    - type: custom:mushroom-chips-card
+      chips:
+      - type: template
+        content: TV Bright
+        icon: mdi:brightness-7
+        icon_color: yellow
+        tap_action:
+          action: call-service
+          service: scene.turn_on
+          data:
+            entity_id: scene.tv_bright
+      - type: template
+        content: TV Movie
+        icon: mdi:movie
+        icon_color: purple
+        tap_action:
+          action: call-service
+          service: scene.turn_on
+          data:
+            entity_id: scene.tv_dimmed
+      - type: template
+        content: Ambient
+        icon: mdi:lava-lamp
+        icon_color: pink
+        tap_action:
+          action: call-service
+          service: scene.turn_on
+          data:
+            entity_id: scene.tv_cozy_dani
+- title: Bedroom
+  cards:
+  - type: custom:mushroom-title-card
+    title: Bedroom
+    subtitle: '{{ states("sensor.bedroom_temperature") }}°F | {{ states("sensor.bedroom_humidity") }}%'
+  - type: horizontal-stack
+    cards:
+    - type: custom:mushroom-climate-card
+      entity: climate.bedroom
+      show_temperature_control: true
+    - type: custom:mushroom-entity-card
+      entity: switch.humidifier
+      icon: mdi:air-humidifier
+  - type: custom:mushroom-chips-card
+    chips:
+    - type: light
+      entity: light.bedroom
+      content_info: name
+    - type: light
+      entity: light.dresser_lamp
+      content_info: name
+    - type: light
+      entity: light.floor_lamp
+      content_info: name
+    - type: light
+      entity: light.nightstand_lamp
+      content_info: name
+  - type: custom:mushroom-chips-card
+    chips:
+    - type: template
+      content: Bright
+      icon: mdi:brightness-7
+      icon_color: yellow
+      tap_action:
+        action: call-service
+        service: scene.turn_on
+        data:
+          entity_id: scene.bedroom_bright
+    - type: template
+      content: Relax
+      icon: mdi:bed
+      icon_color: orange
+      tap_action:
+        action: call-service
+        service: scene.turn_on
+        data:
+          entity_id: scene.bedroom_relax
+    - type: template
+      content: Night
+      icon: mdi:weather-night
+      icon_color: indigo
+      tap_action:
+        action: call-service
+        service: scene.turn_on
+        data:
+          entity_id: scene.bedroom_nightlight
+    - type: template
+      content: Sunset
+      icon: mdi:weather-sunset
+      icon_color: red
+      tap_action:
+        action: call-service
+        service: scene.turn_on
+        data:
+          entity_id: scene.bedroom_sundown
+- title: Kitchen
+  cards:
+  - type: custom:mushroom-title-card
+    title: Kitchen
+  - type: custom:mushroom-light-card
+    entity: light.kitchen_underlight
+    show_brightness_control: true
+    show_color_control: true
+    use_light_color: true
+  - type: horizontal-stack
+    cards:
+    - type: custom:mushroom-entity-card
+      entity: binary_sensor.fridge_door_contact
+      icon_color: blue
+    - type: custom:mushroom-entity-card
+      entity: binary_sensor.freezer_door_contact
+      icon_color: cyan
+  - type: custom:mushroom-entity-card
+    entity: switch.kitchen_underlight_do_not_disturb
+    icon: mdi:bell-off
+- title: Calendar
+  icon: mdi:calendar
+  cards:
+  - type: custom:mushroom-title-card
+    title: Calendar
+    subtitle: Events & Schedules
+  - type: calendar
+    entities:
+    - calendar.cmiller548_gmail_com
+    - calendar.chris_is_not_in_seattle_calendar
+    - calendar.birthdays
+    - calendar.holidays_in_united_states
+    - calendar.home_maintenance
+    - calendar.seattle_kraken_2022_23_schedule
+    - calendar.family
+  - type: custom:mushroom-title-card
+    title: Current Events
+  - type: custom:mushroom-entity-card
+    entity: calendar.chris_is_not_in_seattle_calendar
+    name: Travel Status
+    icon: mdi:airplane
+    icon_color: blue
+- title: Energy
+  icon: mdi:lightning-bolt
+  cards:
+  - type: custom:mushroom-title-card
+    title: Energy Usage
+    subtitle: Power Monitoring
+  - type: vertical-stack
+    cards:
+    - type: custom:mushroom-entity-card
+      entity: sensor.current_bill_electric_usage_to_date
+      name: Current Usage
+      icon: mdi:flash
+      icon_color: amber
+    - type: custom:mushroom-entity-card
+      entity: sensor.current_bill_electric_cost_to_date
+      name: Current Cost
+      icon: mdi:currency-usd
+      icon_color: green
+    - type: custom:mushroom-entity-card
+      entity: sensor.current_bill_electric_forecasted_usage
+      name: Forecasted Usage
+      icon: mdi:chart-line
+      icon_color: blue
+    - type: custom:mushroom-entity-card
+      entity: sensor.current_bill_electric_forecasted_cost
+      name: Forecasted Cost
+      icon: mdi:cash-clock
+      icon_color: orange
+  - type: custom:mushroom-title-card
+    title: Monthly Typical
+  - type: horizontal-stack
+    cards:
+    - type: custom:mushroom-entity-card
+      entity: sensor.typical_monthly_electric_usage
+      name: Typical Usage
+      icon: mdi:home-lightning-bolt
+      icon_color: purple
+    - type: custom:mushroom-entity-card
+      entity: sensor.typical_monthly_electric_cost
+      name: Typical Cost
+      icon: mdi:cash
+      icon_color: teal
