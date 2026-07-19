@@ -7,16 +7,18 @@ views:
 - title: Home
   type: custom:grid-layout
   layout:
-    grid-template-columns: repeat(6, minmax(0, 1fr))
+    # Outer 1fr tracks are gutters — they center the 6 content tracks
+    # (layout-card ignores max-width/margin:auto, so centering lives in
+    # the grid definition itself).
+    grid-template-columns: minmax(16px, 1fr) repeat(6, minmax(0, 185px)) minmax(16px, 1fr)
     grid-gap: 12px
-    margin: 12px auto 28px
-    max-width: 1180px
+    margin: 12px 0 28px
     grid-template-areas: |
-      "hero hero hero hero hero hero"
-      "today today today agenda agenda agenda"
-      "playing playing playing reminders reminders reminders"
-      "rooms rooms rooms rooms rooms rooms"
-      "room-lr room-lr room-br room-br room-kt room-kt"
+      ". hero hero hero hero hero hero ."
+      ". today today today agenda agenda agenda ."
+      ". playing playing playing reminders reminders reminders ."
+      ". rooms rooms rooms rooms rooms rooms ."
+      ". room-lr room-lr room-br room-br room-kt room-kt ."
     mediaquery:
       "(max-width: 800px)":
         grid-template-columns: minmax(0, 1fr)
@@ -33,57 +35,38 @@ views:
           "room-br"
           "room-kt"
   cards:
-  # ---------- HERO: outfit verdict + weather + slim sun arc ----------
-  - type: vertical-stack
+  # ---------- HERO: outfit verdict + weather + sun times (one tight band;
+  #            horizon-card is too tall at grid width — times live in the
+  #            secondary line instead) ----------
+  - type: custom:mushroom-template-card
     view_layout:
       grid-area: hero
-    cards:
-      - type: custom:mushroom-template-card
-        primary: "{{ states('sensor.outfit_advice') }}"
-        secondary: >-
-          {{ states('sensor.current_city') }}  ·  {{ states('sensor.active_temperature') }}°
-          {{ states('weather.forecast_home') | replace('-', ' ') | title }}
-        icon: >-
-          {% set c = states('weather.forecast_home') %}
-          {% set m = {'sunny':'mdi:weather-sunny','clear-night':'mdi:weather-night',
-          'cloudy':'mdi:weather-cloudy','partlycloudy':'mdi:weather-partly-cloudy',
-          'rainy':'mdi:weather-rainy','pouring':'mdi:weather-pouring',
-          'snowy':'mdi:weather-snowy','fog':'mdi:weather-fog','windy':'mdi:weather-windy'} %}
-          {{ m.get(c, 'mdi:weather-partly-cloudy') }}
-        icon_color: amber
-        card_mod:
-          style: |
-            ha-card {
-              background:
-                radial-gradient(130% 200% at 10% -20%, rgba(221,161,94,0.22), transparent 60%),
-                var(--card-background-color);
-              border-radius: 24px 24px 6px 6px;
-              --mush-icon-size: 52px;
-            }
-            mushroom-shape-icon { --shape-color: transparent; }
-            mushroom-state-info $ .primary { font-size: 22px; font-weight: 700; }
-            mushroom-state-info $ .secondary { font-size: 14px; }
-      - type: custom:horizon-card
-        moon: false
-        fields:
-          sunrise: true
-          sunset: true
-          dawn: false
-          noon: false
-          dusk: false
-          azimuth: false
-          sun_azimuth: false
-          elevation: false
-          sun_elevation: false
-          moonrise: false
-          moonset: false
-          moon_phase: false
-        card_mod:
-          style: |
-            ha-card {
-              border-radius: 6px 6px 24px 24px;
-              --hc-card-padding: 6px 14px 10px;
-            }
+    primary: "{{ states('sensor.outfit_advice') }}"
+    secondary: >-
+      {{ states('sensor.current_city') }}  ·  {{ states('sensor.active_temperature') }}°
+      {{ states('weather.forecast_home') | replace('-', ' ') | title }}
+      ·  ↑ {{ as_timestamp(state_attr('sun.sun','next_rising')) | timestamp_custom('%-I:%M %p') }}
+      ·  ↓ {{ as_timestamp(state_attr('sun.sun','next_setting')) | timestamp_custom('%-I:%M %p') }}
+    icon: >-
+      {% set c = states('weather.forecast_home') %}
+      {% set m = {'sunny':'mdi:weather-sunny','clear-night':'mdi:weather-night',
+      'cloudy':'mdi:weather-cloudy','partlycloudy':'mdi:weather-partly-cloudy',
+      'rainy':'mdi:weather-rainy','pouring':'mdi:weather-pouring',
+      'snowy':'mdi:weather-snowy','fog':'mdi:weather-fog','windy':'mdi:weather-windy'} %}
+      {{ m.get(c, 'mdi:weather-partly-cloudy') }}
+    icon_color: amber
+    card_mod:
+      style: |
+        ha-card {
+          background:
+            radial-gradient(130% 200% at 10% -20%, rgba(221,161,94,0.22), transparent 60%),
+            var(--card-background-color);
+          border-radius: 24px;
+          --mush-icon-size: 52px;
+        }
+        mushroom-shape-icon { --shape-color: transparent; }
+        mushroom-state-info $ .primary { font-size: 22px; font-weight: 700; }
+        mushroom-state-info $ .secondary { font-size: 14px; }
   # ---------- TODAY: transit (work days only) + mail ----------
   - type: vertical-stack
     view_layout:
@@ -110,14 +93,24 @@ views:
       - type: custom:mushroom-chips-card
         alignment: start
         chips:
+          # front door — amber only when unlocked (state is the accent)
+          - type: template
+            entity: lock.front_door_lock
+            content: "{{ 'Locked' if is_state('lock.front_door_lock','locked') else 'Unlocked' }}"
+            icon: "{{ 'mdi:lock' if is_state('lock.front_door_lock','locked') else 'mdi:lock-open-variant' }}"
+            icon_color: "{{ '' if is_state('lock.front_door_lock','locked') else 'amber' }}"
+            tap_action:
+              action: more-info
+          # mail_and_packages was reconfigured — hello_chrismiller_xyz_* is
+          # the live entity set (the old mail_* set is dead duplicates)
           - type: entity
-            entity: sensor.mail_usps_mail
+            entity: sensor.hello_chrismiller_xyz_mail_usps_mail
             icon: mdi:mailbox
           - type: entity
-            entity: sensor.mail_amazon_packages
+            entity: sensor.hello_chrismiller_xyz_mail_amazon_packages
             icon: mdi:package
           - type: entity
-            entity: sensor.mail_amazon_packages_delivered
+            entity: sensor.hello_chrismiller_xyz_mail_amazon_packages_delivered
             icon: mdi:package-check
   # ---------- AGENDA ----------
   - type: vertical-stack
