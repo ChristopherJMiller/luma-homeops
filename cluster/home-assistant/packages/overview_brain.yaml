@@ -112,7 +112,14 @@ template:
         state: >-
           {% set coat = is_state('binary_sensor.coat_needed','on') %}
           {% set umb = is_state('binary_sensor.umbrella_needed','on') %}
-          {% if coat and umb %}Coat + umbrella
-          {% elif coat %}Grab a coat
-          {% elif umb %}Umbrella today
-          {% else %}You're good{% endif %}
+          {% if coat and umb %}Jacket + umbrella
+          {% elif coat %}Grab a jacket
+          {% elif umb %}Take an umbrella
+          {% else %}You don't need a jacket{% endif %}
+
+      # Transit line(s) for the active city's commute.
+      - name: Commute Transit
+        unique_id: commute_transit
+        icon: mdi:train
+        state: >-
+          {% if is_state('sensor.current_city','Toronto') %}Line 1 · Line 5{% else %}Link 2 Line{% endif %}

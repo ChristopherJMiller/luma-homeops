@@ -1,258 +1,136 @@
 views:
 - title: Home
-  cards:
-  - type: custom:horizon-card
-    fields:
-      sunrise: true
-      sunset: true
-      sun_azimuth: true
-      sun_elevation: true
-      moonrise: true
-      moonset: true
-  - type: custom:mushroom-chips-card
-    chips:
-    - type: entity
-      entity: switch.circadian_adaptive_lighting_circadian
-      icon: mdi:white-balance-sunny
-    - type: template
-      entity: sensor.u_s_air_quality_index
-      content: 'AQI: {{ states("sensor.u_s_air_quality_index") }}'
-      icon: mdi:air-filter
-      icon_color: "{% set aqi = states('sensor.u_s_air_quality_index') | int %} {% if aqi <= 50 %}\n  green\n{% elif aqi <=\
-        \ 100 %}\n  yellow\n{% elif aqi <= 150 %}\n  orange\n{% elif aqi <= 200 %}\n  red\n{% elif aqi <= 300 %}\n  purple\n\
-        {% else %}\n  deep-purple\n{% endif %}\n"
-    - type: weather
-      entity: weather.forecast_home
-      show_conditions: true
-      show_temperature: true
-  - type: horizontal-stack
-    cards:
-    - type: custom:mushroom-template-card
-      primary: Living Room
-      secondary: '{{ states("sensor.living_room_temperature") }}°F | {{ states("sensor.living_room_humidity") }}%'
-      icon: mdi:sofa
-      icon_color: green
-      tap_action:
-        action: navigate
-        navigation_path: /lovelace/1
-      card_mod:
-        style: "ha-card {\n  padding: 16px;\n}\n"
-    - type: custom:mushroom-template-card
-      primary: Bedroom
-      secondary: '{{ states("sensor.bedroom_temperature") }}°F | {{ states("sensor.bedroom_humidity") }}%'
-      icon: mdi:bed
-      icon_color: blue
-      tap_action:
-        action: navigate
-        navigation_path: /lovelace/2
-      card_mod:
-        style: "ha-card {\n  padding: 16px;\n}\n"
-  - type: horizontal-stack
-    cards:
-    - type: custom:mushroom-template-card
-      primary: Kitchen
-      secondary: '{{ is_state("binary_sensor.fridge_door_contact", "on") or is_state("binary_sensor.freezer_door_contact",
-        "on") }}'
-      icon: mdi:silverware-fork-knife
-      icon_color: orange
-      tap_action:
-        action: navigate
-        navigation_path: /lovelace/3
-      card_mod:
-        style: "ha-card {\n  padding: 16px;\n}\n"
-  - type: custom:mushroom-title-card
-    title: Quick Actions
-  - type: grid
-    columns: 4
-    cards:
-    - type: custom:mushroom-entity-card
-      entity: light.living_room
-      primary_info: none
-      secondary_info: none
-      icon: mdi:lightbulb-group
-      icon_color: amber
-      tap_action:
-        action: toggle
-    - type: custom:mushroom-entity-card
-      entity: light.bedroom
-      primary_info: none
-      secondary_info: none
-      icon: mdi:bed
-      icon_color: blue
-      tap_action:
-        action: toggle
-    - type: custom:mushroom-entity-card
-      entity: climate.living_room
-      primary_info: none
-      secondary_info: none
-      icon: mdi:thermostat
-      icon_color: green
-      tap_action:
-        action: more-info
-    - type: custom:mushroom-entity-card
-      entity: climate.bedroom
-      primary_info: none
-      secondary_info: none
-      icon: mdi:thermostat
-      icon_color: purple
-      tap_action:
-        action: more-info
-    - type: custom:mushroom-entity-card
-      entity: cover.bedroom_blinds
-      primary_info: none
-      secondary_info: none
-      icon: mdi:window-closed-variant
-      icon_color: deep-purple
-  - type: custom:mushroom-title-card
-    title: Morning Routine
-  - type: custom:mushroom-chips-card
-    chips:
-    - type: entity
-      entity: switch.circadian_adaptive_lighting_circadian
-      name: Adaptive
-      icon: mdi:theme-light-dark
-    - type: template
-      entity: sensor.wake_up_light_time
-      icon: mdi:weather-sunset-up
-      content: >-
-        {% set t = states('sensor.wake_up_light_time') %} {% if t not in
-        ['unknown', 'unavailable'] %}Wake {{ as_timestamp(t) |
-        timestamp_custom('%-I:%M %p') }}{% else %}No alarm{% endif %}
-    - type: entity
-      entity: input_boolean.wake_up_pending
-      name: Armed
-      icon: mdi:alarm
-  - type: custom:mushroom-title-card
-    title: Scenes
-  - type: custom:mushroom-chips-card
-    chips:
-    - type: template
-      content: Bright
-      icon: mdi:brightness-7
-      icon_color: yellow
-      tap_action:
-        action: call-service
-        service: light.turn_on
-        data:
-          entity_id: all
-          brightness_pct: 100
-    - type: template
-      content: Relax
-      icon: mdi:sofa
-      icon_color: orange
-      tap_action:
-        action: call-service
-        service: scene.turn_on
-        data:
-          entity_id: scene.living_room_relax
-    - type: template
-      content: Movie
-      icon: mdi:movie
-      icon_color: purple
-      tap_action:
-        action: call-service
-        service: light.turn_on
-        data:
-          entity_id: all
-          brightness_pct: 20
-    - type: template
-      content: Night
-      icon: mdi:weather-night
-      icon_color: indigo
-      tap_action:
-        action: call-service
-        service: light.turn_off
-        data:
-          entity_id: all
-  - type: custom:mushroom-title-card
-    title: Devices
-  - type: vertical-stack
-    cards:
-    - type: custom:mushroom-entity-card
-      entity: binary_sensor.slider_door_contact
-      name: Sliding Door
-      icon_color: green
-    - type: custom:mushroom-entity-card
-      entity: binary_sensor.fridge_door_contact
-      name: Fridge Door
-      icon_color: blue
-    - type: custom:mushroom-entity-card
-      entity: binary_sensor.freezer_door_contact
-      name: Freezer Door
-      icon_color: cyan
-    - type: custom:mushroom-entity-card
-      entity: switch.floor_fan
-      name: Floor Fan
-      icon_color: teal
-    - type: custom:mushroom-entity-card
-      entity: switch.circadian_adaptive_lighting_circadian
-      name: Adaptive Lighting
-      icon: mdi:theme-light-dark
-      icon_color: amber
-    - type: custom:mushroom-entity-card
-      entity: todo.shopping_list
-      name: Shopping List
-      icon: mdi:cart
-      icon_color: orange
-      tap_action:
-        action: more-info
-  - type: custom:mushroom-title-card
-    title: Today's Events
-  - type: custom:mushroom-entity-card
-    entity: calendar.chris_is_not_in_seattle_calendar
-    name: Travel Status
-    icon: mdi:airplane
-    icon_color: blue
-  - type: custom:calendar-card-pro
-    entities:
-    - entity: calendar.cmiller548_gmail_com
-      label: 📅
-      color: '#4CAF50'
-      show_time: true
-      show_location: true
-    - entity: calendar.chris_is_not_in_seattle_calendar
-      label: ✈️
-      color: '#2196F3'
-      show_time: true
-    - entity: calendar.birthdays
-      label: 🎂
-      color: '#FF9800'
-      show_time: false
-    - entity: calendar.holidays_in_united_states
-      label: 🇺🇸
-      color: '#9C27B0'
-      show_time: false
-    days_to_show: 7
-    compact_events_to_show: 5
-    compact_days_to_show: 3
-    filter_duplicates: true
-    tap_action:
-      action: navigate
-      navigation_path: /lovelace/4
-  - type: vertical-stack
-    cards:
-    - type: custom:mushroom-title-card
-      title: Mail & Packages
-    - type: horizontal-stack
+  type: sections
+  max_columns: 2
+  sections:
+    # ---------- HERO: outfit verdict + weather + sun ----------
+    - type: grid
+      column_span: 2
       cards:
-      - type: custom:mushroom-entity-card
-        entity: sensor.mail_usps_mail
-        name: USPS Mail
-        icon: mdi:mailbox
-        icon_color: blue
-        layout: vertical
-      - type: custom:mushroom-entity-card
-        entity: sensor.mail_amazon_packages
-        name: Amazon
-        icon: mdi:package
-        icon_color: orange
-        layout: vertical
-      - type: custom:mushroom-entity-card
-        entity: sensor.mail_amazon_packages_delivered
-        name: Delivered
-        icon: mdi:package-check
-        icon_color: green
-        layout: vertical
+        - type: custom:mushroom-template-card
+          primary: "{{ states('sensor.outfit_advice') }}"
+          secondary: >-
+            {{ states('sensor.current_city') }} · {{ states('sensor.active_temperature') }}°
+            {{ states('weather.forecast_home') | replace('-', ' ') | title }}   ·   ☀
+            {{ as_timestamp(state_attr('sun.sun','next_rising')) | timestamp_custom('%-I:%M', true) }}
+            ☾ {{ as_timestamp(state_attr('sun.sun','next_setting')) | timestamp_custom('%-I:%M', true) }}
+          multiline_secondary: true
+          icon: >-
+            {% set c = states('weather.forecast_home') %}
+            {% set m = {'sunny':'mdi:weather-sunny','clear-night':'mdi:weather-night',
+            'cloudy':'mdi:weather-cloudy','partlycloudy':'mdi:weather-partly-cloudy',
+            'rainy':'mdi:weather-rainy','pouring':'mdi:weather-pouring',
+            'snowy':'mdi:weather-snowy','fog':'mdi:weather-fog','windy':'mdi:weather-windy'} %}
+            {{ m.get(c, 'mdi:weather-partly-cloudy') }}
+          icon_color: amber
+          card_mod:
+            style: |
+              ha-card {
+                background:
+                  radial-gradient(135% 130% at 12% 0%, rgba(221,161,94,0.20), transparent 55%),
+                  var(--card-background-color);
+                border-radius: 26px;
+                --card-primary-font-size: 23px;
+                --card-primary-font-weight: 700;
+              }
+    # ---------- TODAY: transit + mail ----------
+    - type: grid
+      column_span: 1
+      cards:
+        - type: custom:mushroom-title-card
+          title: Today
+        - type: custom:mushroom-template-card
+          primary: >-
+            {% set m = states('sensor.active_commute') %}
+            {% if m not in ['unknown','unavailable',''] %}{{ m }} min to the office{% else %}Commute{% endif %}
+          secondary: "{{ states('sensor.commute_transit') }}"
+          icon: mdi:train
+          icon_color: amber
+          card_mod:
+            style: "ha-card { border-radius: 20px; }"
+        - type: custom:mushroom-chips-card
+          alignment: start
+          chips:
+            - type: entity
+              entity: sensor.mail_usps_mail
+              icon: mdi:mailbox
+            - type: entity
+              entity: sensor.mail_amazon_packages
+              icon: mdi:package
+            - type: entity
+              entity: sensor.mail_amazon_packages_delivered
+              icon: mdi:package-check
+    # ---------- AGENDA ----------
+    - type: grid
+      column_span: 1
+      cards:
+        - type: custom:mushroom-title-card
+          title: Agenda
+        - type: custom:calendar-card-pro
+          entities:
+            - entity: calendar.cmiller548_gmail_com
+              color: '#DDA15E'
+            - entity: calendar.family
+              color: '#96A884'
+            - entity: calendar.chris_is_not_in_seattle_calendar
+              label: ✈️
+              color: '#C2703D'
+            - entity: calendar.birthdays
+              label: 🎂
+              color: '#C79BD6'
+          days_to_show: 5
+          compact_events_to_show: 4
+          card_mod:
+            style: "ha-card { border-radius: 22px; }"
+    # ---------- ROOMS (drill-down) ----------
+    - type: grid
+      column_span: 2
+      cards:
+        - type: custom:mushroom-title-card
+          title: Rooms
+        - type: grid
+          columns: 3
+          square: false
+          cards:
+            - type: custom:mushroom-template-card
+              primary: Living Room
+              secondary: "{{ states('sensor.living_room_temperature') }}° · {{ states('sensor.living_room_humidity') }}%"
+              icon: mdi:sofa
+              icon_color: amber
+              tap_action:
+                action: navigate
+                navigation_path: /home-ops/1
+              card_mod: &roomtile
+                style: |
+                  ha-card {
+                    background:
+                      radial-gradient(120% 120% at 20% 0%, rgba(221,161,94,0.13), transparent 60%),
+                      var(--card-background-color);
+                    border-radius: 22px;
+                    transition: transform .18s ease, box-shadow .18s ease;
+                  }
+                  ha-card:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 8px 20px rgba(0,0,0,0.28);
+                  }
+            - type: custom:mushroom-template-card
+              primary: Bedroom
+              secondary: "{{ states('sensor.bedroom_temperature') }}° · {{ states('sensor.bedroom_humidity') }}%"
+              icon: mdi:bed
+              icon_color: amber
+              tap_action:
+                action: navigate
+                navigation_path: /home-ops/2
+              card_mod: *roomtile
+            - type: custom:mushroom-template-card
+              primary: Kitchen
+              secondary: Tap to open
+              icon: mdi:silverware-fork-knife
+              icon_color: amber
+              tap_action:
+                action: navigate
+                navigation_path: /home-ops/3
+              card_mod: *roomtile
 - title: Living Room
   cards:
   - type: custom:mushroom-title-card
