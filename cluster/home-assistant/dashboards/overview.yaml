@@ -104,6 +104,25 @@ views:
       icon: mdi:window-closed-variant
       icon_color: deep-purple
   - type: custom:mushroom-title-card
+    title: Morning Routine
+  - type: custom:mushroom-chips-card
+    chips:
+    - type: entity
+      entity: switch.circadian_adaptive_lighting_circadian
+      name: Adaptive
+      icon: mdi:theme-light-dark
+    - type: template
+      entity: sensor.wake_up_light_time
+      icon: mdi:weather-sunset-up
+      content: >-
+        {% set t = states('sensor.wake_up_light_time') %} {% if t not in
+        ['unknown', 'unavailable'] %}Wake {{ as_timestamp(t) |
+        timestamp_custom('%-I:%M %p') }}{% else %}No alarm{% endif %}
+    - type: entity
+      entity: input_boolean.wake_up_pending
+      name: Armed
+      icon: mdi:alarm
+  - type: custom:mushroom-title-card
     title: Scenes
   - type: custom:mushroom-chips-card
     chips:
@@ -166,9 +185,10 @@ views:
       name: Floor Fan
       icon_color: teal
     - type: custom:mushroom-entity-card
-      entity: switch.humidifier
-      name: Humidifier
-      icon_color: indigo
+      entity: switch.circadian_adaptive_lighting_circadian
+      name: Adaptive Lighting
+      icon: mdi:theme-light-dark
+      icon_color: amber
     - type: custom:mushroom-entity-card
       entity: todo.shopping_list
       name: Shopping List
@@ -356,8 +376,9 @@ views:
       entity: climate.bedroom
       show_temperature_control: true
     - type: custom:mushroom-entity-card
-      entity: switch.humidifier
-      icon: mdi:air-humidifier
+      entity: switch.bedroom_light_switch
+      name: Light Switch
+      icon: mdi:light-switch
   - type: custom:mushroom-chips-card
     chips:
     - type: light
