@@ -40,6 +40,17 @@
   # ustreamer, not mjpg-streamer: nixpkgs' mjpg-streamer input_uvc.so has an
   # undefined-symbol dlopen failure (`resolutions_help`). Lower CPUWeight
   # so a busy webcam can never starve the print loop.
+  #
+  # USB-BUS BUDGET (Pi 3B): the printer's CH340 serial (12M, bulk) shares one
+  # internal USB 2.0 hub with this C270 webcam (isochronous) and the smsc95xx
+  # ethernet. A UVC webcam reserves *guaranteed* isochronous bandwidth up front,
+  # which squeezes the serial's bulk transfers — the mechanism behind mid-print
+  # "communication timeout ... considering it dead" kills (e.g. 2026-07-23 04:35).
+  # So keep the webcam's reservation as small as possible:
+  #   --format=MJPEG   the C270 compresses on-chip; without this ustreamer pulls
+  #                    raw YUYV (~49 Mbit/s at 640x480x10) and floods the bus.
+  #   --desired-fps=5  halves the isochronous reservation vs 10 fps.
+  #   --drop-same-frames  don't re-mux a static bed; reduces downstream churn.
   systemd.services.ustreamer = {
     description = "uStreamer for OctoPrint webcam";
     after = [ "network.target" ];
@@ -49,8 +60,10 @@
       ExecStart = ''
         ${pkgs.ustreamer}/bin/ustreamer \
           --device=/dev/video0 \
+          --format=MJPEG \
           --resolution=640x480 \
-          --desired-fps=10 \
+          --desired-fps=5 \
+          --drop-same-frames=30 \
           --host=127.0.0.1 \
           --port=8080
       '';

@@ -93,12 +93,41 @@ in
           set -eu
           booted=$(readlink -f /run/booted-system)
           current=$(readlink -f /run/current-system)
-          if [ "$booted" != "$current" ]; then
-            echo "booted=$booted differs from current=$current — rebooting"
-            ${pkgs.systemd}/bin/systemctl reboot
-          else
+          if [ "$booted" = "$current" ]; then
             echo "booted matches current — no reboot needed"
+            exit 0
           fi
+          ${lib.optionalString config.services.octoprint.enable ''
+          # Never reboot mid-print. Ask OctoPrint for the active job state; a
+          # stale-kernel reboot that kills an 8-hour print is far worse than
+          # deferring the reboot one more night. Self-applies on any satellite
+          # that runs OctoPrint (gated on services.octoprint.enable).
+          octocfg=/var/lib/octoprint/config.yaml
+          apikey=$(${pkgs.gawk}/bin/awk \
+            '/^api:/{f=1;next} f&&/^[^[:space:]]/{f=0} f&&/^[[:space:]]*key:/{print $2; exit}' \
+            "$octocfg" 2>/dev/null || true)
+          state=""
+          if [ -n "$apikey" ]; then
+            state=$(${pkgs.curl}/bin/curl -sf --max-time 10 -H "X-Api-Key: $apikey" \
+              http://127.0.0.1:${toString config.services.octoprint.port}/api/job \
+              | ${pkgs.jq}/bin/jq -r '.state // empty' 2>/dev/null || true)
+          fi
+          case "$state" in
+            Printing*|Pausing*|Paused*|Resuming*|Starting*|Cancelling*)
+              echo "OctoPrint state=\"$state\" — print in progress, deferring reboot to next window"
+              exit 0
+              ;;
+            "")
+              echo "OctoPrint state indeterminate (api unreachable / no key) — deferring reboot to be safe"
+              exit 0
+              ;;
+            *)
+              echo "OctoPrint state=\"$state\" — not printing, reboot permitted"
+              ;;
+          esac
+          ''}
+          echo "booted=$booted differs from current=$current — rebooting"
+          ${pkgs.systemd}/bin/systemctl reboot
         '';
       };
     };
