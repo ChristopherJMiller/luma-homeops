@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "homeassistant": {
+      "type": "http",
+      "url": "https://home.chrismiller.xyz/api/mcp",
+      "oauth": {
+        "clientId": "http://localhost:12345",
+        "callbackPort": 12345
+      }
+    }
+  }
+}
