@@ -1,0 +1,46 @@
+#!/bin/sh
+# This script is executed at boot time after VyOS configuration is fully applied.
+# Any modifications required to work around unfixed bugs
+# or use services not available through the VyOS CLI system can be placed here.
+#
+# DEPLOYMENT: this file is the tracked source of truth. It is NOT deployed by
+# Ansible (the router uses the network_cli connection, which cannot copy files).
+# Deploy manually after editing:
+#     scp router/scripts/vyos-postconfig-bootup.script \
+#         vyos:/tmp/vyos-postconfig-bootup.script
+#     ssh vyos 'sudo install -o root -g vyattacfg -m 0775 \
+#         /tmp/vyos-postconfig-bootup.script \
+#         /config/scripts/vyos-postconfig-bootup.script'
+# /config/scripts/ lives on the persistent config partition and survives VyOS
+# image upgrades.
+
+# --- LAN service recovery: heal cold-boot race vs. slow downstream switch ---
+# Incident 2026-07-25: after a whole-house power outage the LAN switch on eth2
+# finished booting AFTER vyos-router.service, so kea-dhcp4 (and potentially
+# pdns_recursor) bound before eth2 had carrier and never opened their LAN
+# sockets -- no DHCP/DNS served to the LAN, clients lost internet as leases
+# lapsed. VyOS exposes no CLI knob to make DHCP wait for interface carrier, so
+# we heal it here: wait for eth2 to be fully up, then ensure both are bound to
+# the LAN IP, restarting only the one(s) that are not.
+#
+# Backgrounded so it never blocks boot. Idempotent: on a healthy boot where the
+# sockets are already present it does nothing and exits. Watch it fire with:
+#     journalctl -t lan-recover
+(
+  LAN_IF=eth2
+  LAN_IP=192.168.0.1
+  for _ in $(seq 1 60); do            # up to ~3 min of grace for the switch
+    if ip -4 addr show dev "$LAN_IF" | grep -q "inet ${LAN_IP}/" \
+       && [ "$(cat /sys/class/net/${LAN_IF}/carrier 2>/dev/null)" = "1" ]; then
+      sleep 2
+      ss -ulnp | grep -q "${LAN_IP}:67" || systemctl restart kea-dhcp4-server
+      ss -ulnp | grep -q "${LAN_IP}:53" || systemctl restart pdns-recursor
+      if ss -ulnp | grep -q "${LAN_IP}:67" && ss -ulnp | grep -q "${LAN_IP}:53"; then
+        logger -t lan-recover "kea/pdns confirmed bound to ${LAN_IP}"
+        exit 0
+      fi
+    fi
+    sleep 3
+  done
+  logger -t lan-recover "gave up waiting for ${LAN_IF}/${LAN_IP} to serve"
+) &
