@@ -36,7 +36,7 @@ spec:
           emptyDir: {}
       containers:
         - name: wordarena-frontend
-          image: ghcr.io/christopherjmiller/word-arena-frontend:main-9f56c34
+          image: ghcr.io/christopherjmiller/word-arena-frontend:main-9f56c34@sha256:bfc623a043221c4b4e4a02acd7297f785d1c0d34aee1c2fe98ac75006e416f92
           ports:
             - containerPort: 8080
               protocol: TCP
