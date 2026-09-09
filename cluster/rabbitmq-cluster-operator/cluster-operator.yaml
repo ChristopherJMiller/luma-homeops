@@ -5815,7 +5815,7 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
-        image: ghcr.io/rabbitmq/cluster-operator:2.22.5@sha256:2727b84b835ada97247bbb65ebfa6998168b4e8ee11b0e6cece56ac2c9c4f0fb
+        image: ghcr.io/rabbitmq/cluster-operator:2.23.0@sha256:9236fb4f559bb6c4a04605fdf9aa1c03d00573df2d4da43c71e11b296e0a1886
         livenessProbe:
           httpGet:
             path: /healthz
