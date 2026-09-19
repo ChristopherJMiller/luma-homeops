@@ -29,7 +29,7 @@ spec:
         runAsGroup: 101
       containers:
         - name: mysite
-          image: ghcr.io/christopherjmiller/chrismiller.xyz:2.5.0
+          image: ghcr.io/christopherjmiller/chrismiller.xyz:2.5.0@sha256:a46ab50794e27e9ea0512f4680ff5b51fc35ff155d8870cdcb25974998ede9d5
           ports:
             - containerPort: 3000
               protocol: TCP
