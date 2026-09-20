@@ -69,6 +69,10 @@
             # `backblaze-b2 account authorize` (stored in ~/.config/b2, not in
             # the repo).
             backblaze-b2
+
+            # restic: read the 2022 `luma-backups` restic repo on B2, and drive
+            # restore drills against the cluster backup repos (see docs/backups.md).
+            restic
           ];
         };
       });
