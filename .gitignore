@@ -9,3 +9,8 @@ router/ansible/ansible.log
 !.claude/settings.json
 !.claude/MCP.md
 .claude/settings.local.json
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
