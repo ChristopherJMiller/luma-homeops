@@ -98,6 +98,14 @@ spec:
               readOnly: true
         redis:
           enabled: true
+          # docker.io/bitnami/redis:7.4.1-debian-12-r0 was deleted upstream
+          # (Bitnami withdrew its free images, 2025). The pod only runs today
+          # because the node still has the layer cached; a reschedule or a node
+          # rebuild (#2661) would leave it ImagePullBackOff. bitnamilegacy/
+          # carries the identical digest. Goes away with the authentik upgrade
+          # (#2591), whose chart no longer bundles this subchart.
+          image:
+            repository: bitnamilegacy/redis
           architecture: standalone
           commonConfiguration: ''
           master:

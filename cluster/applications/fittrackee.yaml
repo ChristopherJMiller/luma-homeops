@@ -21,8 +21,15 @@ spec:
               key: key
         redis:
           enabled: true
+          # bitnami/redis:7.4.1-debian-12-r3 and redis-exporter:1.67.0 were
+          # deleted upstream; bitnamilegacy/ has the same digests. Without this a
+          # reschedule or node rebuild (#2661) can't pull the image.
+          image:
+            repository: bitnamilegacy/redis
           metrics:
             enabled: true
+            image:
+              repository: bitnamilegacy/redis-exporter
             resources:
               requests:
                 cpu: 50m
