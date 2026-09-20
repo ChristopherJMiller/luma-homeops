@@ -15,6 +15,8 @@ spec:
       valuesObject:
         authentik:
           secret_key: file:///session-key/key
+          redis:
+            host: redis   # cluster/authentik/redis.yaml
           postgresql:
             host: acid-auth
             user: postgres
@@ -97,33 +99,9 @@ spec:
               mountPath: /session-key
               readOnly: true
         redis:
-          enabled: true
-          # docker.io/bitnami/redis:7.4.1-debian-12-r0 was deleted upstream
-          # (Bitnami withdrew its free images, 2025). The pod only runs today
-          # because the node still has the layer cached; a reschedule or a node
-          # rebuild (#2661) would leave it ImagePullBackOff. bitnamilegacy/
-          # carries the identical digest. Goes away with the authentik upgrade
-          # (#2591), whose chart no longer bundles this subchart.
-          image:
-            repository: bitnamilegacy/redis
-          architecture: standalone
-          commonConfiguration: ''
-          master:
-            resources:
-              requests:
-                cpu: 100m
-                memory: 512Mi
-              limits:
-                memory: 512Mi
-            persistence:
-              enabled: false
-          # Bitnami pulled redis-exporter:1.63.0-debian-12-r1 from Docker Hub
-          # in 2025 (move to Bitnami Secure Images). The sidecar blocked the
-          # pod's Ready, emptying the redis Service endpoints and crashlooping
-          # authentik. Disabled until we either switch chart or wire an
-          # alternative exporter image.
-          metrics:
-            enabled: false
+          # The bitnami subchart is gone — cluster/authentik/redis.yaml runs a
+          # plain single-instance redis (see the comment there).
+          enabled: false
   destination:
     server: https://kubernetes.default.svc
     namespace: authentik

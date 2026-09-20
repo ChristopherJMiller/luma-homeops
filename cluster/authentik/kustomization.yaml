@@ -6,3 +6,4 @@ resources:
   - psql.yaml
   - postgres-podmonitor.yaml
   - session-key.yaml
+  - redis.yaml
