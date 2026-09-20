@@ -11,7 +11,7 @@ The router is the single point of failure for the entire homelab — if a config
 
 ## Hard rules (CLAUDE.md S8)
 
-- **Always use `commit-confirm 10`** for changes that touch firewall, NAT, interfaces, DHCP, or anything that affects SSH reachability.
+- **Always deploy high-risk changes through a playbook that arms `config-mgmt commit_confirm` first** (firewall, NAT, interfaces, DHCP, anything affecting SSH reachability). See "Apply with commit-confirm".
 - **Always preview first** with `ansible-playbook --check --diff` before applying.
 - **Never commit a config that drops SSH on the management network** without an explicit "I am at the console" sign-off from the user.
 - **Never edit live router config** outside Ansible. The playbook is the source of truth; manual edits drift.
@@ -44,35 +44,48 @@ If the diff includes lines under `interfaces`, `firewall`, `nat`, `dhcp-server`,
 
 ## Apply with commit-confirm (high-risk changes)
 
-```bash
-# Open a commit-confirm window MANUALLY on the router first.
-# This is the rollback parachute — Ansible's commit alone has no auto-rollback.
-ssh chris@192.168.0.1
-configure
-commit-confirm 10  # changes auto-rollback in 10 minutes if not confirmed
-exit
-exit
+The parachute lives **inside the playbook**, not in a separate SSH session.
+An interactive `commit-confirm` opened alongside Ansible does NOT cover
+Ansible's commits — VyOS refuses it with "No configuration changes to
+commit" because the config session is empty. (Learned 2026-09-19, #2507.)
 
-# In a separate terminal, run the playbook:
-cd router/ansible
-ansible-playbook site.yml [--tags <relevant>]
+`playbooks/nat.yml` is the reference implementation; copy the pattern into
+any other high-risk playbook (`network.yml`, `firewall.yml`) before you
+first need it there:
 
-# Verify reachability + functionality (depends on what changed)
-ssh chris@192.168.0.1 '/opt/vyatta/bin/vyatta-op-cmd-wrapper show interfaces'
-ssh chris@192.168.0.1 '/opt/vyatta/bin/vyatta-op-cmd-wrapper show firewall'
-ssh chris@192.168.0.1 '/opt/vyatta/bin/vyatta-op-cmd-wrapper show nat destination'
-# Test connectivity from a third location if possible (curl from outside, ping from a client device)
-
-# If everything works, confirm before the 10-minute timer expires:
-ssh chris@192.168.0.1
-configure
-confirm
-exit
-exit
+```
+arm     vyos_command: sudo sg vyattacfg 'config-mgmt commit_confirm -y -t=N'
+          → systemd timer that reboots the router to the SAVED config
+          (-y skips the "Proceed ?" prompt, which hangs a non-tty session)
+apply   the vyos_config tasks (each commits immediately, save: false)
+verify  ansible.builtin.uri from the control node against
+          <playbook>_verify_urls — use a Cloudflare-PROXIED hostname so the
+          request genuinely leaves via WAN and re-enters through eth0
+          (a DNS-only name takes NAT reflection and proves nothing)
+confirm vyos_command: sudo systemctl stop commit-confirm.timer, then assert
+          `systemctl is-active` says inactive. Do NOT call `config-mgmt
+          confirm` — it stops the timer and then tracebacks trying to
+          finalise a commit-log entry only the interactive CLI writes.
+save    site.yml's final "Commit and save all changes"
 ```
 
-If the timer elapses without `confirm`, VyOS rolls back automatically — including any Ansible-applied changes from that session, since they're all part of the same uncommitted set.
+If `verify` fails the play aborts with the timer still armed → the router
+**reboots** to the last saved config within N minutes (the whole LAN drops
+for ~1 min). That is the intended outcome; don't race it.
 
+```bash
+cd router/ansible
+ansible-playbook site.yml --check --diff --tags <tag>   # preview, every time
+ansible-playbook site.yml --tags <tag>                  # apply
+```
+
+Rehearse a new playbook's arm/verify/confirm chain once with a harmless
+change (e.g. a rule `description`) before using it for a real cutover.
+
+**Never enter `set` commands by hand on the router** — not even "just the
+two lines from the diff". Everything goes through Ansible so repo == router.
+Manual commits also land only in the running config; a reboot silently
+reverts them unless someone remembers `save`.
 ## Apply without commit-confirm (low-risk changes only)
 
 For purely additive, non-network-path changes — DNS forwarder rules, NTP, container config tweaks, hostname:
