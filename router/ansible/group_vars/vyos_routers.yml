@@ -94,11 +94,11 @@ nat:
       port: 80
       protocol: tcp_udp
       inbound_interface: eth0
-      translation_address: 192.168.0.6
+      translation_address: 192.168.0.7
       translation_port: 80
-    # #2507 phase 3a (2026-09-19): LAN-side reflection (210/310) hits Traefik
-    # at .7 as a canary while WAN (200/300) stays on ingress-nginx at .6.
-    # Phase 3b flips 200/300 too; both then move together from here on.
+    # #2507 phase 3 (2026-09-19): all four port-forward/reflection rules
+    # (200/210/300/310) point at Traefik .7. ingress-nginx idles at .6
+    # until phase 4 decommissions it; rollback = flip these back to .6.
     - rule: 210
       description: 'NAT Reflection: HTTP'
       destination_address: 152.44.247.88
@@ -112,7 +112,7 @@ nat:
       port: 443
       protocol: tcp_udp
       inbound_interface: eth0
-      translation_address: 192.168.0.6
+      translation_address: 192.168.0.7
       translation_port: 443
     - rule: 310
       description: 'NAT Reflection: HTTPS'
@@ -172,3 +172,11 @@ monitoring:
       enabled: true
       listen_address: 0.0.0.0
       port: 9100
+
+# playbooks/nat.yml: commit-confirm window and the outside-in check that
+# must pass before the commit is confirmed. The apex is
+# Cloudflare-proxied, so the request comes back in through eth0 (a
+# DNS-only name would take NAT reflection and prove nothing).
+nat_commit_confirm_minutes: 10
+nat_verify_urls:
+  - https://chrismiller.xyz/
