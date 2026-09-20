@@ -46,7 +46,7 @@ spec:
 
 Commit, push, Argo syncs. Then add the host to `edge-snapshot.sh` (next to this file) so it's covered by the regression test. That is all.
 
-**Helm-rendered ingresses** (argo-cd, authentik, home-assistant, fittrackee, plex, webdav, grafana, royaltracker): same content via chart values — `className: traefik` (or `ingressClassName:` for kps/argo-cd), no `tls:` block, middleware annotation if needed. Check the chart's ingress template if unsure how it spells things; `webdav` and `royaltracker` use `tls.enabled: false`.
+**Helm-rendered ingresses** (argo-cd, authentik, home-assistant, plex, webdav, grafana, royaltracker): same content via chart values — `className: traefik` (or `ingressClassName:` for kps/argo-cd), no `tls:` block, middleware annotation if needed. Check the chart's ingress template if unsure how it spells things; `webdav` and `royaltracker` use `tls.enabled: false`.
 
 ## Middlewares (the only knobs)
 

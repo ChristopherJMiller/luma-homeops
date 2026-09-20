@@ -13,8 +13,6 @@ resources:
   - cert-manager.yaml
   - chrismillerxyz.yaml
   - dns.yaml
-  - fit.yaml
-  - fittrackee.yaml
   - fluent-bit.yaml
   - grafana-config.yaml
   - home-assistant.yaml

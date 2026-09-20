@@ -103,11 +103,6 @@ data:
               "refId": "B"
             },
             {
-              "expr": "up{job=~\".*postgres.*\",cluster=~\".*fit.*\"} OR up{job=~\".*acid-fit.*\"} OR on() vector(0)",
-              "legendFormat": "acid-fit",
-              "refId": "C"
-            },
-            {
               "expr": "up{job=~\".*postgres.*\",cluster=~\".*ha.*\"} OR up{job=~\".*acid-ha.*\"} OR on() vector(0)",
               "legendFormat": "acid-ha",
               "refId": "D"
