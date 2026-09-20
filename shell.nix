@@ -1,4 +1,13 @@
-{ pkgs ? import <nixpkgs> {
+# Pinned to nixos-unstable so the toolchain doesn't depend on the host's
+# <nixpkgs> channel. To bump:
+#   rev=$(gh api repos/NixOS/nixpkgs/git/ref/heads/nixos-unstable --jq .object.sha)
+#   sha=$(nix-prefetch-url --unpack https://github.com/NixOS/nixpkgs/archive/$rev.tar.gz)
+# and update both values below. Override for testing with:
+#   nix-shell shell.nix --arg pkgs 'import <nixpkgs> {}'
+{ pkgs ? import (fetchTarball {
+    url = "https://github.com/NixOS/nixpkgs/archive/20b1ddd1aa5ace70c9468305030aa4f9ef79671b.tar.gz";
+    sha256 = "17c8rash8751zwzq426b54754znickr50nwd4ziq4pklm0pid3h7";
+  }) {
     config.allowUnfree = true;
   }
 }:
@@ -10,7 +19,7 @@ pkgs.mkShell {
     krew
     pre-commit
     kubeseal
-    nodejs_20
+    nodejs_22
     kustomize
     talosctl
     kubernetes-helm
