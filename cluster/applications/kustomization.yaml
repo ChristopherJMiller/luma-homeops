@@ -12,7 +12,7 @@ resources:
   - cert-approver.yaml
   - cert-manager.yaml
   - chrismillerxyz.yaml
-  - external-dns.yaml
+  - dns.yaml
   - fit.yaml
   - fittrackee.yaml
   - fluent-bit.yaml

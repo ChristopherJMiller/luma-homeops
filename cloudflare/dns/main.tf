@@ -23,5 +23,5 @@ terraform {
 }
 
 # Auth via CLOUDFLARE_API_TOKEN — exported by ./tf.sh from the git-crypt
-# secret the cluster already uses (cluster/external-dns/cloudflare-api-token.secret.yaml).
+# secret the cluster already uses (cluster/dns/cloudflare-api-token.secret.yaml).
 provider "cloudflare" {}

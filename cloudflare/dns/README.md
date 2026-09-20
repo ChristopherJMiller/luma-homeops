@@ -19,7 +19,7 @@ single host can be made proxied later by adding a record here.
 
 This replaced external-dns (retired 2026-09) — 47 identical per-host CNAMEs
 managed by a controller with delete authority over public DNS, which wiped
-them all on a routine minor bump (see git log for `cluster/external-dns/`).
+them all on a routine minor bump (see git log for `cluster/dns/`, formerly `cluster/external-dns/`).
 
 ## Not managed here
 
@@ -39,7 +39,7 @@ az login                     # state backend auth, if stale
 ```
 
 `tf.sh` exports `CLOUDFLARE_API_TOKEN` from the git-crypt secret the cluster
-already uses (`cluster/external-dns/cloudflare-api-token.secret.yaml`) and
+already uses (`cluster/dns/cloudflare-api-token.secret.yaml`) and
 never prints it.
 
 ## Verify

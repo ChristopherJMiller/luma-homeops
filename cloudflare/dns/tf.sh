@@ -10,7 +10,7 @@
 set -euo pipefail
 
 repo="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
-secret="$repo/cluster/external-dns/cloudflare-api-token.secret.yaml"
+secret="$repo/cluster/dns/cloudflare-api-token.secret.yaml"
 
 if ! grep -q '^stringData:' "$secret" 2>/dev/null; then
   echo "tf.sh: $secret is not readable cleartext — is git-crypt unlocked?" >&2

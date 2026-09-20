@@ -34,6 +34,25 @@ rbd() { kubectl -n rook exec "$TOOLS" -- rbd "$@"; }
 
 ## Inspect (in this order)
 
+0. **Is it actually a data problem?** Before anything else, separate *advisory* health from *data-path* health. `HEALTH_ERR` with `113 pgs active+clean, 6 osds up/in` is not an outage.
+
+   ```bash
+   ceph pg stat; ceph osd stat        # if PGs are all active+clean and OSDs all up/in, the data path is fine
+   ceph health detail | grep -E '^\[(ERR|WRN)\]'
+   ```
+
+   Known advisory codes on galaxy (2026-09) and what they really are:
+
+   | Code | Meaning | Urgency |
+   |---|---|---|
+   | `AUTH_INSECURE_*` (6 codes, 2 of them ERR) | Ceph ≥19.2.6 flags cephx keys using the legacy `aes` type (CVE-2025-64754 hardening). Every daemon + client key on galaxy is `aes`. Fix = key rotation to `aes256-gcm`-class types via the documented mon/osd/mds/mgr/client rotation procedure, then flip the `auth_*_insecure_*` mon settings. **Write operations — its own planned session with Chris.** | Days, not minutes |
+   | `DAEMON_OLD_VERSION` | Some daemons lag the image tag (2026-09-20: 2 MDS on 19.2.5 while the rest is 19.2.6). Rook rolls MDS last and can leave them; a `kubectl rollout restart deploy/rook-ceph-mds-*` fixes it, which is safe *only* with `ceph fs status` showing the standby MDS active. | Low |
+   | `RECENT_CRASH` | Crashes are listed until archived — galaxy's are from 2025 (`ceph crash ls-new`). `ceph crash archive-all` is a read-modify of the crash log, not the data path. | Cosmetic |
+   | `BLUESTORE_SLOW_OP_ALERT` | SMR HDDs; chronic, see CLAUDE.md sharp edge #1. | Noise |
+
+   `RECENT_CRASH` within the last 24 h, or any code not in this table, is not advisory — keep going down the list.
+
+
 1. **Top-level state**
 
    ```bash
@@ -102,6 +121,7 @@ Never proactively run a `repair`/`out`/`destroy` even if confident.
 ## When to escalate
 
 - Multiple OSDs on the same host with `BLUESTORE_SPURIOUS_READ_ERRORS` and growing → likely failing controller/cable/PSU. Recommend SMART check + dmesg inspection on that node, not Ceph commands.
+- `HEALTH_ERR` that is *entirely* `AUTH_INSECURE_*` codes with clean PGs → not an incident; propose the key-rotation session and move on. Don't let the ERR badge (or Argo's Degraded rollup, #2521) stall unrelated work like a Talos hop — S5's "Ceph healthy between hops" means PGs active+clean, not HEALTH_OK.
 - `ceph -s` shows `pgs: ... incomplete` or `peering` → quorum / peering issue, not a data integrity issue. Different playbook.
 - Ceph capacity > 80% RAW USED → space crunch is its own emergency; recommend reaping unused PVs, growing storage, or purging snapshots before any other work.
 

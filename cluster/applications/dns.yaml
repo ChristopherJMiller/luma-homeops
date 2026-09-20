@@ -2,13 +2,13 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: external-dns
+  name: dns
   namespace: argo-cd
 spec:
   project: default
   source:
     repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
-    path: cluster/external-dns
+    path: cluster/dns
   destination:
     server: https://kubernetes.default.svc
     namespace: dns

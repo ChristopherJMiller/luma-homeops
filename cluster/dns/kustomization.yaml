@@ -3,8 +3,9 @@
 #
 # Records themselves are terraform-managed in cloudflare/dns/ — every public
 # hostname is a wildcard CNAME to the zone apex, so nothing in-cluster needs
-# write access to per-host records. external-dns was retired 2026-09-19 after
-# it deleted every managed record on a routine minor bump (see git log).
+# write access to per-host records. (This dir was cluster/external-dns/ until
+# external-dns was retired 2026-09-19 after it deleted every managed record
+# on a routine minor bump — see git log.)
 #
 # What remains here:
 #   - cloudflare-api-token: shared by cloudflareddns and cert-manager (DNS-01)
