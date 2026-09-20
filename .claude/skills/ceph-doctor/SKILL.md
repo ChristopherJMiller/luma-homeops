@@ -45,7 +45,7 @@ rbd() { kubectl -n rook exec "$TOOLS" -- rbd "$@"; }
 
    | Code | Meaning | Urgency |
    |---|---|---|
-   | `AUTH_INSECURE_*` (6 codes, 2 of them ERR) | Ceph ≥19.2.6 flags cephx keys using the legacy `aes` type (CVE-2025-64754 hardening). Every daemon + client key on galaxy is `aes`. Fix = key rotation to `aes256-gcm`-class types via the documented mon/osd/mds/mgr/client rotation procedure, then flip the `auth_*_insecure_*` mon settings. **Write operations — its own planned session with Chris.** | Days, not minutes |
+   | `AUTH_INSECURE_*` (6 codes, 2 of them ERR) | Ceph ≥19.2.6 flags cephx keys using the legacy `aes` type ([CVE-2025-30156](https://docs.ceph.com/en/latest/security/CVE-2025-30156/)). **Phase 1 done 2026-09-20**: daemons + admin on `aes256k` via `spec.security.cephx` in `cluster/rook-cluster/cluster.yaml` (Rook automates; toolbox pod needs a restart afterwards). CSI + NFS keys stay `aes` until the node kernel is ≥7.0 (#2660); the three residual warnings are muted in the CR on purpose. If `AUTH_INSECURE_SERVICE_*` ever returns as ERR, someone bumped `allowedCiphers` or a daemon key regressed — re-read #2660 before touching anything. | Days, not minutes |
    | `DAEMON_OLD_VERSION` | Some daemons lag the image tag (2026-09-20: 2 MDS on 19.2.5 while the rest is 19.2.6). Rook rolls MDS last and can leave them; a `kubectl rollout restart deploy/rook-ceph-mds-*` fixes it, which is safe *only* with `ceph fs status` showing the standby MDS active. | Low |
    | `RECENT_CRASH` | Crashes are listed until archived — galaxy's are from 2025 (`ceph crash ls-new`). `ceph crash archive-all` is a read-modify of the crash log, not the data path. | Cosmetic |
    | `BLUESTORE_SLOW_OP_ALERT` | SMR HDDs; chronic, see CLAUDE.md sharp edge #1. | Noise |
