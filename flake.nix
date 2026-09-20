@@ -62,6 +62,13 @@
             uv
             ruff
             docker_29
+
+            # Backblaze B2 CLI: inspect/prune the existing B2 account and manage
+            # buckets/app-keys for the cluster backup targets. nixpkgs installs
+            # the binary as `backblaze-b2` (alias `b2v4`), NOT `b2`. Auth via
+            # `backblaze-b2 account authorize` (stored in ~/.config/b2, not in
+            # the repo).
+            backblaze-b2
           ];
         };
       });
