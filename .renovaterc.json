@@ -28,17 +28,6 @@
       "matchFileNames": ["operators/ceph-nfs-export-operator/requirements.txt"],
       "allowedVersions": "<1.39",
       "description": "kopf 1.39+ requires python>=3.10; ceph base image ships python3-cephfs only for system python 3.9. Unpin when ceph base bumps to a newer Stream."
-    },
-    {
-      "matchPackageNames": ["kubernetes-sigs/external-dns", "/external-dns/"],
-      "groupName": "external-dns",
-      "description": "Keep external-dns out of group:allNonMajor so its stricter automerge policy never blocks the shared non-major PR."
-    },
-    {
-      "matchPackageNames": ["kubernetes-sigs/external-dns", "/external-dns/"],
-      "matchUpdateTypes": ["minor", "major"],
-      "automerge": false,
-      "description": "external-dns minor bumps carry breaking changes: v0.22.0 dropped the alpha annotation prefix with no fallback and deleted every managed record on first sync (2026-09-18). Patch updates automerge; minor/major need a human. Note upstream kustomize pins the image one tag behind the ref (ref vX.Y.0 ships binary vX.Y-1.0)."
     }
   ]
 }
