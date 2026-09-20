@@ -2,7 +2,7 @@
 apiVersion: bitnami.com/v1alpha1
 kind: SealedSecret
 metadata:
-  creationTimestamp: null
+  creationTimestamp:
   name: webdav-media-pass
   namespace: media
 spec:
@@ -10,6 +10,6 @@ spec:
     password: AgB63NUwlXbA77ODlaVhu/uPvCLqTjHoUsxsHNMDcfqU4HLuNUhzRCummLXQrM7Lfd6LT4xBJLdiOLQczVVKRtCNE8Wcj1Ui6UL0LXqyqDDj/OWSQ9JAEjzK9PFStfK1uiG6rL0nkW9BP6zf0LpWOEppH2VSW82QmYeBMgmsqWxzJOk8bay5Vj4Rwr7cGs+WtYryYKrSzwpjzp9guAJey3agPhVspDz0e2KozfOCNuClWwJZhVJ1Tef3g2d9+y83t3YqDIegl72sqEJWFi5Lai4rtUDepkoZOc5u7RdKDlqNYUf2qWtqFrDhAfv6tVY0GrMnj4j8PDfXptywLY0Ea3KV8mbaOy6nHplpHDiV+1i/tBTVOrxypsk3cdqO3Pgoq5bEz05DVzHxXtYDWvH8SAMHIB0T1v/mVWFlFF9Q3jWLkhiB6pQQ7KKDQ0q0WH0oDcXz8OOfvgE+r4kHRYgd6t6hnII73P5+P6VTGiSGQXXkPPLXfpno3CL84bV2TKfItkosCulS5MoBuWCxxcZFnxsYLmOi/+8Iu36JHgLAp6vT7MmWkWiVytIBCsvABFv1Uc6Dg/MHhKTFAu3VutS8mODHhSAQ76dagyBP//AnsYpVx63VHNghy9Gwjwpe9/Aa5PBmUCzdhwwMxjuKwoQPgYwyQWj/WKioyFDLRna1oR8hlfVsOlSWgjg9GBKEZJN6QBidfht82aTy+rbCZ82GsMbvQRHyYjkvja+gBvk4+e7Eg6V2+NWda6oL/kU+
   template:
     metadata:
-      creationTimestamp: null
+      creationTimestamp:
       name: webdav-media-pass
       namespace: media

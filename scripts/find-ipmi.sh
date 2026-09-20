@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # --- Configuration ---
 SSH_USER=$(whoami)
 ROUTER_IP="192.168.0.1"
@@ -5,7 +6,7 @@ DHCP_COMMAND="/opt/vyatta/bin/vyatta-op-cmd-wrapper show dhcp server leases"
 CONNECT_TIMEOUT=5 # seconds for curl connection timeout
 
 echo "Attempting to fetch DHCP leases from ${ROUTER_IP} as user ${SSH_USER}..."
-# The sed command helps normalize line endings if the SSH server sends 
+# The sed command helps normalize line endings if the SSH server sends
 
 dhcp_leases_output=$(ssh -o BatchMode=yes -o ConnectTimeout=10 "${SSH_USER}@${ROUTER_IP}" "${DHCP_COMMAND}" 2>/dev/null | sed 's/\r$//')
 
@@ -88,4 +89,4 @@ else
     echo "No IPMI dashboards (responding with 2xx/3xx HTTP codes) were found on the identified IPs."
 fi
 
-exit 0 
+exit 0

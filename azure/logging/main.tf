@@ -6,7 +6,7 @@ terraform {
       version = "~> 3.0"
     }
   }
-  
+
   # Remote state backend - run azure/bootstrap first!
   backend "azurerm" {
     resource_group_name  = "rg-luma-homelab-terraform-state"

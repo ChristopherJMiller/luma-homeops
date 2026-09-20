@@ -1,58 +1,58 @@
 ---
 # VyOS Monitoring Configuration Tasks
 # Deploys syslog collection for Kubernetes cluster logs
-- name: Configure syslog to receive remote logs
-  vyos.vyos.vyos_config:
-    lines:
-      - set system syslog host 0.0.0.0 facility all level info
-      - set system syslog host 0.0.0.0 protocol udp
-      - set system syslog host 0.0.0.0 port 514
-      - "set system syslog file {{ monitoring.syslog.log_file }} facility all level info"
-    save: false
-  when: monitoring.syslog.enabled
-  tags: [monitoring, syslog]
+  - name: Configure syslog to receive remote logs
+    vyos.vyos.vyos_config:
+      lines:
+        - set system syslog host 0.0.0.0 facility all level info
+        - set system syslog host 0.0.0.0 protocol udp
+        - set system syslog host 0.0.0.0 port 514
+        - "set system syslog file {{ monitoring.syslog.log_file }} facility all level info"
+      save: false
+    when: monitoring.syslog.enabled
+    tags: [monitoring, syslog]
 
-- name: Configure firewall rule for syslog access
-  vyos.vyos.vyos_config:
-    lines:
-      - set firewall ipv4 input filter rule 100 action 'accept'
-      - set firewall ipv4 input filter rule 100 protocol 'udp'
-      - set firewall ipv4 input filter rule 100 destination port '514'
-      - set firewall ipv4 input filter rule 100 source group network-group 'NET-INSIDE-v4'
-      - set firewall ipv4 input filter rule 100 description 'Kubernetes syslog collection'
-    save: false
-  when: monitoring.syslog.enabled
-  tags: [monitoring, syslog, firewall]
+  - name: Configure firewall rule for syslog access
+    vyos.vyos.vyos_config:
+      lines:
+        - set firewall ipv4 input filter rule 100 action 'accept'
+        - set firewall ipv4 input filter rule 100 protocol 'udp'
+        - set firewall ipv4 input filter rule 100 destination port '514'
+        - set firewall ipv4 input filter rule 100 source group network-group 'NET-INSIDE-v4'
+        - set firewall ipv4 input filter rule 100 description 'Kubernetes syslog collection'
+      save: false
+    when: monitoring.syslog.enabled
+    tags: [monitoring, syslog, firewall]
 
-- name: Enable SNMP for monitoring (Prometheus can scrape via SNMP exporter)
-  vyos.vyos.vyos_config:
-    lines:
-      - set service snmp community public authorization ro
-      - set service snmp listen-address 192.168.0.1 port 161
-      - set service snmp location "Homelab Router"
-      - set service snmp contact "chris@homelab"
-    save: false
-  tags: [monitoring, snmp]
+  - name: Enable SNMP for monitoring (Prometheus can scrape via SNMP exporter)
+    vyos.vyos.vyos_config:
+      lines:
+        - set service snmp community public authorization ro
+        - set service snmp listen-address 192.168.0.1 port 161
+        - set service snmp location "Homelab Router"
+        - set service snmp contact "chris@homelab"
+      save: false
+    tags: [monitoring, snmp]
 
-- name: Configure firewall rule for SNMP
-  vyos.vyos.vyos_config:
-    lines:
-      - set firewall ipv4 input filter rule 110 action 'accept'
-      - set firewall ipv4 input filter rule 110 protocol 'udp'
-      - set firewall ipv4 input filter rule 110 destination port '161'
-      - set firewall ipv4 input filter rule 110 source group network-group 'NET-INSIDE-v4'
-      - set firewall ipv4 input filter rule 110 description 'SNMP monitoring'
-    save: false
-  tags: [monitoring, snmp, firewall]
+  - name: Configure firewall rule for SNMP
+    vyos.vyos.vyos_config:
+      lines:
+        - set firewall ipv4 input filter rule 110 action 'accept'
+        - set firewall ipv4 input filter rule 110 protocol 'udp'
+        - set firewall ipv4 input filter rule 110 destination port '161'
+        - set firewall ipv4 input filter rule 110 source group network-group 'NET-INSIDE-v4'
+        - set firewall ipv4 input filter rule 110 description 'SNMP monitoring'
+      save: false
+    tags: [monitoring, snmp, firewall]
 
-- name: Verify syslog service status
-  vyos.vyos.vyos_command:
-    commands:
-      - show log tail 10
-  register: log_status
-  tags: [monitoring, verify]
+  - name: Verify syslog service status
+    vyos.vyos.vyos_command:
+      commands:
+        - show log tail 10
+    register: log_status
+    tags: [monitoring, verify]
 
-- name: Display verification results
-  debug:
-    var: log_status.stdout_lines
-  tags: [monitoring, verify]
+  - name: Display verification results
+    debug:
+      var: log_status.stdout_lines
+    tags: [monitoring, verify]

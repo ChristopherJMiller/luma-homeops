@@ -20,7 +20,7 @@ variable "retention_days" {
   description = "Log retention period in days"
   type        = number
   default     = 90
-  
+
   validation {
     condition     = var.retention_days >= 30 && var.retention_days <= 730
     error_message = "Retention days must be between 30 and 730."
@@ -31,7 +31,7 @@ variable "daily_quota_gb" {
   description = "Daily ingestion quota in GB to control costs"
   type        = number
   default     = 1
-  
+
   validation {
     condition     = var.daily_quota_gb >= 0.1 && var.daily_quota_gb <= 100
     error_message = "Daily quota must be between 0.1 and 100 GB."

@@ -16,7 +16,12 @@ repos:
     rev: 0.2.1
     hooks:
       - id: yamlfmt
-        args: [--mapping, '2', --sequence, '4', --offset, '2']
+        # --width: ruamel wraps plain scalars longer than this and leaves a
+        #   trailing space at the wrap, which trailing-whitespace then strips —
+        #   an infinite fight on any long value (auth headers, CSP, SealedSecret
+        #   ciphertext). YAML has no line limit; never wrap.
+        # --preserve-quotes: don't churn "x" -> x on files you didn't touch.
+        args: [--mapping, '2', --sequence, '4', --offset, '2', --width, '100000', --preserve-quotes]
         exclude: |
           (?x)^(
             cluster/rabbitmq-cluster-operator/(cluster-operator|messaging-topology-operator)\.yaml

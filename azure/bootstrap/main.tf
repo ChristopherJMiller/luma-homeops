@@ -50,11 +50,11 @@ resource "azurerm_storage_account" "terraform_state" {
   location                 = azurerm_resource_group.terraform_state.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
-  
+
   # Security settings
   min_tls_version                 = "TLS1_2"
   allow_nested_items_to_be_public = false
-  
+
   tags = {
     Environment = "luma-homelab"
     Purpose     = "terraform-state"
@@ -68,4 +68,3 @@ resource "azurerm_storage_container" "terraform_state" {
   storage_account_name  = azurerm_storage_account.terraform_state.name
   container_access_type = "private"
 }
-
