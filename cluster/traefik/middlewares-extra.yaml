@@ -1,6 +1,6 @@
 ---
 # nginx enable-cors:true equivalent for the chrismillerxyz site (mirrors
-# ingress-nginx CORS defaults).
+# the ingress-nginx CORS defaults it replaced).
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:

@@ -36,9 +36,9 @@ spec:
             memory: 256Mi
         ingressClass:
           enabled: true
-          # nginx stays the default until the router cutover bakes (#2507
-          # phase 4); flip only after nginx is decommissioned.
-          isDefaultClass: false
+          # Default class since ingress-nginx was decommissioned (#2507 phase 4);
+          # an Ingress without ingressClassName lands here.
+          isDefaultClass: true
           name: traefik
         providers:
           kubernetesIngress:

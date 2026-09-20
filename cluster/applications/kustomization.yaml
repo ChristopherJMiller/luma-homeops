@@ -27,7 +27,6 @@ resources:
   - music-streaming.yaml
   - metallb.yaml
   - metrics-server.yaml
-  - ingress-nginx.yaml
   - ipmi-exporter.yaml
   - lagrange-satellite.yaml
   - logging-secrets.yaml

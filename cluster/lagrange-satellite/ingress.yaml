@@ -31,7 +31,7 @@ spec:
       http:
         paths:
           # /orbit/* — Vite SPA, served by the orbit pod's own nginx.
-          # Listed first as a doc-order hint but ingress-nginx matches by
+          # Listed first as a doc-order hint; the controller matches by
           # longest prefix regardless of ordering.
           - path: /orbit
             pathType: Prefix

@@ -97,8 +97,8 @@ nat:
       translation_address: 192.168.0.7
       translation_port: 80
     # #2507 phase 3 (2026-09-19): all four port-forward/reflection rules
-    # (200/210/300/310) point at Traefik .7. ingress-nginx idles at .6
-    # until phase 4 decommissions it; rollback = flip these back to .6.
+    # (200/210/300/310) point at Traefik .7 (ingress-nginx decommissioned;
+    # .6 is free in the MetalLB pool).
     - rule: 210
       description: 'NAT Reflection: HTTP'
       destination_address: 152.44.247.88
