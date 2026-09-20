@@ -12,7 +12,12 @@ spec:
             - --source=ingress
             - --registry=txt
             - --provider=cloudflare
-            - --policy=sync
+            # upsert-only: external-dns may create/update but never DELETE.
+            # A stale CNAME for a removed ingress just 404s at the ingress;
+            # a mass-delete (2026-09-18, v0.22 annotation-prefix change)
+            # takes every public hostname offline. Clean up stale records
+            # by hand when retiring an app.
+            - --policy=upsert-only
             - --txt-owner-id=luma
             # Scope to our four zones. One `--domain-filter` per zone —
             # external-dns treats the value as a single literal filter and
