@@ -23,7 +23,7 @@ When this guide and a tool/agent default conflict, **this guide wins**.
 | Secrets | git-crypt + Sealed Secrets + agenix | `*.secret.yaml` + `nodes/*` + `satellites/.keys/*` are git-crypt encrypted (`.gitattributes`). For runtime cluster secrets, edit `*.secret.yaml`, run `./sign.sh` → SealedSecret for Argo. For satellite secrets, agenix (recipients in `satellites/secrets/recipients.nix`). |
 | Satellites | NixOS edge devices at `192.168.0.243-.254` ("upper orbit") | Pull-based GitOps via comin from `satellites/`. NOT Argo-managed. See `satellites/README.md` and the Satellites section below. |
 
-`shell.nix` provides the toolchain. Run anything that needs `talosctl`/`helm`/`argocd` through `nix-shell shell.nix --run '…'`. There is no flake — `nix develop` will not work.
+The toolchain is a flake (`flake.nix`, pinned by `flake.lock`; bump with `nix flake update nixpkgs` — see the nix-shell-pin skill). Run anything that needs `talosctl`/`helm`/`argocd` through `nix develop --command …` or the equivalent `nix-shell shell.nix --run '…'` (a flake-compat shim; both give the identical toolchain). `pre-commit` and `az` only exist inside it.
 
 ---
 
