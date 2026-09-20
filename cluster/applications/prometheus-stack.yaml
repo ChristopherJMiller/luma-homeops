@@ -158,7 +158,7 @@ spec:
             ingressClassName: nginx
             annotations:
               kubernetes.io/ingress.class: nginx
-              external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+              external-dns.kubernetes.io/target: chrismiller.xyz
             hosts:
               - dashboard.chrismiller.xyz
             tls:

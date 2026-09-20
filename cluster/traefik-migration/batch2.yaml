@@ -8,7 +8,7 @@ metadata:
   name: attic-traefik
   namespace: attic
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
 spec:
   ingressClassName: traefik
   tls:
@@ -32,7 +32,7 @@ metadata:
   name: chrismillerxyz-traefik
   namespace: chrismillerxyz
   annotations:
-    external-dns.alpha.kubernetes.io/controller: cloudflareddns
+    external-dns.kubernetes.io/controller: cloudflareddns
     traefik.ingress.kubernetes.io/router.middlewares: chrismillerxyz-cors@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -57,7 +57,7 @@ metadata:
   name: www-chrismillerxyz-traefik
   namespace: chrismillerxyz
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: chrismillerxyz-cors@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -82,7 +82,7 @@ metadata:
   name: fittrackee-traefik
   namespace: fit
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -107,7 +107,7 @@ metadata:
   name: home-assistant-traefik
   namespace: home-assistant
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -132,7 +132,7 @@ metadata:
   name: plex-traefik
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -157,7 +157,7 @@ metadata:
   name: mediadav-traefik
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
 spec:
   ingressClassName: traefik
   tls:
@@ -181,7 +181,7 @@ metadata:
   name: gonic-traefik
   namespace: music-streaming
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
 spec:
   ingressClassName: traefik
   tls:
@@ -205,7 +205,7 @@ metadata:
   name: gonic-webdav-traefik
   namespace: music-streaming
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
 spec:
   ingressClassName: traefik
   tls:
@@ -229,7 +229,7 @@ metadata:
   name: grafana-traefik
   namespace: prometheus
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
 spec:
   ingressClassName: traefik
   tls:
@@ -253,7 +253,7 @@ metadata:
   name: realliance-traefik
   namespace: realliance-net
   annotations:
-    external-dns.alpha.kubernetes.io/controller: cloudflareddns
+    external-dns.kubernetes.io/controller: cloudflareddns
     traefik.ingress.kubernetes.io/router.middlewares: realliance-net-set-csp@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -278,7 +278,7 @@ metadata:
   name: www-realliance-traefik
   namespace: realliance-net
   annotations:
-    external-dns.alpha.kubernetes.io/target: realliance.net
+    external-dns.kubernetes.io/target: realliance.net
     traefik.ingress.kubernetes.io/router.middlewares: realliance-net-set-csp@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -303,7 +303,7 @@ metadata:
   name: royaltracker-traefik
   namespace: royaltracker
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
 spec:
   ingressClassName: traefik
   tls:

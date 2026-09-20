@@ -13,7 +13,7 @@ metadata:
   name: lidarr-traefik
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -38,7 +38,7 @@ metadata:
   name: prowlarr-traefik
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -63,7 +63,7 @@ metadata:
   name: radarr-traefik
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -88,7 +88,7 @@ metadata:
   name: readarr-traefik
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -113,7 +113,7 @@ metadata:
   name: sabnzbd-traefik
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -138,7 +138,7 @@ metadata:
   name: sonarr-traefik
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -165,7 +165,7 @@ metadata:
   name: share-admin-traefik
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -190,7 +190,7 @@ metadata:
   name: share-public-traefik
   namespace: media
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -217,7 +217,7 @@ metadata:
   name: lagrange-admin-traefik
   namespace: ops
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -251,7 +251,7 @@ metadata:
   name: wordarena-traefik
   namespace: word-arena
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
 spec:
   ingressClassName: traefik
@@ -293,7 +293,7 @@ metadata:
   name: argocd-traefik
   namespace: argo-cd
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
 spec:
   ingressClassName: traefik
   tls:
@@ -319,7 +319,7 @@ metadata:
   name: authentik-traefik
   namespace: authentik
   annotations:
-    external-dns.alpha.kubernetes.io/target: chrismiller.xyz
+    external-dns.kubernetes.io/target: chrismiller.xyz
     traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
 spec:
   ingressClassName: traefik

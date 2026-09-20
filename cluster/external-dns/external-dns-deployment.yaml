@@ -22,7 +22,7 @@ spec:
             # The matcher is suffix-based, so each entry admits both the apex
             # (chrismiller.xyz) and every subdomain. Apex A records are owned
             # by cloudflareddns; the apex ingresses opt out individually with
-            # `external-dns.alpha.kubernetes.io/controller: cloudflareddns`
+            # `external-dns.kubernetes.io/controller: cloudflareddns`
             # so external-dns leaves them alone.
             #
             # (Don't use the `--domain-filter=.zone` shortcut — the leading

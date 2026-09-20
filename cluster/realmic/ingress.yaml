@@ -7,7 +7,7 @@ metadata:
     service: web
   annotations:
     kubernetes.io/ingress.class: nginx
-    external-dns.alpha.kubernetes.io/target: realliance.net
+    external-dns.kubernetes.io/target: realliance.net
     nginx.ingress.kubernetes.io/configuration-snippet: |
       more_clear_headers "Content-Security-Policy";
 spec:
