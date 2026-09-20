@@ -320,6 +320,11 @@ spec:
         keyGeneration: 1
       csi:
         keyType: aes
+      # Unused (rbd mirroring is not enabled) but Rook-managed and no kernel
+      # involvement, so rotate it with the daemons.
+      rbdMirrorPeer:
+        keyRotationPolicy: KeyGeneration
+        keyGeneration: 1
   csi:
     readAffinity:
       # Enable read affinity to enable clients to optimize reads from an OSD in the same topology.
@@ -340,7 +345,15 @@ spec:
 
   # healthChecks
   # Valid values for daemons are 'mon', 'osd', 'status'
+  # Phase-1 residue of the CVE-2025-30156 rotation (see spec.security.cephx):
+  # the CSI node keys and the NFS keys must stay `aes` until the node kernel
+  # is >= 7.0, so these three warnings are expected. Remove when phase 2
+  # (allowedCiphers: [aes256k]) lands.
   healthCheck:
+    muteHealthWarning:
+      AUTH_INSECURE_CLIENT_KEY_TYPE: {policy: mute}
+      AUTH_INSECURE_KEYS_ALLOWED: {policy: mute}
+      AUTH_INSECURE_KEYS_CREATABLE: {policy: mute}
     daemonHealth:
       mon:
         disabled: false
