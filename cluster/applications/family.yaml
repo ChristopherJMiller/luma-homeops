@@ -1,0 +1,26 @@
+---
+# Family archive: a static CephFS volume (/family) plus its nightly B2 mirror.
+# Lives in the media namespace because that's where every consumer runs
+# (filebrowser for uploads, Plex/Jellyfin for playback). The LAN NFS export
+# for it is in cluster/rook-cluster/family-export.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: family
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/family
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: media
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

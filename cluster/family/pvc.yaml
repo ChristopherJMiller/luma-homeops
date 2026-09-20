@@ -1,0 +1,16 @@
+---
+# Binds the static PV above. storageClassName "" + volumeName pins it to the
+# static PV and keeps the dynamic provisioner out of the picture.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: family-media
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""
+  volumeName: family-media
+  resources:
+    requests:
+      storage: 1Ti

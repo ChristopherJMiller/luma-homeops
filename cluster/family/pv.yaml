@@ -1,0 +1,37 @@
+---
+# Static CephFS PV for the family archive: a plain top-level directory
+# (/family) in fs-pool rather than a CSI-provisioned subvolume, so the same
+# tree can be (a) mounted RWX by pods in any namespace via a static PV like
+# this one, and (b) exported over NFS to the LAN by the ceph-nfs-export
+# operator (cluster/rook-cluster/family-export.yaml), which is also what
+# mkdirs the path on first sync.
+#
+# Ownership convention: everything under /family is uid/gid 1000 (filebrowser,
+# the rclone backup job, NFS clients). Do NOT set fsGroup on pods mounting
+# this volume — the cephfs CSIDriver has fsGroupPolicy=File, which would make
+# kubelet recursively chown the whole tree on every mount.
+#
+# Capacity is a bookkeeping number for the PVC binder; CephFS is thin.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: family-media
+spec:
+  accessModes:
+    - ReadWriteMany
+  capacity:
+    storage: 1Ti
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  storageClassName: ""
+  csi:
+    driver: rook.cephfs.csi.ceph.com
+    volumeHandle: family-media-static
+    nodeStageSecretRef:
+      name: rook-csi-cephfs-node
+      namespace: rook
+    volumeAttributes:
+      clusterID: rook
+      fsName: fs-pool
+      staticVolume: "true"
+      rootPath: /family

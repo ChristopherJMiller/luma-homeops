@@ -21,6 +21,10 @@ spec:
         kubernetes.io/hostname: middle
       securityContext:
         fsGroup: 1000
+        # Skip the recursive chown when the volume root already has gid 1000.
+        # Matters for the CephFS family volume (fsGroupPolicy=File would walk
+        # the whole archive on every start) and spares the mm-media walk too.
+        fsGroupChangePolicy: OnRootMismatch
         runAsUser: 1000
         runAsGroup: 1000
         runAsNonRoot: true
@@ -61,6 +65,10 @@ spec:
           volumeMounts:
             - name: media
               mountPath: /srv
+            # Family archive (cluster/family/): web upload path into CephFS
+            # /family. Authentik-gated at /; only explicit share links are public.
+            - name: family
+              mountPath: /srv/family
             - name: database
               mountPath: /database
           resources:
@@ -84,6 +92,9 @@ spec:
         - name: media
           persistentVolumeClaim:
             claimName: mm-media
+        - name: family
+          persistentVolumeClaim:
+            claimName: family-media
         - name: database
           persistentVolumeClaim:
             claimName: filebrowser-data

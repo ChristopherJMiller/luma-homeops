@@ -1,0 +1,88 @@
+---
+# Nightly mirror of /family to B2 (bucket galaxy-family). Files-as-files, no
+# encryption or dedup layer on purpose: the bucket is browsable in the B2
+# console and restorable with nothing but `rclone copy`. See docs/backups.md.
+#
+# Layout in the bucket:
+#   current/…          exact mirror of the volume
+#   deleted/<date>/…   anything removed or overwritten locally, moved here by
+#                      --backup-dir instead of being dropped
+# On top of that the bucket keeps hidden file versions for 90 days, so even a
+# hostile `rclone purge` with this key is reversible from the laptop
+# (docs/backups.md → "Family media").
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: family-backup
+  namespace: media
+  labels:
+    app.kubernetes.io/name: family-backup
+    backup-tier: family
+spec:
+  schedule: "30 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 43200 # 12h — the first full sync is ~330 GiB
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: family-backup
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+          containers:
+            - name: rclone
+              image: rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+              envFrom:
+                - secretRef:
+                    name: family-b2
+              command: ["/bin/sh"]
+              args:
+                - -c
+                - |
+                  set -eu
+                  SRC=/family
+                  DST=b2:galaxy-family
+                  MIN_FILES=100
+
+                  # Sanity gate: an empty or barely-populated source means the
+                  # volume failed to mount or was wiped — never let that become
+                  # "move everything in the bucket to deleted/".
+                  n=$(find "$SRC" -type f | head -n $((MIN_FILES + 1)) | wc -l)
+                  if [ "$n" -le "$MIN_FILES" ]; then
+                    echo "refusing to sync: only $n files under $SRC (min $MIN_FILES)" >&2
+                    exit 2
+                  fi
+
+                  echo "family-backup start $(date -u +%FT%TZ): $n+ files"
+                  rclone sync "$SRC" "$DST/current" \
+                    --backup-dir "$DST/deleted/$(date -u +%F)" \
+                    --exclude '.DS_Store' --exclude 'Thumbs.db' --exclude '._*' \
+                    --transfers 8 --checkers 16 \
+                    --fast-list --stats 5m --stats-one-line --stats-log-level NOTICE \
+                    --log-level INFO
+                  echo "family-backup done $(date -u +%FT%TZ)"
+              volumeMounts:
+                - name: family
+                  mountPath: /family
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+                limits:
+                  cpu: "2"
+                  memory: 1Gi
+          volumes:
+            - name: family
+              persistentVolumeClaim:
+                claimName: family-media
+                readOnly: true

@@ -1,0 +1,25 @@
+---
+# LAN NFS export of the family archive (CephFS /family, see cluster/family/),
+# for bulk drag-and-drop from a workstation. The operator mkdirs the path on
+# first reconcile, which is also what brings the static PV's rootPath into
+# existence. Mount from a client:
+#   sudo mount -t nfs4 192.168.0.230:/family /mnt/family
+# Clients are listed individually; add a line per machine rather than opening
+# the export to the whole /24. no_root_squash + uid 1000 on the client keeps
+# ownership consistent with the pods (everything under /family is 1000:1000).
+apiVersion: nfs.luma-homelab.io/v1alpha1
+kind: CephNFSExport
+metadata:
+  name: family
+  namespace: rook
+spec:
+  cluster: satellites
+  fs: fs-pool
+  path: /family
+  pseudo: /family
+  squash: no_root_squash
+  accessType: NONE
+  clients:
+    - addresses: [192.168.0.21/32] # rowlett (Chris's workstation)
+      accessType: RW
+      squash: no_root_squash

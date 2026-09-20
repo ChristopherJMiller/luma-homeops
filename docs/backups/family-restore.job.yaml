@@ -1,0 +1,97 @@
+---
+# Pull the family archive from B2 into the CephFS volume. Hand-applied, never
+# Argo-managed (it's a one-shot; see docs/backups.md → "Family media").
+#
+#   kubectl apply -f docs/backups/family-restore.job.yaml
+#   kubectl -n media logs -f job/family-restore
+#   kubectl delete -f docs/backups/family-restore.job.yaml
+#
+# Two uses, selected by SRC:
+#   restore   SRC=b2:galaxy-family/current  with the family-b2 Secret (default)
+#   ingest    SRC=b2:toad-backups           with an ad-hoc read-only key in a
+#             Secret named toad-b2 (same RCLONE_CONFIG_B2_* keys). Used once,
+#             2026-09, to seed the volume from the 2023 NAS dump.
+#
+# It is a `copy`, never a `sync`: it only ever adds or overwrites, so running
+# it against a populated volume is safe. If VERIFY_SHA1SUMS is mounted (a
+# sha1sum-format ConfigMap), every listed file is hashed afterwards and the
+# Job fails on any mismatch — that is the restore drill.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: family-restore
+  namespace: media
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 172800 # 48h
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+        # Enforce the ownership convention on the volume root (idempotent).
+        # Runs as root only for this; everything else is uid 1000.
+        - name: own
+          image: rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+          command: ["/bin/sh", "-c", "chown 1000:1000 /family && chmod 2775 /family && ls -ld /family"]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: family
+              mountPath: /family
+      containers:
+        - name: rclone
+          image: rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+          envFrom:
+            - secretRef:
+                name: family-b2 # EDIT for ingest: toad-b2
+          env:
+            - name: SRC
+              value: b2:galaxy-family/current # EDIT for ingest: b2:toad-backups
+          command: ["/bin/sh"]
+          args:
+            - -c
+            - |
+              set -eu
+              echo "family-restore start $(date -u +%FT%TZ): $SRC -> /family"
+              rclone copy "$SRC" /family \
+                --exclude '.DAV/**' --exclude 'Thumbs.db' --exclude '.DS_Store' --exclude '._*' \
+                --transfers 6 --checkers 12 --fast-list \
+                --stats 5m --stats-one-line --stats-log-level NOTICE --log-level INFO
+              echo "copy done $(date -u +%FT%TZ)"
+
+              if [ -s /verify/SHA1SUMS ]; then
+                echo "verifying $(wc -l < /verify/SHA1SUMS) files against manifest…"
+                cd /family
+                # sha1sum -c prints one line per file; keep only failures.
+                if sha1sum -c --quiet /verify/SHA1SUMS 2>&1 | tee /tmp/verify.log | head -50; [ -s /tmp/verify.log ]; then
+                  echo "VERIFY FAILED: $(wc -l < /tmp/verify.log) problems" >&2
+                  exit 3
+                fi
+                echo "VERIFY OK: all files match"
+              fi
+              echo "family-restore done $(date -u +%FT%TZ)"
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+          volumeMounts:
+            - name: family
+              mountPath: /family
+            - name: verify
+              mountPath: /verify
+              readOnly: true
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "4"
+              memory: 2Gi
+      volumes:
+        - name: family
+          persistentVolumeClaim:
+            claimName: family-media
+        - name: verify
+          configMap:
+            name: toad-manifest # sha1sum-format; optional
+            optional: true
