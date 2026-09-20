@@ -6,6 +6,5 @@ resources:
   - pvc.yaml
   - deployment.yaml
   - service.yaml
-  - tls.yaml
   - ingress-public.yaml
   - ingress-admin.yaml

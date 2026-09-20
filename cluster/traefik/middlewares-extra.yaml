@@ -9,7 +9,7 @@ metadata:
 spec:
   headers:
     accessControlAllowOriginList:
-      - "*"
+      - '*'
     accessControlAllowCredentials: true
     accessControlAllowMethods:
       - GET
@@ -19,7 +19,7 @@ spec:
       - PATCH
       - OPTIONS
     accessControlAllowHeaders:
-      - "*"
+      - '*'
     accessControlMaxAge: 1728000
 ---
 # realliance.net's more_set_headers CSP equivalent.
@@ -31,4 +31,8 @@ metadata:
 spec:
   headers:
     customResponseHeaders:
-      Content-Security-Policy: "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests"
+      Content-Security-Policy: >-
+        default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self';
+        img-src 'self' data:; connect-src 'self'; font-src 'self' data:;
+        base-uri 'none'; form-action 'self'; frame-ancestors 'none';
+        upgrade-insecure-requests

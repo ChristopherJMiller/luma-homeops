@@ -18,13 +18,10 @@ spec:
           tag: fa861d25a5c51622c357f8bc3ea1429c8c0f108a
         ingress:
           enabled: true
-          className: nginx
+          className: traefik
           host: rccl-tracker.chrismiller.xyz
-          externalDnsTarget: chrismiller.xyz
           tls:
-            enabled: true
-            issuerKind: ClusterIssuer
-            issuerName: letsencrypt-prod
+            enabled: false  # Traefik serves the wildcard default cert
         database:
           secretName: royaltracker-db
           secretKey: database_url

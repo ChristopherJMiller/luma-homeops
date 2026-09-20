@@ -4,5 +4,4 @@ kind: Kustomization
 namespace: realmic
 resources:
   - home.yaml
-  - tls.yaml
   - ingress.yaml

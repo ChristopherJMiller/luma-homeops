@@ -5,6 +5,5 @@ namespace: fit
 resources:
   - psql.yaml
   - postgres-podmonitor.yaml
-  - tls.yaml
   - app-key.yaml
   - psql-username.yaml

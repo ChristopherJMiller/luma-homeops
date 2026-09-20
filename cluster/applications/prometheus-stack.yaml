@@ -125,8 +125,8 @@ spec:
               - job_name: satellites
                 static_configs:
                   - targets:
-                      - 192.168.0.243:9100  # octoprint
-                      - 192.168.0.244:9100  # printer
+                      - 192.168.0.243:9100 # octoprint
+                      - 192.168.0.244:9100 # printer
                     labels:
                       group: satellites
               # comin's GitOps deploy state per satellite (last_deployment,
@@ -134,8 +134,8 @@ spec:
               - job_name: satellites-comin
                 static_configs:
                   - targets:
-                      - 192.168.0.243:4243  # octoprint
-                      - 192.168.0.244:4243  # printer
+                      - 192.168.0.243:4243 # octoprint
+                      - 192.168.0.244:4243 # printer
                     labels:
                       group: satellites
                       component: comin
@@ -155,16 +155,9 @@ spec:
           envFromSecret: azure-monitor-credentials
           ingress:
             enabled: true
-            ingressClassName: nginx
-            annotations:
-              kubernetes.io/ingress.class: nginx
-              external-dns.kubernetes.io/target: chrismiller.xyz
+            ingressClassName: traefik
             hosts:
               - dashboard.chrismiller.xyz
-            tls:
-              - secretName: dashboard-tls
-                hosts:
-                  - dashboard.chrismiller.xyz
   destination:
     server: https://kubernetes.default.svc
     namespace: prometheus
@@ -177,21 +170,3 @@ spec:
       - CreateNamespace=true
       - ServerSideApply=true
       - PrunePropagationPolicy=foreground
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: dashboard-tls
-  namespace: prometheus
-spec:
-  secretName: dashboard-tls
-  issuerRef:
-    kind: ClusterIssuer
-    name: letsencrypt-prod
-  commonName: dashboard.chrismiller.xyz
-  dnsNames:
-    - dashboard.chrismiller.xyz
-  privateKey:
-    rotationPolicy: Always
-    algorithm: ECDSA
-    size: 384

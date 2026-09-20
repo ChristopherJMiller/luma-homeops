@@ -6,16 +6,9 @@ metadata:
   labels:
     service: web
   annotations:
-    kubernetes.io/ingress.class: nginx
-    external-dns.kubernetes.io/target: realliance.net
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      more_clear_headers "Content-Security-Policy";
+    traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
 spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - legacy.realliance.net
-      secretName: realmic-tls
+  ingressClassName: traefik
   rules:
     - host: legacy.realliance.net
       http:

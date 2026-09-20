@@ -5,5 +5,4 @@ namespace: authentik
 resources:
   - psql.yaml
   - postgres-podmonitor.yaml
-  - tls.yaml
   - session-key.yaml

@@ -5,7 +5,6 @@ namespace: home-assistant
 resources:
   - psql.yaml
   - postgres-podmonitor.yaml
-  - tls.yaml
 
 # HA config packages (git-tracked source of truth). Rendered into a ConfigMap
 # that the ha-helm chart mounts at /config/packages via extraConfigMounts.

@@ -45,7 +45,6 @@ resources:
   - sealed-secrets.yaml
   - share.yaml
   - traefik.yaml
-  - traefik-migration.yaml
   - traefik-release.yaml
   - trivy-operator.yaml
   - word-arena.yaml

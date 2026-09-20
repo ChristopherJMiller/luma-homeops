@@ -7,18 +7,9 @@ metadata:
   labels:
     service: web
   annotations:
-    kubernetes.io/ingress.class: nginx
-    nginx.ingress.kubernetes.io/enable-cors: 'true'
-    # cloudflareddns owns the apex A record (points at the WAN IP, not the
-    # cluster LB). Without this opt-out, external-dns would push the LB IP
-    # and fight cloudflareddns on every reconcile.
-    external-dns.kubernetes.io/controller: cloudflareddns
+    traefik.ingress.kubernetes.io/router.middlewares: chrismillerxyz-cors@kubernetescrd
 spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - chrismiller.xyz
-      secretName: chrismillerxyz-tls
+  ingressClassName: traefik
   rules:
     - host: chrismiller.xyz
       http:
@@ -39,15 +30,9 @@ metadata:
   labels:
     service: web
   annotations:
-    kubernetes.io/ingress.class: nginx
-    external-dns.kubernetes.io/target: chrismiller.xyz
-    nginx.ingress.kubernetes.io/enable-cors: 'true'
+    traefik.ingress.kubernetes.io/router.middlewares: chrismillerxyz-cors@kubernetescrd
 spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - www.chrismiller.xyz
-      secretName: chrismillerxyz-tls
+  ingressClassName: traefik
   rules:
     - host: www.chrismiller.xyz
       http:
@@ -59,22 +44,3 @@ spec:
                 name: mysite
                 port:
                   number: 80
----
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: chrismiller-tls
-  namespace: chrismillerxyz
-spec:
-  secretName: chrismillerxyz-tls
-  issuerRef:
-    kind: ClusterIssuer
-    name: letsencrypt-prod
-  commonName: chrismiller.xyz
-  dnsNames:
-    - chrismiller.xyz
-    - www.chrismiller.xyz
-  privateKey:
-    rotationPolicy: Always
-    algorithm: ECDSA
-    size: 384

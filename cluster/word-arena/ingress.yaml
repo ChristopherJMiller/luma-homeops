@@ -6,25 +6,9 @@ metadata:
   labels:
     service: web
   annotations:
-    kubernetes.io/ingress.class: nginx
-    external-dns.kubernetes.io/target: chrismiller.xyz
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      more_clear_headers "Content-Security-Policy";
-    # WebSocket support
-    nginx.ingress.kubernetes.io/proxy-read-timeout: '3600'
-    nginx.ingress.kubernetes.io/proxy-send-timeout: '3600'
-    nginx.ingress.kubernetes.io/websocket-services: wordarena-backend
-    # Session affinity via cookies to ensure game state consistency
-    nginx.ingress.kubernetes.io/affinity: cookie
-    nginx.ingress.kubernetes.io/affinity-mode: persistent
-    nginx.ingress.kubernetes.io/session-cookie-name: word-arena-session
-    nginx.ingress.kubernetes.io/session-cookie-expires: '86400'
+    traefik.ingress.kubernetes.io/router.middlewares: traefik-strip-csp@kubernetescrd
 spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - wordarena.chrismiller.xyz
-      secretName: wordarena-tls
+  ingressClassName: traefik
   rules:
     - host: wordarena.chrismiller.xyz
       http:

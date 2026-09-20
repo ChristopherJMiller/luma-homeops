@@ -6,17 +6,9 @@ metadata:
   labels:
     service: web
   annotations:
-    kubernetes.io/ingress.class: nginx
-    # cloudflareddns owns the apex A record (WAN IP, not cluster LB).
-    external-dns.kubernetes.io/controller: cloudflareddns
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      more_set_headers "Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests";
+    traefik.ingress.kubernetes.io/router.middlewares: realliance-net-set-csp@kubernetescrd
 spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - realliance.net
-      secretName: realliance-tls
+  ingressClassName: traefik
   rules:
     - host: realliance.net
       http:
@@ -36,16 +28,9 @@ metadata:
   labels:
     service: web
   annotations:
-    kubernetes.io/ingress.class: nginx
-    external-dns.kubernetes.io/target: realliance.net
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      more_set_headers "Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:; connect-src 'self'; font-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; upgrade-insecure-requests";
+    traefik.ingress.kubernetes.io/router.middlewares: realliance-net-set-csp@kubernetescrd
 spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - www.realliance.net
-      secretName: realliance-tls
+  ingressClassName: traefik
   rules:
     - host: www.realliance.net
       http:

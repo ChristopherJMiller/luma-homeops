@@ -5,5 +5,4 @@ namespace: word-arena
 resources:
   - frontend.yaml
   - backend.yaml
-  - tls.yaml
   - ingress.yaml
