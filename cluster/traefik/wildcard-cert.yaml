@@ -1,0 +1,27 @@
+---
+# One wildcard certificate for every public hostname, served by Traefik as
+# its default (see tlsstore.yaml). Ingresses need no `spec.tls` and apps
+# need no per-host Certificate: a new public app is one Ingress with a host.
+#
+# DNS-01 via the same Cloudflare token cert-manager already uses. The
+# nested wildcard is for dav.music.chrismiller.xyz — `*.chrismiller.xyz`
+# only matches one label.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-tls
+  namespace: traefik
+spec:
+  secretName: wildcard-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: '*.chrismiller.xyz'
+  dnsNames:
+    - chrismiller.xyz
+    - '*.chrismiller.xyz'
+    - '*.music.chrismiller.xyz'
+    - realliance.net
+    - '*.realliance.net'
+  privateKey:
+    rotationPolicy: Always

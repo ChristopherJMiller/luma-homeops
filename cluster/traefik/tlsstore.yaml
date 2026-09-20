@@ -1,0 +1,12 @@
+---
+# Traefik serves this certificate for any TLS connection whose SNI isn't
+# matched by an Ingress `spec.tls` entry — with the wildcard cert covering
+# every public zone, that is all of them.
+apiVersion: traefik.io/v1alpha1
+kind: TLSStore
+metadata:
+  name: default
+  namespace: traefik
+spec:
+  defaultCertificate:
+    secretName: wildcard-tls
