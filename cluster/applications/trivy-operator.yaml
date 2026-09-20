@@ -18,6 +18,17 @@ spec:
           # baseline (hostPID + hostPath denied) and Talos lacks the host paths
           # it inspects anyway. Disable instead of spamming FailedCreate forever.
           infraAssessmentScannerEnabled: false
+          # Built-in trivy server (ClientServer mode): the vulnerability + Java DBs
+          # live once on the Ceph PVC below instead of being downloaded and
+          # unpacked (~1.3 GB) into an emptyDir on the node's system SSD by
+          # every scan job. Standalone mode was writing ~2.4 TB/day across the
+          # three boot NVMes (#2661) — the PVC settings were dead config.
+          builtInTrivyServer: true
+          # A scan that fails permanently (image tag deleted upstream) was being
+          # recreated every 30 s, forever. Retry hourly; cap concurrency so a
+          # rescan wave can't saturate a node's disk.
+          scanJobsRetryDelay: 1h
+          scanJobsConcurrentLimit: 3
           resources:
             requests:
               cpu: 100m
