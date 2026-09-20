@@ -96,13 +96,16 @@ nat:
       inbound_interface: eth0
       translation_address: 192.168.0.6
       translation_port: 80
+    # #2507 phase 3a (2026-09-19): LAN-side reflection (210/310) hits Traefik
+    # at .7 as a canary while WAN (200/300) stays on ingress-nginx at .6.
+    # Phase 3b flips 200/300 too; both then move together from here on.
     - rule: 210
       description: 'NAT Reflection: HTTP'
       destination_address: 152.44.247.88
       port: 80
       protocol: tcp_udp
       inbound_interface: eth2
-      translation_address: 192.168.0.6
+      translation_address: 192.168.0.7
       translation_port: 80
     - rule: 300
       description: HTTPS Port Forward
@@ -117,7 +120,7 @@ nat:
       port: 443
       protocol: tcp_udp
       inbound_interface: eth2
-      translation_address: 192.168.0.6
+      translation_address: 192.168.0.7
       translation_port: 443
   source_rules:
     - rule: 100
