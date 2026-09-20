@@ -284,7 +284,7 @@ spec:
   ingressClassName: traefik
   tls:
     - hosts: [www.realliance.net]
-      secretName: chrismillerxyz-tls
+      secretName: realliance-tls
   rules:
     - host: www.realliance.net
       http:
