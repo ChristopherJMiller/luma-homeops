@@ -28,6 +28,23 @@
       "matchFileNames": ["operators/ceph-nfs-export-operator/requirements.txt"],
       "allowedVersions": "<1.39",
       "description": "kopf 1.39+ requires python>=3.10; ceph base image ships python3-cephfs only for system python 3.9. Unpin when ceph base bumps to a newer Stream."
+    },
+    {
+      "matchManagers": ["argocd"],
+      "matchPackageNames": ["rook-ceph", "kube-prometheus-stack", "traefik", "cert-manager", "sealed-secrets", "postgres-operator"],
+      "matchUpdateTypes": ["minor", "major"],
+      "automerge": false,
+      "description": "Operators with upgrade/delete authority over cluster state: patch automerges, minor/major wait for a human (renovate-triage skill). rook-ceph sat 6 patches behind a CVE fix because this manager was off."
+    },
+    {
+      "matchManagers": ["argocd"],
+      "matchPackageNames": ["authentik"],
+      "enabled": false,
+      "description": "authentik 2024.12 -> 2026.x is 8 strictly sequential hops with a pg_dump per hop (#2591). Not a Renovate job."
     }
-  ]
+  ],
+  "argocd": {
+    "fileMatch": ["^cluster/applications/.+\\.yaml$"],
+    "rangeStrategy": "replace"
+  }
 }
