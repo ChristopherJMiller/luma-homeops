@@ -298,6 +298,28 @@ spec:
     pgHealthCheckTimeout: 0
 
   # csi defines CSI Driver settings applied per cluster.
+  # CephX key hygiene (CVE-2025-30156). Ceph >=19.2.6 flags every legacy
+  # `aes` key; the fix is rotating to `aes256k`. Two phases because the CSI
+  # node keys are used by the Talos KERNEL (krbd / kernel CephFS), and
+  # kernel aes256k support only exists in Linux >= 7.0 (Talos 1.10/1.11 are
+  # 6.12). Rotating CSI keys early would break every PVC mount.
+  #
+  #   phase 1 (this): daemons + admin -> aes256k. Clears both [ERR] checks
+  #                   (SERVICE_KEY_TYPE, SERVICE_TICKETS). Rook restarts
+  #                   mon/mgr/osd/mds/nfs one at a time.
+  #   phase 2 (blocked on a >=7.0 node kernel): csi.keyType: aes256k with
+  #                   keepPriorKeyCountMax: 1 + node drains, then
+  #                   allowedCiphers: [aes256k].
+  #
+  # To rotate again later (e.g. after a Ceph major): bump daemon.keyGeneration.
+  security:
+    cephx:
+      allowedCiphers: [aes, aes256k]
+      daemon:
+        keyRotationPolicy: KeyGeneration
+        keyGeneration: 1
+      csi:
+        keyType: aes
   csi:
     readAffinity:
       # Enable read affinity to enable clients to optimize reads from an OSD in the same topology.
