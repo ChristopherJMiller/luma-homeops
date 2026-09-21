@@ -172,7 +172,7 @@ One repo, snapshots grouped by `--host`:
 | `home-assistant-persist` | HA config, `.storage/`, custom components | recorder DB is in Postgres; local `home-assistant_v2.db*` excluded |
 | `mm-plex-config` | Plex library DB, metadata, prefs | live SQLite may be torn; Plex's own `*.db-YYYY-MM-DD` backups in the same dir are consistent. Cache/Logs excluded |
 | `gonic` | `/data` (gonic.db) + `/playlists` | small; a torn DB just means a rescan |
-| `satellites-cephfs` | CephFS `/satellites` (octoprint config, uploads) | the only satellite state not in git |
+| `satellites-cephfs` | CephFS `/satellites` | currently empty — octoprint's NFS mount is still commented out in `satellites/hosts/octoprint/default.nix`. Backed up anyway so it's covered the day a satellite starts using it; the canary only checks a snapshot exists |
 
 Retention: `--keep-daily 14 --keep-weekly 8 --keep-monthly 12`, applied
 weekly by `backups/restic-maintenance` (Sunday 05:00, also runs `check
