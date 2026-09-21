@@ -27,7 +27,7 @@ spec:
           labels:
             app.kubernetes.io/name: restic-backup
         spec:
-          restartPolicy: OnFailure
+          restartPolicy: Never # each attempt keeps its pod (and logs); OnFailure deletes them at backoffLimit
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000

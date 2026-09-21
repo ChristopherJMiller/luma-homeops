@@ -33,7 +33,7 @@ spec:
           labels:
             app.kubernetes.io/name: family-backup
         spec:
-          restartPolicy: OnFailure
+          restartPolicy: Never # each attempt keeps its pod (and logs); OnFailure deletes them at backoffLimit
           securityContext:
             runAsUser: 1000
             runAsGroup: 1000
@@ -73,7 +73,7 @@ spec:
                   # keep it bounded (see docs/backups/family-restore.job.yaml).
                   rclone sync "$SRC" "$DST/current" \
                     --backup-dir "$DST/deleted/$(date -u +%F)" \
-                    --exclude '.DS_Store' --exclude 'Thumbs.db' --exclude '._*' \
+                    --exclude '.DS_Store' --exclude 'Thumbs.db' --exclude '._*' --exclude '*.partial' \
                     --transfers 4 --checkers 8 \
                     --s3-chunk-size 16M --s3-upload-concurrency 4 --buffer-size 16M \
                     --bwlimit 10M \

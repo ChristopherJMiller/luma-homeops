@@ -31,7 +31,7 @@ spec:
           labels:
             app.kubernetes.io/name: restic-backup
         spec:
-          restartPolicy: OnFailure
+          restartPolicy: Never # each attempt keeps its pod (and logs); OnFailure deletes them at backoffLimit
           affinity:
             podAffinity:
               requiredDuringSchedulingIgnoredDuringExecution:
@@ -51,8 +51,10 @@ spec:
                 capabilities:
                   drop: [ALL]
                   # root without DAC_OVERRIDE cannot read the app's 0600 files
-                  # (Plex: .LocalAdminToken); DAC_READ_SEARCH is the read-only bypass.
-                  add: [DAC_READ_SEARCH]
+                  # (Plex: .LocalAdminToken). DAC_READ_SEARCH would be the minimal
+                  # bypass but PodSecurity baseline (cluster default) rejects it;
+                  # DAC_OVERRIDE is baseline-allowed and the mounts are read-only.
+                  add: [DAC_OVERRIDE]
               envFrom:
                 - secretRef:
                     name: restic-config
