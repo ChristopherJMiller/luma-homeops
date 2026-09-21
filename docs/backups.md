@@ -184,6 +184,18 @@ The RWO volumes (HA, Plex, gonic) are RBD, so their jobs carry a required
 PVC read-only. If the app is scaled to 0 the job can't schedule — that fails
 and alerts, which is the correct outcome.
 
+Gotchas already hit (2026-09-21, first scheduled cycle):
+- The jobs run as root with `capabilities.drop: [ALL]` + `add: [DAC_OVERRIDE]`.
+  Dropping ALL removes root's ability to read the app's `0600` files
+  (Plex `.LocalAdminToken`); `DAC_READ_SEARCH` would be the minimal fix but
+  the cluster-wide PodSecurity default is **baseline**, which rejects it at
+  admission — pods silently never start and the Job fails with no logs.
+  `DAC_OVERRIDE` is baseline-allowed; the mounts are read-only anyway.
+- Every backup job is `restartPolicy: Never`. With `OnFailure` the controller
+  deletes the pod when backoffLimit is hit, taking the logs with it.
+- `family-backup` excludes `*.partial` so a concurrent ingest/restore can't
+  fail the nightly mirror on rclone's in-flight temp files.
+
 ### Inspect / restore a file (laptop, no cluster)
 
 ```bash
