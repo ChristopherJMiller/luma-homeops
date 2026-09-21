@@ -53,6 +53,9 @@ spec:
             - |
               set -eu
               echo "family-restore start $(date -u +%FT%TZ): $SRC -> /family"
+              # A killed run leaves rclone's in-flight *.partial files behind;
+              # they are never resumed, only re-copied, so clear them first.
+              find /family -name '*.partial' -type f -print -delete | sed 's/^/  removing stale /'
               # --bwlimit: the SMR OSDs collapse after ~25 GiB of sustained
               # writes (seconds of commit latency, OSDs marked down, Prometheus
               # restarts — 2026-09-21 at 30 MB/s). 4 MB/s ≈ a day for the full
