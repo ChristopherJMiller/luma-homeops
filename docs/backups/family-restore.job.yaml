@@ -53,14 +53,15 @@ spec:
             - |
               set -eu
               echo "family-restore start $(date -u +%FT%TZ): $SRC -> /family"
-              # --bwlimit: 300 GiB of sequential writes at full speed would
-              # starve the SMR OSDs that Postgres also lives on (CLAUDE.md
-              # sharp edge #1). 30 MB/s ≈ 3.5 h for the full archive.
+              # --bwlimit: the SMR OSDs collapse after ~25 GiB of sustained
+              # writes (seconds of commit latency, OSDs marked down, Prometheus
+              # restarts — 2026-09-21 at 30 MB/s). 4 MB/s ≈ a day for the full
+              # archive; run overnight and watch `ceph -s` slow ops.
               rclone copy "$SRC" /family \
                 --exclude '.DAV/**' --exclude 'Thumbs.db' --exclude '.DS_Store' --exclude '._*' \
-                --transfers 4 --checkers 8 --fast-list \
+                --transfers 2 --checkers 8 --fast-list \
                 --multi-thread-streams 2 --multi-thread-chunk-size 32M --buffer-size 16M \
-                --bwlimit 30M \
+                --bwlimit 4M \
                 --stats 5m --stats-one-line --stats-log-level NOTICE --log-level INFO
               echo "copy done $(date -u +%FT%TZ)"
 
