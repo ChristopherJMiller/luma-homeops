@@ -35,3 +35,10 @@ spec:
       fsName: fs-pool
       staticVolume: "true"
       rootPath: /family
+      # The mons only speak msgr2 on :3300 and the kernel cephfs client
+      # defaults to msgr1 there ("socket closed (con state V1_BANNER)" in
+      # dmesg, surfaced by kubelet as "no mds is up"). RBD gets this from the
+      # cluster-wide rbd_default_map_options; cephfs needs it per mount.
+      # The rook-ceph-fs StorageClass lacks this too — first dynamic CephFS
+      # PVC will hit the same wall.
+      kernelMountOptions: ms_mode=prefer-crc
