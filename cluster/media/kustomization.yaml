@@ -4,6 +4,8 @@ kind: Kustomization
 namespace: media
 resources:
   - logical-backup-s3.yaml
+  - restic-config.yaml
+  - restic-backup-plex-cronjob.yaml
   - psql.yaml
   - postgres-servicemonitor.yaml
   - mega-media-servicemonitor.yaml

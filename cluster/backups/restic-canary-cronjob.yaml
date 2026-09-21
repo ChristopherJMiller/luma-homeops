@@ -1,0 +1,88 @@
+---
+# Monthly automated restore drill for the config-tier restic repo: pull one
+# known file out of the latest snapshot of every host and fail loudly if it
+# is missing or empty. This is what makes "the backups are exercised" a
+# metric (kube_job_status_failed) instead of a promise.
+# The manual, full-volume drill is in docs/backups.md.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: restic-canary
+  namespace: backups
+  labels:
+    app.kubernetes.io/name: restic-backup
+    backup-tier: config
+spec:
+  schedule: "0 6 1 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: restic-backup
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: restic
+              image: restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              envFrom:
+                - secretRef:
+                    name: restic-config
+              env:
+                - name: RESTIC_CACHE_DIR
+                  value: /cache
+              command: ["/bin/sh"]
+              args:
+                - -c
+                - |
+                  set -u
+                  fail=0
+                  # host | a path that must exist and be non-empty in every snapshot
+                  while IFS='|' read -r host path; do
+                    out="/restore/$host"; rm -rf "$out"; mkdir -p "$out"
+                    if restic restore latest --host "$host" --include "$path" --target "$out" --retry-lock 15m >/dev/null 2>&1 \
+                       && [ -s "$out$path" ]; then
+                      echo "OK   $host  $path ($(wc -c < "$out$path") bytes)"
+                    else
+                      echo "FAIL $host  $path" >&2; fail=1
+                    fi
+                  done <<'EOF'
+                  home-assistant-persist|/data/.storage/core.config
+                  mm-plex-config|/data/Library/Application Support/Plex Media Server/Preferences.xml
+                  gonic|/data/gonic.db
+                  satellites-cephfs|/data/octoprint/config.yaml
+                  EOF
+                  [ "$fail" = 0 ] && echo "restic canary OK $(date -u +%FT%TZ)" || { echo "restic canary FAILED"; exit 1; }
+              volumeMounts:
+                - name: cache
+                  mountPath: /cache
+                - name: restore
+                  mountPath: /restore
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
+          volumes:
+            - name: cache
+              emptyDir: {}
+            - name: restore
+              emptyDir: {}

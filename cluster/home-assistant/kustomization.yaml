@@ -4,6 +4,8 @@ kind: Kustomization
 namespace: home-assistant
 resources:
   - logical-backup-s3.yaml
+  - restic-config.yaml
+  - restic-backup-cronjob.yaml
   - psql.yaml
   - postgres-podmonitor.yaml
 

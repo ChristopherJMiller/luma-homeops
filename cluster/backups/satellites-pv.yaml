@@ -1,0 +1,43 @@
+---
+# Read-only static CephFS view of /satellites (the NFS-exported state of the
+# NixOS satellites — octoprint config/uploads etc.), so restic can back it up
+# from the cluster. Same pattern as cluster/family/pv.yaml; see there for the
+# msgr2 mount option and the fsGroup caveat.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: satellites-cephfs-ro
+spec:
+  accessModes:
+    - ReadOnlyMany
+  capacity:
+    storage: 100Gi
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  storageClassName: ""
+  csi:
+    driver: rook.cephfs.csi.ceph.com
+    volumeHandle: satellites-cephfs-ro-static
+    nodeStageSecretRef:
+      name: rook-csi-cephfs-node
+      namespace: rook
+    volumeAttributes:
+      clusterID: rook
+      fsName: fs-pool
+      staticVolume: "true"
+      rootPath: /satellites
+      kernelMountOptions: ms_mode=prefer-crc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: satellites-cephfs-ro
+  namespace: backups
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: ""
+  volumeName: satellites-cephfs-ro
+  resources:
+    requests:
+      storage: 100Gi

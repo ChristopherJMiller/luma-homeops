@@ -1,0 +1,78 @@
+---
+# Weekly retention + integrity pass on the config-tier restic repo.
+# Sunday 05:00 UTC, after the nightly backups (01:00–02:00) are long done —
+# forget/prune take an exclusive lock and would otherwise collide.
+#
+# "Delete" here is soft: the key has no deleteFiles capability, so pruned
+# packs become hidden versions the bucket purges 30 days later. That is the
+# undo window if this ever forgets too much.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: restic-maintenance
+  namespace: backups
+  labels:
+    app.kubernetes.io/name: restic-backup
+    backup-tier: config
+spec:
+  schedule: "0 5 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 10800
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: restic-backup
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: restic
+              image: restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              envFrom:
+                - secretRef:
+                    name: restic-config
+              env:
+                - name: RESTIC_CACHE_DIR
+                  value: /cache
+              command: ["/bin/sh"]
+              args:
+                - -c
+                - |
+                  set -eu
+                  echo "restic maintenance start $(date -u +%FT%TZ)"
+                  restic forget --group-by host \
+                    --keep-daily 14 --keep-weekly 8 --keep-monthly 12 \
+                    --prune --retry-lock 30m
+                  # Metadata check every week; read back a rotating 10% of the
+                  # data too, so silent corruption surfaces within ~10 weeks.
+                  restic check --read-data-subset=10% --retry-lock 30m
+                  restic snapshots --compact --group-by host
+                  echo "restic maintenance done $(date -u +%FT%TZ)"
+              volumeMounts:
+                - name: cache
+                  mountPath: /cache
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: "1"
+                  memory: 1Gi
+          volumes:
+            - name: cache
+              emptyDir: {}

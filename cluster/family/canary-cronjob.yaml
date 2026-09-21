@@ -1,0 +1,61 @@
+---
+# Monthly automated restore check for the family mirror: fetch one known
+# file straight from B2 and compare its sha1 to the value recorded from the
+# original 2023 NAS dump. Proves the bucket is readable with the cluster key
+# and the bytes are intact; the full drill is docs/backups/family-restore.job.yaml.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: family-canary
+  namespace: media
+  labels:
+    app.kubernetes.io/name: family-backup
+    backup-tier: family
+spec:
+  schedule: "30 6 1 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: family-backup
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: rclone
+              image: rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              envFrom:
+                - secretRef:
+                    name: family-b2
+              command: ["/bin/sh"]
+              args:
+                - -c
+                - |
+                  set -eu
+                  f='current/OldPictures/DSC00024.JPG'
+                  want=24a94c2430e5a594731df147440b708b370b106b
+                  got=$(rclone cat "b2:galaxy-family/$f" | sha1sum | cut -d' ' -f1)
+                  if [ "$got" = "$want" ]; then echo "family canary OK: $f sha1=$got"; else echo "family canary FAILED: $f sha1=$got want=$want" >&2; exit 1; fi
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi

@@ -1,0 +1,27 @@
+---
+# Backup plumbing that doesn't belong to one app: the satellites CephFS
+# snapshot, weekly restic maintenance, the monthly restore canary, and the
+# backup alert rules. Per-app backup CronJobs live next to their PVCs
+# (cluster/home-assistant, cluster/media, cluster/music-streaming,
+# cluster/family). Runbook: docs/backups.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: backups
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/backups
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: backups
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

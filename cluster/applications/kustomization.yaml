@@ -23,6 +23,7 @@ resources:
   - mega-media-release.yaml
   - media-webdav.yaml
   - family.yaml
+  - backups.yaml
   - music-streaming.yaml
   - metallb.yaml
   - metrics-server.yaml

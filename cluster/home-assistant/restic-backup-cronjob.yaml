@@ -1,0 +1,94 @@
+---
+# Nightly restic snapshot of the home-assistant-persist PVC (HA config,
+# .storage/, custom components) into the shared config-tier repo.
+# Restore: docs/backups.md → "Config volumes".
+#
+# The PVC is RBD (RWO), so this pod must land on the node the HA pod is on —
+# hence the required podAffinity. If HA is scaled to 0 the job can't
+# schedule and fails, which is the right outcome (it alerts).
+# Runs as root: read-only mounts, and it must read whatever uid the app
+# wrote as.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: restic-home-assistant
+  namespace: home-assistant
+  labels:
+    app.kubernetes.io/name: restic-backup
+    backup-tier: config
+spec:
+  schedule: "0 1 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: restic-backup
+        spec:
+          restartPolicy: OnFailure
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - topologyKey: kubernetes.io/hostname
+                  labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: home-assistant
+                      app.kubernetes.io/instance: ha
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: restic
+              image: restic/restic:0.19.1@sha256:136600b6ff6843d61d355f7f71f460a166429f35de6fd11b568fece3c9a4d510
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              envFrom:
+                - secretRef:
+                    name: restic-config
+              env:
+                - name: RESTIC_CACHE_DIR
+                  value: /cache
+                - name: RESTIC_HOST
+                  value: home-assistant-persist
+              command: ["/bin/sh"]
+              args:
+                - -c
+                - |
+                  set -eu
+                  echo "restic backup $RESTIC_HOST start $(date -u +%FT%TZ)"
+                  restic backup /data \
+                    --host "$RESTIC_HOST" --tag home-assistant --tag config \
+                    --exclude '/data/home-assistant_v2.db*' \
+                    --exclude '/data/*.log*' \
+                    --exclude '/data/deps' --exclude '/data/.cache' --exclude '/data/tts' \
+                    --retry-lock 15m --no-scan --cleanup-cache
+                  restic snapshots --host "$RESTIC_HOST" --latest 1 --compact
+                  echo "restic backup $RESTIC_HOST done $(date -u +%FT%TZ)"
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                  readOnly: true
+                - name: cache
+                  mountPath: /cache
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: home-assistant-persist
+                readOnly: true
+            - name: cache
+              emptyDir: {}

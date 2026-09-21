@@ -1,0 +1,13 @@
+---
+# No `namespace:` transformer on purpose: prometheusrule.yaml must land in
+# the prometheus namespace; everything else names `backups` explicitly.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - restic-config.yaml
+  - satellites-pv.yaml
+  - restic-satellites-cronjob.yaml
+  - restic-maintenance-cronjob.yaml
+  - restic-canary-cronjob.yaml
+  - prometheusrule.yaml

@@ -1,0 +1,54 @@
+---
+# Backup alerting. A real PrometheusRule (the operator's ruleSelector only
+# loads these, not the ConfigMaps under cluster/prometheus-stack/rules/),
+# in the prometheus namespace where ruleNamespaceSelector looks.
+# Names deliberately avoid Volume/Storage/Ceph so they route to
+# homelab-default (Discord, weekday hours) rather than the storage route.
+# Covers: restic-* (config tier + maintenance + canary), family-backup,
+# family-canary, and the operator-generated logical-backup-* CronJobs.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: backup-alerts
+  namespace: prometheus
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: backups
+      interval: 60s
+      rules:
+        - alert: BackupCronJobStale
+          # No successful run in 36h for a nightly job.
+          expr: |
+            (time() - kube_cronjob_status_last_successful_time{cronjob=~"restic-(home-assistant|plex|gonic|satellites)|family-backup|logical-backup-.*"}) > 36 * 3600
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Backup {{ $labels.namespace }}/{{ $labels.cronjob }} has not succeeded in >36h"
+            description: "Last success was {{ $value | humanizeDuration }} ago. See docs/backups.md."
+        - alert: BackupCronJobNeverSucceeded
+          # Exists but has never completed — a freshly broken deploy, or a
+          # job that can never schedule (e.g. RWO affinity with the app at 0).
+          expr: |
+            kube_cronjob_info{cronjob=~"restic-(home-assistant|plex|gonic|satellites)|family-backup|logical-backup-.*"}
+              unless on (namespace, cronjob) kube_cronjob_status_last_successful_time
+          for: 48h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Backup {{ $labels.namespace }}/{{ $labels.cronjob }} has never succeeded"
+        - alert: BackupJobFailed
+          # Any failed run: nightly backups, weekly maintenance, monthly
+          # canaries. Failed Jobs stick around (failedJobsHistoryLimit) so
+          # this stays raised until someone looks.
+          expr: |
+            kube_job_status_failed{job_name=~"(restic-.*|family-backup|family-canary|logical-backup-.*)-[0-9]+"} > 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Backup job {{ $labels.namespace }}/{{ $labels.job_name }} failed"
+            description: "kubectl -n {{ $labels.namespace }} logs job/{{ $labels.job_name }}"

@@ -1,0 +1,40 @@
+---
+# Throwaway Postgres cluster for restore drills. Hand-applied, never in Argo.
+#
+#   kubectl apply -f docs/backups/acid-drill.yaml
+#   ./docs/backups/pg-restore.sh home-assistant acid-ha acid-drill
+#   kubectl delete -f docs/backups/acid-drill.yaml
+#   kubectl -n home-assistant delete pvc pgdata-acid-drill-0   # PVCs are retained by policy
+#
+# Edit `namespace` to match the source cluster you're drilling (the script
+# reads the operator-managed credential Secrets from that namespace).
+# Bump `volume.size` if the source's data dir is larger than this.
+apiVersion: acid.zalan.do/v1
+kind: postgresql
+metadata:
+  name: acid-drill
+  namespace: home-assistant
+  labels:
+    app: postgresql
+    cluster: acid-drill
+    backup-drill: "true"
+spec:
+  teamId: acid
+  numberOfInstances: 1
+  postgresql:
+    version: "16"
+    parameters:
+      synchronous_commit: "off"
+  users:
+    postgres: []
+  databases:
+    postgres: postgres
+  volume:
+    size: 5Gi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
