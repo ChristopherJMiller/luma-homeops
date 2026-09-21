@@ -50,6 +50,9 @@ spec:
                 allowPrivilegeEscalation: false
                 capabilities:
                   drop: [ALL]
+                  # root without DAC_OVERRIDE cannot read the app's 0600 files
+                  # (Plex: .LocalAdminToken); DAC_READ_SEARCH is the read-only bypass.
+                  add: [DAC_READ_SEARCH]
               envFrom:
                 - secretRef:
                     name: restic-config

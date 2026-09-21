@@ -55,14 +55,17 @@ echo "dump: $key"
 backblaze-b2 file download --no-progress "b2://$bucket/$key" "$tmp/dump.sql.gz" >/dev/null
 ls -l "$tmp/dump.sql.gz" | awk '{print "size:", $5, "bytes"}'
 
-# 2. target ready
-say "waiting for postgresql/$tgt in $ns to be Running"
-for _ in $(seq 1 60); do
-  st=$(kubectl -n "$ns" get postgresql "$tgt" -o jsonpath='{.status.PostgresClusterStatus}' 2>/dev/null || true)
-  [ "$st" = Running ] && kubectl -n "$ns" get pod "${tgt}-0" -o jsonpath='{.status.containerStatuses[?(@.name=="postgres")].ready}' 2>/dev/null | grep -q true && break
+# 2. target ready — judge by the pod + psql, not the CR status, which lags
+#    (a slow PVC provision leaves it at CreateFailed until the next resync).
+say "waiting for ${tgt}-0 in $ns to accept connections"
+ready=no
+for _ in $(seq 1 120); do
+  if kubectl -n "$ns" get pod "${tgt}-0" -o jsonpath='{.status.containerStatuses[?(@.name=="postgres")].ready}' 2>/dev/null | grep -q true \
+     && tpsql -c 'select 1' >/dev/null 2>&1; then ready=yes; break; fi
   sleep 5
 done
-[ "$st" = Running ] || { echo "target not Running (status: $st)" >&2; exit 1; }
+[ "$ready" = yes ] || { echo "${tgt}-0 never became ready" >&2; exit 1; }
+echo "CR status: $(kubectl -n "$ns" get postgresql "$tgt" -o jsonpath='{.status.PostgresClusterStatus}' 2>/dev/null) (advisory)"
 
 # 3. remember the target's own passwords
 say "capturing $tgt role passwords from operator Secrets"
@@ -75,8 +78,9 @@ echo "roles: ${!pw[*]}"
 
 # 4. load
 say "loading dump into $tgt (errors like 'already exists' are expected)"
-errs=$(gunzip -c "$tmp/dump.sql.gz" | tpsql 2>&1 | grep -c '^ERROR' || true)
-echo "psql ERROR lines: $errs"
+gunzip -c "$tmp/dump.sql.gz" | tpsql 2>&1 | grep '^ERROR' > "$tmp/errors.log" || true
+echo "psql ERROR lines: $(wc -l < "$tmp/errors.log") — by kind:"
+sed -E 's/"[^"]+"/"…"/g' "$tmp/errors.log" | sort | uniq -c | sort -rn | head -8 | sed 's/^/  /'
 
 # 5. put the passwords back
 say "re-applying $tgt role passwords"
