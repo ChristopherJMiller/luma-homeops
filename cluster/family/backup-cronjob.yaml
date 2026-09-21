@@ -27,7 +27,7 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 2
-      activeDeadlineSeconds: 43200 # 12h — the first full sync is ~330 GiB
+      activeDeadlineSeconds: 72000 # 20h — the first full sync is ~330 GiB over the WAN uplink; sync is incremental, so a killed run resumes next night
       template:
         metadata:
           labels:
@@ -76,6 +76,7 @@ spec:
                     --exclude '.DS_Store' --exclude 'Thumbs.db' --exclude '._*' \
                     --transfers 4 --checkers 8 \
                     --s3-chunk-size 16M --s3-upload-concurrency 4 --buffer-size 16M \
+                    --bwlimit 10M \
                     --fast-list --stats 5m --stats-one-line --stats-log-level NOTICE \
                     --log-level INFO
                   echo "family-backup done $(date -u +%FT%TZ)"
