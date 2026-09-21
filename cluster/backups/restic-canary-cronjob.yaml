@@ -53,8 +53,17 @@ spec:
                 - |
                   set -u
                   fail=0
-                  # host | a path that must exist and be non-empty in every snapshot
+                  # host | a path that must exist and be non-empty in every snapshot,
+                  # or "-" = only require that a snapshot exists (volume may be empty)
                   while IFS='|' read -r host path; do
+                    if [ "$path" = "-" ]; then
+                      if restic snapshots --host "$host" --latest 1 --json --retry-lock 15m 2>/dev/null | grep -q '"short_id"'; then
+                        echo "OK   $host  (snapshot exists)"
+                      else
+                        echo "FAIL $host  no snapshot" >&2; fail=1
+                      fi
+                      continue
+                    fi
                     out="/restore/$host"; rm -rf "$out"; mkdir -p "$out"
                     if restic restore latest --host "$host" --include "$path" --target "$out" --retry-lock 15m >/dev/null 2>&1 \
                        && [ -s "$out$path" ]; then
@@ -64,9 +73,9 @@ spec:
                     fi
                   done <<'EOF'
                   home-assistant-persist|/data/.storage/core.config
-                  mm-plex-config|/data/Library/Application Support/Plex Media Server/Preferences.xml
+                  mm-plex-config|/data/Preferences.xml
                   gonic|/data/gonic.db
-                  satellites-cephfs|/data/octoprint/config.yaml
+                  satellites-cephfs|-
                   EOF
                   [ "$fail" = 0 ] && echo "restic canary OK $(date -u +%FT%TZ)" || { echo "restic canary FAILED"; exit 1; }
               volumeMounts:

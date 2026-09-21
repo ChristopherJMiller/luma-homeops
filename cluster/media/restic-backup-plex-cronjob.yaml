@@ -66,12 +66,15 @@ spec:
                 - |
                   set -eu
                   echo "restic backup $RESTIC_HOST start $(date -u +%FT%TZ)"
+                  # The PVC is mounted at the "Plex Media Server" level:
+                  # /data/Preferences.xml, /data/Plug-in Support/Databases/…
                   restic backup /data \
                     --host "$RESTIC_HOST" --tag plex --tag config \
-                    --exclude '/data/Library/Application Support/Plex Media Server/Cache' \
-                    --exclude '/data/Library/Application Support/Plex Media Server/Logs' \
-                    --exclude '/data/Library/Application Support/Plex Media Server/Crash Reports' \
-                    --exclude '/data/Library/Application Support/Plex Media Server/Plug-in Support/Caches' \
+                    --exclude '/data/Cache' \
+                    --exclude '/data/Logs' \
+                    --exclude '/data/Crash Reports' \
+                    --exclude '/data/Diagnostics' \
+                    --exclude '/data/Plug-in Support/Caches' \
                     --retry-lock 15m --no-scan --cleanup-cache
                   restic snapshots --host "$RESTIC_HOST" --latest 1 --compact
                   echo "restic backup $RESTIC_HOST done $(date -u +%FT%TZ)"
