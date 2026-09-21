@@ -32,9 +32,13 @@ spec:
         # key can't delete, the bucket's lifecycle rule hides dumps after 30d.
         # Restore is manual — docs/backups.md → "Postgres".
         configLogicalBackup:
+          # Keep in lockstep with the operator image (chart default image.tag,
+          # v1.11.0). The chart's own default is logical-backup v1.12.0, whose
+          # dump.sh needs LOGICAL_BACKUP_S3_BUCKET_PREFIX — an env var the
+          # 1.11 operator doesn't set — and dies with "unbound variable".
+          logical_backup_docker_image: registry.opensource.zalan.do/acid/logical-backup:v1.11.0@sha256:635346ca458a88c5ffeb02090b8ad882cb5442fff00b60ff7ee56535cd2a32f6
           logical_backup_provider: s3
           logical_backup_s3_bucket: galaxy-cluster-backups
-          logical_backup_s3_bucket_prefix: spilo
           logical_backup_s3_endpoint: https://s3.us-west-004.backblazeb2.com
           logical_backup_s3_region: us-west-004
           logical_backup_s3_sse: AES256
