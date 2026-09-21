@@ -10,6 +10,7 @@ metadata:
     app: postgresql
     cluster: acid-attic
 spec:
+  enableLogicalBackup: true # nightly pg_dumpall -> B2, docs/backups.md
   databases:
     attic: attic
   numberOfInstances: 1

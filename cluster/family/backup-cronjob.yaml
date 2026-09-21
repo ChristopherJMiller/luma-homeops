@@ -38,9 +38,15 @@ spec:
             runAsUser: 1000
             runAsGroup: 1000
             runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
           containers:
             - name: rclone
               image: rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
               envFrom:
                 - secretRef:
                     name: family-b2
@@ -63,10 +69,13 @@ spec:
                   fi
 
                   echo "family-backup start $(date -u +%FT%TZ): $n+ files"
+                  # Memory ≈ transfers × upload-concurrency × chunk + buffers;
+                  # keep it bounded (see docs/backups/family-restore.job.yaml).
                   rclone sync "$SRC" "$DST/current" \
                     --backup-dir "$DST/deleted/$(date -u +%F)" \
                     --exclude '.DS_Store' --exclude 'Thumbs.db' --exclude '._*' \
-                    --transfers 8 --checkers 16 \
+                    --transfers 4 --checkers 8 \
+                    --s3-chunk-size 16M --s3-upload-concurrency 4 --buffer-size 16M \
                     --fast-list --stats 5m --stats-one-line --stats-log-level NOTICE \
                     --log-level INFO
                   echo "family-backup done $(date -u +%FT%TZ)"

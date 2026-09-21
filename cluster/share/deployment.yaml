@@ -76,7 +76,11 @@ spec:
               cpu: 50m
               memory: 64Mi
             limits:
-              memory: 256Mi
+              # Writes into /srv/family land in CephFS, whose kernel client
+              # charges dirty page cache to this cgroup without throttling
+              # (see docs/backups/family-restore.job.yaml). Headroom for
+              # normal uploads; bulk drops should go over the NFS export.
+              memory: 1Gi
           livenessProbe:
             httpGet:
               path: /health

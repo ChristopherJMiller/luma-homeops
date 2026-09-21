@@ -53,9 +53,14 @@ spec:
             - |
               set -eu
               echo "family-restore start $(date -u +%FT%TZ): $SRC -> /family"
+              # --bwlimit: 300 GiB of sequential writes at full speed would
+              # starve the SMR OSDs that Postgres also lives on (CLAUDE.md
+              # sharp edge #1). 30 MB/s ≈ 3.5 h for the full archive.
               rclone copy "$SRC" /family \
                 --exclude '.DAV/**' --exclude 'Thumbs.db' --exclude '.DS_Store' --exclude '._*' \
-                --transfers 6 --checkers 12 --fast-list \
+                --transfers 4 --checkers 8 --fast-list \
+                --multi-thread-streams 2 --multi-thread-chunk-size 32M --buffer-size 16M \
+                --bwlimit 30M \
                 --stats 5m --stats-one-line --stats-log-level NOTICE --log-level INFO
               echo "copy done $(date -u +%FT%TZ)"
 
@@ -80,13 +85,19 @@ spec:
             - name: verify
               mountPath: /verify
               readOnly: true
+          # No memory limit — on purpose. The kernel cephfs client has no
+          # cgroup-writeback support, so dirty page cache from writes to
+          # /family is charged to this cgroup but never throttled by it; with
+          # a limit the pod is OOM-killed (rclone's own anon usage is ~50 MB;
+          # file_dirty alone reached 840 MB in 4 minutes). Without a limit
+          # the global vm.dirty_ratio throttles the writer instead. Applies to
+          # anything that writes heavily to a CephFS mount.
           resources:
             requests:
               cpu: 500m
-              memory: 512Mi
+              memory: 1Gi
             limits:
               cpu: "4"
-              memory: 2Gi
       volumes:
         - name: family
           persistentVolumeClaim:

@@ -24,6 +24,23 @@ spec:
         configDebug:
           enable_database_access: true
           debug_logging: true
+        # Nightly pg_dumpall of every cluster with enableLogicalBackup: true,
+        # uploaded to B2 (S3 API) at spilo/<cluster>/<uid>/logical_backups/.
+        # Credentials come from a Secret named logical-backup-s3 that must
+        # exist in each *cluster's* namespace (the operator reads it from
+        # there, not from its own). Retention is left empty on purpose: the
+        # key can't delete, the bucket's lifecycle rule hides dumps after 30d.
+        # Restore is manual — docs/backups.md → "Postgres".
+        configLogicalBackup:
+          logical_backup_provider: s3
+          logical_backup_s3_bucket: galaxy-cluster-backups
+          logical_backup_s3_bucket_prefix: spilo
+          logical_backup_s3_endpoint: https://s3.us-west-004.backblazeb2.com
+          logical_backup_s3_region: us-west-004
+          logical_backup_s3_sse: AES256
+          logical_backup_s3_retention_time: ""
+          logical_backup_schedule: "30 00 * * *"
+          logical_backup_cronjob_environment_secret: logical-backup-s3
   destination:
     server: https://kubernetes.default.svc
     namespace: postgres-operator
