@@ -258,8 +258,12 @@ intended trade.
 Before 2026-09 there was no backup system: two one-off uploads to B2
 (`luma-backups`, a 2022 restic repo of `/srv` on the old `luma` box whose
 password is lost; `toad-backups`, a 2023 plain-file dump of the NAS media
-library), never exercised, never restored. `toad-backups` is the seed of
-`/family`. Delete `luma-backups` once its password is confirmed gone.
+library), never exercised, never restored. `toad-backups` was the seed of
+`/family`; both buckets were **deleted 2026-09-22** once `toad-backups` was
+proven redundant (every object's sha1 present in `galaxy-family`; the 81
+multipart files carry no sha1 in rclone-written metadata, so those were
+matched on name + exact size with one verified byte-identical end to end).
+The account now holds only `galaxy-family` and `galaxy-cluster-backups`.
 Alternatives considered (Velero, k8up, kopia, WAL-G) and why not: Velero's
 object backup is redundant with Argo and its RBD-snapshot/B2 path is the
 least-trodden; k8up is this design as an operator — worth it past ~10
