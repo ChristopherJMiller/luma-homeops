@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://realliance.github.io/helm-mega-media
     chart: mega-media
-    targetRevision: 0.9.0
+    targetRevision: 0.10.0
     helm:
       releaseName: mm
       valuesObject:
@@ -105,6 +105,21 @@ spec:
             size: 30Gi
           transcode:
             storageClassName: rook-ceph-block
+          # The family archive (cluster/family/) as a second library source.
+          # Read-only on purpose: Plex writes sidecars next to media by default,
+          # and this volume is the curated, B2-mirrored source of truth — its
+          # metadata belongs in mm-plex-config (which is backed up), not in the
+          # archive. Add it in Plex as an "Other Videos" library on /family.
+          # RWX CephFS, so it doesn't pin Plex to a node the way mm-media does.
+          extraVolumes:
+            - name: family
+              persistentVolumeClaim:
+                claimName: family-media
+                readOnly: true
+          extraVolumeMounts:
+            - name: family
+              mountPath: /family
+              readOnly: true
         sabnzbd:
           tag: release-28cfd5e
           livenessProbe:
