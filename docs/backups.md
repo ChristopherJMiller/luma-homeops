@@ -251,6 +251,7 @@ intended trade.
 | 2026-09-21 | Config | first snapshot of each host taken by hand-triggered jobs | see git log |
 | 2026-09-22 | Family | ingest of the 2023 `toad-backups` dump (320 GiB) via `family-restore.job.yaml`, then sha1 of every file vs the manifest taken from the bucket listing | all 4,943 files match. Took ~23 h at 4 MB/s after the 30 MB/s attempt tanked Ceph; 19 files are 0 bytes in the 2023 source (listed in the ingest notes) |
 | 2026-09-22 | All | first fully scheduled cycle | 6 pg dumps + 4 restic snapshots succeeded on schedule; the cycle before caught the PodSecurity/DAC and OnFailure-log bugs above |
+| 2026-09-22 | Family | first full nightly mirror (8 h at the 10 MB/s cap), then counted both sides and ran the canary against the live bucket | volume 4,943 files / 327.4 GiB = `current/` 4,943 files / 327.44 GiB, `deleted/` empty, canary sha1 OK |
 
 ## History / why it looks like this
 
