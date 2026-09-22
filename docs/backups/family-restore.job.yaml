@@ -71,12 +71,15 @@ spec:
               if [ -s /verify/SHA1SUMS ]; then
                 echo "verifying $(wc -l < /verify/SHA1SUMS) files against manifest…"
                 cd /family
-                # sha1sum -c prints one line per file; keep only failures.
-                if sha1sum -c --quiet /verify/SHA1SUMS 2>&1 | tee /tmp/verify.log | head -50; [ -s /tmp/verify.log ]; then
+                # BusyBox sha1sum (no --quiet): one "<file>: OK|FAILED" line per
+                # entry; keep everything that isn't OK.
+                sha1sum -c /verify/SHA1SUMS 2>&1 | grep -v ': OK$' > /tmp/verify.log || true
+                if [ -s /tmp/verify.log ]; then
+                  head -50 /tmp/verify.log
                   echo "VERIFY FAILED: $(wc -l < /tmp/verify.log) problems" >&2
                   exit 3
                 fi
-                echo "VERIFY OK: all files match"
+                echo "VERIFY OK: all $(wc -l < /verify/SHA1SUMS) files match"
               fi
               echo "family-restore done $(date -u +%FT%TZ)"
           securityContext:
