@@ -222,7 +222,7 @@ Argo self-heals `kubectl scale` within a minute, so scaling goes through git:
 The operator won't migrate PVCs, but it clones by `pg_basebackup` from a live cluster in the same namespace (no `timestamp` = direct clone):
 
 ```yaml
-# new CR next to the old one, e.g. cluster/authentik/psql-ssd.yaml
+# new CR next to the old one, e.g. cluster/media/psql-ssd.yaml
 metadata: { name: acid-auth-ssd }
 spec:
   clone: { cluster: acid-auth }
@@ -243,7 +243,7 @@ Alternative worth trying on `acid-royaltracker` (small, 2 instances) first: chan
 
 ## Cleanup found on the way (do with the first migration)
 
-- `authentik/redis-data-a-redis-{master-0,replicas-0,1,2}` — 4 × 8 Gi orphaned by removing the bitnami subchart (84aff760). Delete PVCs, purge PVs.
+- `authentik/*` — the whole namespace is orphaned: authentik was removed 2026-09-23 (oauth2-proxy replaced it). 4 × 8 Gi redis PVCs + 2 × 20 Gi pgdata-acid-auth. Delete PVCs, purge PVs.
 - `default/pgdata-acid-royaltracker-0` — a stray in the `default` namespace; confirm nothing binds it, purge.
 
 ## Rollback

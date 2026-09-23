@@ -1,20 +1,23 @@
 ---
 # Public ingress for the Lagrange admin API. Auth happens in two layers:
 #
-#   1. Authentik SSO via nginx forward-auth — uses the existing
-#      ak-outpost-media-outpost in the authentik namespace (legacy name;
-#      it's actually a domain-level outpost for *.chrismiller.xyz that
-#      already serves the media *arr apps). Same annotation set as
-#      media/lidarr et al.
+#   1. SSO via the oauth2-proxy ADMIN tier (cluster/oauth2-proxy/,
+#      docs/auth.md). Same middleware pair as media/lidarr et al.
 #
-#   2. Lagrange-admin trusts the X-authentik-username header when the
-#      source IP is the wg0 peer (10.99.0.1) — see option G in the
-#      cluster-side discussion. Automation paths still use the bearer
-#      token via the in-cluster Service (lagrange-admin.ops.svc:8443),
-#      which bypasses SSO entirely.
+#   2. Lagrange-admin trusts an identity header when the source IP is the
+#      wg0 peer (10.99.0.1).
+#      *** BROKEN AS OF 2026-09-23 — needs a change in the lagrange repo. ***
+#      That layer reads `X-authentik-username`, which no longer exists:
+#      oauth2-proxy emits `X-Auth-Request-User` / `X-Auth-Request-Email`
+#      instead, and there is no rename knob. Access control is unaffected
+#      (nobody reaches the app without passing SSO first) but lagrange can
+#      no longer tell *who* the caller is on that path. Point it at
+#      X-Auth-Request-User to restore it.
+#      Automation is unaffected: it uses the bearer token via the
+#      in-cluster Service (lagrange-admin.ops.svc:8443), bypassing SSO.
 #
-# Note: clients hitting the PUBLIC URL with just a bearer token will get
-# redirected to authentik (forward-auth runs on every request). For
+# Note: clients hitting the PUBLIC URL with just a bearer token get
+# redirected to Google (forward-auth runs on every request). For
 # scripted/automated callers, use the in-cluster Service path.
 apiVersion: networking.k8s.io/v1
 kind: Ingress

@@ -1,6 +1,6 @@
 ---
 name: edge-ingress
-description: Expose a cluster service publicly, or change anything on the Traefik edge (Ingress, middleware, TLS, the Traefik chart). Use when adding a public hostname for an app, gating an app behind authentik, changing CSP/CORS behaviour, or touching cluster/traefik/. Encodes the post-2026-09 design (one Ingress with a host; wildcard DNS + wildcard cert; no per-host DNS/cert/annotation) and the 25-host behavioural snapshot that is the regression test for every edge change. NEVER adds external-dns or cert-manager annotations to an Ingress. NEVER adds a per-host Certificate for a public hostname. NEVER changes Traefik chart values without a before/after snapshot diff.
+description: Expose a cluster service publicly, or change anything on the Traefik edge (Ingress, middleware, TLS, the Traefik chart). Use when adding a public hostname for an app, gating an app behind SSO, changing CSP/CORS behaviour, or touching cluster/traefik/. Encodes the post-2026-09 design (one Ingress with a host; wildcard DNS + wildcard cert; no per-host DNS/cert/annotation) and the 25-host behavioural snapshot that is the regression test for every edge change. NEVER adds external-dns or cert-manager annotations to an Ingress. NEVER adds a per-host Certificate for a public hostname. NEVER changes Traefik chart values without a before/after snapshot diff.
 ---
 
 # edge-ingress
@@ -28,7 +28,8 @@ metadata:
   name: myapp
   namespace: myapp
   # annotations:
-  #   traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd
+  #   traefik.ingress.kubernetes.io/router.middlewares: >-
+  #     oauth2-proxy-oauth2-admin-errors@kubernetescrd,oauth2-proxy-oauth2-admin-auth@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
@@ -46,7 +47,7 @@ spec:
 
 Commit, push, Argo syncs. Then add the host to `edge-snapshot.sh` (next to this file) so it's covered by the regression test. That is all.
 
-**Helm-rendered ingresses** (argo-cd, authentik, home-assistant, plex, webdav, grafana, royaltracker): same content via chart values — `className: traefik` (or `ingressClassName:` for kps/argo-cd), no `tls:` block, middleware annotation if needed. Check the chart's ingress template if unsure how it spells things; `webdav` and `royaltracker` use `tls.enabled: false`.
+**Helm-rendered ingresses** (argo-cd, home-assistant, plex, webdav, grafana, royaltracker): same content via chart values — `className: traefik` (or `ingressClassName:` for kps/argo-cd), no `tls:` block, middleware annotation if needed. Check the chart's ingress template if unsure how it spells things; `webdav` and `royaltracker` use `tls.enabled: false`.
 
 ## Middlewares (the only knobs)
 
@@ -54,8 +55,8 @@ Reference as `<namespace>-<name>@kubernetescrd`, comma-separated, in `traefik.in
 
 | Middleware | Lives in | Use for |
 |---|---|---|
-| `authentik-authentik-forward-auth` | `cluster/traefik/middlewares.yaml` (ns authentik) | Gate behind SSO. Needs a ProxyProvider for the host on the media outpost in authentik first, or the redirect loops. |
-| `traefik-strip-csp` | `cluster/traefik/middlewares.yaml` (ns traefik) | Apps whose own CSP breaks behind a proxy (the *arr stack, HA, plex, authentik itself). |
+| `oauth2-proxy-oauth2-<tier>-errors`, `oauth2-proxy-oauth2-<tier>-auth` | `cluster/oauth2-proxy/middlewares.yaml` | Gate behind SSO (Google). ALWAYS reference **both**, errors first — reversed gives a bare 401 instead of a login redirect. Tiers: `admin` (you), `family` (relatives). See `docs/auth.md`. |
+| `traefik-strip-csp` | `cluster/traefik/middlewares.yaml` (ns traefik) | Apps whose own CSP breaks behind a proxy (the *arr stack, HA, plex). |
 | `chrismillerxyz-cors` | `cluster/traefik/middlewares-extra.yaml` | The static site; mirrors nginx `enable-cors`. |
 | `realliance-net-set-csp` | `cluster/traefik/middlewares-extra.yaml` | Sets a strict CSP on realliance.net. |
 

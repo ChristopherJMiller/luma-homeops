@@ -8,8 +8,8 @@
 # requests off to lagrange-admin — orbit's own nginx returns 502 on /v1
 # as a defence-in-depth tripwire if /v1 ever lands on this pod.
 #
-# Auth is inherited from the Ingress's authentik forward-auth annotations
-# (orbit itself does no auth). The authentik_proxy_* cookie is set at
+# Auth is inherited from the Ingress's oauth2-proxy forward-auth annotations
+# (orbit itself does no auth). The _oauth2_proxy_admin cookie is set at
 # Domain=chrismiller.xyz so SSO state is shared across /orbit and /v1.
 apiVersion: apps/v1
 kind: Deployment

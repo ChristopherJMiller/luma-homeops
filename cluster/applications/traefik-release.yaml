@@ -47,8 +47,8 @@ spec:
               enabled: true
           kubernetesCRD:
             enabled: true
-            # Ingresses in media/ops/share reference the shared ForwardAuth
-            # Middleware living in the authentik namespace.
+            # Ingresses in media/ops reference the shared auth Middlewares
+            # living in the oauth2-proxy namespace (see docs/auth.md).
             allowCrossNamespace: true
           kubernetesGateway:
             enabled: false

@@ -6,8 +6,6 @@ resources:
   - amd-gpu-plugin-release.yaml
   - applications.yaml
   - attic.yaml
-  - authentik.yaml
-  - authentik-release.yaml
   - ceph-nfs-export-operator.yaml
   - cert-approver.yaml
   - cert-manager.yaml

@@ -14,3 +14,8 @@ router/ansible/ansible.log
 .terraform/
 *.tfstate
 *.tfstate.*
+
+# Ad-hoc credential drops (Google OAuth client etc). Real secrets belong in
+# *.secret.yaml (git-crypt) and are sealed into the cluster by ./sign.sh.
+galaxy-sso.env
+*.env
