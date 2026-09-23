@@ -3,7 +3,7 @@
 # every setting below, so this is the closest thing to config-as-code that Ombi
 # allows: it keeps all of its configuration in its own database, not in files.
 #
-#   nix-shell shell.nix --run docs/ombi/bootstrap.sh
+#   nix develop -c docs/ombi/bootstrap.sh
 #
 # What it sets, and why in this order:
 #
@@ -43,7 +43,7 @@ say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 note() { printf '  %s\n' "$*"; }
 
 for bin in kubectl jq curl; do
-  command -v "$bin" >/dev/null || { echo "need $bin — run this inside nix-shell shell.nix" >&2; exit 1; }
+  command -v "$bin" >/dev/null || { echo "need $bin — run this as: nix develop -c docs/ombi/bootstrap.sh" >&2; exit 1; }
 done
 
 # ---------------------------------------------------------------- secrets ----

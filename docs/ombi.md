@@ -91,7 +91,7 @@ actionable, at the cost of friction for the family.
 ## Running the bootstrap
 
 ```sh
-nix-shell shell.nix --run docs/ombi/bootstrap.sh
+nix develop -c docs/ombi/bootstrap.sh
 ```
 
 It port-forwards to `mm-ombi` (Ombi's public host is behind the family gate,
