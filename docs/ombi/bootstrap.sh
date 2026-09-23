@@ -39,6 +39,14 @@ PROFILE_MOVIE_4K="${PROFILE_MOVIE_4K:-Ultra-HD}"
 PROFILE_TV="${PROFILE_TV:-HD-1080p}"
 PROFILE_MUSIC="${PROFILE_MUSIC:-Standard}"
 
+# Music requests OFF by default. Lidarr keeps running for Chris's own use — this
+# only removes music from Ombi's family-facing request flow. Ombi's SPA asks
+# GET /Settings/lidarrenabled to decide whether to offer music at all, so
+# disabling Lidarr here is what actually hides it; dropping the two music roles
+# below means the API refuses even if some UI path survives. Set to true to
+# restore both halves together.
+ENABLE_MUSIC="${ENABLE_MUSIC:-false}"
+
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 note() { printf '  %s\n' "$*"; }
 
@@ -178,19 +186,24 @@ say "4. Radarr / Sonarr / Lidarr — the resolution cap"
 
 RADARR_QP=$(profile_id radarr 7878 v3 "$PROFILE_MOVIE")
 SONARR_QP=$(profile_id sonarr 8989 v3 "$PROFILE_TV")
-LIDARR_QP=$(profile_id lidarr 8686 v1 "$PROFILE_MUSIC")
 [ -n "$RADARR_QP" ] || { echo "Radarr has no profile named '$PROFILE_MOVIE'. Have: $(profile_names radarr 7878 v3)" >&2; exit 1; }
 [ -n "$SONARR_QP" ] || { echo "Sonarr has no profile named '$PROFILE_TV'. Have: $(profile_names sonarr 8989 v3)" >&2; exit 1; }
-[ -n "$LIDARR_QP" ] || { echo "Lidarr has no profile named '$PROFILE_MUSIC'. Have: $(profile_names lidarr 8686 v1)" >&2; exit 1; }
 
 # Radarr wants the root folder as a PATH; Sonarr wants its ID. Getting these
 # the wrong way round fails at request time, not here.
 RADARR_ROOT=$(arr radarr 7878 v3 rootfolder | jq -r '.[0].path')
 SONARR_ROOT_ID=$(arr sonarr 8989 v3 rootfolder | jq -r '.[0].id')
-LIDARR_ROOT=$(arr lidarr 8686 v1 rootfolder | jq -r '.[0].path')
 note "movies -> $PROFILE_MOVIE (qp $RADARR_QP) into $RADARR_ROOT"
 note "tv     -> $PROFILE_TV (qp $SONARR_QP) into root id $SONARR_ROOT_ID"
-note "music  -> $PROFILE_MUSIC (qp $LIDARR_QP) into $LIDARR_ROOT"
+if [ "$ENABLE_MUSIC" = "true" ]; then
+  LIDARR_QP=$(profile_id lidarr 8686 v1 "$PROFILE_MUSIC")
+  [ -n "$LIDARR_QP" ] || { echo "Lidarr has no profile named '$PROFILE_MUSIC'. Have: $(profile_names lidarr 8686 v1)" >&2; exit 1; }
+  LIDARR_ROOT=$(arr lidarr 8686 v1 rootfolder | jq -r '.[0].path')
+  note "music  -> $PROFILE_MUSIC (qp $LIDARR_QP) into $LIDARR_ROOT"
+else
+  LIDARR_QP=1; LIDARR_ROOT=""
+  note "music  -> DISABLED in Ombi (ENABLE_MUSIC=false); Lidarr itself is untouched"
+fi
 
 # ---- 4K profile in Radarr, created only if absent -------------------------
 RADARR_4K_QP=$(profile_id radarr 7878 v3 "$PROFILE_MOVIE_4K")
@@ -267,12 +280,13 @@ jq -n --arg qp "$SONARR_QP" --arg root "$SONARR_ROOT_ID" --arg key "$SONARR_KEY"
   | opost v1/Settings/sonarr >/dev/null
 note "sonarr saved"
 
-jq -n --arg qp "$LIDARR_QP" --arg root "$LIDARR_ROOT" --arg key "$LIDARR_KEY" '
-  { enabled: true, apiKey: $key,
+jq -n --arg qp "$LIDARR_QP" --arg root "$LIDARR_ROOT" --arg key "$LIDARR_KEY" \
+      --argjson on "$( [ "$ENABLE_MUSIC" = "true" ] && echo true || echo false )" '
+  { enabled: $on, apiKey: $key,
     ip: "mm-lidarr.media.svc.cluster.local", port: 8686, ssl: false, subDir: null,
     defaultQualityProfile: $qp, defaultRootPath: $root, albumFolder: true }' \
   | opost v1/Settings/lidarr >/dev/null
-note "lidarr saved"
+note "lidarr saved (enabled=$ENABLE_MUSIC)"
 
 # ======================================================= 5. 4K feature =======
 say "5. 4K movie requests"
@@ -287,9 +301,10 @@ say "6. default roles for auto-created users"
 # members may ASK for 4K, and only Chris can say yes. Standard requests are
 # auto-approved and capped at 1080p by the profiles set in step 4.
 oget v1/Settings/UserManagement \
-  | jq '
-      .defaultRoles = ["RequestMovie","RequestTv","RequestMusic","ManageOwnRequests",
-                       "AutoApproveMovie","AutoApproveTv","AutoApproveMusic","Request4KMovie"]
+  | jq --argjson music "$( [ "$ENABLE_MUSIC" = "true" ] && echo true || echo false )" '
+      .defaultRoles = (["RequestMovie","RequestTv","ManageOwnRequests",
+                        "AutoApproveMovie","AutoApproveTv","Request4KMovie"]
+                       + (if $music then ["RequestMusic","AutoApproveMusic"] else [] end))
       | .importPlexUsers = false
       | .importPlexAdmin = false
       | .movieRequestLimit = 10   | .movieRequestLimitType = 1

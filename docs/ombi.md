@@ -48,8 +48,9 @@ Auto-created users get `UserManagementSettings.DefaultRoles`:
 
 | Role | Granted | Effect |
 |---|---|---|
-| `RequestMovie` / `RequestTv` / `RequestMusic` | yes | may ask for things |
-| `AutoApproveMovie` / `AutoApproveTv` / `AutoApproveMusic` | yes | standard requests need no nod |
+| `RequestMovie` / `RequestTv` | yes | may ask for things |
+| `AutoApproveMovie` / `AutoApproveTv` | yes | standard requests need no nod |
+| `RequestMusic` / `AutoApproveMusic` | **no** | music is off — see below |
 | `ManageOwnRequests` | yes | can cancel their own |
 | `Request4KMovie` | **yes** | may ask for 4K |
 | `AutoApprove4KMovie` | **no** | …but cannot grant it to themselves |
@@ -64,11 +65,55 @@ That last row *is* the approval gate. Everything else is the cap:
   absent. That profile deliberately **excludes Remux-2160p** and cuts off at
   `WEBDL-2160p`: a 4K remux is 50-90 GB, and sustained writes past ~25 GiB are
   what make these SMR OSDs flap and stall Ceph.
-- **Weekly per-person limits** as a backstop: 10 movies, 50 episodes, 20 albums.
+- **Weekly per-person limits** as a backstop: 10 movies, 50 episodes (the album
+  limit is still configured but moot while music is off).
+
+**Music is disabled** (`ENABLE_MUSIC=false` in `bootstrap.sh`). Two halves, and
+both matter: Lidarr is marked `enabled: false` in Ombi, which is what actually
+hides music from the UI — the SPA asks `GET /Settings/lidarrenabled` to decide
+whether to offer it at all — and the two music roles are dropped so the API
+refuses even if some UI path survives. Lidarr itself keeps running untouched for
+your own use; this only removes music from the family-facing request flow. Re-run
+with `ENABLE_MUSIC=true nix develop -c docs/ombi/bootstrap.sh` to restore both
+halves together.
+
+Note `defaultRoles` only applies at user *creation*, so flipping music back on
+does not retro-fit people who already have accounts — fix those in Ombi → Users.
 
 Ombi's own settings all live in its database, so `docs/ombi/bootstrap.sh` is the
 source of truth for the above, not any YAML file. It is idempotent; re-running it
 re-asserts every setting.
+
+## What Ombi shows of the Plex library
+
+Ombi is a *request* app, not a library browser — there is no route that lists
+what you own, and there is no "in my library" filter on Discover (its only toggle
+is Combined / Movies / TV). Browsing stays Plex's job at
+`plex.chrismiller.xyz`.
+
+What it does instead is **mark** availability everywhere a title appears, which is
+the part that actually matters: nobody requests something you already have.
+Verified against the live cache:
+
+| Title | In Plex? | Ombi says |
+|---|---|---|
+| The Blues Brothers | yes | `available: true`, plus a `plexUrl` deep link straight into Plex |
+| Black Phone 2 | yes | `available: true`, `plexUrl` present |
+| Venom | no | `available: false` |
+
+That comes from the `plexservercontent` / `plexepisode` tables in `ombi_external`,
+populated by the `plexContentSync` job (daily 02:00, plus `plexRecentlyAddedSync`
+every 30 min). It needs `plex-token` set — without it Ombi falls back to asking
+Radarr/Sonarr what exists, which only covers what the *arrs manage.
+
+Two caveats on where the marking does *not* appear: the multi-search endpoint
+(`POST /api/v2/search/multi/...`) returns `available: null` — it is a light TMDB
+lookup, and availability is resolved on the detail and carousel endpoints
+instead. And a title Plex holds but that has no TMDB id in the cache cannot be
+matched, so it will look unavailable.
+
+If you do want a library-ish surface inside Ombi, the newsletter is the only one:
+it mails a "recently added" digest. Not enabled here.
 
 ## Discord
 
