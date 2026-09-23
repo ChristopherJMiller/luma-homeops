@@ -35,8 +35,17 @@ fi
 
 # Built with jq so the password never lands in a process argument or the shell
 # history, and never reaches stdout.
-body=$(jq -n --arg e "$EMAIL" --arg n "$NAME" --arg p "$(openssl rand -base64 30)" \
+#
+# /dev/urandom, NOT openssl: openssl only exists inside the nix shell, and a
+# missing one expands to an EMPTY password that Immich cheerfully accepts —
+# creating a live account anyone could log into. Hence the guard below; this
+# already happened once (2026-09-23) and the four accounts had to be reset.
+PW=$(head -c 32 /dev/urandom | base64 | tr -d '\n')
+[ "${#PW}" -ge 32 ] || { echo "refusing to create a user: password generation failed" >&2; exit 1; }
+
+body=$(jq -n --arg e "$EMAIL" --arg n "$NAME" --arg p "$PW" \
   '{email:$e, name:$n, password:$p, shouldChangePassword:false, notify:false}')
+unset PW
 
 printf '%s' "$body" | curl "${R[@]}" "${H[@]}" -X POST "$API/admin/users" -d @- \
   | jq -r 'if .id then "created \(.email)  id=\(.id)" else "FAILED: \(.message // .)" end'
