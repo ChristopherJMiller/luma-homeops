@@ -226,7 +226,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "ArgoCD sync operations rate",
+          "description": "argocd_app_sync_total has no Running phase -- only Succeeded and Failed -- so the old filter matched nothing and the fallback drew a flat zero.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -343,19 +343,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum(rate(argocd_app_sync_total{phase=\"Succeeded\"}[5m])) OR on() vector(0)",
-              "legendFormat": "Success",
-              "refId": "A"
-            },
-            {
-              "expr": "sum(rate(argocd_app_sync_total{phase=\"Failed\"}[5m])) OR on() vector(0)",
-              "legendFormat": "Failed",
-              "refId": "B"
-            },
-            {
-              "expr": "sum(rate(argocd_app_sync_total{phase=\"Running\"}[5m])) OR on() vector(0)",
-              "legendFormat": "In Progress",
-              "refId": "C"
+              "expr": "sum by (phase) (rate(argocd_app_sync_total[5m]))",
+              "refId": "A",
+              "legendFormat": "{{phase}}"
             }
           ],
           "title": "Sync Operations Rate",
@@ -936,7 +926,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Current active Plex streams",
+          "description": "Was Plex Active Streams. Nothing exports Plex metrics on this cluster -- there is no Plex exporter deployed and no plex_* series has ever existed -- so that panel could only ever show its fallback zero. Open health issues across the *arr services is a real signal from exporters that ARE running.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -988,16 +978,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "plex_active_streams OR plex_sessions_active_total OR on() vector(0)",
-              "refId": "A"
+              "expr": "sum(sonarr_system_health_issues) + sum(radarr_system_health_issues) + sum(lidarr_system_health_issues) + sum(prowlarr_system_health_issues)",
+              "refId": "A",
+              "legendFormat": "open issues"
             }
           ],
-          "title": "Plex Active Streams",
+          "title": "Media Service Health Issues",
           "type": "stat"
         },
         {
           "datasource": "Prometheus",
-          "description": "Active Plex transcoding sessions",
+          "description": "Was Plex Transcoding, which needs a Plex exporter that does not exist here. Whether the downloader is paused is a real thing that silently stalls the pipeline.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1045,16 +1036,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "plex_transcode_sessions_active_total OR on() vector(0)",
-              "refId": "A"
+              "expr": "sabnzbd_paused",
+              "refId": "A",
+              "legendFormat": "paused"
             }
           ],
-          "title": "Plex Transcoding",
+          "title": "SABnzbd Paused",
           "type": "stat"
         },
         {
           "datasource": "Prometheus",
-          "description": "SABnzbd download speed over time",
+          "description": "exportarr names this sabnzbd_speed_bps; sabnzbd_download_rate does not exist.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1124,9 +1116,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sabnzbd_download_rate OR rate(sabnzbd_downloaded_bytes[5m]) OR on() vector(0)",
-              "legendFormat": "Download Speed",
-              "refId": "A"
+              "expr": "sabnzbd_speed_bps",
+              "refId": "A",
+              "legendFormat": "download speed"
             }
           ],
           "title": "SABnzbd Download Speed",
@@ -1134,7 +1126,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Current SABnzbd queue size",
+          "description": "exportarr names this sabnzbd_queue_length; sabnzbd_queue_size does not exist.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1186,8 +1178,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sabnzbd_queue_size OR on() vector(0)",
-              "refId": "A"
+              "expr": "sabnzbd_queue_length",
+              "refId": "A",
+              "legendFormat": "queued"
             }
           ],
           "title": "SABnzbd Queue",
@@ -1195,7 +1188,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "*arr services queue status",
+          "description": "exportarr exports no *_queue_total for any service, so all four old queries were dead -- and readarr is not even deployed (its PV was an orphan). Missing item counts are the equivalent backlog signal it does export.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1239,35 +1232,22 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sonarr_queue_total OR on() vector(0)",
-              "format": "table",
-              "instant": true,
-              "legendFormat": "Sonarr",
-              "refId": "A"
+              "expr": "sonarr_episode_missing_total",
+              "refId": "A",
+              "legendFormat": "Sonarr episodes"
             },
             {
-              "expr": "radarr_queue_total OR on() vector(0)",
-              "format": "table",
-              "instant": true,
-              "legendFormat": "Radarr",
-              "refId": "B"
+              "expr": "radarr_movie_missing_total",
+              "refId": "B",
+              "legendFormat": "Radarr movies"
             },
             {
-              "expr": "lidarr_queue_total OR on() vector(0)",
-              "format": "table",
-              "instant": true,
-              "legendFormat": "Lidarr",
-              "refId": "C"
-            },
-            {
-              "expr": "readarr_queue_total OR on() vector(0)",
-              "format": "table",
-              "instant": true,
-              "legendFormat": "Readarr",
-              "refId": "D"
+              "expr": "lidarr_albums_missing_total",
+              "refId": "C",
+              "legendFormat": "Lidarr albums"
             }
           ],
-          "title": "Sonarr/Radarr Queue Status",
+          "title": "Missing Items by Service",
           "transformations": [
             {
               "id": "merge",
@@ -1293,7 +1273,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Prowlarr indexer health and status",
+          "description": "prowlarr_indexer_status does not exist. exportarr gives indexer counts and per-indexer query outcomes instead.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1352,10 +1332,14 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "prowlarr_indexer_status OR on() vector(0)",
-              "format": "table",
-              "instant": true,
-              "refId": "A"
+              "expr": "prowlarr_indexer_total",
+              "refId": "A",
+              "legendFormat": "indexers configured"
+            },
+            {
+              "expr": "sum(rate(prowlarr_indexer_failed_queries_total[1h])) / clamp_min(sum(rate(prowlarr_indexer_queries_total[1h])), 1) * 100",
+              "refId": "B",
+              "legendFormat": "query failure %"
             }
           ],
           "title": "Prowlarr Indexer Health",
