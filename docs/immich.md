@@ -100,7 +100,8 @@ The model, and the one irreversible choice:
   — so it must not be a personal account, or the shared archive is welded to
   one person's library forever.
 - Everyone else (Chris, Erin, Jeanne, Jim, Kelly) has their **own account**
-  with private uploads and their own phone sync.
+  with private uploads and their own phone sync. Each must be created by an
+  admin first — `docs/immich/add-user.sh` — because `autoRegister` is off.
 - The archive reaches people as **shared albums** from the `family` account.
   Partner sharing is the wrong tool: it shares a whole library one-way.
 
@@ -157,7 +158,7 @@ What lives there:
 
 | Setting | Why it is set the way it is |
 |---|---|
-| `oauth.*` | Dex issuer, `autoRegister: true` so a family member who can reach Dex gets an account on first login |
+| `oauth.*` | Dex issuer, `autoRegister: **false**` — an OIDC login links to an existing account by email and never creates one. This is the account-creation gate; see "Who can get an account" |
 | `oauth.mobileOverrideEnabled` | Dex is strict about redirect URIs and rejects the `app.immich://` custom scheme; the override routes the mobile flow through the server. This is what makes phone sync work |
 | `job.*.concurrency` | **The SMR throttle.** Defaults assume SSDs (`thumbnailGeneration: 3`, `metadataExtraction: 5`, `library: 5`); everything disk- or ML-heavy is pinned to 1 |
 | `library.scan.cronExpression` | 06:00 UTC, clear of every backup window |
@@ -193,57 +194,67 @@ a second, non-admin one. Creating the admin with any other address would have
 produced exactly that split-brain.
 
 Passwords for both accounts are in `cluster/immich/accounts.secret.yaml`
-(git-crypt, consumed by nothing). Since `passwordLogin` was disabled they are
-**not** a way in — see "The family account has no login" below.
+(git-crypt). The `family` one is load-bearing — it is that account's only way
+to authenticate. See "Password login stays on, and is not the gate" below.
 
 `immich_role` — the OIDC claim Immich can read to grant admin — is **not**
 usable here: Dex has no way to inject a static custom claim per user. Email
 matching is the mechanism that works.
 
-## Sign-in is OIDC only
+## Who can get an account
 
-`passwordLogin` is **disabled**. Everyone signs in through Dex with the
-Google or Microsoft account they already have; there are no Immich passwords
-to manage or leak, and `autoRegister` means family members need no
-provisioning.
+Immich is the one app on galaxy that is **not** behind an oauth2-proxy
+middleware — it can't be, the mobile app needs the raw API — so none of the
+sealed `--authenticated-emails-file` allowlists are consulted in front of it.
+Dex's connectors admit *any* Google or Microsoft account (`tenant: common`, no
+`hostedDomains`), and Dex has no email allowlist to give it: the google
+connector can only restrict to Workspace domains you control, the microsoft
+connector only to an org tenant, and neither fits a family on `@gmail.com` and
+`@hotmail.com`.
 
-**If Dex is down, nobody can sign in — including the admin.** That is not a
-lockout: the way back in is this repo.
+So the gate is **`oauth.autoRegister: false`**. An OIDC login can only ever
+link to an account that already exists, matched by email; it never creates
+one. Without this, anyone on the internet who loaded
+`photos.chrismiller.xyz` could register themselves.
+
+**Provisioning is therefore a required step**, not a convenience:
 
 ```bash
-# in cluster/immich/config.secret.yaml: passwordLogin.enabled: true
-rm cluster/immich/config.yaml && nix develop --command ./sign.sh
-git commit -a && git push
-kubectl -n immich rollout restart deploy/immich-server
+docs/immich/add-user.sh millerjj7332@gmail.com "Jeanne"
+docs/immich/album-sync.sh      # re-share the archive with the new account
 ```
 
-Recovery therefore needs *cluster* access rather than *Immich* access, which
-is the right dependency to have. The bootstrap passwords in
-`accounts.secret.yaml` still work the moment it flips back.
+The address must be exactly the one on their Google/Microsoft account —
+Immich matches by email, and a mismatch looks to them like a plain access
+denial. The script sets a long random password and deliberately keeps it
+nowhere; they sign in through Dex, and an admin can reset it with
+`PUT /api/admin/users/<id>` if it is ever actually needed.
 
-### The family account has no login
+### Password login stays on, and is not the gate
 
-Disabling `passwordLogin` had a consequence that was not obvious at the time:
-`family@chrismiller.xyz` is a **non-person service account**. It has no Google
-or Microsoft identity, so it cannot sign in through Dex, and its password is
-now refused. The account is unreachable.
+`passwordLogin` is **enabled**. That is not a weakening, because an Immich
+password only exists for an account an admin already created — account
+creation is gated above, not here. It earns its place twice:
 
-That matters because it owns the entire `/family` external library, and Immich
-scopes almost everything to the owner:
+- **`family@chrismiller.xyz` is a non-person service account** with no Google
+  or Microsoft identity. It cannot sign in through Dex at all, so a password
+  is its *only* means of authenticating. It owns the entire `/family` external
+  library, and Immich scopes almost everything to the owner:
+  - `POST /api/search/metadata` only returns the caller's own assets — the
+    admin key returns zero archive assets, which is ownership, not a failed
+    scan.
+  - An album can only contain assets its creator owns, so **archive albums
+    have to be family's albums**.
+  - `/api/api-keys` is self-scoped; there is no `/api/admin/api-keys` and no
+    impersonation endpoint (checked against 3.2.2), so an admin cannot mint a
+    key for another user.
 
-- `POST /api/search/metadata` only ever returns the caller's own assets. The
-  admin key returns zero archive assets — not a bug.
-- An album can only contain assets its creator owns, so **archive albums have
-  to be family's albums**.
-- `/api/api-keys` is self-scoped. There is no `/api/admin/api-keys` and no
-  impersonation endpoint (checked against 3.2.2), so an admin cannot mint a
-  key on another user's behalf.
+  Turning password login off orphaned this account entirely — no albums, no
+  sharing, no automation. That is why it is back on.
+- **If Dex is down, humans can still get in**, including the admin. Otherwise
+  a broken IdP is a full lockout with only a repo commit as the way back.
 
-The fix is a **one-time** break-glass window: flip `passwordLogin` true as
-above, sign in as family, create an API key, store it in
-`accounts.secret.yaml` as `family-api-key`, flip password login back off. After
-that the account is permanently automatable and never needs a login again.
-Until that key exists, `docs/immich/album-sync.sh` cannot run.
+Bootstrap passwords for both accounts are in `accounts.secret.yaml`.
 
 ## Sharing the archive
 

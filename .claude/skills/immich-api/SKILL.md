@@ -1,6 +1,6 @@
 ---
 name: immich-api
-description: Drive Immich (photos.chrismiller.xyz) through its REST API — create users, create and scan external libraries, inspect and pause jobs, read statistics — for the things that cannot be expressed in cluster/immich/config.secret.yaml. Use when asked to add someone to Immich, import or rescan the family archive, check why photos are not appearing, or throttle/pause Immich work. Encodes the auth dance (password login is DISABLED), the permanent library-ownership rule, and the SMR guard that must accompany any scan. NEVER triggers a library scan without a Ceph watch armed. NEVER creates an external library owned by a personal account. NEVER changes settings through the API that belong in the config file.
+description: Drive Immich (photos.chrismiller.xyz) through its REST API — provision users, share the family archive as albums, create and scan external libraries, inspect and pause jobs — for the things that cannot be expressed in cluster/immich/config.secret.yaml. Use when asked to add someone to Immich, give a family member access to the archive, import or rescan it, check why photos are not appearing, or throttle/pause Immich work. Encodes which of the two API keys to use (admin vs family — search and albums are owner-scoped), the permanent library-ownership rule, and the SMR guard that must accompany any scan. ALWAYS provision a user with docs/immich/add-user.sh before they sign in, because autoRegister is off. NEVER re-enable oauth.autoRegister — it is the only thing stopping open registration on a public host. NEVER triggers a library scan without a Ceph watch armed. NEVER creates an external library owned by a personal account. NEVER changes settings through the API that belong in the config file.
 ---
 
 # immich-api
@@ -16,18 +16,22 @@ is silently reverted on the next restart.
 
 ## Getting a token
 
-Password login is **disabled** (OIDC only), so there is no interactive login
-for automation. Two options:
+Use an API key. Two exist, and picking the wrong one is the most common
+mistake here:
 
 ```bash
-# Preferred: an API key, created once in the UI (Account Settings -> API Keys)
-# and stored in cluster/immich/accounts.secret.yaml.
 API=https://photos.chrismiller.xyz/api
+# admin (cmiller548@gmail.com) — users, libraries, jobs, server stats
 H="x-api-key: $(kubectl -n immich get secret immich-accounts -o jsonpath='{.data.api-key}' | base64 -d)"
-
-# Break-glass: flip passwordLogin true in config.secret.yaml, re-seal, restart,
-# then POST /auth/login. Only when OIDC itself is what is broken.
+# family (family@chrismiller.xyz) — ANYTHING touching archive assets
+H="x-api-key: $(kubectl -n immich get secret immich-accounts -o jsonpath='{.data.family-api-key}' | base64 -d)"
 ```
+
+`passwordLogin` is **enabled**, but it is not how anyone gets in day to day and
+it is *not* the account-creation control — `autoRegister: false` is (see
+Users). It stays on for two reasons: the `family` service account has no
+Google/Microsoft identity and a password is its only way to authenticate, and
+it keeps a broken Dex from locking out the admin too.
 
 From a workstation the host resolves through the edge, so add
 `--resolve photos.chrismiller.xyz:443:192.168.0.7` to every curl if split-DNS
@@ -46,26 +50,38 @@ the *admin* key returns zero archive assets, because the archive belongs to
 check `/api/server/statistics` instead. Anything touching archive assets
 (albums, sharing) needs `family-api-key`, not `api-key`.
 
-The family account is a non-person with no Google/Microsoft identity, so with
-`passwordLogin` disabled **it cannot log in at all**. `/api/api-keys` is
-self-scoped — there is no `/api/admin/api-keys` and no impersonation (3.2.2) —
-so minting its key is a one-time break-glass, documented in `docs/immich.md`
-under "The family account has no login". Do not improvise around this by
-writing to the `api_key` table.
+The family account is a non-person with no Google/Microsoft identity, so a
+password is the **only** way it can authenticate — which is precisely why
+`passwordLogin` is left on. `/api/api-keys` is self-scoped (no
+`/api/admin/api-keys`, no impersonation as of 3.2.2), so its key can only be
+minted by logging in as it. Do not improvise around this by writing to the
+`api_key` table.
 
 ## Users
 
-Family members need **no provisioning** — `oauth.autoRegister` creates an
-account on first sign-in through Dex. Create a user by hand only for a
-non-person (a service/shared account).
+**Every user must be provisioned before they can log in.** Use the script —
+it does the duplicate check and keeps the throwaway password out of argv:
+
+```bash
+docs/immich/add-user.sh <their-google-or-microsoft-email> "Their Name"
+docs/immich/album-sync.sh          # then re-share the archive with them
+```
+
+`oauth.autoRegister` is **false**, so an OIDC login can only *link to an
+account that already exists*, matched by email — it never creates one. That is
+the account-creation control for this instance, and it is load-bearing:
+Immich is the one app on galaxy **not** behind an oauth2-proxy middleware (the
+mobile app needs the raw API), so no sealed allowlist is consulted in front of
+it, and Dex's connectors admit any Google or Microsoft account
+(`tenant: common`, no `hostedDomains` — and Dex has no email allowlist to give
+it, which is why the control lives here). Do not turn autoRegister back on.
+
+The email must be **exactly** the address on their Google/Microsoft account; a
+mismatch surfaces to them as a generic access-denied.
 
 ```bash
 # list
 curl -sS "$API/admin/users" -H "$H" | jq -r '.[] | "\(.email) admin=\(.isAdmin)"'
-
-# create (non-person only)
-curl -sS -X POST "$API/admin/users" -H "$H" -H 'Content-Type: application/json' \
-  -d '{"email":"…","password":"…","name":"…","shouldChangePassword":false}'
 ```
 
 **Admin comes from the email, not a claim.** Immich links an OIDC login to an
