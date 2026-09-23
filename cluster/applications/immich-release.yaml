@@ -50,6 +50,10 @@ spec:
                   # cluster does not run. The SMR tuning lives on acid-immich
                   # instead (cluster/immich/psql.yaml).
                   DB_VECTOR_EXTENSION: vectorchord
+                  # Spilo's pg_hba rejects unencrypted network connections
+                  # ("no encryption" in the FATAL). require = use TLS but do not
+                  # verify the CA, which is right for Spilo's self-signed cert.
+                  DB_SSL_MODE: require
 
         immich:
           metrics:
