@@ -18,4 +18,6 @@ resources:
   - prowlarr-ingress.yaml
   - sabnzbd-ingress.yaml
   - api-keys.yaml
+  - ombi-bootstrap.yaml
+  - ombi-ingress.yaml
   - webdav.yaml

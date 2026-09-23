@@ -46,6 +46,8 @@ Rules that are easy to get wrong:
 3. The oauth2-proxy hosts themselves (`auth-admin`, `auth-family`) must stay
    **ungated** — gating them is a redirect loop.
 4. Add the host to `.claude/skills/edge-ingress/edge-snapshot.sh`.
+5. Gating is only half of it for an app with real users — see "How each app
+   consumes the identity" below before assuming the app will know who arrived.
 
 ## Add or remove a person
 
@@ -131,6 +133,25 @@ so there is no database to run or back up.
   accounts; the connector uses `tenant: common`. Access control remains the
   oauth2-proxy allowlist, NOT the tenant — anyone with any Microsoft account
   can reach Dex, and is then refused unless their address is allowlisted.
+
+## How each app consumes the identity
+
+Gating a host answers "may this person in?". Some apps also need to know *who*
+came in, and there are three different answers in this cluster. Reach for the
+first one that works.
+
+| Pattern | Apps | How |
+|---|---|---|
+| **Gate only** | the *arr stack, SABnzbd, share, mediadav | The app has no user model worth wiring, or a single shared login. oauth2-proxy is the whole story. |
+| **Gate + header SSO** | Ombi | oauth2-proxy's `X-Auth-Request-Email` (already in `authResponseHeaders` on both `*-auth` middlewares) *is* the login. Ombi's header auth resolves or creates the user from it. See `docs/ombi.md`. |
+| **Native OIDC, no gate** | Immich | The app is its own Dex client with its own user list and does the redirect itself. Necessary when a mobile app must authenticate — it cannot complete a forward-auth redirect. See `docs/immich.md`. |
+
+The middle pattern is the cheapest way to get per-person identity into an app
+that has users but no OIDC support, and it costs the mobile apps: anything
+behind forward-auth is web-only. The third pattern is the escape hatch for when
+that cost is unacceptable, and it means the app's own authorization — not an
+allowlist here — decides who gets in, so it needs its own answer to "who may
+register" (for Immich, `oauth.autoRegister: false`).
 
 ## Troubleshooting
 

@@ -1,0 +1,39 @@
+---
+# Ombi — the family's media request front-end.
+#
+# Gated by the FAMILY tier, not admin: the whole point is that relatives reach
+# it. The two middlewares must stay in this order — `errors` first so it wraps
+# `auth` and can turn oauth2-proxy's 401 into a redirect to the sign-in page
+# (see cluster/oauth2-proxy/middlewares.yaml).
+#
+# This is also the handoff for Ombi's login: oauth2-family-auth returns
+# X-Auth-Request-Email, and Ombi's header auth (EnableHeaderAuth, configured by
+# docs/ombi/bootstrap.sh) trusts that header to resolve or create the user. So
+# removing the auth middleware does not merely un-gate Ombi — it leaves Ombi
+# with no way to identify anyone, and the login page will fail outright.
+#
+# No spec.tls and no DNS record on purpose: the wildcard LE cert in
+# traefik/wildcard-tls is the default TLSStore and *.chrismiller.xyz already
+# resolves to the apex. A new public app is one Ingress with a host.
+#
+# Note: this gate means the Ombi *mobile apps* cannot sign in — they can't
+# complete a browser forward-auth redirect. Web only. See docs/ombi.md.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ombi
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: oauth2-proxy-oauth2-family-errors@kubernetescrd,oauth2-proxy-oauth2-family-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: requests.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mm-ombi
+                port:
+                  number: 3579

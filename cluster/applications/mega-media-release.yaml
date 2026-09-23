@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://realliance.github.io/helm-mega-media
     chart: mega-media
-    targetRevision: 0.10.0
+    targetRevision: 0.11.0
     helm:
       releaseName: mm
       valuesObject:
@@ -536,6 +536,38 @@ spec:
             newzbin = ""
             priority = -100
 
+        # Ombi — the family-facing request UI at requests.chrismiller.xyz, gated
+        # by the oauth2-proxy FAMILY tier (cluster/media/ombi-ingress.yaml).
+        #
+        # Unlike every other workload in this release, Ombi is NOT pinned to
+        # `middle`: it only speaks HTTP to the *arrs and Plex and never mounts the
+        # RWO media PVC, so the chart deliberately omits nodeName/podAffinity for
+        # it. That keeps it off the node whose memory requests are already tight.
+        #
+        # Ombi stores its configuration in its own database, not in files, so
+        # there is nothing more to express here — auth mode, *arr connections,
+        # quality profiles (the resolution cap), roles and the Discord agent are
+        # applied by docs/ombi/bootstrap.sh against Ombi's settings API.
+        ombi:
+          enabled: true
+          # External secret, not a chart-generated key: Argo can't tell install
+          # from upgrade and would otherwise rotate the key on every sync.
+          apiKey:
+            name: api-keys
+            key: ombi
+          config:
+            storageClassName: rook-ceph-block
+            size: 1Gi
+          resources:
+            # Request/limit decoupled for the same reason as Plex and SABnzbd
+            # above: Ombi idles small but the first-boot EF migrations and its
+            # Plex/*arr sync jobs spike it. Request enough to schedule, keep the
+            # ceiling for the spikes.
+            requests:
+              memory: 256Mi
+              cpu: 100m
+            limits:
+              memory: 768Mi
         media:
           storageClassName: rook-ceph-block
           size: 3000Gi
