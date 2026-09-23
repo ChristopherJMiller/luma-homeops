@@ -6,6 +6,7 @@ resources:
   - namespace.yaml
   - logical-backup-s3.yaml
   - secrets.yaml
+  - config.yaml
   - pvcs.yaml
   - psql.yaml
   - backup-cronjob.yaml

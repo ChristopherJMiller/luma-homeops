@@ -58,6 +58,12 @@ spec:
         immich:
           metrics:
             enabled: true # ServiceMonitors for the existing kube-prometheus-stack
+          # System settings as code: cluster/immich/config.secret.yaml. Using a
+          # config file makes the entire settings UI read-only, which is the
+          # point — OIDC, job throttling and the scan schedule get reviewed in
+          # git instead of clicked. Immich re-reads it on restart.
+          configurationKind: Secret
+          existingConfiguration: immich-config
           persistence:
             library:
               # CephFS RWX, created in cluster/immich/pvcs.yaml. The chart
