@@ -85,6 +85,11 @@ spec:
             - name: config
               mountPath: /etc/dex
               readOnly: true
+            # Dex rewrites its config through a temp file at startup to expand
+            # env vars; with readOnlyRootFilesystem it dies on
+            # "cannot create temp file: ... read-only file system".
+            - name: tmp
+              mountPath: /tmp
           livenessProbe:
             httpGet:
               path: /healthz/live
@@ -109,6 +114,8 @@ spec:
             items:
               - key: config.yaml
                 path: config.yaml
+        - name: tmp
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
