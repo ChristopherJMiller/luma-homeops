@@ -12,6 +12,20 @@
 #   same loop. Don't reformat Talos config — it's regenerated/diffed
 #   against `talosctl gen` upstream.
 repos:
+  - repo: local
+    hooks:
+      # A kustomization can reference a resource that is not committed --
+      # `git commit -am` stages only tracked files, so a newly created resource
+      # silently stays out of the tree. Argo then fails at `kustomize build`
+      # and the WHOLE Application stops generating manifests, not just that
+      # resource. pre-commit stashes unstaged/untracked files, so this builds
+      # the same tree Argo will get.
+      - id: kustomize-build
+        name: kustomize build (every cluster/ kustomization must render)
+        language: system
+        entry: scripts/check-kustomizations.sh
+        pass_filenames: false
+        files: ^cluster/.*\.(yaml|yml)$
   - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
     rev: 0.2.1
     hooks:
