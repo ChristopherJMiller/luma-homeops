@@ -606,7 +606,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum(increase(http_requests_total{namespace=\"dex\",handler=\"/token\",code=\"200\"}[24h])) OR on() vector(0)",
+              "expr": "sum(increase(http_requests_total{namespace=\"dex\",handler=\"/token\",code=\"200\"}[24h]))",
               "refId": "A",
               "legendFormat": "sign-ins"
             }
@@ -718,17 +718,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum(rate(http_requests_total{namespace=\"dex\",handler=\"/auth\"}[5m])) OR on() vector(0)",
+              "expr": "sum(rate(http_requests_total{namespace=\"dex\",handler=\"/auth\"}[5m]))",
               "refId": "A",
               "legendFormat": "Started (/auth)"
             },
             {
-              "expr": "sum(rate(http_requests_total{namespace=\"dex\",handler=\"/token\",code=\"200\"}[5m])) OR on() vector(0)",
+              "expr": "sum(rate(http_requests_total{namespace=\"dex\",handler=\"/token\",code=\"200\"}[5m]))",
               "refId": "B",
               "legendFormat": "Completed (/token)"
             },
             {
-              "expr": "sum(rate(http_requests_total{namespace=\"dex\",code=~\"4..|5..\"}[5m])) OR on() vector(0)",
+              "expr": "sum(rate(http_requests_total{namespace=\"dex\",code=~\"4..|5..\"}[5m]))",
               "refId": "C",
               "legendFormat": "Errors"
             }
@@ -783,7 +783,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "topk(10, sum by (handler, code) (increase(http_requests_total{namespace=\"dex\",code=~\"4..|5..\"}[1h]))) OR on() vector(0)",
+              "expr": "topk(10, sum by (handler, code) (increase(http_requests_total{namespace=\"dex\",code=~\"4..|5..\"}[1h])))",
               "refId": "A",
               "legendFormat": "{{handler}} {{code}}",
               "format": "table",
@@ -871,7 +871,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum(up{namespace=~\"dex|oauth2-proxy\"}) OR on() vector(0)",
+              "expr": "sum(up{namespace=~\"dex|oauth2-proxy\"})",
               "refId": "A",
               "legendFormat": "targets up"
             }
@@ -926,7 +926,7 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum by (app_kubernetes_io_instance) (rate(oauth2_proxy_requests_total{namespace=\"oauth2-proxy\"}[5m])) OR on() vector(0)",
+              "expr": "sum by (app_kubernetes_io_instance) (rate(oauth2_proxy_requests_total{namespace=\"oauth2-proxy\"}[5m]))",
               "refId": "A",
               "legendFormat": "{{app_kubernetes_io_instance}}"
             }
