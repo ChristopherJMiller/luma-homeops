@@ -39,7 +39,14 @@ spec:
             capabilities:
               drop: [ALL]
           args:
-            - --provider=google
+            # OIDC against Dex, which brokers BOTH Google and Microsoft.
+            # Reverting this to --provider=google would silently lock out
+            # anyone who signs in with a Microsoft account.
+            - --provider=oidc
+            - --oidc-issuer-url=https://dex.chrismiller.xyz
+            - --provider-display-name=galaxy
+            # Dex staticClient id — not a secret (the secret is in the env below).
+            - --client-id=oauth2-proxy-family
             - --http-address=0.0.0.0:4180
             - --reverse-proxy=true # behind Traefik: trust X-Forwarded-*
             - --redirect-url=https://auth-family.chrismiller.xyz/oauth2/callback
@@ -59,20 +66,17 @@ spec:
             - --authenticated-emails-file=/etc/oauth2-proxy/emails
             # Hand the upstream app the identity: X-Auth-Request-User/-Email.
             - --set-xauthrequest=true
-            - --skip-provider-button=true # one provider; don't show a chooser
+            # Skip oauth2-proxy's own chooser — it has one provider (Dex).
+            # The Google-vs-Microsoft choice happens on Dex's page.
+            - --skip-provider-button=true
             - --upstream=static://202 # nothing is proxied through; only /oauth2/* matters
             - --silence-ping-logging=true
           env:
-            - name: OAUTH2_PROXY_CLIENT_ID
-              valueFrom:
-                secretKeyRef:
-                  name: google-oauth
-                  key: client-id
             - name: OAUTH2_PROXY_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
                   name: google-oauth
-                  key: client-secret
+                  key: dex-client-secret-family
             - name: OAUTH2_PROXY_COOKIE_SECRET
               valueFrom:
                 secretKeyRef:
