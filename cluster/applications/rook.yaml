@@ -16,6 +16,16 @@ spec:
         csi:
           serviceMonitor:
             enabled: true
+          # The mons only speak msgr2 on :3300 and the kernel cephfs client
+          # defaults to msgr1 there, so every CephFS mount fails with "no mds
+          # is up" (dmesg: "socket closed (con state V1_BANNER)"). RBD already
+          # gets the equivalent from the cluster-wide rbd_default_map_options.
+          #
+          # This is the right place for it: Rook passes it to the CSI node
+          # plugin for ALL cephfs mounts. Setting kernelMountOptions on a
+          # StorageClass does NOT work — the provisioner never copies it into
+          # the PV volumeAttributes, so the mount is attempted without it.
+          cephFSKernelMountOptions: ms_mode=prefer-crc
         monitoring:
           enabled: true
   destination:
