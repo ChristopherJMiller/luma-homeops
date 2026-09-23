@@ -202,13 +202,14 @@ password form you need to get at Ombi with no `X-Auth-Request-Email` header —
 `kubectl -n media port-forward svc/mm-ombi 13579:3579` and browse
 `127.0.0.1:13579`.
 
-## Not built
+## Deliberately not built
 
-- **Approve from Discord.** Would need a small bot: Ombi's generic Webhook agent
-  POSTs an in-cluster service, which posts an embed with Approve/Deny buttons and
-  calls `POST /api/v1/Request/movie/approve` on the press. A gateway bot keeps it
-  outbound-only, so no new public endpoint. `reconciler/` in the chart repo is the
-  precedent for where such a service would live and how it would be built.
+- **Approve from Discord.** **Decided against, 2026-09-23** — the notification is
+  enough; approving in Ombi's web UI is a tap away from the message. Do not
+  rebuild this on a hunch: it would mean a Discord application, a bot token, and
+  an in-cluster service translating button presses into
+  `POST /api/v1/Request/movie/approve`. That is real surface area for a two-person
+  approval flow. Revisit only if Chris asks.
 - **A 4K library separate from the 1080p one** (see Day 2 above).
 - **Metrics.** Ombi exposes no Prometheus endpoint, so there is no ServiceMonitor.
   `/health` exists and aggregates Plex + every *arr — useful for a blackbox probe,
