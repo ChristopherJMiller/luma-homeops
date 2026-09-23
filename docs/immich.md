@@ -142,3 +142,30 @@ judge by slow ops rather than latency alone.
 | `pg_hba.conf rejects connection … no encryption` | Spilo requires TLS on network connections. `DB_SSL_MODE: require` — not `verify-*`, the cert is self-signed |
 | Mobile app cannot log in | someone added an oauth2-proxy middleware to the Ingress — it must have none |
 | Ceph slow ops during import | the library scan; pause it in Administration → Jobs |
+
+## System settings are code, not UI
+
+Immich reads `/config/immich-config.yaml`, mounted by the chart from the
+`immich-config` Secret (`cluster/immich/config.secret.yaml`). **While a config
+file is set, the entire settings UI is read-only** — not just the OAuth page.
+That is deliberate: settings get reviewed in git and survive a rebuild.
+
+What lives there:
+
+| Setting | Why it is set the way it is |
+|---|---|
+| `oauth.*` | Dex issuer, `autoRegister: true` so a family member who can reach Dex gets an account on first login |
+| `oauth.mobileOverrideEnabled` | Dex is strict about redirect URIs and rejects the `app.immich://` custom scheme; the override routes the mobile flow through the server. This is what makes phone sync work |
+| `job.*.concurrency` | **The SMR throttle.** Defaults assume SSDs (`thumbnailGeneration: 3`, `metadataExtraction: 5`, `library: 5`); everything disk- or ML-heavy is pinned to 1 |
+| `library.scan.cronExpression` | 06:00 UTC, clear of every backup window |
+| `library.watch.enabled` | false — inotify over a 327 GiB tree is not worth it |
+| `passwordLogin.enabled` | true, so the admin account can be created and recovered without depending on Dex |
+
+Changing any of it: edit the secret, `rm cluster/immich/config.yaml`, re-run
+`./sign.sh`, commit. Immich re-reads the file on restart —
+`kubectl -n immich rollout restart deploy/immich-server`.
+
+**What cannot be declared:** users and external libraries. The config file's
+`user` key only holds `deleteDelay`, and libraries are database rows. Creating
+the `family` account and pointing its external library at `/family` stays a
+one-time step in the UI (or via the API).
