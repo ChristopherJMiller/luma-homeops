@@ -7,7 +7,7 @@
 #        diff <(sed "s/ cert=.*//" before.txt) <(sed "s/ cert=.*//" after.txt)
 # Add new public hosts to the list below when you add them.
 set -u
-hosts="$(printf '%s\n' chrismiller.xyz www.chrismiller.xyz ci attic auth-admin auth-family dex galaxy home lidarr plex prowlarr radarr sabnzbd share sonarr mediadav music dav.music lagrange dashboard rccl-tracker wordarena realliance.net www.realliance.net legacy.realliance.net)"
+hosts="$(printf '%s\n' chrismiller.xyz www.chrismiller.xyz ci attic auth-admin auth-family dex galaxy photos home lidarr plex prowlarr radarr sabnzbd share sonarr mediadav music dav.music lagrange dashboard rccl-tracker wordarena realliance.net www.realliance.net legacy.realliance.net)"
 for h in $hosts; do
   case $h in *.net|*.xyz) fq=$h;; *) fq=$h.chrismiller.xyz;; esac
   for path in / /share/; do

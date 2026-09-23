@@ -33,3 +33,52 @@ spec:
   resources:
     requests:
       storage: 10Gi
+---
+# The family archive, for Immich's external library.
+#
+# PVCs are namespaced and `family-media` lives in ns media, so Immich cannot
+# reference it directly. CephFS is happy to serve the same path to several
+# mounts, so this is a second static PV over the same /family directory —
+# ReadOnlyMany, because Immich must never write to the archive. Same pattern
+# as cluster/backups/satellites-pv.yaml.
+#
+# volumeHandle must differ from the media-namespace PV or the CSI driver
+# treats them as the same volume.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: family-media-immich-ro
+spec:
+  accessModes:
+    - ReadOnlyMany
+  capacity:
+    storage: 1Ti
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  storageClassName: ""
+  csi:
+    driver: rook.cephfs.csi.ceph.com
+    volumeHandle: family-media-immich-ro-static
+    nodeStageSecretRef:
+      name: rook-csi-cephfs-node
+      namespace: rook
+    volumeAttributes:
+      clusterID: rook
+      fsName: fs-pool
+      staticVolume: "true"
+      rootPath: /family
+      kernelMountOptions: ms_mode=prefer-crc
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: family-media-ro
+  namespace: immich
+spec:
+  accessModes:
+    - ReadOnlyMany
+  storageClassName: ""
+  volumeName: family-media-immich-ro
+  resources:
+    requests:
+      storage: 1Ti

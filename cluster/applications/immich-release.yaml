@@ -85,7 +85,7 @@ spec:
             family:
               enabled: true
               type: persistentVolumeClaim
-              existingClaim: family-media
+              existingClaim: family-media-ro
               readOnly: true
               globalMounts:
                 - path: /family

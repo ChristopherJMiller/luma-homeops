@@ -22,7 +22,7 @@ spec:
         - alert: BackupCronJobStale
           # No successful run in 36h for a nightly job.
           expr: |
-            (time() - kube_cronjob_status_last_successful_time{cronjob=~"restic-(home-assistant|plex|gonic|satellites)|family-backup|logical-backup-.*"}) > 36 * 3600
+            (time() - kube_cronjob_status_last_successful_time{cronjob=~"restic-(home-assistant|plex|gonic|satellites)|family-backup|immich-backup|logical-backup-.*"}) > 36 * 3600
           for: 1h
           labels:
             severity: warning
@@ -33,7 +33,7 @@ spec:
           # Exists but has never completed — a freshly broken deploy, or a
           # job that can never schedule (e.g. RWO affinity with the app at 0).
           expr: |
-            kube_cronjob_info{cronjob=~"restic-(home-assistant|plex|gonic|satellites)|family-backup|logical-backup-.*"}
+            kube_cronjob_info{cronjob=~"restic-(home-assistant|plex|gonic|satellites)|family-backup|immich-backup|logical-backup-.*"}
               unless on (namespace, cronjob) kube_cronjob_status_last_successful_time
           for: 48h
           labels:
@@ -45,7 +45,7 @@ spec:
           # canaries. Failed Jobs stick around (failedJobsHistoryLimit) so
           # this stays raised until someone looks.
           expr: |
-            kube_job_status_failed{job_name=~"(restic-.*|family-backup|family-canary|logical-backup-.*)-[0-9]+"} > 0
+            kube_job_status_failed{job_name=~"(restic-.*|family-backup|family-canary|immich-backup|logical-backup-.*)-[0-9]+"} > 0
           for: 10m
           labels:
             severity: warning
