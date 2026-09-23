@@ -192,9 +192,9 @@ an OIDC login to an existing account by email, so signing in through Dex with
 a second, non-admin one. Creating the admin with any other address would have
 produced exactly that split-brain.
 
-Passwords for both accounts are in `cluster/immich/secrets.secret.yaml`
-(git-crypt, consumed by nothing). They matter because `passwordLogin` stays
-enabled as a way in if Dex is ever down.
+Passwords for both accounts are in `cluster/immich/accounts.secret.yaml`
+(git-crypt, consumed by nothing). Since `passwordLogin` was disabled they are
+**not** a way in — see "The family account has no login" below.
 
 `immich_role` — the OIDC claim Immich can read to grant admin — is **not**
 usable here: Dex has no way to inject a static custom claim per user. Email
@@ -219,7 +219,53 @@ kubectl -n immich rollout restart deploy/immich-server
 
 Recovery therefore needs *cluster* access rather than *Immich* access, which
 is the right dependency to have. The bootstrap passwords in
-`secrets.secret.yaml` still work the moment it flips back.
+`accounts.secret.yaml` still work the moment it flips back.
+
+### The family account has no login
+
+Disabling `passwordLogin` had a consequence that was not obvious at the time:
+`family@chrismiller.xyz` is a **non-person service account**. It has no Google
+or Microsoft identity, so it cannot sign in through Dex, and its password is
+now refused. The account is unreachable.
+
+That matters because it owns the entire `/family` external library, and Immich
+scopes almost everything to the owner:
+
+- `POST /api/search/metadata` only ever returns the caller's own assets. The
+  admin key returns zero archive assets — not a bug.
+- An album can only contain assets its creator owns, so **archive albums have
+  to be family's albums**.
+- `/api/api-keys` is self-scoped. There is no `/api/admin/api-keys` and no
+  impersonation endpoint (checked against 3.2.2), so an admin cannot mint a
+  key on another user's behalf.
+
+The fix is a **one-time** break-glass window: flip `passwordLogin` true as
+above, sign in as family, create an API key, store it in
+`accounts.secret.yaml` as `family-api-key`, flip password login back off. After
+that the account is permanently automatable and never needs a login again.
+Until that key exists, `docs/immich/album-sync.sh` cannot run.
+
+## Sharing the archive
+
+Albums, album membership and sharing are database state — the config file
+cannot express any of it. `docs/immich/album-sync.sh` is the automated
+substitute: one album per top-level folder of the archive, shared with every
+other account as **viewer**, run as the family account.
+
+```bash
+docs/immich/album-sync.sh --dry-run    # what it would create
+docs/immich/album-sync.sh
+```
+
+It is idempotent — albums are matched by name and it diffs the album's current
+contents against the archive, adding only what is missing. So it is safe (and
+cheap) to re-run after the nightly 06:00 UTC library scan, which is what keeps
+new files appearing in the right album without anyone opening the UI.
+
+Viewer rather than editor is deliberate: the archive is read-only truth on
+disk, mirrored to B2, and nobody should be able to restructure it from a phone.
+Files sitting at the archive root are skipped rather than turned into
+single-file albums.
 
 ## Images
 

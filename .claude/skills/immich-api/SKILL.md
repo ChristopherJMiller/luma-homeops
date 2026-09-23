@@ -40,6 +40,19 @@ Check any token before relying on it:
 curl -sS "$API/users/me" -H "$H" | jq -c '{email, isAdmin}'
 ```
 
+**Everything is scoped to the key's owner.** `POST /api/search/metadata` with
+the *admin* key returns zero archive assets, because the archive belongs to
+`family@chrismiller.xyz`. That is not a bug and not a sign the scan failed —
+check `/api/server/statistics` instead. Anything touching archive assets
+(albums, sharing) needs `family-api-key`, not `api-key`.
+
+The family account is a non-person with no Google/Microsoft identity, so with
+`passwordLogin` disabled **it cannot log in at all**. `/api/api-keys` is
+self-scoped — there is no `/api/admin/api-keys` and no impersonation (3.2.2) —
+so minting its key is a one-time break-glass, documented in `docs/immich.md`
+under "The family account has no login". Do not improvise around this by
+writing to the `api_key` table.
+
 ## Users
 
 Family members need **no provisioning** — `oauth.autoRegister` creates an
