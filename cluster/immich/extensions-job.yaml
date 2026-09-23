@@ -1,0 +1,82 @@
+---
+# Creates the vchord extension in the immich database.
+#
+# This exists because the extension is the one piece of Immich's database that
+# the postgresql CR cannot express: `databases:` creates the database, and the
+# spilo-vchord image ships vchord.so, but something still has to run
+# CREATE EXTENSION. Without this, rebuilding acid-immich from the CR leaves a
+# database with no vchord and Immich fails at startup with a vector error —
+# exactly the kind of non-obvious breakage worth designing out.
+#
+# An Argo PostSync hook rather than a plain Job so it re-runs on every sync of
+# this app, which includes the sync that follows a rebuild. It is idempotent
+# (IF NOT EXISTS) and cheap, so re-running costs nothing.
+#
+# `preparedDatabases` would declare extensions natively, but switching to it
+# changes the database/role layout underneath a working install; not worth it
+# for one extension.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: immich-extensions
+  namespace: immich
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 4
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: immich-extensions
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70 # postgres in the alpine image
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: psql
+          image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          env:
+            - name: PGHOST
+              value: acid-immich.immich.svc.cluster.local
+            - name: PGUSER
+              value: postgres
+            - name: PGDATABASE
+              value: immich
+            # Spilo's pg_hba rejects unencrypted connections.
+            - name: PGSSLMODE
+              value: require
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres.acid-immich.credentials.postgresql.acid.zalan.do
+                  key: password
+          command: ["/bin/sh"]
+          args:
+            - -c
+            - |
+              set -eu
+              # The hook can fire before Patroni has finished electing a
+              # primary, so wait rather than fail the sync.
+              for i in $(seq 1 60); do
+                psql -qtAc 'select 1' >/dev/null 2>&1 && break
+                echo "waiting for acid-immich ($i)"; sleep 5
+              done
+              psql -v ON_ERROR_STOP=1 -c 'CREATE EXTENSION IF NOT EXISTS vchord CASCADE;'
+              echo "extensions present:"
+              psql -qtAc "select extname || ' ' || extversion from pg_extension where extname in ('vchord','vector') order by 1"
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

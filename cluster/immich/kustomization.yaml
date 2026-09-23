@@ -9,4 +9,5 @@ resources:
   - config.yaml
   - pvcs.yaml
   - psql.yaml
+  - extensions-job.yaml
   - backup-cronjob.yaml
