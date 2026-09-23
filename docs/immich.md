@@ -54,11 +54,20 @@ Immich's own Postgres container, which we don't run. The SMR tuning
 | `immich-ml-cache` | downloaded CLIP/face models | no — regenerable |
 
 `immich-uploads` is CephFS RWX because the server and machine-learning pods
-both mount it. That means the `rook-ceph-fs` StorageClass matters: it carries
-`kernelMountOptions: ms_mode=prefer-crc`, without which every mount fails with
-"no mds is up" (the mons only speak msgr2). The SC also carries
-`Replace=true,Force=true` because `parameters` are immutable and a plain apply
-leaves Argo stuck retrying forever.
+both mount it.
+
+**Every CephFS mount here depends on `ms_mode=prefer-crc`** — the mons only
+speak msgr2 on :3300, and without it the kernel client fails with "no mds is
+up". It is set **on the Rook operator**, `csi.cephFSKernelMountOptions` in
+`cluster/applications/rook.yaml`, which Rook writes into the `ceph-csi-config`
+ConfigMap that the node plugin reads at mount time.
+
+Setting `kernelMountOptions` on the *StorageClass* does **not** work: the
+provisioner never copies it into the PV's `volumeAttributes`, so the mount is
+attempted without it (confirmed on a freshly provisioned PV, 2026-09-23).
+Static PVs may carry it inline, and that does work. After changing the value,
+restart `deploy/rook-ceph-operator` so it regenerates `ceph-csi-config` — no
+PV recreation needed, since the option is applied per mount.
 
 The backup excludes `thumbs/` and `encoded-video/` — derived data that
 regenerates — so the mirror holds only irreplaceable bytes.
@@ -129,6 +138,6 @@ judge by slow ops rather than latency alone.
 |---|---|
 | `chart "immich" version X not found` | the version in the chart's git main is not published; check `helm search repo immich/immich --versions` |
 | Server fails on vector extension | `CREATE EXTENSION vchord CASCADE` not run in the `immich` database, or `vchord` missing from `shared_preload_libraries` |
-| CephFS PVC stuck, "no mds is up" | StorageClass lost `kernelMountOptions: ms_mode=prefer-crc` |
+| CephFS PVC stuck, "no mds is up" | `ms_mode=prefer-crc` is missing — see Storage above. Check `kubectl -n rook get cm ceph-csi-config -o jsonpath='{.data.config\.json}'`; if `cephFS.kernelMountOptions` is empty, restart `deploy/rook-ceph-operator` |
 | Mobile app cannot log in | someone added an oauth2-proxy middleware to the Ingress — it must have none |
 | Ceph slow ops during import | the library scan; pause it in Administration → Jobs |
