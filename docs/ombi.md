@@ -78,12 +78,15 @@ line reading **Pending Approval** is one you need to action and
 *Processing Request* is one that already went through.
 
 **It currently posts to the same webhook alertmanager uses**, so requests share a
-channel with Ceph warnings and CRITICAL pages. That is why `bootstrap.sh` enables
-*only* `NewRequest` and mutes `RequestAvailable` / `RequestDeclined`: in that
-company, "now available" and "declined" are noise for the operator, while
-`NewRequest` is the one line that asks for an action. Give Ombi its own
+channel with Ceph warnings and CRITICAL pages. `bootstrap.sh` therefore treats the
+notification templates as an **allowlist**: `NewRequest` on, every other template
+explicitly off. That has to be an allowlist rather than a couple of opt-outs,
+because Ombi seeds a template per notification type and ships most of them
+*enabled* — `Issue*`, `RequestApproved`, `PartiallyAvailable`, `RequestDeleted` —
+all of which would otherwise land in the alerts channel. Of those, only
+`NewRequest` asks the operator for an action. Give Ombi its own
 `#media-requests` webhook (swap `discord-webhook-url`, re-seal, re-run) and
-turning the other two back on becomes reasonable.
+widening that allowlist becomes reasonable.
 
 Worth knowing while you are in there: all three alertmanager receivers
 (`homelab-default`, `critical-alerts`, `storage-alerts`) point at that one

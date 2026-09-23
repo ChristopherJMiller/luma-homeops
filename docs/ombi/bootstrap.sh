@@ -326,16 +326,19 @@ else
         .enabled = true
         | .webhookUrl = $u
         | .username = "Ombi"
+        # Ombi seeds a template per notification type and enables most of them
+        # (Issue*, RequestApproved, PartiallyAvailable, RequestDeleted, ...).
+        # Leaving those on would put all of it in the alerts channel, so this is
+        # an allowlist, not a couple of targeted opt-outs: enable NewRequest and
+        # nothing else. Widen it once Ombi has its own channel.
         | .notificationTemplates |= map(
-            if .notificationType == 0 then            # NewRequest
-              .enabled = true
-              | .subject = "{RequestStatus}: {Title}"
-              | .message = "{Alias} requested **{Title}** ({Year}) — {Type}, {RequestStatus}. https://requests.chrismiller.xyz/requests"
-            elif .notificationType == 2 or .notificationType == 6 then
-              .enabled = false                        # RequestAvailable / RequestDeclined
-            else . end)' \
+            .enabled = (.notificationType == 0)
+            | if .notificationType == 0 then            # NewRequest
+                .subject = "{RequestStatus}: {Title}"
+                | .message = "{Alias} requested **{Title}** ({Year}) — {Type}, {RequestStatus}. https://requests.chrismiller.xyz/requests"
+              else . end)' \
     | opost v1/Settings/notifications/discord >/dev/null
-  note "webhook set; NewRequest enabled, RequestAvailable/RequestDeclined muted"
+  note "webhook set; NewRequest is the ONLY enabled template (allowlist, not opt-out)"
   note "subject leads with {RequestStatus} — 'Pending Approval' is the one to action"
 fi
 
