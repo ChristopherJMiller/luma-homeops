@@ -1,0 +1,27 @@
+---
+# Authentication for the Traefik edge, replacing authentik (2026-09).
+# Two instances = two trust tiers; an Ingress picks its tier by which pair of
+# middlewares it references. Identity comes from Google; the allowlists are
+# ConfigMaps in cluster/oauth2-proxy/. See docs/auth.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: oauth2-proxy
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/oauth2-proxy
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: oauth2-proxy
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

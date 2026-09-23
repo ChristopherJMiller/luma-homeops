@@ -1,0 +1,146 @@
+---
+# oauth2-proxy, FAMILY trust tier — for apps relatives should reach
+# (Jellyfin, Immich, the family share). Identical in shape to admin.yaml, which
+# carries the full commentary; what differs is the allowlist it mounts, its
+# cookie name, and its public host. That separation IS the blast radius: a
+# stolen family session carries a `_oauth2_proxy_family` cookie, which the
+# admin instance will not accept, so it cannot reach sonarr/sabnzbd/etc.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy-family
+  namespace: oauth2-proxy
+  labels:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/instance: family
+spec:
+  replicas: 2 # every gated request hits this; don't make it a single point of failure
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oauth2-proxy
+      app.kubernetes.io/instance: family
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oauth2-proxy
+        app.kubernetes.io/instance: family
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.13.0@sha256:56e3daedf765c7a1eea6e366fbe684be7d3084830ade14b6174570d3c7960954
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          args:
+            - --provider=google
+            - --http-address=0.0.0.0:4180
+            - --reverse-proxy=true # behind Traefik: trust X-Forwarded-*
+            - --redirect-url=https://auth-family.chrismiller.xyz/oauth2/callback
+            # Cookie is shared across *.chrismiller.xyz so one login covers every
+            # gated host on this tier. The NAME is tier-specific: both tiers set a
+            # cookie on the same parent domain, and identical names would collide
+            # in the browser.
+            - --cookie-name=_oauth2_proxy_family
+            - --cookie-domain=.chrismiller.xyz
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --cookie-expire=168h
+            # Only redirect back to our own domain after login.
+            - --whitelist-domain=.chrismiller.xyz
+            # THE allowlist. No email-domain fallback on purpose: if this file is
+            # empty or unreadable, nobody gets in (fail closed).
+            - --authenticated-emails-file=/etc/oauth2-proxy/emails
+            # Hand the upstream app the identity: X-Auth-Request-User/-Email.
+            - --set-xauthrequest=true
+            - --skip-provider-button=true # one provider; don't show a chooser
+            - --upstream=static://202 # nothing is proxied through; only /oauth2/* matters
+            - --silence-ping-logging=true
+          env:
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: client-id
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: cookie-secret-family
+          ports:
+            - name: http
+              containerPort: 4180
+          volumeMounts:
+            - name: emails
+              mountPath: /etc/oauth2-proxy
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+      volumes:
+        - name: emails
+          secret:
+            secretName: oauth2-proxy-family-emails
+            items:
+              - key: emails
+                path: emails
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy-family
+  namespace: oauth2-proxy
+spec:
+  selector:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/instance: family
+  ports:
+    - name: http
+      port: 4180
+      targetPort: http
+---
+# Public host for the OAuth dance only (sign_in / start / callback). Deliberately
+# NOT gated by its own middleware — that would be a redirect loop.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oauth2-proxy-family
+  namespace: oauth2-proxy
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: auth-family.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: oauth2-proxy-family
+                port:
+                  number: 4180

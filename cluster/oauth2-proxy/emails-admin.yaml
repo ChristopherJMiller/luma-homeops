@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: oauth2-proxy-admin-emails
+  namespace: oauth2-proxy
+spec:
+  encryptedData:
+    emails: AgA8RkGPLAvafpXNKzkae8MQHYFrsdT7tITSNMSEKPNEToxHjVIfZiW/RhWYzWMHyesmzOwvlb4mxq7mgyh+rSzUZc+J3Z6AonzAGyCftGMe8dubIUym9kchojtd/ED74t5OCEX9PnodF1OxQclMohjl38IksJg92e800l0VmMzqTBY3EEc5DdOvibmXVvB2skIUHxQnSM69ne4Us3wl2O243TOqZ4adQeA8JYDcGvZtw5wo+ZP9ujLTTjboR0SW3EX+13ilZemutHhbvS2Il0IAbx6PXzcRG9jJnGHfYD7Nob+4ONw8SFRTsolm2z8MmUW1rPRMZEHPhco24B5lwd+Kk+YGfLPOmHJYBUjhvzjlK2w4uqpJdtyCy32iJWqxEK8uK0H65oUFDEwzsWqZl0E5PMy3tO8Mxp6yFSd4ox60H46xazs/29ceSOPV6ZYtsLRUYH+5mUAxuT8NE1fvevJR7KX7V50SoFVNgh0aCYkij+pz8SHO8LTfZNFZjDFGGQY1zTxy9P747UtMYWxW68ED1ZROLP+9IkgTsD/1wE8krhwgcwliPUrRsHflebXnPeFPp0tK6s2cEb8vM1oe6TXf0G9dNSnuatC1iLzp4mdYp4tJCVJyOzgkbPQtckqzoO7H6N8XyyYF0UACC2Gz7rwkcR47d9a1Dj1mGPKoN3gSHllnYo6Feo8Hvf62v/ShEw1bSdiGqaDGPIDF6bUS6eIeqyZHTzk=
+  template:
+    metadata:
+      name: oauth2-proxy-admin-emails
+      namespace: oauth2-proxy
