@@ -1,0 +1,27 @@
+---
+# Dex — OIDC broker in front of oauth2-proxy, so that both Google and
+# Microsoft accounts can sign in (oauth2-proxy speaks to one provider only).
+# Dex holds no users: it brokers, and oauth2-proxy's per-tier allowlists do
+# the authorization. See docs/auth.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dex
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/dex
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dex
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

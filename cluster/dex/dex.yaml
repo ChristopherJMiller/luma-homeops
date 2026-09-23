@@ -1,0 +1,147 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dex
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+# Dex needs to manage its own CRDs (storage.type: kubernetes) — auth codes,
+# refresh tokens, signing keys. Scoped to its own API group only.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dex
+  namespace: dex
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: dex
+rules:
+  - apiGroups: ["dex.coreos.com"]
+    resources: ["*"]
+    verbs: ["*"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["create", "list", "watch", "get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: dex
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: dex
+subjects:
+  - kind: ServiceAccount
+    name: dex
+    namespace: dex
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dex
+  namespace: dex
+  labels:
+    app.kubernetes.io/name: dex
+spec:
+  # >1 is safe: state lives in CRDs, not in the pod.
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dex
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: dex
+    spec:
+      serviceAccountName: dex
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: dex
+          image: ghcr.io/dexidp/dex:v2.44.0@sha256:5d0656fce7d453c0e3b2706abf40c0d0ce5b371fb0b73b3cf714d05f35fa5f86
+          # Dex reads its config ONCE at startup. After changing the sealed
+          # dex-config Secret (a connector, a client secret), the new value
+          # will not take effect until:
+          #   kubectl -n dex rollout restart deploy/dex
+          args: ["dex", "serve", "/etc/dex/config.yaml"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 5556
+            - name: telemetry
+              containerPort: 5558
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dex
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /healthz/live
+              port: telemetry
+            initialDelaySeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /healthz/ready
+              port: telemetry
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: config
+          secret:
+            secretName: dex-config
+            items:
+              - key: config.yaml
+                path: config.yaml
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dex
+  namespace: dex
+spec:
+  selector:
+    app.kubernetes.io/name: dex
+  ports:
+    - name: http
+      port: 5556
+      targetPort: http
+    - name: telemetry
+      port: 5558
+      targetPort: telemetry
+---
+# Public host. Ungated by design — this IS the login page.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dex
+  namespace: dex
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: dex.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: dex
+                port:
+                  number: 5556

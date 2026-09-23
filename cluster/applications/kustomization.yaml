@@ -23,6 +23,7 @@ resources:
   - family.yaml
   - backups.yaml
   - music-streaming.yaml
+  - dex.yaml
   - oauth2-proxy.yaml
   - metallb.yaml
   - metrics-server.yaml
