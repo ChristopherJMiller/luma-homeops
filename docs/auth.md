@@ -69,9 +69,9 @@ Microsoft — Dex brokers both and the allowlist matches on the address, not on
 who issued it. Google Workspace domains count (`kmiller.org` is one);
 outlook/hotmail addresses go through the Microsoft connector.
 
-Google's consent screen is in Testing mode, so anyone signing in *with Google*
-must also be a test user there — see below. The Microsoft side has no such
-list.
+The allowlist is the only gate: the Google consent screen is published, so
+there is no test-user list to keep in sync, and the Microsoft side never had
+one.
 
 ## Google OAuth client
 
@@ -89,11 +89,16 @@ The consent screen requires an authorized-domain home page, privacy policy
 and terms link. Those are `galaxy.chrismiller.xyz` — `cluster/galaxy-site/`,
 edit `content/*.html` and commit (the ConfigMap hash rolls the pods).
 
-Publishing out of **Testing** mode needs no Google review, because the scopes
-requested (openid/email/profile) are non-sensitive. Testing mode costs you an
-"unverified app" warning on every sign-in and 7-day token expiry, and forces
-you to add each person in two places (the allowlist AND the test-user list).
-Once published, the allowlist is the only place people are managed.
+The consent screen is **published (Production)** as of 2026-09-23 — no review
+was needed because the scopes requested (openid/email/profile) are
+non-sensitive. That means no "unverified app" warning, no 7-day token expiry,
+and **the allowlist is the only place people are managed** (no test-user list
+to keep in sync).
+
+Google required proof of domain ownership before it would accept the branding:
+a Search Console **Domain** property for `chrismiller.xyz`, verified by the
+`google-site-verification` TXT record in `cloudflare/dns/mail.tf`. A Domain
+property covers every subdomain, so it will not need redoing for future hosts.
 
 Client id/secret and the two per-tier cookie secrets live in
 `cluster/oauth2-proxy/google-oauth.secret.yaml` (git-crypt → SealedSecret).
