@@ -1,0 +1,26 @@
+---
+# galaxy.chrismiller.xyz — public home page, privacy policy and terms.
+# Required by Google's OAuth consent screen (authorized-domain links) to
+# publish the sign-in app out of Testing mode. See docs/auth.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: galaxy-site
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/galaxy-site
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: galaxy-site
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

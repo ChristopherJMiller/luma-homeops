@@ -13,6 +13,7 @@ resources:
   - dns.yaml
   - fluent-bit.yaml
   - grafana-config.yaml
+  - galaxy-site.yaml
   - home-assistant.yaml
   - home-assistant-release.yaml
   - home-assistant-mosquitto.yaml
