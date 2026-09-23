@@ -9,6 +9,13 @@ Every off-site copy is readable from a laptop with nothing from the cluster.
 | Family media | CephFS `/family` (PVC `media/family-media`) | rclone mirror, files-as-files | `galaxy-family/current/…`, deletions → `galaxy-family/deleted/<date>/…` | nightly 03:30 |
 | Postgres | all six `postgresql` clusters | postgres-operator logical backup (`pg_dumpall \| gzip`) | `galaxy-cluster-backups/spilo/<cluster>/<uid>/logical_backups/<ts>.sql.gz` | nightly 00:30 |
 | Config volumes | HA persist, Plex config, gonic data+playlists, CephFS `/satellites` | restic, one repo, host = volume | `galaxy-cluster-backups/restic/config` | nightly 01:00–02:00 |
+| Immich uploads | `immich-uploads` — phone photos | rclone mirror | `galaxy-family/immich/current/…` | nightly 04:30 |
+
+Immich's uploads are the only genuinely *new* irreplaceable data this cluster
+produces; the family archive is read-only and already mirrored, and the media
+library is re-acquirable. `thumbs/` and `encoded-video/` are excluded because
+Immich regenerates them. Its database rides the Postgres tier as
+`acid-immich`. See `docs/immich.md`.
 
 **Deliberately not backed up** (re-acquirable, or not worth the bytes):
 `media/mm-media` (1.7 TiB arr library), `music-streaming/gonic-music-pvc`
