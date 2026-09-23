@@ -47,6 +47,20 @@ PROFILE_MUSIC="${PROFILE_MUSIC:-Standard}"
 # restore both halves together.
 ENABLE_MUSIC="${ENABLE_MUSIC:-false}"
 
+# Which Plex web client the "play on Plex" deep links point at. Ombi prefixes
+# its `web/#!/server/<id>/details?key=...` path with this (PlexHelper.
+# BuildPlexMediaUrl), and defaults to https://app.plex.tv.
+#
+# We use our own host instead. Both work when the visitor has a Plex session, but
+# their failure modes differ and app.plex.tv's is bad: it resolves the
+# machineIdentifier against the signed-in account's server list, so with no
+# session it finds no such server and renders a bare "Not found" with no hint to
+# log in. Our own host serves the server's bundled client, which shows a real
+# Plex sign-in screen instead — and it is the host the family already has a
+# session with from watching. Cost is that the bundled client trails app.plex.tv
+# slightly; for "jump to this item" that does not matter.
+PLEX_WEB_HOST="${PLEX_WEB_HOST:-https://plex.chrismiller.xyz}"
+
 say() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 note() { printf '  %s\n' "$*"; }
 
@@ -163,7 +177,7 @@ else
   # NB the top-level flag is `enable`, not `enabled` (PlexSettings.Enable).
   # plexSelectedLibraries left as-is: empty means "all libraries".
   oget v1/Settings/plex \
-    | jq --arg t "$PLEX_TOKEN" --arg mid "$PLEX_MID" '
+    | jq --arg t "$PLEX_TOKEN" --arg mid "$PLEX_MID" --arg web "$PLEX_WEB_HOST" '
         .enable = true
         | .enableWatchlistImport = false
         | .servers = [ ((.servers[0] // {}) + {
@@ -174,11 +188,13 @@ else
             port: 32400,
             ssl: false,
             subDir: null,
+            serverHostname: $web,
             episodeBatchSize: 150,
             plexSelectedLibraries: ((.servers[0].plexSelectedLibraries) // [])
           }) ]' \
     | opost v1/Settings/plex >/dev/null
   note "pointed at mm-plex.media.svc.cluster.local:32400 (machine $PLEX_MID)"
+  note "deep links will use $PLEX_WEB_HOST"
 fi
 
 # ======================================================== 4. the *arrs =======

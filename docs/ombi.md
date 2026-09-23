@@ -115,6 +115,43 @@ matched, so it will look unavailable.
 If you do want a library-ish surface inside Ombi, the newsletter is the only one:
 it mails a "recently added" digest. Not enabled here.
 
+### "Play on Plex" deep links
+
+Those links point at **`plex.chrismiller.xyz`**, not `app.plex.tv`, set via the
+Plex server's `serverHostname` in `bootstrap.sh` (`PLEX_WEB_HOST`).
+
+Both work for a visitor who has a Plex session; the difference is how they fail.
+`app.plex.tv` resolves the `machineIdentifier` against the *signed-in account's*
+server list, so with no session it finds no such server and renders a bare
+**"Not found"** with no suggestion to log in — which is exactly how this was
+discovered. Our own host serves the server's bundled web client, which shows a
+real Plex sign-in screen instead, and it is the host the family already has a
+session with from watching. The bundled client trails app.plex.tv a little; for
+"jump to this item" that does not matter.
+
+**Changing `serverHostname` does not retroactively fix existing links.** The URL
+is stored per item in `plexservercontent.url`, built at cache time, and the
+content cacher is additive — it inserts new items and leaves existing rows alone,
+so a plain re-sync changes nothing and you end up with a mix of old and new hosts.
+The supported fix is Ombi's clear-and-resync:
+
+```sh
+curl -sS -H "Authorization: Bearer <admin jwt>" -H 'Content-Type: application/json' \
+  -X POST http://127.0.0.1:13579/api/v1/Job/clearmediaserverdata -d '{}'
+```
+
+That triggers `IMediaDatabaseRefresh`, which wipes the media-server content cache
+and rebuilds it. Requests are untouched. Availability badges read as "not
+available" for the minute or two the rebuild takes, then self-heal.
+
+One cosmetic wrinkle in the resulting chain: Plex answers `/web/` with a 302 to
+`http://` — absolute, and it does not know Traefik terminated TLS — so the hop
+sequence is `https://…/web/` → `http://…/web/index.html` → 301 from Traefik →
+`https://…/web/index.html` → 200. It lands on HTTPS and the browser preserves the
+`#!` fragment across redirects, so the deep link works; there is just one plain
+HTTP hop in the middle. Setting Plex's own custom access URL to
+`https://plex.chrismiller.xyz:443` would remove it, and is not done here.
+
 ## Discord
 
 Ombi's Discord agent is notification-only — you approve in Ombi's web UI, not
