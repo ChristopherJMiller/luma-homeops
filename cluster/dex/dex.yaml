@@ -122,6 +122,8 @@ kind: Service
 metadata:
   name: dex
   namespace: dex
+  labels:
+    app.kubernetes.io/name: dex
 spec:
   selector:
     app.kubernetes.io/name: dex

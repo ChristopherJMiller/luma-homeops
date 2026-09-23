@@ -4,3 +4,4 @@ kind: Kustomization
 resources:
   - dex.yaml
   - config.yaml
+  - servicemonitor.yaml

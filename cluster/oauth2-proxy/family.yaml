@@ -84,6 +84,8 @@ spec:
             - --skip-provider-button=true
             - --upstream=static://202 # nothing is proxied through; only /oauth2/* matters
             - --silence-ping-logging=true
+            # Prometheus metrics; scraped via the ServiceMonitor in servicemonitors.yaml.
+            - --metrics-address=0.0.0.0:44180
           env:
             - name: OAUTH2_PROXY_CLIENT_SECRET
               valueFrom:
@@ -98,6 +100,8 @@ spec:
           ports:
             - name: http
               containerPort: 4180
+            - name: metrics
+              containerPort: 44180
           volumeMounts:
             - name: emails
               mountPath: /etc/oauth2-proxy
@@ -132,6 +136,9 @@ kind: Service
 metadata:
   name: oauth2-proxy-family
   namespace: oauth2-proxy
+  labels:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/instance: family
 spec:
   selector:
     app.kubernetes.io/name: oauth2-proxy
@@ -140,6 +147,9 @@ spec:
     - name: http
       port: 4180
       targetPort: http
+    - name: metrics
+      port: 44180
+      targetPort: metrics
 ---
 # Public host for the OAuth dance only (sign_in / start / callback). Deliberately
 # NOT gated by its own middleware — that would be a redirect loop.

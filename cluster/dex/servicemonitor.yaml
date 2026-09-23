@@ -1,0 +1,32 @@
+---
+# Metrics for Dex.
+#
+# Dex already served telemetry on :5558 (config.secret.yaml `telemetry.http`,
+# exposed as the `telemetry` port on the Service) — it simply had nothing
+# scraping it. The `release: prometheus` label is what makes Prometheus select
+# this; without it the monitor exists and collects nothing, silently.
+#
+# The useful series is `http_requests_total{handler, code, method}`:
+#   /auth      — an authorization request started
+#   /callback  — the upstream IdP came back
+#   /token     — a code was exchanged, i.e. a completed sign-in
+#
+# NOTE that metric name is extremely generic and collides with other exporters,
+# so ALWAYS scope queries with `namespace="dex"` or `job="dex"`.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: dex
+  namespace: dex
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: dex
+  namespaceSelector:
+    matchNames: [dex]
+  endpoints:
+    - port: telemetry
+      scheme: http
+      interval: 30s

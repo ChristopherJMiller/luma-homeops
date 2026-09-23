@@ -10,3 +10,4 @@ resources:
   - admin.yaml
   - family.yaml
   - middlewares.yaml
+  - servicemonitors.yaml
