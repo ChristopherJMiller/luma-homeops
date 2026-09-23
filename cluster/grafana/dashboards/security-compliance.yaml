@@ -229,7 +229,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -370,7 +372,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -444,7 +448,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "showThresholdLabels": false,
@@ -573,7 +579,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Failed authentication attempts across services",
+          "description": "Rejections across the three real auth surfaces. The old panel tracked authentik via django_http_responses_total_by_status (removed 2026-09-23), a hardcoded vector(0) labelled SSH, and apiserver_audit_total which this cluster does not emit -- so all three series were dead or fake.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -644,19 +650,19 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "increase(django_http_responses_total_by_status{status=\"401\"}[5m]) or vector(0)",
-              "legendFormat": "Authentik",
-              "refId": "A"
+              "expr": "sum(increase(oauth2_proxy_requests_total{code=\"401\"}[5m]))",
+              "refId": "A",
+              "legendFormat": "Forward-auth rejected (oauth2-proxy)"
             },
             {
-              "expr": "vector(0)",
-              "legendFormat": "SSH",
-              "refId": "B"
+              "expr": "sum(increase(http_requests_total{namespace=\"dex\",code=~\"4..|5..\"}[5m]))",
+              "refId": "B",
+              "legendFormat": "Dex errors"
             },
             {
-              "expr": "rate(apiserver_audit_total{objectRef_resource=\"pods\",verb=\"create\"}[5m]) or vector(0)",
-              "legendFormat": "Kubernetes API",
-              "refId": "C"
+              "expr": "sum(increase(apiserver_request_total{code=~\"401|403\"}[5m]))",
+              "refId": "C",
+              "legendFormat": "Kubernetes API denied"
             }
           ],
           "title": "Failed Authentication Attempts",
@@ -848,7 +854,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -917,7 +925,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "showThresholdLabels": false,
@@ -1013,11 +1023,15 @@ data:
           },
           "id": 11,
           "options": {
-            "displayLabels": ["percent"],
+            "displayLabels": [
+              "percent"
+            ],
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "showUnfilled": true,
@@ -1153,7 +1167,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -1626,7 +1642,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "showThresholdLabels": true,
@@ -1648,7 +1666,13 @@ data:
       "refresh": "1m",
       "schemaVersion": 30,
       "style": "dark",
-      "tags": ["homelab", "security", "trivy", "vulnerabilities", "compliance"],
+      "tags": [
+        "homelab",
+        "security",
+        "trivy",
+        "vulnerabilities",
+        "compliance"
+      ],
       "templating": {
         "list": [
           {
@@ -1790,7 +1814,16 @@ data:
         "to": "now"
       },
       "timepicker": {
-        "refresh_intervals": ["30s", "1m", "5m", "15m", "30m", "1h", "2h", "1d"]
+        "refresh_intervals": [
+          "30s",
+          "1m",
+          "5m",
+          "15m",
+          "30m",
+          "1h",
+          "2h",
+          "1d"
+        ]
       },
       "timezone": "",
       "title": "Trivy Security & Compliance",
