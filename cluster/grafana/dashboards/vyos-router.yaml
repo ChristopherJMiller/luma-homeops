@@ -337,7 +337,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Total interfaces detected",
+          "description": "The SNMP walk does not collect ifNumber; it collects per-interface rows. Counting ifAdminStatus gives the same number, and up-vs-total is more useful than a bare total.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -381,8 +381,14 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "ifNumber{instance=\"192.168.0.1:161\"}",
-              "refId": "A"
+              "expr": "count(ifAdminStatus{instance=\"192.168.0.1:161\"})",
+              "refId": "A",
+              "legendFormat": "interfaces"
+            },
+            {
+              "expr": "count(ifOperStatus{instance=\"192.168.0.1:161\"} == 1)",
+              "refId": "B",
+              "legendFormat": "up"
             }
           ],
           "title": "Total Interfaces",
@@ -449,7 +455,10 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "table",
               "placement": "bottom"
             }
@@ -531,7 +540,10 @@ data:
               "mode": "single"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "list",
               "placement": "bottom"
             }
@@ -618,7 +630,9 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean"],
+              "calcs": [
+                "mean"
+              ],
               "displayMode": "table",
               "placement": "right"
             }
@@ -695,7 +709,9 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean"],
+              "calcs": [
+                "mean"
+              ],
               "displayMode": "table",
               "placement": "right"
             }
@@ -867,7 +883,10 @@ data:
               "mode": "single"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "list",
               "placement": "bottom"
             }
@@ -1131,7 +1150,10 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "table",
               "placement": "right"
             }
@@ -1300,7 +1322,9 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean"],
+              "calcs": [
+                "mean"
+              ],
               "displayMode": "list",
               "placement": "bottom"
             }
@@ -1377,7 +1401,9 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean"],
+              "calcs": [
+                "mean"
+              ],
               "displayMode": "list",
               "placement": "bottom"
             }
@@ -1397,7 +1423,12 @@ data:
       "refresh": "30s",
       "schemaVersion": 27,
       "style": "dark",
-      "tags": ["vyos", "router", "network", "homelab"],
+      "tags": [
+        "vyos",
+        "router",
+        "network",
+        "homelab"
+      ],
       "templating": {
         "list": []
       },
