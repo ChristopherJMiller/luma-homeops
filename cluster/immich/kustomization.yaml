@@ -8,3 +8,4 @@ resources:
   - secrets.yaml
   - pvcs.yaml
   - psql.yaml
+  - backup-cronjob.yaml

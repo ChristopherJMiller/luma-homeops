@@ -15,7 +15,7 @@ spec:
   source:
     repoURL: https://immich-app.github.io/immich-charts
     chart: immich
-    targetRevision: 0.13.2
+    targetRevision: 0.12.0
     helm:
       releaseName: immich
       valuesObject:
@@ -40,10 +40,16 @@ spec:
                   DB_PASSWORD:
                     valueFrom:
                       secretKeyRef: {name: immich-db, key: DB_PASSWORD}
-                  # The OSDs are SMR spinners. Immich has a first-class setting
-                  # for non-SSD storage; without it the thumbnail/index passes
-                  # assume latencies this cluster cannot deliver (CLAUDE.md #1).
-                  DB_STORAGE_TYPE: HDD
+                  # Which vector extension to use. Auto-detection would pick
+                  # VectorChord anyway (it is preferred when several are
+                  # present), but being explicit means a future pgvector-only
+                  # database fails loudly instead of silently degrading.
+                  #
+                  # NOTE: DB_STORAGE_TYPE is deliberately NOT set here — it
+                  # configures Immich's own Postgres container, which this
+                  # cluster does not run. The SMR tuning lives on acid-immich
+                  # instead (cluster/immich/psql.yaml).
+                  DB_VECTOR_EXTENSION: vectorchord
 
         immich:
           metrics:

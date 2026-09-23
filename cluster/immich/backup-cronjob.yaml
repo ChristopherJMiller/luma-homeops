@@ -1,0 +1,99 @@
+---
+# Nightly mirror of Immich's uploads to B2. These are phone photos — the only
+# genuinely new irreplaceable data this cluster produces, as distinct from the
+# family archive (read-only, already mirrored) and the media library
+# (re-acquirable). Immich's database rides the operator's logical-backup tier;
+# this covers the files.
+#
+# Same shape and the same reasoning as cluster/family/backup-cronjob.yaml:
+# files-as-files so a restore needs nothing but rclone, deletions moved aside
+# rather than dropped, a key that cannot delete, and a sanity gate so an
+# unmounted volume can never empty the bucket. See docs/backups.md.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: immich-backup
+  namespace: immich
+  labels:
+    app.kubernetes.io/name: immich-backup
+    backup-tier: family
+spec:
+  # 04:30 — after family-backup (03:30) so two large rclone jobs never hammer
+  # the SMR OSDs at once.
+  schedule: "30 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 72000
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: immich-backup
+        spec:
+          restartPolicy: Never # keep failed pods and their logs
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: rclone
+              image: rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              envFrom:
+                - secretRef:
+                    name: immich-b2
+              command: ["/bin/sh"]
+              args:
+                - -c
+                - |
+                  set -eu
+                  SRC=/uploads
+                  DST=b2:galaxy-family/immich
+                  MIN_FILES=1
+
+                  # An empty or unmounted source must never be allowed to move
+                  # the whole bucket into deleted/.
+                  n=$(find "$SRC" -type f | head -n $((MIN_FILES + 1)) | wc -l)
+                  if [ "$n" -le "$MIN_FILES" ]; then
+                    echo "refusing to sync: only $n files under $SRC (min $MIN_FILES)" >&2
+                    exit 2
+                  fi
+
+                  echo "immich-backup start $(date -u +%FT%TZ): $n+ files"
+                  # thumbs/ and encoded-video/ are derived from originals and
+                  # regenerate on demand — excluded to keep the mirror to the
+                  # irreplaceable bytes.
+                  rclone sync "$SRC" "$DST/current" \
+                    --backup-dir "$DST/deleted/$(date -u +%F)" \
+                    --exclude 'thumbs/**' --exclude 'encoded-video/**' \
+                    --exclude '.DS_Store' --exclude '*.partial' \
+                    --transfers 4 --checkers 8 \
+                    --s3-chunk-size 16M --s3-upload-concurrency 4 --buffer-size 16M \
+                    --bwlimit 10M \
+                    --fast-list --stats 5m --stats-one-line --stats-log-level NOTICE \
+                    --log-level INFO
+                  echo "immich-backup done $(date -u +%FT%TZ)"
+              volumeMounts:
+                - name: uploads
+                  mountPath: /uploads
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+                limits:
+                  cpu: "2"
+          volumes:
+            - name: uploads
+              persistentVolumeClaim:
+                claimName: immich-uploads
+                readOnly: true

@@ -31,6 +31,11 @@ spec:
     parameters:
       # SMR spinners: same reasoning as every other cluster here (#2587).
       synchronous_commit: "off"
+      # What Immich's DB_STORAGE_TYPE=HDD would set if we ran their Postgres
+      # image. We run Spilo, so the tuning goes here: no readahead benefit and
+      # an honest seek cost on ST8000DM004 spinners.
+      effective_io_concurrency: "1"
+      random_page_cost: "4"
       # VectorChord must be preloaded. This list is Spilo's own eight libraries
       # PLUS vchord — if the operator replaces rather than extends the value,
       # dropping any of the first eight silently disables pg_cron/bg_mon/etc.
