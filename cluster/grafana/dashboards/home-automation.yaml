@@ -72,7 +72,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -149,7 +151,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -460,7 +464,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "showThresholdLabels": true,
@@ -529,7 +535,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -568,7 +576,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "MQTT broker uptime and version",
+          "description": "The mosquitto-exporter sidecar prefixes every series broker_, not mosquitto_ -- and nothing was scraping it until a ServiceMonitor was added 2026-09-23 (cluster/home-assistant/mosquitto-servicemonitor.yaml).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -601,7 +609,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -610,8 +620,14 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "mosquitto_broker_uptime_seconds",
-              "refId": "A"
+              "expr": "broker_uptime",
+              "refId": "A",
+              "legendFormat": "uptime"
+            },
+            {
+              "expr": "broker_connection_up",
+              "refId": "B",
+              "legendFormat": "broker up"
             }
           ],
           "title": "MQTT Broker Health",
@@ -619,7 +635,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Connected MQTT clients",
+          "description": "The mosquitto-exporter sidecar prefixes every series broker_, not mosquitto_ -- and nothing was scraping it until a ServiceMonitor was added 2026-09-23 (cluster/home-assistant/mosquitto-servicemonitor.yaml).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -660,7 +676,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -669,8 +687,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "mosquitto_clients_connected",
-              "refId": "A"
+              "expr": "broker_clients_connected",
+              "refId": "A",
+              "legendFormat": "connected"
             }
           ],
           "title": "Connected Clients",
@@ -678,7 +697,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "MQTT message publish and subscribe rate",
+          "description": "The mosquitto-exporter sidecar prefixes every series broker_, not mosquitto_ -- and nothing was scraping it until a ServiceMonitor was added 2026-09-23 (cluster/home-assistant/mosquitto-servicemonitor.yaml).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -737,7 +756,10 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "list",
               "placement": "bottom"
             }
@@ -745,14 +767,19 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(mosquitto_messages_published_total[5m])",
-              "legendFormat": "Published",
-              "refId": "A"
+              "expr": "rate(broker_publish_messages_received[5m])",
+              "refId": "A",
+              "legendFormat": "Published in"
             },
             {
-              "expr": "rate(mosquitto_messages_sent_total[5m])",
-              "legendFormat": "Sent",
-              "refId": "B"
+              "expr": "rate(broker_publish_messages_sent[5m])",
+              "refId": "B",
+              "legendFormat": "Published out"
+            },
+            {
+              "expr": "rate(broker_publish_messages_dropped[5m])",
+              "refId": "C",
+              "legendFormat": "Dropped"
             }
           ],
           "title": "Message Rate",
@@ -760,7 +787,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Top 10 most active MQTT topics",
+          "description": "Was a per-topic pie chart. The exporter reads mosquitto $SYS counters, which have no per-topic breakdown, so topk over a topic label could never work. Total subscription count is what $SYS exposes.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -788,33 +815,41 @@ data:
             "legend": {
               "displayMode": "table",
               "placement": "right",
-              "values": ["value", "percent"]
+              "values": [
+                "value",
+                "percent"
+              ]
             },
             "pieType": "donut",
             "tooltip": {
               "mode": "single"
             },
-            "displayLabels": ["name", "percent"],
+            "displayLabels": [
+              "name",
+              "percent"
+            ],
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             }
           },
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "topk(10, mosquitto_topic_messages_count)",
-              "legendFormat": "{{topic}}",
-              "refId": "A"
+              "expr": "broker_subscriptions_count",
+              "refId": "A",
+              "legendFormat": "subscriptions"
             }
           ],
-          "title": "Topics Distribution",
-          "type": "piechart"
+          "title": "Subscriptions",
+          "type": "stat"
         },
         {
           "datasource": "Prometheus",
-          "description": "Connected MQTT clients details",
+          "description": "The mosquitto-exporter sidecar prefixes every series broker_, not mosquitto_ -- and nothing was scraping it until a ServiceMonitor was added 2026-09-23 (cluster/home-assistant/mosquitto-servicemonitor.yaml).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -855,10 +890,19 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "mosquitto_client_messages",
-              "format": "table",
-              "instant": true,
-              "refId": "A"
+              "expr": "broker_clients_total",
+              "refId": "A",
+              "legendFormat": "total"
+            },
+            {
+              "expr": "broker_clients_disconnected",
+              "refId": "B",
+              "legendFormat": "disconnected"
+            },
+            {
+              "expr": "broker_clients_maximum",
+              "refId": "C",
+              "legendFormat": "peak"
             }
           ],
           "title": "Client Connections",
@@ -878,11 +922,11 @@ data:
               }
             }
           ],
-          "type": "table"
+          "type": "timeseries"
         },
         {
           "datasource": "Prometheus",
-          "description": "Retained messages count",
+          "description": "The mosquitto-exporter sidecar prefixes every series broker_, not mosquitto_ -- and nothing was scraping it until a ServiceMonitor was added 2026-09-23 (cluster/home-assistant/mosquitto-servicemonitor.yaml).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -923,7 +967,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -932,8 +978,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "mosquitto_retained_messages_count",
-              "refId": "A"
+              "expr": "broker_retained_messages_count",
+              "refId": "A",
+              "legendFormat": "retained"
             }
           ],
           "title": "Retained Messages",
@@ -941,7 +988,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "MQTT network I/O",
+          "description": "The mosquitto-exporter sidecar prefixes every series broker_, not mosquitto_ -- and nothing was scraping it until a ServiceMonitor was added 2026-09-23 (cluster/home-assistant/mosquitto-servicemonitor.yaml).",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1008,14 +1055,14 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(mosquitto_bytes_received_total[5m])",
-              "legendFormat": "Bytes In",
-              "refId": "A"
+              "expr": "rate(broker_bytes_received[5m])",
+              "refId": "A",
+              "legendFormat": "Bytes in"
             },
             {
-              "expr": "rate(mosquitto_bytes_sent_total[5m])",
-              "legendFormat": "Bytes Out",
-              "refId": "B"
+              "expr": "rate(broker_bytes_sent[5m])",
+              "refId": "B",
+              "legendFormat": "Bytes out"
             }
           ],
           "title": "Network I/O",
@@ -1054,7 +1101,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "showUnfilled": false
@@ -1113,7 +1162,7 @@ data:
               "color": "rgba(255,0,255,0.7)"
             },
             "filterValues": {
-              "le": 1e-9
+              "le": 1E-9
             },
             "legend": {
               "show": true
@@ -1193,7 +1242,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -1271,7 +1322,10 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "list",
               "placement": "bottom"
             }
@@ -1371,7 +1425,10 @@ data:
               "mode": "single"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "list",
               "placement": "bottom"
             }
@@ -1417,16 +1474,24 @@ data:
             "legend": {
               "displayMode": "table",
               "placement": "right",
-              "values": ["value", "percent"]
+              "values": [
+                "value",
+                "percent"
+              ]
             },
             "pieType": "pie",
             "tooltip": {
               "mode": "single"
             },
-            "displayLabels": ["name", "percent"],
+            "displayLabels": [
+              "name",
+              "percent"
+            ],
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             }
           },
@@ -1490,7 +1555,9 @@ data:
           "options": {
             "bucketDataBound": "auto",
             "legend": {
-              "calcs": ["mean"],
+              "calcs": [
+                "mean"
+              ],
               "displayMode": "list",
               "placement": "bottom"
             }
@@ -1662,7 +1729,14 @@ data:
       "refresh": "10s",
       "schemaVersion": 27,
       "style": "dark",
-      "tags": ["homelab", "home-assistant", "mqtt", "mosquitto", "iot", "automation"],
+      "tags": [
+        "homelab",
+        "home-assistant",
+        "mqtt",
+        "mosquitto",
+        "iot",
+        "automation"
+      ],
       "templating": {
         "list": [
           {

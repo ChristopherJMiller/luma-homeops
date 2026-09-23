@@ -1,0 +1,18 @@
+# Expose Home Assistant's own metrics at /api/prometheus.
+#
+# The home-automation dashboard has 15 panels querying home_assistant_* series
+# that have never existed, because this integration was never enabled. With
+# `namespace: homeassistant` the exported names are homeassistant_* -- note
+# that is ONE word, so the dashboard's home_assistant_* spelling is wrong
+# regardless and those panels still need retargeting once metrics arrive.
+#
+# NOT YET SCRAPED. /api/prometheus requires a bearer token, and a long-lived
+# access token can only be minted from the HA UI (Profile -> Security ->
+# Long-Lived Access Tokens). Once it exists, seal it and add a ScrapeConfig
+# with `authorization: {type: Bearer, credentials: {...}}` pointing at
+# ha-home-assistant.home-assistant.svc:8123/api/prometheus.
+#
+# Package changes need a manual restart -- no reloader is deployed:
+#   kubectl -n home-assistant rollout restart deploy/ha-home-assistant
+prometheus:
+  namespace: homeassistant

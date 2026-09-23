@@ -8,6 +8,7 @@ resources:
   - restic-backup-cronjob.yaml
   - psql.yaml
   - postgres-podmonitor.yaml
+  - mosquitto-servicemonitor.yaml
 
 # HA config packages (git-tracked source of truth). Rendered into a ConfigMap
 # that the ha-helm chart mounts at /config/packages via extraConfigMounts.
@@ -26,6 +27,7 @@ configMapGenerator:
       - packages/home_alerts.yaml
       - packages/presence.yaml
       - packages/zigbee_hygiene.yaml
+      - packages/prometheus.yaml
   - name: ha-dashboards
     files:
       - dashboards/overview.yaml

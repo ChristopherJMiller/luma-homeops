@@ -1,0 +1,30 @@
+---
+# Metrics for the MQTT broker.
+#
+# The mosquitto chart already runs a mosquitto-exporter sidecar and already
+# publishes it as the `prometheus` port on the Service -- nothing was scraping
+# it, so every MQTT panel on the home-automation dashboard was empty. Same
+# shape as Dex: exposed, never collected.
+#
+# `release: prometheus` is mandatory; the Prometheus CR selects on it and a
+# monitor without it is silently ignored.
+#
+# NOTE the exporter prefixes everything `broker_`, NOT `mosquitto_` -- the
+# dashboard originally queried mosquitto_* names that this exporter has never
+# emitted.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: mosquitto
+  namespace: home-assistant
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mosquitto
+  namespaceSelector:
+    matchNames: [home-assistant]
+  endpoints:
+    - port: prometheus
+      interval: 30s
