@@ -85,9 +85,15 @@ Dex cutover and can be removed once you are confident in it. Redirect URIs:
 - `https://auth-admin.chrismiller.xyz/oauth2/callback` (legacy)
 - `https://auth-family.chrismiller.xyz/oauth2/callback` (legacy)
 
-The consent screen is in **Testing** mode, so only accounts listed as test
-users can complete a login — a second gate in front of the allowlist. Adding
-someone means adding them in *both* places.
+The consent screen requires an authorized-domain home page, privacy policy
+and terms link. Those are `galaxy.chrismiller.xyz` — `cluster/galaxy-site/`,
+edit `content/*.html` and commit (the ConfigMap hash rolls the pods).
+
+Publishing out of **Testing** mode needs no Google review, because the scopes
+requested (openid/email/profile) are non-sensitive. Testing mode costs you an
+"unverified app" warning on every sign-in and 7-day token expiry, and forces
+you to add each person in two places (the allowlist AND the test-user list).
+Once published, the allowlist is the only place people are managed.
 
 Client id/secret and the two per-tier cookie secrets live in
 `cluster/oauth2-proxy/google-oauth.secret.yaml` (git-crypt → SealedSecret).
