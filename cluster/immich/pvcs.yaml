@@ -1,0 +1,35 @@
+---
+# Phone uploads and everything Immich generates from them (thumbnails,
+# transcodes, profile images). This is NEW irreplaceable data — the family
+# archive at /family is only ever read — so it gets its own nightly mirror to
+# B2 (see cluster/immich/backup-cronjob.yaml and docs/backups.md).
+#
+# CephFS RWX because the server and machine-learning pods both mount it and
+# may land on different nodes; an RBD volume would pin them together.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-uploads
+  namespace: immich
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: rook-ceph-fs
+  resources:
+    requests:
+      storage: 500Gi
+---
+# Downloaded CLIP / face-recognition models. Regenerable — deliberately NOT
+# backed up; a fresh pod just re-downloads them.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-ml-cache
+  namespace: immich
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 10Gi

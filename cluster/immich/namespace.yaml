@@ -1,0 +1,8 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: immich
+  labels:
+    # The Immich containers run as a non-root uid and need no extra caps.
+    pod-security.kubernetes.io/enforce: baseline

@@ -42,5 +42,12 @@ parameters:
   csi.storage.k8s.io/controller-expand-secret-namespace: rook
   csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
   csi.storage.k8s.io/node-stage-secret-namespace: rook
+
+  # The mons only speak msgr2 on :3300 and the kernel cephfs client defaults to
+  # msgr1 there, so without this every mount fails with "no mds is up" (dmesg:
+  # "socket closed (con state V1_BANNER)"). RBD gets the equivalent from the
+  # cluster-wide rbd_default_map_options; cephfs needs it per mount. The static
+  # PVs in cluster/family and cluster/backups carry the same option.
+  kernelMountOptions: ms_mode=prefer-crc
 reclaimPolicy: Retain
 allowVolumeExpansion: true
