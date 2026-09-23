@@ -81,13 +81,13 @@ curl -sf -o /dev/null "http://127.0.0.1:$LOCAL_PORT/" \
 arr() { # arr <name> <port> <apiver> <path>
   local name=$1 port=$2 ver=$3 path=$4
   local key; key=$(sec api-keys "$name")
-  kubectl -n "$NS" exec "deploy/mm-$name" -- \
+  kubectl -n "$NS" exec "deploy/mm-$name" -c "$name" -- \
     curl -sS -H "X-Api-Key: $key" "http://localhost:$port/api/$ver/$path"
 }
 arr_post() { # arr_post <name> <port> <apiver> <path>   (body on stdin)
   local name=$1 port=$2 ver=$3 path=$4
   local key; key=$(sec api-keys "$name")
-  kubectl -n "$NS" exec -i "deploy/mm-$name" -- \
+  kubectl -n "$NS" exec -i "deploy/mm-$name" -c "$name" -- \
     curl -sS -H "X-Api-Key: $key" -H 'Content-Type: application/json' \
       -X POST "http://localhost:$port/api/$ver/$path" -d @-
 }
@@ -202,23 +202,30 @@ if [ -z "$RADARR_4K_QP" ]; then
     | jq --arg n "$PROFILE_MOVIE_4K" '
         # 2160p, but deliberately NOT Remux-2160p. A 4K remux is 50-90 GB, and
         # sustained writes past ~25 GiB are what make these SMR OSDs flap and
-        # stall Ceph (docs/backups.md, the SMR notes in CLAUDE.md). WEBDL/Bluray
-        # 2160p land around 15-40 GB, which the array copes with.
+        # stall Ceph (the SMR notes in CLAUDE.md). WEBDL/Bluray 2160p land
+        # around 15-40 GB, which the array copes with.
         def mark:
-          if has("quality") then
+          if has("quality") and (.quality != null) then
             (if (.quality.name | test("2160p")) and ((.quality.name | test("Remux")) | not)
              then .allowed = true else . end)
           else
             .items |= map(mark) | .allowed = ([.items[].allowed] | any)
           end;
-        def allowed_ids: [ .. | objects | select(has("quality") and .allowed) | .quality ];
+        # Radarr rejects a cutoff that names a quality nested inside a GROUP
+        # ("Cutoff must be an allowed quality or group") -- WEBDL-2160p lives in
+        # the "WEB 2160p" group, so the cutoff has to be the id of the group itself.
+        # Hence: pick the allowed TOP-LEVEL item that contains WEBDL-2160p.
+        def top_id: if (.quality // null) != null then .quality.id else .id end;
+        def has_webdl2160:
+          ([ .. | objects | select(has("quality") and (.quality != null)) | .quality.name ]
+           | index("WEBDL-2160p")) != null;
         .name = $n
         | .upgradeAllowed = true
         | .items |= map(mark)
         # Stop upgrading once a 4K WEB release is in hand rather than chasing
         # ever-larger files forever.
-        | .cutoff = ( ( [ allowed_ids[] | select(.name == "WEBDL-2160p") | .id ] | first )
-                      // ( [ allowed_ids[] | .id ] | min ) )' \
+        | .cutoff = ( ( [ .items[] | select(.allowed) | select(has_webdl2160) | top_id ] | first )
+                      // ( [ .items[] | select(.allowed) | top_id ] | min ) )' \
     | arr_post radarr 7878 v3 qualityprofile)
   RADARR_4K_QP=$(jq -r '.id // empty' <<<"$created")
   [ -n "$RADARR_4K_QP" ] \
