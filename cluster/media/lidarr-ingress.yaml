@@ -4,7 +4,7 @@ kind: Ingress
 metadata:
   name: lidarr
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
+    traefik.ingress.kubernetes.io/router.middlewares: oauth2-proxy-oauth2-admin-errors@kubernetescrd,oauth2-proxy-oauth2-admin-auth@kubernetescrd,traefik-strip-csp@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
