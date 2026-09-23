@@ -1,0 +1,135 @@
+---
+# Immich itself. The namespace, volumes and database are cluster/immich/
+# (Application `immich`); this is only the Helm release, kept separate for the
+# same reason as mega-media and home-assistant — chart upgrades land here
+# without touching the plumbing underneath.
+#
+# Runbook: docs/immich.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: immich-release
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://immich-app.github.io/immich-charts
+    chart: immich
+    targetRevision: 0.13.2
+    helm:
+      releaseName: immich
+      valuesObject:
+        # Shared by every component.
+        controllers:
+          main:
+            containers:
+              main:
+                env:
+                  DB_HOSTNAME:
+                    valueFrom:
+                      secretKeyRef: {name: immich-db, key: DB_HOSTNAME}
+                  DB_PORT:
+                    valueFrom:
+                      secretKeyRef: {name: immich-db, key: DB_PORT}
+                  DB_DATABASE_NAME:
+                    valueFrom:
+                      secretKeyRef: {name: immich-db, key: DB_DATABASE_NAME}
+                  DB_USERNAME:
+                    valueFrom:
+                      secretKeyRef: {name: immich-db, key: DB_USERNAME}
+                  DB_PASSWORD:
+                    valueFrom:
+                      secretKeyRef: {name: immich-db, key: DB_PASSWORD}
+                  # The OSDs are SMR spinners. Immich has a first-class setting
+                  # for non-SSD storage; without it the thumbnail/index passes
+                  # assume latencies this cluster cannot deliver (CLAUDE.md #1).
+                  DB_STORAGE_TYPE: HDD
+
+        immich:
+          metrics:
+            enabled: true # ServiceMonitors for the existing kube-prometheus-stack
+          persistence:
+            library:
+              # CephFS RWX, created in cluster/immich/pvcs.yaml. The chart
+              # deliberately will not create this for us.
+              existingClaim: immich-uploads
+
+        # Job queue. emptyDir is the chart default and is fine: a lost queue
+        # means jobs re-run, and the data itself is in Postgres and the PVC.
+        valkey:
+          enabled: true
+
+        server:
+          enabled: true
+          controllers:
+            main:
+              containers:
+                main:
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 512Mi
+                    limits:
+                      cpu: "2"
+                      memory: 2Gi
+          persistence:
+            # The family archive, mounted READ-ONLY as an external library.
+            # Immich indexes it in place and never writes: /family stays the
+            # source of truth, still mirrored to B2 by family-backup.
+            family:
+              enabled: true
+              type: persistentVolumeClaim
+              existingClaim: family-media
+              readOnly: true
+              globalMounts:
+                - path: /family
+                  readOnly: true
+          ingress:
+            main:
+              enabled: true
+              className: traefik
+              # NO oauth2-proxy middleware on purpose: the Immich mobile app
+              # cannot complete a browser forward-auth redirect, and phone sync
+              # is the point. Immich authenticates against Dex itself.
+              hosts:
+                - host: photos.chrismiller.xyz
+                  paths:
+                    - path: /
+                      service:
+                        identifier: main
+              tls: [] # wildcard cert is Traefik's default TLSStore
+
+        machine-learning:
+          enabled: true
+          controllers:
+            main:
+              containers:
+                main:
+                  resources:
+                    requests:
+                      cpu: 100m
+                      memory: 1Gi
+                    limits:
+                      cpu: "2"
+                      memory: 3Gi
+          persistence:
+            cache:
+              # Downloaded CLIP / face models. A PVC rather than the chart's
+              # emptyDir default so a restart doesn't re-download ~2 GB.
+              enabled: true
+              type: persistentVolumeClaim
+              existingClaim: immich-ml-cache
+              globalMounts:
+                - path: /cache
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: immich
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true
