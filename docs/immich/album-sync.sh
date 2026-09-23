@@ -32,13 +32,26 @@ ADMIN=$(kubectl -n immich get secret immich-accounts -o jsonpath='{.data.api-key
 fam()  { curl "${R[@]}" -H "x-api-key: $KEY"   -H 'Content-Type: application/json' "$@"; }
 adm()  { curl "${R[@]}" -H "x-api-key: $ADMIN" -H 'Content-Type: application/json' "$@"; }
 
+# An album's current contents. NOT from GET /api/albums/{id} — as of 3.2.2 that
+# returns assetCount and no asset list at all, which silently yields an empty
+# diff and re-adds everything. Search's albumIds filter is the way.
+album_assets() {
+  local id="$1" p=1
+  while [ -n "$p" ]; do
+    fam -X POST "$API/search/metadata" -d "{\"albumIds\":[\"$id\"],\"size\":1000,\"page\":$p}" > "$WORK/ap.json"
+    jq -r '.assets.items[].id' "$WORK/ap.json"
+    p=$(jq -r '.assets.nextPage // ""' "$WORK/ap.json")
+  done
+}
+
 # --- who owns what -----------------------------------------------------------
 me=$(fam "$API/users/me" | jq -r '.email')
 [ "$me" = "family@chrismiller.xyz" ] || { echo "family-api-key belongs to $me, not the family account" >&2; exit 1; }
 
 # Viewer, not editor: the archive is read-only truth on disk and nobody should
 # be able to restructure it from a phone.
-adm "$API/admin/users" | jq -r '.[] | select(.email != "family@chrismiller.xyz") | .id' > "$WORK/share"
+# sorted because comm below requires it
+adm "$API/admin/users" | jq -r '.[] | select(.email != "family@chrismiller.xyz") | .id' | sort -u > "$WORK/share"
 echo "sharing with $(wc -l < "$WORK/share") user(s)"
 
 # --- every archive asset, bucketed by top-level folder ------------------------
@@ -71,7 +84,19 @@ cut -f1 "$WORK/assets" | sort -u | while read -r folder; do
     : > "$WORK/have"
   else
     # Diff against what the album already holds so a re-run is nearly free.
-    fam "$API/albums/$id" | jq -r '.assets[].id' | sort -u > "$WORK/have"
+    album_assets "$id" | sort -u > "$WORK/have"
+  fi
+
+  # Share with anyone not on the album yet. Creation only names the users who
+  # existed at the time, so without this a newly provisioned family member
+  # would get every FUTURE album and none of the existing ones — which is the
+  # whole archive.
+  fam "$API/albums/$id" | jq -r '.albumUsers[].user.id' | sort -u > "$WORK/on"
+  comm -23 "$WORK/share" "$WORK/on" > "$WORK/newusers"
+  if [ -s "$WORK/newusers" ]; then
+    echo "$folder: sharing with $(wc -l < "$WORK/newusers") new user(s)"
+    [ "$DRY" = 1 ] || fam -X PUT "$API/albums/$id/users" \
+      -d "$(jq -R . < "$WORK/newusers" | jq -s '{albumUsers: map({userId: ., role: "viewer"})}')" >/dev/null
   fi
 
   comm -23 "$WORK/want" "$WORK/have" > "$WORK/add"
@@ -89,4 +114,4 @@ cut -f1 "$WORK/assets" | sort -u | while read -r folder; do
 done
 
 echo
-fam "$API/albums" | jq -r 'sort_by(.albumName)[] | "  \(.albumName): \(.assetCount) assets -> \(.albumUsers|length) viewer(s)"'
+fam "$API/albums" | jq -r 'sort_by(.albumName)[] | "  \(.albumName): \(.assetCount) assets -> \([.albumUsers[] | select(.role != "owner")] | length) viewer(s)"'

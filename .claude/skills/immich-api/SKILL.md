@@ -115,6 +115,27 @@ curl -sS -X POST "$API/libraries/<id>/validate" -H "$H" -H 'Content-Type: applic
   -d '{"importPaths":["/family"]}' | jq -c '.importPaths'
 ```
 
+## Albums and sharing
+
+`docs/immich/album-sync.sh` owns this — one album per top-level `/family`
+folder, shared with every other account as `viewer`, idempotent, safe after
+every nightly scan. Run it rather than hand-rolling album calls, and re-run it
+after provisioning anyone.
+
+Two traps if you do touch the API directly:
+
+- **`GET /api/albums/{id}` returns no asset list** as of 3.2.2 — just
+  `assetCount`. `jq '.assets[]'` on it yields null, so a diff built from it
+  looks like "the album is empty" and re-adds everything. Enumerate an album
+  with `POST /api/search/metadata -d '{"albumIds":["<id>"],"size":1000}'`,
+  paginating on `.assets.nextPage`.
+- **`POST /api/albums` only shares with the users passed at creation.** Adding
+  someone later needs `PUT /api/albums/{id}/users` per existing album, or they
+  get every future album and none of the current ones.
+
+`albumUsers` includes the owner with `role: "owner"`, so count viewers with
+`select(.role != "owner")`.
+
 ## Scanning — never without a guard
 
 A scan thumbnails and ML-indexes every file. That is the same sustained-IO
