@@ -130,6 +130,8 @@ so there is no database to run or back up.
 | "Found." link instead of redirecting | `statusRewrites: {"401": 302}` missing from the errors middleware |
 | Logged in but the app 403s | app-level authz, not us — check `X-Auth-Request-Email` reaches it |
 | Everyone locked out | allowlist file empty/unmounted — it fails closed by design |
+| "Grant Access ... would like to view your email" on every login | oauth2-proxy is sending `approval_prompt=force`, which makes Dex ignore its own `skipApprovalScreen`. Fix is `--prompt=select_account` on oauth2-proxy; an empty `--approval-prompt=` does NOT work |
+| Dex config change has no effect | Dex reads config only at startup: `kubectl -n dex rollout restart deploy/dex` |
 
 Logs: `kubectl -n oauth2-proxy logs -l app.kubernetes.io/instance=admin`.
 
