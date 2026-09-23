@@ -18,6 +18,11 @@ spec:
       app.kubernetes.io/name: oauth2-proxy
   namespaceSelector:
     matchNames: [oauth2-proxy]
+  # oauth2_proxy_requests_total carries only a `code` label — nothing that says
+  # which tier served the request. Promoting the Service's instance label makes
+  # `admin` vs `family` queryable, which is the whole point of running two.
+  targetLabels:
+    - app.kubernetes.io/instance
   endpoints:
     - port: metrics
       scheme: http

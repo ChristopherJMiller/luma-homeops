@@ -146,6 +146,39 @@ so there is no database to run or back up.
 
 Logs: `kubectl -n oauth2-proxy logs -l app.kubernetes.io/instance=admin`.
 
+## Metrics
+
+Both Dex and oauth2-proxy are scraped; the Grafana dashboard
+`application-performance` has the panels (ConfigMap in
+`cluster/grafana/dashboards/`).
+
+| Source | Series | Notes |
+|---|---|---|
+| Dex `:5558` | `http_requests_total{handler,code,method}` | `/auth` = a login started, `/callback` = the IdP came back, `/token` = a code was exchanged, i.e. a **completed** sign-in |
+| Dex | `request_duration_seconds` | histogram |
+| oauth2-proxy `:44180` | `oauth2_proxy_requests_total{code}`, `oauth2_proxy_requests_in_flight`, `oauth2_proxy_response_duration_seconds` | needs `--metrics-address`, which is set |
+
+Two traps here, both of which produce silence rather than errors:
+
+- **`http_requests_total` is a generic name** shared with other exporters.
+  Always scope it: `http_requests_total{namespace="dex", …}`.
+- **`oauth2_proxy_requests_total` carries only a `code` label** — nothing says
+  which tier served the request. The ServiceMonitor promotes the Service's
+  `app.kubernetes.io/instance` via `targetLabels`, so queries can
+  `sum by (app_kubernetes_io_instance)` to split admin from family. Without
+  that the two tiers are indistinguishable.
+
+And the cluster-wide one: **a ServiceMonitor without `release: prometheus` is
+never selected** and collects nothing, silently — as is one whose selector
+matches a Service with no labels. Both Services here had no labels at all until
+2026-09-23. After adding a monitor, always confirm the target is actually up:
+
+```bash
+kubectl -n prometheus exec prometheus-prometheus-kube-prometheus-prometheus-0 -c prometheus -- \
+  wget -qO- 'http://localhost:9090/api/v1/targets?state=active' \
+  | jq -r '.data.activeTargets[] | select(.labels.namespace|test("dex|oauth2-proxy")) | "\(.labels.namespace)/\(.labels.service) \(.health)"'
+```
+
 ## History
 
 authentik ran here until 2026-09. Its entire configured state was one

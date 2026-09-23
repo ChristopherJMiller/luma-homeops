@@ -22,7 +22,7 @@ data:
           }
         ]
       },
-      "description": "Application-specific metrics for ArgoCD, Authentik, and Media services",
+      "description": "Application-specific metrics for Argo CD, the auth stack (Dex + oauth2-proxy), and media services",
       "editable": true,
       "gnetId": null,
       "graphTooltip": 1,
@@ -119,7 +119,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -203,7 +205,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -328,7 +332,10 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean", "lastNotNull"],
+              "calcs": [
+                "mean",
+                "lastNotNull"
+              ],
               "displayMode": "table",
               "placement": "bottom"
             }
@@ -433,7 +440,10 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "table",
               "placement": "bottom"
             }
@@ -515,7 +525,10 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "table",
               "placement": "bottom"
             }
@@ -548,7 +561,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Current active user sessions",
+          "description": "Completed sign-ins in 24h. Dex /token is the code exchange, so this counts finished logins rather than attempts.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -582,7 +595,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -591,16 +606,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "authentik_core_users_active_total OR on() vector(0)",
-              "refId": "A"
+              "expr": "sum(increase(http_requests_total{namespace=\"dex\",handler=\"/token\",code=\"200\"}[24h])) OR on() vector(0)",
+              "refId": "A",
+              "legendFormat": "sign-ins"
             }
           ],
-          "title": "Active User Sessions",
+          "title": "Sign-ins (24h)",
           "type": "stat"
         },
         {
           "datasource": "Prometheus",
-          "description": "Authentication success and failure rates",
+          "description": "Authorization requests started (/auth) vs completed (/token). A widening gap means people are bouncing off the upstream IdP.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -691,7 +707,10 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean", "lastNotNull"],
+              "calcs": [
+                "mean",
+                "lastNotNull"
+              ],
               "displayMode": "table",
               "placement": "bottom"
             }
@@ -699,14 +718,19 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(authentik_flows_execution_total{result=\"success\"}[5m]) OR on() vector(0)",
-              "legendFormat": "Successful",
-              "refId": "A"
+              "expr": "sum(rate(http_requests_total{namespace=\"dex\",handler=\"/auth\"}[5m])) OR on() vector(0)",
+              "refId": "A",
+              "legendFormat": "Started (/auth)"
             },
             {
-              "expr": "rate(authentik_flows_execution_total{result=\"failure\"}[5m]) OR on() vector(0)",
-              "legendFormat": "Failed",
-              "refId": "B"
+              "expr": "sum(rate(http_requests_total{namespace=\"dex\",handler=\"/token\",code=\"200\"}[5m])) OR on() vector(0)",
+              "refId": "B",
+              "legendFormat": "Completed (/token)"
+            },
+            {
+              "expr": "sum(rate(http_requests_total{namespace=\"dex\",code=~\"4..|5..\"}[5m])) OR on() vector(0)",
+              "refId": "C",
+              "legendFormat": "Errors"
             }
           ],
           "title": "Authentication Rate",
@@ -714,7 +738,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Top sources of failed login attempts",
+          "description": "Dex 4xx/5xx by endpoint. Dex exposes no client_ip label, so this groups by handler and code instead.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -759,13 +783,14 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "topk(10, sum by (client_ip) (increase(authentik_flows_execution_total{result=\"failure\"}[1h]))) OR on() vector(0)",
+              "expr": "topk(10, sum by (handler, code) (increase(http_requests_total{namespace=\"dex\",code=~\"4..|5..\"}[1h]))) OR on() vector(0)",
+              "refId": "A",
+              "legendFormat": "{{handler}} {{code}}",
               "format": "table",
-              "instant": true,
-              "refId": "A"
+              "instant": true
             }
           ],
-          "title": "Failed Login Sources",
+          "title": "Auth Errors by Endpoint (1h)",
           "transformations": [
             {
               "id": "organize",
@@ -785,7 +810,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Health status of Authentik outposts",
+          "description": "Scrape targets up across the auth stack: Dex plus both oauth2-proxy tiers",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -835,7 +860,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -844,17 +871,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "up{job=~\".*outpost.*\"} OR on() vector(0)",
-              "legendFormat": "{{job}}",
-              "refId": "A"
+              "expr": "sum(up{namespace=~\"dex|oauth2-proxy\"}) OR on() vector(0)",
+              "refId": "A",
+              "legendFormat": "targets up"
             }
           ],
-          "title": "Outpost Health",
+          "title": "Auth Stack Up",
           "type": "stat"
         },
         {
           "datasource": "Prometheus",
-          "description": "Active LDAP and SAML providers",
+          "description": "Forward-auth request rate per trust tier. Two tiers exist so admin hosts stay restricted to Chris; this makes the split visible.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -887,7 +914,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "showThresholdLabels": false,
@@ -897,18 +926,13 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "authentik_providers_saml_active OR on() vector(0)",
-              "legendFormat": "SAML",
-              "refId": "A"
-            },
-            {
-              "expr": "authentik_providers_ldap_active OR on() vector(0)",
-              "legendFormat": "LDAP",
-              "refId": "B"
+              "expr": "sum by (app_kubernetes_io_instance) (rate(oauth2_proxy_requests_total{namespace=\"oauth2-proxy\"}[5m])) OR on() vector(0)",
+              "refId": "A",
+              "legendFormat": "{{app_kubernetes_io_instance}}"
             }
           ],
-          "title": "LDAP/SAML Provider Status",
-          "type": "gauge"
+          "title": "Forward-Auth Requests by Tier",
+          "type": "timeseries"
         },
         {
           "datasource": "Prometheus",
@@ -953,7 +977,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -1008,7 +1034,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -1085,7 +1113,10 @@ data:
               "mode": "single"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "list",
               "placement": "bottom"
             }
@@ -1144,7 +1175,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -1389,7 +1422,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "showUnfilled": true
@@ -1409,14 +1444,32 @@ data:
       "refresh": "30s",
       "schemaVersion": 27,
       "style": "dark",
-      "tags": ["homelab", "applications", "argocd", "authentik", "media"],
+      "tags": [
+        "homelab",
+        "applications",
+        "argocd",
+        "auth",
+        "media"
+      ],
       "templating": {
         "list": [
           {
             "current": {
               "selected": true,
-              "text": ["argo-cd", "authentik", "media"],
-              "value": ["argo-cd", "authentik", "media"]
+              "text": [
+                "argo-cd",
+                "dex",
+                "oauth2-proxy",
+                "media",
+                "immich"
+              ],
+              "value": [
+                "argo-cd",
+                "dex",
+                "oauth2-proxy",
+                "media",
+                "immich"
+              ]
             },
             "datasource": "Prometheus",
             "definition": "label_values(kube_pod_info, namespace)",
@@ -1431,7 +1484,7 @@ data:
               "refId": "Prometheus-namespace-Variable-Query"
             },
             "refresh": 1,
-            "regex": "/(argo-cd|authentik|media)/",
+            "regex": "/(argo-cd|dex|oauth2-proxy|media|immich)/",
             "skipUrlSync": false,
             "sort": 1,
             "tagValuesQuery": "",
