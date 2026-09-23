@@ -169,3 +169,30 @@ Changing any of it: edit the secret, `rm cluster/immich/config.yaml`, re-run
 `user` key only holds `deleteDelay`, and libraries are database rows. Creating
 the `family` account and pointing its external library at `/family` stays a
 one-time step in the UI (or via the API).
+
+## How the accounts were bootstrapped
+
+Users and libraries cannot be declared in the config file, so they were created
+once through the API rather than by clicking. Recorded here because the
+*ownership* decision is permanent and worth being able to audit.
+
+```
+POST /api/auth/admin-sign-up   email=cmiller548@gmail.com     -> admin
+POST /api/admin/users          email=family@chrismiller.xyz   -> Family Archive
+POST /api/libraries            ownerId=<family>  importPaths=["/family"]
+POST /api/libraries/<id>/validate                             -> isValid: true
+```
+
+**The admin account is deliberately keyed to the Google address.** Immich links
+an OIDC login to an existing account by email, so signing in through Dex with
+`cmiller548@gmail.com` lands on the admin account rather than auto-registering
+a second, non-admin one. Creating the admin with any other address would have
+produced exactly that split-brain.
+
+Passwords for both accounts are in `cluster/immich/secrets.secret.yaml`
+(git-crypt, consumed by nothing). They matter because `passwordLogin` stays
+enabled as a way in if Dex is ever down.
+
+`immich_role` — the OIDC claim Immich can read to grant admin — is **not**
+usable here: Dex has no way to inject a static custom claim per user. Email
+matching is the mechanism that works.
