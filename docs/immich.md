@@ -266,6 +266,41 @@ creation is gated above, not here. It earns its place twice:
 
 Bootstrap passwords for both accounts are in `accounts.secret.yaml`.
 
+## Metrics
+
+`immich.metrics.enabled: true` in the chart values sets
+`IMMICH_TELEMETRY_INCLUDE=all` and exposes `metrics-api:8081` (API server:
+HTTP request counts/durations, asset and job gauges) and `metrics-ms:8082`
+(microservices worker: queue depths and job timings — this is the one that
+tells you whether the SMR throttle is keeping up).
+
+**The chart's own ServiceMonitor collects nothing.** This Prometheus selects
+on `serviceMonitorSelector.matchLabels.release=prometheus`, the chart creates
+its ServiceMonitor without that label, and there is no values knob to add one
+— so it is never selected, and there is no error anywhere to tell you. Immich
+ran for a day with telemetry on and zero `immich_*` series in Prometheus.
+`cluster/immich/servicemonitor.yaml` ships a correctly labelled one; the
+chart's inert copy stays, because turning `metrics.enabled` off would also
+remove the env var and the Service's metrics ports.
+
+Any new ServiceMonitor in this repo needs `release: prometheus`. To audit:
+
+```bash
+kubectl get servicemonitors -A -o json | jq -r \
+  '.items[] | "\(.metadata.namespace)/\(.metadata.name)  release=\((.metadata.labels // {})["release"] // "MISSING")"'
+```
+
+Ceph metrics are unaffected by this — ceph-mgr is scraped by pod annotation
+via the `kubernetes-pods` job, not by its (also unlabelled) ServiceMonitor.
+For storage behaviour, query the pool counters rather than per-PVC stats;
+`kubelet_volume_stats_*` gives capacity, not IOPS:
+
+```promql
+sum by (pool_id) (rate(ceph_pool_rd[5m]))    # read IOPS   (3 = fs-pool-replicated)
+sum by (pool_id) (rate(ceph_pool_wr[5m]))    # write IOPS  (1 = block-pool)
+ceph_osd_commit_latency_ms                   # the SMR pain signal
+```
+
 ## Sharing the archive
 
 Albums, album membership and sharing are database state — the config file
