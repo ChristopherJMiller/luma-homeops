@@ -81,7 +81,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {
@@ -118,7 +120,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Active connections by cluster",
+          "description": "pg_stat_database carries no cluster_name label -- the old query grouped by it and collapsed to one unlabelled series. Each Zalando cluster lives in its own namespace.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -159,7 +161,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "showUnfilled": true
@@ -167,9 +171,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum by (cluster_name) (pg_stat_database_numbackends{datname!~\"template.*|postgres\"}) OR count by (namespace) (up{job=~\".*postgres.*\"}) OR on() vector(0)",
-              "legendFormat": "{{datname}}",
-              "refId": "A"
+              "expr": "sum by (namespace) (pg_stat_database_numbackends{datname!~\"template.*|postgres\"})",
+              "refId": "A",
+              "legendFormat": "{{namespace}}"
             }
           ],
           "title": "Active Connections by Cluster",
@@ -240,7 +244,10 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "table",
               "placement": "bottom",
               "fontSize": "12px"
@@ -269,7 +276,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Queries per second by cluster",
+          "description": "Commits plus rollbacks, grouped by namespace because pg_stat_database has no cluster_name label.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -337,17 +344,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum by (cluster_name) (rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m]))",
-              "legendFormat": "{{datname}}",
-              "refId": "A"
+              "expr": "sum by (namespace) (rate(pg_stat_database_xact_commit[5m]) + rate(pg_stat_database_xact_rollback[5m]))",
+              "refId": "A",
+              "legendFormat": "{{namespace}}"
             }
           ],
-          "title": "Queries Per Second",
+          "title": "Transactions Per Second",
           "type": "timeseries"
         },
         {
           "datasource": "Prometheus",
-          "description": "Cache hit ratio per cluster",
+          "description": "Fallback removed: it ended in OR on() vector(95), so a collection failure would have rendered a healthy-looking 95 percent.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -387,7 +394,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "showThresholdLabels": false,
@@ -397,9 +406,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "avg(pg_stat_database_blks_hit / (pg_stat_database_blks_hit + pg_stat_database_blks_read + 1) * 100) OR on() vector(95)",
-              "legendFormat": "{{datname}}",
-              "refId": "A"
+              "expr": "avg(pg_stat_database_blks_hit / (pg_stat_database_blks_hit + pg_stat_database_blks_read + 1) * 100)",
+              "refId": "A",
+              "legendFormat": "hit ratio"
             }
           ],
           "title": "Cache Hit Ratio",
@@ -407,7 +416,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Maximum replication lag across all replicas",
+          "description": "postgres_exporter emits pg_replication_lag_seconds; the old query used pg_replication_lag, which does not exist.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -448,7 +457,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -457,8 +468,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "max(pg_replication_lag) OR max(pg_stat_replication_pg_wal_lsn_diff) OR on() vector(0)",
-              "refId": "A"
+              "expr": "max(pg_replication_lag_seconds)",
+              "refId": "A",
+              "legendFormat": "lag"
             }
           ],
           "title": "Replication Lag",
@@ -544,7 +556,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Top 10 slow queries",
+          "description": "pg_stat_statements is not exported here, so pg_stat_statements_mean_time_seconds was dead. Longest open transaction per database is the available signal for something stuck.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -594,13 +606,14 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "topk(10, pg_stat_statements_mean_time_seconds{queryid!=\"\"})",
+              "expr": "topk(10, max by (namespace, datname) (pg_stat_activity_max_tx_duration))",
+              "refId": "A",
+              "legendFormat": "{{namespace}}/{{datname}}",
               "format": "table",
-              "instant": true,
-              "refId": "A"
+              "instant": true
             }
           ],
-          "title": "Slow Queries",
+          "title": "Longest Running Transactions",
           "transformations": [
             {
               "id": "organize",
@@ -622,7 +635,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Redis instance health status",
+          "description": "Immich's job queue. Scraped by redis_exporter (cluster/immich/valkey-exporter.yaml) since 2026-09-23; before that nothing scraped any Redis here and this panel showed a hardcoded zero.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -672,7 +685,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {
@@ -684,17 +699,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "up{job=~\".*redis.*\"} OR redis_up{} OR on() vector(0)",
-              "legendFormat": "{{instance}}",
-              "refId": "A"
+              "expr": "redis_up",
+              "refId": "A",
+              "legendFormat": "{{namespace}}"
             }
           ],
-          "title": "Redis Instance Health",
+          "title": "Valkey Health",
           "type": "stat"
         },
         {
           "datasource": "Prometheus",
-          "description": "Redis memory usage percentage",
+          "description": "Was a Redis query whose OR on() vector(50) fallback invented a flat 50 percent. Nothing scrapes Redis on this cluster, so this tracks the Postgres pods that are actually monitored.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -735,7 +750,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "showUnfilled": true
@@ -743,17 +760,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(redis_memory_used_bytes / redis_memory_max_bytes * 100) OR (container_memory_working_set_bytes{pod=~\".*redis.*\"} / container_spec_memory_limit_bytes{pod=~\".*redis.*\"} * 100) OR on() vector(50)",
-              "legendFormat": "{{instance}}",
-              "refId": "A"
+              "expr": "sum by (pod) (container_memory_working_set_bytes{pod=~\"acid-.*\"}) / sum by (pod) (kube_pod_container_resource_limits{pod=~\"acid-.*\",resource=\"memory\"}) * 100",
+              "refId": "A",
+              "legendFormat": "{{pod}}"
             }
           ],
-          "title": "Memory Usage",
+          "title": "Postgres Memory vs Limit",
           "type": "bargauge"
         },
         {
           "datasource": "Prometheus",
-          "description": "Redis cache hit rate",
+          "description": "The old query ended in OR on() vector(95), which invented a flat 95 percent whenever the metric was absent -- which was always.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -793,7 +810,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "showThresholdLabels": false,
@@ -806,12 +825,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) * 100) OR on() vector(95)",
-              "legendFormat": "{{instance}}",
-              "refId": "A"
+              "expr": "rate(redis_keyspace_hits_total[5m]) / (rate(redis_keyspace_hits_total[5m]) + rate(redis_keyspace_misses_total[5m])) * 100",
+              "refId": "A",
+              "legendFormat": "hit rate"
             }
           ],
-          "title": "Cache Hit Rate",
+          "title": "Valkey Cache Hit Rate",
           "type": "gauge"
         },
         {
@@ -885,16 +904,16 @@ data:
           "targets": [
             {
               "expr": "rate(redis_commands_processed_total[5m])",
-              "legendFormat": "{{instance}}",
-              "refId": "A"
+              "refId": "A",
+              "legendFormat": "ops/s"
             }
           ],
-          "title": "Operations Per Second",
+          "title": "Valkey Operations Per Second",
           "type": "timeseries"
         },
         {
           "datasource": "Prometheus",
-          "description": "Redis operation latency distribution",
+          "description": "Completes the Valkey section. Replaces a Redis latency heatmap whose histogram was never exported; rising memory here with non-zero evictions on panel 15 means Immich job state is being dropped.",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -932,7 +951,7 @@ data:
               "color": "rgba(255,0,255,0.7)"
             },
             "filterValues": {
-              "le": 1e-9
+              "le": 1E-9
             },
             "legend": {
               "show": true
@@ -953,13 +972,13 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum(rate(redis_commands_duration_seconds_bucket[5m])) by (le)",
-              "format": "heatmap",
-              "refId": "A"
+              "expr": "redis_memory_used_bytes",
+              "refId": "A",
+              "legendFormat": "used"
             }
           ],
-          "title": "Redis Operation Latency",
-          "type": "heatmap"
+          "title": "Valkey Memory Used",
+          "type": "timeseries"
         },
         {
           "datasource": "Prometheus",
@@ -1031,17 +1050,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "redis_connected_clients OR on() vector(0)",
-              "legendFormat": "{{instance}}",
-              "refId": "A"
+              "expr": "redis_connected_clients",
+              "refId": "A",
+              "legendFormat": "clients"
             }
           ],
-          "title": "Connected Clients",
+          "title": "Valkey Connected Clients",
           "type": "timeseries"
         },
         {
           "datasource": "Prometheus",
-          "description": "Keys evicted in last hour",
+          "description": "Non-zero means Valkey is dropping data under memory pressure. For Immich that is queued jobs disappearing, so this should stay at zero.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1078,7 +1097,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {
@@ -1090,12 +1111,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "increase(redis_evicted_keys_total[1h]) OR on() vector(0)",
-              "legendFormat": "{{instance}}",
-              "refId": "A"
+              "expr": "increase(redis_evicted_keys_total[1h])",
+              "refId": "A",
+              "legendFormat": "evicted/1h"
             }
           ],
-          "title": "Evicted Keys",
+          "title": "Valkey Evicted Keys",
           "type": "stat"
         },
         {
@@ -1168,17 +1189,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(redis_net_input_bytes_total[5m]) OR on() vector(0)",
-              "legendFormat": "{{instance}} Input",
-              "refId": "A"
+              "expr": "rate(redis_net_input_bytes_total[5m])",
+              "refId": "A",
+              "legendFormat": "in"
             },
             {
-              "expr": "rate(redis_net_output_bytes_total[5m]) OR on() vector(0)",
-              "legendFormat": "{{instance}} Output",
-              "refId": "B"
+              "expr": "rate(redis_net_output_bytes_total[5m])",
+              "refId": "B",
+              "legendFormat": "out"
             }
           ],
-          "title": "Network I/O",
+          "title": "Valkey Network I/O",
           "type": "timeseries"
         },
         {
@@ -1327,7 +1348,10 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "table",
               "placement": "bottom"
             }
@@ -1350,7 +1374,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "IOPS by volume",
+          "description": "kubelet exposes volume capacity and inodes, never read/write ops, so kubelet_volume_stats_read_ops_total and _write_ops_total do not exist and this panel was permanently empty. Ceph pool counters are where per-volume-class IO actually lives: block-pool is RBD, fs-pool-replicated is CephFS.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1418,17 +1442,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum by (persistentvolumeclaim) (rate(kubelet_volume_stats_read_ops_total{namespace!~\"kube.*\"}[5m]))",
-              "legendFormat": "{{persistentvolumeclaim}} Read",
-              "refId": "A"
+              "expr": "sum by (name) (rate(ceph_pool_rd[5m]) * on(pool_id) group_left(name) ceph_pool_metadata)",
+              "refId": "A",
+              "legendFormat": "{{name}} read"
             },
             {
-              "expr": "sum by (persistentvolumeclaim) (rate(kubelet_volume_stats_write_ops_total{namespace!~\"kube.*\"}[5m]))",
-              "legendFormat": "{{persistentvolumeclaim}} Write",
-              "refId": "B"
+              "expr": "sum by (name) (rate(ceph_pool_wr[5m]) * on(pool_id) group_left(name) ceph_pool_metadata)",
+              "refId": "B",
+              "legendFormat": "{{name}} write"
             }
           ],
-          "title": "IOPS by Volume",
+          "title": "IOPS by Ceph Pool",
           "type": "timeseries"
         },
         {
@@ -1492,7 +1516,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {
@@ -1576,7 +1602,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Ceph cluster health and storage overview",
+          "description": "Fallbacks removed: ceph_health_status fell back to vector(2), which is HEALTH_ERR, and utilisation fell back to a flat 50 percent. Both metrics are live; the fallbacks could only fire when scraping breaks, and then they invent a cluster state.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1635,7 +1661,9 @@ data:
             "orientation": "horizontal",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {
@@ -1647,29 +1675,14 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "ceph_health_status OR on() vector(2)",
-              "legendFormat": "Cluster Health",
-              "refId": "A"
+              "expr": "ceph_health_status",
+              "refId": "A",
+              "legendFormat": "health"
             },
             {
-              "expr": "count(ceph_osd_in == 1) OR on() vector(0)",
-              "legendFormat": "OSDs In",
-              "refId": "B"
-            },
-            {
-              "expr": "count(ceph_osd_up == 1) OR on() vector(0)",
-              "legendFormat": "OSDs Up",
-              "refId": "C"
-            },
-            {
-              "expr": "(ceph_cluster_total_used_bytes / ceph_cluster_total_bytes) * 100 OR on() vector(50)",
-              "legendFormat": "Storage Used %",
-              "refId": "D"
-            },
-            {
-              "expr": "ceph_pg_active + ceph_pg_clean OR on() vector(0)",
-              "legendFormat": "Active PGs",
-              "refId": "E"
+              "expr": "(ceph_cluster_total_used_bytes / ceph_cluster_total_bytes) * 100",
+              "refId": "B",
+              "legendFormat": "used %"
             }
           ],
           "title": "Ceph Cluster Overview",
@@ -1762,7 +1775,10 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "table",
               "placement": "bottom"
             }
@@ -1797,7 +1813,15 @@ data:
       "refresh": "30s",
       "schemaVersion": 27,
       "style": "dark",
-      "tags": ["homelab", "database", "postgresql", "redis", "ceph", "storage", "latency"],
+      "tags": [
+        "homelab",
+        "database",
+        "postgresql",
+        "redis",
+        "ceph",
+        "storage",
+        "latency"
+      ],
       "templating": {
         "list": [
           {

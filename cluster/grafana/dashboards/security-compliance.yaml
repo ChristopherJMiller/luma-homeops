@@ -408,7 +408,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Let's Encrypt API rate limit usage",
+          "description": "cert-manager exports certmanager_* (no underscore after cert); the old query used cert_manager_http_acme_client_request_total, which does not exist.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -460,9 +460,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(rate(cert_manager_http_acme_client_request_total[1h]) / 20) * 100",
-              "legendFormat": "Rate Limit Usage",
-              "refId": "A"
+              "expr": "(sum(rate(certmanager_http_acme_client_request_count[1h])) / 20) * 100",
+              "refId": "A",
+              "legendFormat": "Rate limit usage"
             }
           ],
           "title": "Let's Encrypt Rate Limits",
@@ -670,7 +670,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Top IPs with failed authentication attempts",
+          "description": "Was nginx_ingress_controller_requests grouped by remote_addr. ingress-nginx was decommissioned 2026-09-20, and the query was malformed anyway -- increase(...) by (...) is not valid PromQL. Traefik exports no client-IP label, so this groups by entrypoint and code.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -719,13 +719,14 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "topk(10, increase(nginx_ingress_controller_requests{status=~\"4..\"}[1h]) by (remote_addr)) or vector(0)",
+              "expr": "topk(10, sum by (entrypoint, code) (increase(traefik_entrypoint_requests_total{code=~\"4..\"}[1h])))",
+              "refId": "A",
+              "legendFormat": "{{entrypoint}} {{code}}",
               "format": "table",
-              "instant": true,
-              "refId": "A"
+              "instant": true
             }
           ],
-          "title": "Failed Auth Source IPs",
+          "title": "Client Errors by Entrypoint (1h)",
           "transformations": [
             {
               "id": "organize",
@@ -817,7 +818,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Pods with elevated security contexts",
+          "description": "kube-state-metrics does not emit kube_pod_container_security_context_privileged, _run_as_root or kube_pod_spec_host_network, so the old panel was permanently empty. trivy-operator performs the equivalent checks and is already running.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -865,27 +866,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "count(kube_pod_container_security_context_privileged == true) or vector(0)",
-              "legendFormat": "Privileged Pods",
-              "refId": "A"
-            },
-            {
-              "expr": "count(kube_pod_container_security_context_run_as_root == true) or vector(0)",
-              "legendFormat": "Root Containers",
-              "refId": "B"
-            },
-            {
-              "expr": "count(kube_pod_spec_host_network == true) or vector(0)",
-              "legendFormat": "Host Network",
-              "refId": "C"
+              "expr": "sum by (severity) (trivy_resource_configaudits)",
+              "refId": "A",
+              "legendFormat": "{{severity}}"
             }
           ],
-          "title": "Privileged Pod Security",
+          "title": "Config Audit Findings by Severity",
           "type": "stat"
         },
         {
           "datasource": "Prometheus",
-          "description": "Percentage of pods covered by network policies",
+          "description": "kube_networkpolicy_labels does not exist; kube_networkpolicy_created does. This is the share of namespaces that have any NetworkPolicy at all.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -937,9 +928,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(count(kube_pod_info{namespace!~\"kube-.*\"} and on(namespace,pod) kube_networkpolicy_labels) / count(kube_pod_info{namespace!~\"kube-.*\"})) * 100",
-              "legendFormat": "Coverage",
-              "refId": "A"
+              "expr": "count(count by (namespace) (kube_networkpolicy_created)) / count(count by (namespace) (kube_pod_info{namespace!~\"kube-.*\"})) * 100",
+              "refId": "A",
+              "legendFormat": "Coverage"
             }
           ],
           "title": "Network Policy Coverage",
@@ -947,7 +938,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Pod distribution by security standards",
+          "description": "Same substitution as panel 9: the Pod Security Standards queries relied on kube-state-metrics security-context series that do not exist. Critical and High trivy config-audit findings per namespace is the equivalent that is actually collected.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1040,22 +1031,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "(count(kube_pod_container_security_context_privileged != true and on(namespace,pod) kube_pod_container_security_context_run_as_root != true) / count(kube_pod_info)) * 100",
-              "legendFormat": "Restricted",
-              "refId": "A"
-            },
-            {
-              "expr": "(count(kube_pod_container_security_context_privileged != true and on(namespace,pod) kube_pod_container_security_context_run_as_root == true) / count(kube_pod_info)) * 100",
-              "legendFormat": "Baseline",
-              "refId": "B"
-            },
-            {
-              "expr": "(count(kube_pod_container_security_context_privileged == true) / count(kube_pod_info)) * 100",
-              "legendFormat": "Privileged",
-              "refId": "C"
+              "expr": "topk(10, sum by (namespace) (trivy_resource_configaudits{severity=~\"Critical|High\"}))",
+              "refId": "A",
+              "legendFormat": "{{namespace}}"
             }
           ],
-          "title": "Pod Security Standards Compliance",
+          "title": "Worst Namespaces by Config Findings",
           "type": "bargauge"
         },
         {
@@ -1427,7 +1408,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "SSL/TLS configuration by ingress",
+          "description": "Was nginx_ingress_controller_ssl_expire_time_seconds. Certificates are cert-manager's now, and Traefik serves one wildcard from the default TLSStore.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1466,13 +1447,14 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "nginx_ingress_controller_ssl_expire_time_seconds",
+              "expr": "(certmanager_certificate_expiration_timestamp_seconds - time()) / 86400",
+              "refId": "A",
+              "legendFormat": "{{name}}",
               "format": "table",
-              "instant": true,
-              "refId": "A"
+              "instant": true
             }
           ],
-          "title": "SSL/TLS Configuration",
+          "title": "Certificate Expiry",
           "transformations": [
             {
               "id": "organize",
@@ -1511,7 +1493,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Unusual traffic patterns and potential attacks",
+          "description": "Retargeted from ingress-nginx to Traefik, which replaced it on 2026-09-20.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1582,19 +1564,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(nginx_ingress_controller_requests{status=\"404\"}[5m])",
-              "legendFormat": "404 Not Found",
-              "refId": "A"
-            },
-            {
-              "expr": "rate(nginx_ingress_controller_requests{status=\"403\"}[5m])",
-              "legendFormat": "403 Forbidden",
-              "refId": "B"
-            },
-            {
-              "expr": "rate(nginx_ingress_controller_requests{status=\"429\"}[5m])",
-              "legendFormat": "429 Rate Limited",
-              "refId": "C"
+              "expr": "sum by (code) (rate(traefik_entrypoint_requests_total{code=~\"404|403|429\"}[5m]))",
+              "refId": "A",
+              "legendFormat": "{{code}}"
             }
           ],
           "title": "Unusual Traffic Patterns",
@@ -1602,7 +1574,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Overall security posture score",
+          "description": "The old expression had an unbalanced parenthesis and so never parsed, then fell back to a fabricated score of 85. Weighted: 40 percent image vulnerabilities, 30 percent exposed secrets, 30 percent config audits, each the share that is NOT Critical.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1654,9 +1626,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "((1 - (sum(trivy_image_vulnerabilities{severity=\"Critical\"}) / (sum(trivy_image_vulnerabilities) + 1))) * 40) + ((1 - (sum(trivy_image_exposedsecrets{severity=\"Critical\"}) / (sum(trivy_image_exposedsecrets) + 1))) * 30) + ((1 - (sum(trivy_resource_configaudits{severity=\"Critical\"}) / (sum(trivy_resource_configaudits) + 1))) * 30)) or vector(85)",
-              "legendFormat": "Security Score",
-              "refId": "A"
+              "expr": "(1 - (sum(trivy_image_vulnerabilities{severity=\"Critical\"}) / (sum(trivy_image_vulnerabilities) + 1))) * 40 + (1 - (sum(trivy_image_exposedsecrets{severity=\"Critical\"}) / (sum(trivy_image_exposedsecrets) + 1))) * 30 + (1 - (sum(trivy_resource_configaudits{severity=\"Critical\"}) / (sum(trivy_resource_configaudits) + 1))) * 30",
+              "refId": "A",
+              "legendFormat": "Security score"
             }
           ],
           "title": "Trivy Security Score",

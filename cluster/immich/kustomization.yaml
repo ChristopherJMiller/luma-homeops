@@ -15,3 +15,4 @@ resources:
   - extensions-job.yaml
   - backup-cronjob.yaml
   - servicemonitor.yaml
+  - valkey-exporter.yaml
