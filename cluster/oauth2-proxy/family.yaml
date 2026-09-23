@@ -71,12 +71,16 @@ spec:
             - --code-challenge-method=S256
             # Skip oauth2-proxy's own chooser — it has one provider (Dex).
             # The Google-vs-Microsoft choice happens on Dex's page.
-            # oauth2-proxy defaults to approval_prompt=force, and Dex ignores its
-            # skipApprovalScreen whenever that parameter is present — which puts a
-            # "galaxy admin would like to: view your email" click in front of every
-            # login. Empty = do not send it. (It exists to force Google to reissue a
-            # refresh token; we do not rely on those — the session is the cookie.)
-            - --approval-prompt=
+            # Dex ignores its own skipApprovalScreen whenever the request carries
+            # approval_prompt=force, which oauth2-proxy sends by default — that put a
+            # "galaxy admin would like to: view your email address" click in front of
+            # EVERY login. Setting --prompt makes oauth2-proxy drop approval_prompt
+            # entirely (documented: "if present, approval-prompt is ignored"); an
+            # empty --approval-prompt= does NOT work, the default wins.
+            # select_account is the benign choice: Dex does not treat it as forcing
+            # approval, and letting people pick which Google/Microsoft account to use
+            # is what we want anyway.
+            - --prompt=select_account
             - --skip-provider-button=true
             - --upstream=static://202 # nothing is proxied through; only /oauth2/* matters
             - --silence-ping-logging=true
