@@ -94,7 +94,20 @@ spec:
                       memory: 512Mi
                     limits:
                       cpu: "2"
-                      memory: 2Gi
+                      # 6Gi, raised from 2Gi: the server was OOMKilled ten
+                      # times during the archive thumbnail pass, roughly every
+                      # 20 minutes. Two things stack up here — ffmpeg decoding
+                      # multi-GB DV captures for a video thumbnail, and page
+                      # cache from writing those thumbnails to CephFS, which
+                      # the kernel client charges to the cgroup with no
+                      # writeback throttling (the same mechanism that OOMed the
+                      # family archive writer during the original ingest).
+                      #
+                      # The LIMIT moves, not the request. Node middle is at
+                      # ~99% of memory *requests* while using ~42% of actual
+                      # memory, so raising the request risks unschedulability
+                      # while raising the limit costs nothing until used.
+                      memory: 6Gi
           persistence:
             # The family archive, mounted READ-ONLY as an external library.
             # Immich indexes it in place and never writes: /family stays the
