@@ -160,6 +160,22 @@ spec:
                   image:
                     repository: ghcr.io/immich-app/immich-machine-learning
                     tag: v3.2.2@sha256:60dfcf266a9ef3b7376f5678e8c980d4fb61db5fc48c078fe8a326ab1535d60d
+                  env:
+                    # Same trap as ffmpeg on the server, one layer down.
+                    # ONNX Runtime and OpenMP both autosize their thread pools
+                    # from nproc, which inside a container reports the HOST's
+                    # cores -- 16 here -- not the cgroup's 2. Measured 38
+                    # threads across the ML processes on a 2-CPU budget, which
+                    # buys context switching rather than throughput.
+                    #
+                    # OMP_NUM_THREADS is the one that actually bit: it is what
+                    # the 16-thread process was sizing from, and Immich's own
+                    # variables do not cover it.
+                    #
+                    # Keep all three in step with the cpu limit below.
+                    OMP_NUM_THREADS: "2"
+                    MACHINE_LEARNING_MODEL_INTER_OP_THREADS: "1"
+                    MACHINE_LEARNING_MODEL_INTRA_OP_THREADS: "2"
                   resources:
                     requests:
                       cpu: 100m
