@@ -48,6 +48,15 @@ Rules that are easy to get wrong:
 4. Add the host to `.claude/skills/edge-ingress/edge-snapshot.sh`.
 5. Gating is only half of it for an app with real users — see "How each app
    consumes the identity" below before assuming the app will know who arrived.
+6. **If the backend itself ever answers 401, do not put `errors` on that path.**
+   The `errors` middleware matches a status code and cannot tell the backend's
+   401 apart from oauth2-proxy's, so it rewrites both into a 302 to Dex. For a
+   document that is what you want; for an XHR it is fatal — a cross-origin
+   redirect is not something `fetch` can follow, and the browser reports it as a
+   confusing CORS error naming *Dex* rather than your app. Split the router:
+   `/api` gets `auth` only, documents get `errors,auth`. `cluster/media/ombi-ingress.yaml`
+   is the worked example. This weakens nothing — `auth` still gates the API, and a
+   flat 401 is the right answer to an unauthenticated XHR.
 
 ## Add or remove a person
 

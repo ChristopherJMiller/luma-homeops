@@ -1,10 +1,13 @@
 ---
 # Ombi — the family's media request front-end.
 #
-# Gated by the FAMILY tier, not admin: the whole point is that relatives reach
-# it. The two middlewares must stay in this order — `errors` first so it wraps
-# `auth` and can turn oauth2-proxy's 401 into a redirect to the sign-in page
-# (see cluster/oauth2-proxy/middlewares.yaml).
+# TWO Ingresses for one host, and the split is load-bearing. Read the second
+# one's comment before merging them back together.
+#
+# Document routes: gated by the FAMILY tier, not admin — the whole point is that
+# relatives reach it. The two middlewares must stay in this order: `errors` first
+# so it wraps `auth` and can turn oauth2-proxy's 401 into a redirect to the
+# sign-in page (see cluster/oauth2-proxy/middlewares.yaml).
 #
 # This is also the handoff for Ombi's login: oauth2-family-auth returns
 # X-Auth-Request-Email, and Ombi's header auth (EnableHeaderAuth, configured by
@@ -31,6 +34,51 @@ spec:
       http:
         paths:
           - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mm-ombi
+                port:
+                  number: 3579
+---
+# Ombi's API, gated but deliberately WITHOUT the `errors` middleware.
+#
+# Traefik's `errors` middleware matches on a status code and cannot tell who
+# produced it. Ombi's API answers 401 itself whenever the caller has no valid
+# Ombi JWT — that is not a failure, it is the contract its Angular client relies
+# on (UnauthorizedInterceptor catches 401, drops the stale token and routes to
+# the login page, which re-runs the header-auth exchange and recovers silently).
+#
+# With `errors` attached, that 401 never reached the browser: Traefik rewrote it
+# into a 302 to dex.chrismiller.xyz, and a cross-origin redirect is something an
+# XHR cannot follow. Firefox reported it as
+#   "CORS header 'Access-Control-Allow-Origin' missing. Status code: 200"
+# — the 200 being Dex's login page, which the browser fetched and then refused to
+# let the page read. The discover carousels came up empty with no useful error.
+# Symptom seen 2026-09-23; oauth2-proxy had allowed 78 of 79 requests, so the
+# redirects were never the gate refusing anyone.
+#
+# Dropping `errors` here weakens nothing: `auth` still runs, so an unauthenticated
+# stranger gets a flat 401 instead of a redirect — which is the correct answer to
+# an unauthenticated XHR anyway. Only the document routes above need to redirect,
+# because only a document can usefully land on a login page.
+#
+# The priority annotation makes this router outrank the `/` router explicitly
+# rather than relying on Traefik's longest-rule-wins default.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ombi-api
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: oauth2-proxy-oauth2-family-auth@kubernetescrd
+    traefik.ingress.kubernetes.io/router.priority: "100"
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: requests.chrismiller.xyz
+      http:
+        paths:
+          - path: /api
             pathType: Prefix
             backend:
               service:
