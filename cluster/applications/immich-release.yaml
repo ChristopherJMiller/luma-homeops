@@ -126,6 +126,14 @@ spec:
           enabled: true
           controllers:
             main:
+              # Recreate, NOT the chart's default RollingUpdate. The model
+              # cache below is a ReadWriteOnce RBD volume, and with one replica
+              # maxUnavailable rounds to 0 — so a rolling update keeps the old
+              # pod until the new one is Ready, while the new one sits in
+              # ContainerCreating with "Multi-Attach error" because the old one
+              # still holds the volume. That deadlocks forever, on every image
+              # bump. Recreate terminates first, then starts.
+              strategy: Recreate
               containers:
                 main:
                   image:
