@@ -26,7 +26,9 @@ metadata:
     # "updates to parameters are forbidden" and the app sticks OutOfSync.
     # Replace lets Argo delete+recreate instead. Safe: existing PVs keep
     # their own copy of the parameters, so bound volumes are unaffected.
-    argocd.argoproj.io/sync-options: Replace=true
+    # Replace alone still uses `kubectl replace`, which cannot change an
+    # immutable field; Force makes it delete+recreate.
+    argocd.argoproj.io/sync-options: Replace=true,Force=true
 provisioner: rook.cephfs.csi.ceph.com
 parameters:
   # clusterID is the namespace where the rook cluster is running
