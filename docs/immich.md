@@ -82,8 +82,11 @@ else. Authorization is Immich's own user list, not an allowlist.
 
 The client secret exists in two places that must stay equal:
 `cluster/dex/config.secret.yaml` and `cluster/immich/secrets.secret.yaml`.
-After changing either, re-seal **both** — and remember `sign.sh` skips any
-`*.secret.yaml` whose sealed sibling already exists, so `rm` the `.yaml` first.
+After changing either, re-seal **both**. Two sign.sh behaviours bite here:
+it SKIPS any `*.secret.yaml` whose sealed sibling already exists (so `rm` the
+`.yaml` first), and `kubeseal` reads only ONE document per file — a
+multi-document secret file seals to nothing, Argo prunes the secrets, and
+nothing fails until the next pod restart. One Secret per file, always.
 Dex also only reads its config at startup: `kubectl -n dex rollout restart
 deploy/dex`.
 
@@ -196,3 +199,41 @@ enabled as a way in if Dex is ever down.
 `immich_role` — the OIDC claim Immich can read to grant admin — is **not**
 usable here: Dex has no way to inject a static custom claim per user. Email
 matching is the mechanism that works.
+
+## Sign-in is OIDC only
+
+`passwordLogin` is **disabled**. Everyone signs in through Dex with the
+Google or Microsoft account they already have; there are no Immich passwords
+to manage or leak, and `autoRegister` means family members need no
+provisioning.
+
+**If Dex is down, nobody can sign in — including the admin.** That is not a
+lockout: the way back in is this repo.
+
+```bash
+# in cluster/immich/config.secret.yaml: passwordLogin.enabled: true
+rm cluster/immich/config.yaml && nix develop --command ./sign.sh
+git commit -a && git push
+kubectl -n immich rollout restart deploy/immich-server
+```
+
+Recovery therefore needs *cluster* access rather than *Immich* access, which
+is the right dependency to have. The bootstrap passwords in
+`secrets.secret.yaml` still work the moment it flips back.
+
+## Images
+
+Nothing here pulls from Docker Hub — its rate limits are a bad dependency for
+a cluster that pulls on every cold start.
+
+| Image | From |
+|---|---|
+| `immich-server`, `immich-machine-learning` | ghcr (upstream) |
+| `spilo-vchord` | ghcr (ours) |
+| `rclone`, `restic` | ghcr (first-party upstream images) |
+| `nginx`, `postgres` | `public.ecr.aws/docker/library/*` — ECR Public mirrors Docker Official Images, so it is a drop-in |
+
+All pinned by digest. The chart's default `image.tag` is overridden for both
+Immich components: chart 0.12.0 still ships app v2.6.3 while v3.2.2 is
+current, and waiting for a chart release is not a reason to run a year-old
+app. Re-check the VectorChord/pgvector ranges above when bumping.
