@@ -136,6 +136,15 @@ Ombi needs **three** Postgres databases (`ombi_main`, `ombi_settings`,
 migrating on its own connection — two sharing a database fight over
 `__EFMigrationsHistory`.
 
+**Ombi is slow to come up, and that is normal.** First boot took **104s** from
+container start to Ready here, because it migrates three EF Core contexts before
+it binds a port. A `startupProbe` covers that with a 300s budget (the same figure
+this image's own s6 supervisor allows), and while it is pending liveness and
+readiness do not run at all — so a slow migration cannot get the pod killed
+half-way through one. If you ever drop the startupProbe, give `livenessProbe` an
+`initialDelaySeconds` well past your migration time or first boot will
+restart-loop.
+
 **Postgres is Ombi's least-trodden path.** It exists in Ombi's source
 (`src/Ombi.Store/Context/Postgres/`, selected by `"Type": "Postgres"` in
 `/config/database.json`) but Ombi's own docs list only SQLite/MySQL/MariaDB. If
