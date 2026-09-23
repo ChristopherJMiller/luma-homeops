@@ -1,13 +1,14 @@
 # Edge authentication — trust tiers, and how to change who gets in
 
 Public hosts are gated by **oauth2-proxy**, one instance per *trust tier*,
-with identity from Google. There is no admin UI and no database: the
-configuration is this repo. Replaced authentik 2026-09 (see "History").
+with identity brokered by **Dex** from Google or Microsoft. There is no admin
+UI and no database: the configuration is this repo. Replaced authentik
+2026-09 (see "History").
 
 ```
-browser ──▶ Traefik ──▶ [errors, auth] middlewares ──▶ oauth2-proxy-<tier> ──▶ Google
-                                    │
-                              401 ──┴──▶ 302 to /oauth2/sign_in ──▶ Google ──▶ callback ──▶ cookie
+browser ─▶ Traefik ─▶ [errors, auth] ─▶ oauth2-proxy-<tier> ─▶ Dex ─┬─▶ Google
+                            │                                       └─▶ Microsoft
+                      401 ──┴──▶ 302 /oauth2/sign_in ──▶ … ──▶ callback ──▶ cookie
 ```
 
 | Tier | Instance | Public host | Cookie | Allowlist |
@@ -63,19 +64,26 @@ until it expires (168h). To evict immediately, rotate that tier's
 `cookie-secret-<tier>` in `google-oauth.secret.yaml`, which signs out everyone
 on that tier.
 
-Non-Gmail addresses work if they are Google identities (Workspace counts —
-`kmiller.org` is Workspace-managed). A plain Microsoft/Outlook address does
-not; see "Multi-provider" below.
+Any address works as long as its owner can sign in with **either** Google or
+Microsoft — Dex brokers both and the allowlist matches on the address, not on
+who issued it. Google Workspace domains count (`kmiller.org` is one);
+outlook/hotmail addresses go through the Microsoft connector.
+
+Google's consent screen is in Testing mode, so anyone signing in *with Google*
+must also be a test user there — see below. The Microsoft side has no such
+list.
 
 ## Google OAuth client
 
-One client (`galaxy-sso`) shared by both tiers, created by hand in the Google
-Cloud console — Google exposes no API for creating "Web application" OAuth
-clients, so this artifact cannot be Terraformed. Its redirect URIs:
+One client (`galaxy-sso`), created by hand in the Google Cloud console —
+Google exposes no API for creating "Web application" OAuth clients, so this
+artifact cannot be Terraformed (the Microsoft equivalent *is*: `azure/entra/`).
+**Dex is the client now**; the two `auth-*` URIs are leftovers from before the
+Dex cutover and can be removed once you are confident in it. Redirect URIs:
 
-- `https://auth-admin.chrismiller.xyz/oauth2/callback`
-- `https://auth-family.chrismiller.xyz/oauth2/callback`
-- `https://dex.chrismiller.xyz/callback` (for the multi-provider work)
+- `https://dex.chrismiller.xyz/callback` ← the one in use
+- `https://auth-admin.chrismiller.xyz/oauth2/callback` (legacy)
+- `https://auth-family.chrismiller.xyz/oauth2/callback` (legacy)
 
 The consent screen is in **Testing** mode, so only accounts listed as test
 users can complete a login — a second gate in front of the allowlist. Adding
@@ -84,19 +92,34 @@ someone means adding them in *both* places.
 Client id/secret and the two per-tier cookie secrets live in
 `cluster/oauth2-proxy/google-oauth.secret.yaml` (git-crypt → SealedSecret).
 
-## Multi-provider (planned)
+## Multi-provider: Dex
 
-oauth2-proxy supports exactly one provider per instance, so Microsoft/Outlook
-accounts cannot use the Google-backed instances. The fix is **Dex** brokering
-both, with oauth2-proxy switched from `--provider=google` to `--provider=oidc`
-pointing at Dex. Tiers, middlewares, allowlists, cookies and ingresses are
-unchanged by that swap — Dex passes the upstream email through, so the
-allowlists keep matching real addresses.
+oauth2-proxy speaks to exactly one provider, so it points at **Dex**, which
+brokers Google AND Microsoft. That is why Erin (hotmail) and Jeanne (gmail)
+both work with the same allowlist: Dex passes the upstream email through and
+the allowlist checks the address, not the issuer.
 
-Dex brings its own login page (a connector chooser), themeable via
-`frontend.issuer` / `logoURL` / `theme`, and stores state in Kubernetes CRDs —
-no extra database. The Entra app registration for the Microsoft side *is*
-Terraformable (`azuread_application`), unlike the Google client.
+```
+oauth2-proxy (tier) ──▶ Dex ──▶ Google
+                          └────▶ Microsoft (Entra, personal accounts allowed)
+```
+
+Dex holds no users and no passwords — it brokers only. Its login page is a
+connector chooser ("Log in with Google" / "Log in with Microsoft"), themeable
+via `frontend.issuer` / `logoURL` / `theme`. State lives in Kubernetes CRDs,
+so there is no database to run or back up.
+
+- Config: `cluster/dex/config.secret.yaml` (a Secret: it carries both upstream
+  client secrets and the per-tier static-client secrets).
+- **Dex reads its config only at startup.** After changing it:
+  `kubectl -n dex rollout restart deploy/dex`.
+- One Dex staticClient per oauth2-proxy tier, so a tier can be rotated alone.
+- The Microsoft app registration is terraform: `azure/entra/`
+  (`./tf.sh plan`). `sign_in_audience = AzureADandPersonalMicrosoftAccount`
+  plus access-token version 2 is what admits personal outlook/hotmail
+  accounts; the connector uses `tenant: common`. Access control remains the
+  oauth2-proxy allowlist, NOT the tenant — anyone with any Microsoft account
+  can reach Dex, and is then refused unless their address is allowlisted.
 
 ## Troubleshooting
 

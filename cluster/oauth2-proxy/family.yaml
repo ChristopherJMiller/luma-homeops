@@ -66,6 +66,9 @@ spec:
             - --authenticated-emails-file=/etc/oauth2-proxy/emails
             # Hand the upstream app the identity: X-Auth-Request-User/-Email.
             - --set-xauthrequest=true
+            # Dex advertises S256; without this oauth2-proxy logs a warning and
+            # skips PKCE entirely.
+            - --code-challenge-method=S256
             # Skip oauth2-proxy's own chooser — it has one provider (Dex).
             # The Google-vs-Microsoft choice happens on Dex's page.
             - --skip-provider-button=true
