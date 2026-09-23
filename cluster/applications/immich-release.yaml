@@ -107,7 +107,14 @@ spec:
                       # ~99% of memory *requests* while using ~42% of actual
                       # memory, so raising the request risks unschedulability
                       # while raising the limit costs nothing until used.
-                      memory: 6Gi
+                      #
+                      # 8Gi, with headroom on purpose: the real fix is
+                      # ffmpeg.threads: 2 in cluster/immich/config.secret.yaml
+                      # (ffmpeg was spawning ~16 decode threads for a 2-CPU
+                      # container, because it counts host cores). This limit is
+                      # the backstop for the CephFS page-cache half, which no
+                      # setting controls.
+                      memory: 8Gi
           persistence:
             # The family archive, mounted READ-ONLY as an external library.
             # Immich indexes it in place and never writes: /family stays the
