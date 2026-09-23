@@ -139,5 +139,6 @@ judge by slow ops rather than latency alone.
 | `chart "immich" version X not found` | the version in the chart's git main is not published; check `helm search repo immich/immich --versions` |
 | Server fails on vector extension | `CREATE EXTENSION vchord CASCADE` not run in the `immich` database, or `vchord` missing from `shared_preload_libraries` |
 | CephFS PVC stuck, "no mds is up" | `ms_mode=prefer-crc` is missing — see Storage above. Check `kubectl -n rook get cm ceph-csi-config -o jsonpath='{.data.config\.json}'`; if `cephFS.kernelMountOptions` is empty, restart `deploy/rook-ceph-operator` |
+| `pg_hba.conf rejects connection … no encryption` | Spilo requires TLS on network connections. `DB_SSL_MODE: require` — not `verify-*`, the cert is self-signed |
 | Mobile app cannot log in | someone added an oauth2-proxy middleware to the Ingress — it must have none |
 | Ceph slow ops during import | the library scan; pause it in Administration → Jobs |
