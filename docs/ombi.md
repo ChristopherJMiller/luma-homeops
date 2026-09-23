@@ -117,13 +117,42 @@ seeds Ombi's roles, and **header auth last**, because until that is on nobody is
 auto-provisioned — so a failure midway cannot strand a half-configured Ombi that
 is already minting family accounts.
 
-One input is still empty in `cluster/media/ombi-bootstrap.secret.yaml`, and the
-script skips its step rather than guessing:
+Both optional inputs in `cluster/media/ombi-bootstrap.secret.yaml` are now set; the
+script skips either step rather than guessing if you blank one:
 
 | Key | Get it from | Without it |
 |---|---|---|
 | `discord-webhook-url` | **set** — reusing alertmanager’s webhook (see Discord, above) | no notifications at all |
-| `plex-token` | an `X-Plex-Token` from any Plex web request | no "already in the library" badges; Ombi asks the *arrs instead |
+| `plex-token` | **set** — the running server’s own `PlexOnlineToken`, read from `/config/Preferences.xml` | no "already in the library" badges; Ombi asks the *arrs instead |
+
+### Getting a Plex token
+
+Plex has no notion of a scoped or per-application token — every method below
+hands you the same account-wide credential, so treat whatever you get as
+equivalent to the Plex account itself.
+
+1. **From the server, easiest** — it is already on disk, no browser needed:
+   ```sh
+   kubectl -n media exec deploy/mm-plex -c plex -- \
+     sh -c 'grep -o "PlexOnlineToken=\"[^\"]*\"" /config/Preferences.xml'
+   ```
+   This is where the current value came from.
+2. **From Plex Web** — open any library item, ⋯ → *Get Info* → *View XML*; the
+   token is the `X-Plex-Token=` parameter in the resulting URL.
+3. **From plex.tv** — `POST https://plex.tv/users/sign_in.json` with the account
+   credentials and a `X-Plex-Client-Identifier` header returns `authToken`. Needs
+   the 2FA code appended to the password if 2FA is on, which is why method 1 is
+   nicer.
+
+Verify one before storing it:
+```sh
+kubectl -n media exec deploy/mm-plex -c plex -- \
+  curl -s -o /dev/null -w '%{http_code}\n' \
+  "http://localhost:32400/library/sections?X-Plex-Token=<token>"   # want 200
+```
+
+To rotate it, unclaim the server (Plex → Settings → General) or change the Plex
+account password; either invalidates it, and Ombi then needs the new one here.
 
 To fill one in: edit the `.secret.yaml`, `./sign.sh`, commit, let Argo apply it,
 then re-run the script.
