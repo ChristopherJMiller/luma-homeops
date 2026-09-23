@@ -64,7 +64,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -123,7 +125,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -182,7 +186,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -242,7 +248,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -302,7 +310,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["min"],
+              "calcs": [
+                "min"
+              ],
               "fields": ""
             },
             "text": {},
@@ -362,7 +372,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -380,7 +392,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Request rate by ingress",
+          "description": "Retargeted from ingress-nginx to Traefik (ingress-nginx decommissioned 2026-09-20). Traefik labels the backend app exported_service; its own service label refers to Traefik itself.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -439,7 +451,9 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean"],
+              "calcs": [
+                "mean"
+              ],
               "displayMode": "table",
               "placement": "bottom"
             }
@@ -447,17 +461,17 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum by (ingress) (rate(nginx_ingress_controller_request_duration_seconds_count[5m]))",
-              "legendFormat": "{{ingress}}{{exported_namespace}}",
-              "refId": "A"
+              "expr": "sum by (exported_service) (rate(traefik_service_requests_total[5m]))",
+              "refId": "A",
+              "legendFormat": "{{exported_service}}"
             }
           ],
-          "title": "Request Rate by Ingress",
+          "title": "Request Rate by Service",
           "type": "timeseries"
         },
         {
           "datasource": "Prometheus",
-          "description": "Response status codes",
+          "description": "Retargeted from ingress-nginx to Traefik. Traefik uses code, not status.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -516,7 +530,9 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean"],
+              "calcs": [
+                "mean"
+              ],
               "displayMode": "table",
               "placement": "bottom"
             }
@@ -524,9 +540,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum by (status) (rate(nginx_ingress_controller_request_duration_seconds_count[5m]))",
-              "legendFormat": "{{status}}",
-              "refId": "A"
+              "expr": "sum by (code) (rate(traefik_entrypoint_requests_total[5m]))",
+              "refId": "A",
+              "legendFormat": "{{code}}"
             }
           ],
           "title": "Response Status Codes",
@@ -534,7 +550,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Latency percentiles",
+          "description": "Edge latency at the entrypoint, retargeted from ingress-nginx to Traefik.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -593,7 +609,10 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean", "max"],
+              "calcs": [
+                "mean",
+                "max"
+              ],
               "displayMode": "table",
               "placement": "bottom"
             }
@@ -601,24 +620,24 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "histogram_quantile(0.50, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le))",
-              "legendFormat": "P50",
-              "refId": "A"
+              "expr": "histogram_quantile(0.50, sum by (le) (rate(traefik_entrypoint_request_duration_seconds_bucket[5m])))",
+              "refId": "A",
+              "legendFormat": "p50"
             },
             {
-              "expr": "histogram_quantile(0.90, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le))",
-              "legendFormat": "P90",
-              "refId": "B"
+              "expr": "histogram_quantile(0.90, sum by (le) (rate(traefik_entrypoint_request_duration_seconds_bucket[5m])))",
+              "refId": "B",
+              "legendFormat": "p90"
             },
             {
-              "expr": "histogram_quantile(0.95, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le))",
-              "legendFormat": "P95",
-              "refId": "C"
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(traefik_entrypoint_request_duration_seconds_bucket[5m])))",
+              "refId": "C",
+              "legendFormat": "p95"
             },
             {
-              "expr": "histogram_quantile(0.99, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le))",
-              "legendFormat": "P99",
-              "refId": "D"
+              "expr": "histogram_quantile(0.99, sum by (le) (rate(traefik_entrypoint_request_duration_seconds_bucket[5m])))",
+              "refId": "D",
+              "legendFormat": "p99"
             }
           ],
           "title": "Latency Percentiles",
@@ -626,7 +645,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Upstream response time by service",
+          "description": "Time Traefik spends waiting on the backend, per app. Retargeted from ingress-nginx.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -677,13 +696,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum by (ingress, le) (rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])))",
-              "format": "table",
-              "instant": true,
-              "refId": "A"
+              "expr": "topk(10, histogram_quantile(0.95, sum by (exported_service, le) (rate(traefik_service_request_duration_seconds_bucket[5m]))))",
+              "refId": "A",
+              "legendFormat": "{{exported_service}}"
             }
           ],
-          "title": "Upstream Response Time (P95)",
+          "title": "Slowest Backends (P95)",
           "transformations": [
             {
               "id": "organize",
@@ -763,7 +781,9 @@ data:
               "mode": "multi"
             },
             "legend": {
-              "calcs": ["mean"],
+              "calcs": [
+                "mean"
+              ],
               "displayMode": "table",
               "placement": "bottom"
             }
@@ -821,7 +841,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "showThresholdLabels": false,
@@ -840,7 +862,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "External DNS sync status",
+          "description": "Was External DNS Status. external-dns was retired 2026-09-18 after it deleted every public CNAME on a routine minor bump, and it must not come back -- public DNS is two terraform wildcards now, so there is nothing to monitor. The equivalent question for the edge is whether Traefik reloaded its config cleanly and how long the wildcard certificate has left.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -877,7 +899,9 @@ data:
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
-              "calcs": ["lastNotNull"],
+              "calcs": [
+                "lastNotNull"
+              ],
               "fields": ""
             },
             "text": {},
@@ -886,22 +910,22 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum(rate(external_dns_source_errors_total[5m]))",
-              "legendFormat": "Errors",
-              "refId": "A"
+              "expr": "traefik_config_last_reload_success",
+              "refId": "A",
+              "legendFormat": "config reload ok"
             },
             {
-              "expr": "external_dns_registry_endpoints_total",
-              "legendFormat": "Endpoints",
-              "refId": "B"
+              "expr": "min(traefik_tls_certs_not_after - time()) / 86400",
+              "refId": "B",
+              "legendFormat": "cert days remaining"
             }
           ],
-          "title": "External DNS Status",
+          "title": "Edge Health",
           "type": "stat"
         },
         {
           "datasource": "Prometheus",
-          "description": "Service-to-service latency heatmap",
+          "description": "Retargeted from ingress-nginx to Traefik service metrics.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -947,13 +971,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum by (namespace, service, le) (rate(nginx_ingress_controller_request_duration_seconds_bucket[5m]))) * 1000",
-              "format": "table",
-              "instant": true,
-              "refId": "A"
+              "expr": "histogram_quantile(0.95, sum by (exported_service, le) (rate(traefik_service_request_duration_seconds_bucket[5m])))",
+              "refId": "A",
+              "legendFormat": "{{exported_service}}"
             }
           ],
-          "title": "Service Latency (P95)",
+          "title": "Backend Latency Spread (P95)",
           "transformations": [
             {
               "id": "organize",
@@ -977,7 +1000,12 @@ data:
       "refresh": "30s",
       "schemaVersion": 27,
       "style": "dark",
-      "tags": ["homelab", "network", "ingress", "nginx"],
+      "tags": [
+        "homelab",
+        "network",
+        "ingress",
+        "nginx"
+      ],
       "templating": {
         "list": [
           {
