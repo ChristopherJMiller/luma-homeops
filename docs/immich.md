@@ -51,10 +51,20 @@ Immich's own Postgres container, which we don't run. The SMR tuning
 |---|---|---|
 | `immich-uploads` | phone sync + everything derived from it | yes — nightly rclone mirror to `b2:galaxy-family/immich` |
 | `family-media` | the archive, mounted **read-only** at `/family` | already, by `family-backup` |
-| `immich-ml-cache` | downloaded CLIP/face models | no — regenerable |
+| `immich-ml-cache-fs` | downloaded CLIP/face models | no — regenerable |
 
-`immich-uploads` is CephFS RWX because the server and machine-learning pods
-both mount it.
+Both are CephFS **RWX**. For `immich-uploads` that is because the server and
+machine-learning pods both mount it. For the model cache it is because RWO
+made every update deadlock: with one replica `maxUnavailable` rounds to 0, so
+k8s held the old pod until the new one was Ready, while the new one sat
+indefinitely in `ContainerCreating` with a `Multi-Attach error` on the volume
+the old pod still had. Regenerable read-mostly caches should not be
+single-attach. It replaced `immich-ml-cache` (RWO on `rook-ceph-block`) —
+`accessModes` and `storageClassName` are immutable, so it had to be a new
+claim.
+
+There is no object-storage option for either: Immich requires a POSIX
+filesystem, and the ML container loads ONNX model files from a path.
 
 **Every CephFS mount here depends on `ms_mode=prefer-crc`** — the mons only
 speak msgr2 on :3300, and without it the kernel client fails with "no mds is
