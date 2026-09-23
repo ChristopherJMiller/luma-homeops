@@ -37,6 +37,12 @@
       "description": "Operators with upgrade/delete authority over cluster state: patch automerges, minor/major wait for a human (renovate-triage skill). rook-ceph sat 6 patches behind a CVE fix because this manager was off."
     },
     {
+      "matchManagers": ["dockerfile"],
+      "matchPackageNames": ["ghcr.io/zalando/spilo-16"],
+      "automerge": false,
+      "description": "images/spilo-vchord base. Bumping it means re-checking that VectorChord is still inside the range Immich accepts, and that Spilo has not changed its shared_preload_libraries set. Only acid-immich uses this image."
+    },
+    {
       "matchManagers": ["kubernetes"],
       "matchPackageNames": ["quay.io/oauth2-proxy/oauth2-proxy"],
       "automerge": false,

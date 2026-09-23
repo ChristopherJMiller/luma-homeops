@@ -1,0 +1,84 @@
+---
+name: spilo-vchord image
+
+# Spilo 16 + VectorChord for the Immich database (images/spilo-vchord).
+# Tags :sha-<short> (immutable, what acid-immich pins) and :latest.
+#
+# Only acid-immich uses this image — every other postgresql cluster stays on
+# stock Spilo, so a failure here is contained to Immich.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - images/spilo-vchord/**
+      - .github/workflows/spilo-vchord.yml
+  pull_request:
+    paths:
+      - images/spilo-vchord/**
+      - .github/workflows/spilo-vchord.yml
+  workflow_dispatch:
+
+concurrency:
+  group: spilo-vchord-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository_owner }}/spilo-vchord
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: images/spilo-vchord
+          # amd64 only: every galaxy node is x86_64, and the vchord .deb is
+          # architecture-specific.
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Proves the extension is actually loadable, not just that the file
+      # copied — a broken .so would otherwise only surface at CREATE EXTENSION.
+      - name: Verify vchord is present and loadable
+        if: github.event_name != 'pull_request'
+        run: |
+          set -eux
+          img="$(echo '${{ steps.meta.outputs.tags }}' | head -1)"
+          docker run --rm --entrypoint /bin/bash "$img" -c '
+            test -f /usr/lib/postgresql/16/lib/vchord.so
+            ls -l /usr/lib/postgresql/16/lib/vchord.so
+            # the control file is what CREATE EXTENSION reads
+            ls /usr/share/postgresql/16/extension/vchord*
+          '
