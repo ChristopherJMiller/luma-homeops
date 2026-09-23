@@ -31,7 +31,7 @@ spec:
         # Enforce the ownership convention on the volume root (idempotent).
         # Runs as root only for this; everything else is uid 1000.
         - name: own
-          image: rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+          image: ghcr.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
           command: ["/bin/sh", "-c", "chown 1000:1000 /family && chmod 2775 /family && ls -ld /family"]
           securityContext:
             runAsUser: 0
@@ -40,7 +40,7 @@ spec:
               mountPath: /family
       containers:
         - name: rclone
-          image: rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+          image: ghcr.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
           envFrom:
             - secretRef:
                 name: family-b2 # EDIT for ingest: toad-b2
