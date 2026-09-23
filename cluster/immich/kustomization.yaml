@@ -5,7 +5,10 @@ namespace: immich
 resources:
   - namespace.yaml
   - logical-backup-s3.yaml
-  - secrets.yaml
+  - db.yaml
+  - oidc.yaml
+  - b2.yaml
+  - accounts.yaml
   - config.yaml
   - pvcs.yaml
   - psql.yaml
