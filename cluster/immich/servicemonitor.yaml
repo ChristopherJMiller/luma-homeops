@@ -1,0 +1,45 @@
+---
+# Immich metrics for kube-prometheus-stack.
+#
+# The chart already creates a ServiceMonitor (immich.metrics.enabled: true, in
+# cluster/applications/immich-release.yaml) — but it creates it WITHOUT the
+# `release: prometheus` label, and this Prometheus selects ServiceMonitors with
+#
+#     serviceMonitorSelector: {matchLabels: {release: prometheus}}
+#
+# so the chart's one is never selected and silently collects nothing. Immich
+# had IMMICH_TELEMETRY_INCLUDE=all set and the metrics ports exposed, yet
+# Prometheus held zero immich_* series. The chart exposes no way to add labels
+# to its ServiceMonitor, so we ship our own.
+#
+# The chart's unlabelled ServiceMonitor is left in place: it is inert (nothing
+# selects it) and turning metrics off would also remove the telemetry env var
+# and the Service's metrics ports, which are what we actually need.
+#
+# NOTE for any future monitor in this repo: the `release: prometheus` label is
+# mandatory. Several ServiceMonitors in the cluster are missing it and are
+# scraping nothing — see docs/immich.md.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: immich-metrics
+  namespace: immich
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: immich
+      app.kubernetes.io/name: server
+      app.kubernetes.io/service: immich-server
+  endpoints:
+    # 8081 — the API server: HTTP request counts/durations, and the
+    # immich_* gauges for asset and job state.
+    - port: metrics-api
+      scheme: http
+      interval: 30s
+    # 8082 — the microservices worker: queue depths and job timings, which is
+    # what tells you whether the SMR throttle is keeping up.
+    - port: metrics-ms
+      scheme: http
+      interval: 30s
