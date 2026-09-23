@@ -746,7 +746,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Kubernetes RBAC access denials",
+          "description": "apiserver_audit_total requires the audit log to be exported to Prometheus, which this cluster does not do, so the old query was permanently empty. apiserver_request_total with code 403 is the denial signal that is actually collected.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -787,13 +787,14 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "increase(apiserver_audit_total{objectRef_resource=\"secrets\",verb=\"get\"}[1h]) or vector(0)",
+              "expr": "topk(10, sum by (resource) (increase(apiserver_request_total{code=\"403\"}[1h])))",
+              "refId": "A",
+              "legendFormat": "{{resource}}",
               "format": "table",
-              "instant": false,
-              "refId": "A"
+              "instant": true
             }
           ],
-          "title": "RBAC Violations",
+          "title": "API Authorization Denials (1h)",
           "transformations": [
             {
               "id": "organize",
@@ -1331,7 +1332,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "WAF/ModSecurity blocked requests",
+          "description": "Was nginx ModSecurity, which never ran here; ingress-nginx is gone entirely as of 2026-09-20. Traefik 403s are the equivalent available signal.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1398,12 +1399,12 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "rate(nginx_ingress_controller_requests{status=\"403\"}[5m]) or vector(0)",
-              "legendFormat": "{{rule_type}}",
-              "refId": "A"
+              "expr": "sum by (entrypoint) (rate(traefik_entrypoint_requests_total{code=\"403\"}[5m]))",
+              "refId": "A",
+              "legendFormat": "{{entrypoint}}"
             }
           ],
-          "title": "WAF/ModSecurity Events",
+          "title": "Forbidden Requests at the Edge",
           "type": "timeseries"
         },
         {

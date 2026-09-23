@@ -31,7 +31,7 @@ data:
       "panels": [
         {
           "datasource": "Prometheus",
-          "description": "PostgreSQL cluster health overview",
+          "description": "One series per monitored Postgres pod. The old panel hardcoded four clusters including acid-auth, which was authentik's and is gone, and filtered on a cluster label the exporters do not carry. NOTE acid-immich has no postgres exporter yet, so it does not appear here.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -95,24 +95,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "up{job=\"kubernetes-pods\",pod=~\"acid-auth.*\"} OR on() vector(0)",
-              "legendFormat": "acid-auth",
-              "refId": "A"
-            },
-            {
-              "expr": "up{job=~\".*postgres.*\",cluster=~\".*chrismillerxyz.*\"} OR up{job=~\".*acid-chrismillerxyz.*\"} OR on() vector(0)",
-              "legendFormat": "acid-chrismillerxyz",
-              "refId": "B"
-            },
-            {
-              "expr": "up{job=~\".*postgres.*\",cluster=~\".*ha.*\"} OR up{job=~\".*acid-ha.*\"} OR on() vector(0)",
-              "legendFormat": "acid-ha",
-              "refId": "D"
-            },
-            {
-              "expr": "up{job=~\".*postgres.*\",cluster=~\".*media.*\"} OR up{job=~\".*acid-media.*\"} OR on() vector(0)",
-              "legendFormat": "acid-media",
-              "refId": "E"
+              "expr": "up{pod=~\"acid-.*\"}",
+              "refId": "A",
+              "legendFormat": "{{namespace}}/{{pod}}"
             }
           ],
           "title": "PostgreSQL Cluster Health",
@@ -181,7 +166,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Database query latency percentiles",
+          "description": "The > 0 filters made every series vanish whenever block I/O time was zero, which on an idle database is most of the time -- so the panel fell through to its vector(0) fallback and looked like a reading rather than an absence.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -256,19 +241,14 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "avg(rate(pg_stat_database_blk_read_time[5m]) + rate(pg_stat_database_blk_write_time[5m])) > 0 OR on() vector(0)",
-              "legendFormat": "Avg Query Time",
-              "refId": "A"
+              "expr": "avg(rate(pg_stat_database_blk_read_time[5m]) + rate(pg_stat_database_blk_write_time[5m]))",
+              "refId": "A",
+              "legendFormat": "avg block I/O ms"
             },
             {
-              "expr": "max(rate(pg_stat_database_blk_read_time[5m]) + rate(pg_stat_database_blk_write_time[5m])) > 0 OR on() vector(0)",
-              "legendFormat": "Max Query Time",
-              "refId": "B"
-            },
-            {
-              "expr": "avg(pg_stat_database_tup_fetched) OR on() vector(0)",
-              "legendFormat": "Tuples Fetched",
-              "refId": "C"
+              "expr": "max(rate(pg_stat_database_blk_read_time[5m]) + rate(pg_stat_database_blk_write_time[5m]))",
+              "refId": "B",
+              "legendFormat": "max block I/O ms"
             }
           ],
           "title": "Database Query Latency",

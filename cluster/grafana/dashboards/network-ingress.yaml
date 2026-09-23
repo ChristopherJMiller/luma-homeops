@@ -31,7 +31,7 @@ data:
       "panels": [
         {
           "datasource": "Prometheus",
-          "description": "Total configured ingresses",
+          "description": "Retargeted from ingress-nginx to Traefik; ingress-nginx was decommissioned 2026-09-20.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -75,8 +75,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "count(count by (ingress) (nginx_ingress_controller_request_duration_seconds_count)) OR on() vector(0)",
-              "refId": "A"
+              "expr": "count(count by (exported_service) (traefik_service_requests_total))",
+              "refId": "A",
+              "legendFormat": "services"
             }
           ],
           "title": "Total Ingresses",
@@ -84,7 +85,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Total request rate",
+          "description": "Retargeted from ingress-nginx to Traefik; ingress-nginx was decommissioned 2026-09-20.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -136,8 +137,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum(rate(nginx_ingress_controller_request_duration_seconds_count[5m])) OR on() vector(0)",
-              "refId": "A"
+              "expr": "sum(rate(traefik_entrypoint_requests_total[5m]))",
+              "refId": "A",
+              "legendFormat": "req/s"
             }
           ],
           "title": "Request Rate",
@@ -145,7 +147,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Active connections",
+          "description": "Retargeted from ingress-nginx to Traefik; ingress-nginx was decommissioned 2026-09-20.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -197,8 +199,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum(nginx_ingress_controller_nginx_process_connections{state=\"active\"}) OR on() vector(0)",
-              "refId": "A"
+              "expr": "sum(traefik_open_connections)",
+              "refId": "A",
+              "legendFormat": "open"
             }
           ],
           "title": "Active Connections",
@@ -206,7 +209,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "P95 latency across all ingresses",
+          "description": "Retargeted from ingress-nginx to Traefik; ingress-nginx was decommissioned 2026-09-20.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -259,8 +262,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "histogram_quantile(0.95, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le)) OR on() vector(0)",
-              "refId": "A"
+              "expr": "histogram_quantile(0.95, sum by (le) (rate(traefik_entrypoint_request_duration_seconds_bucket[5m])))",
+              "refId": "A",
+              "legendFormat": "p95"
             }
           ],
           "title": "P95 Latency",
@@ -330,7 +334,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Error rate (4xx + 5xx)",
+          "description": "Retargeted from ingress-nginx to Traefik; ingress-nginx was decommissioned 2026-09-20. clamp_min on the denominator keeps it from dividing by zero when the edge is idle.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -383,8 +387,9 @@ data:
           "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "100 * (sum(rate(nginx_ingress_controller_request_duration_seconds_count{status=~\"4..|5..\"}[5m])) / sum(rate(nginx_ingress_controller_request_duration_seconds_count[5m]))) OR on() vector(0)",
-              "refId": "A"
+              "expr": "100 * (sum(rate(traefik_entrypoint_requests_total{code=~\"4..|5..\"}[5m])) / clamp_min(sum(rate(traefik_entrypoint_requests_total[5m])), 0.001))",
+              "refId": "A",
+              "legendFormat": "error %"
             }
           ],
           "title": "Error Rate",
