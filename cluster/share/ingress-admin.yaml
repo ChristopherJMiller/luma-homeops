@@ -7,7 +7,11 @@ kind: Ingress
 metadata:
   name: share-admin
   annotations:
-    traefik.ingress.kubernetes.io/router.middlewares: authentik-authentik-forward-auth@kubernetescrd
+    # Admin trust tier (cluster/oauth2-proxy/). errors BEFORE auth: the errors
+    # middleware has to wrap the forwardAuth to catch its 401 and turn it into
+    # a redirect to the sign-in page.
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      oauth2-proxy-oauth2-admin-errors@kubernetescrd,oauth2-proxy-oauth2-admin-auth@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
