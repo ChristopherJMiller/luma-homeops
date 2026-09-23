@@ -58,13 +58,19 @@ spec:
                   set -eu
                   SRC=/uploads
                   DST=b2:galaxy-family/immich
-                  MIN_FILES=1
 
-                  # An empty or unmounted source must never be allowed to move
-                  # the whole bucket into deleted/.
-                  n=$(find "$SRC" -type f | head -n $((MIN_FILES + 1)) | wc -l)
-                  if [ "$n" -le "$MIN_FILES" ]; then
-                    echo "refusing to sync: only $n files under $SRC (min $MIN_FILES)" >&2
+                  # The gate exists so an empty or unmounted source can never
+                  # move a populated bucket into deleted/. An empty source with
+                  # an empty bucket is just a new install with no photos yet —
+                  # that is a no-op, not a failure, otherwise this pages every
+                  # night until someone uploads something.
+                  n=$(find "$SRC" -type f | head -2 | wc -l)
+                  if [ "$n" -eq 0 ]; then
+                    if [ "$(rclone lsf "$DST/current" 2>/dev/null | head -1 | wc -l)" -eq 0 ]; then
+                      echo "nothing to back up yet: $SRC and $DST/current are both empty"
+                      exit 0
+                    fi
+                    echo "refusing to sync: $SRC is empty but $DST/current is not" >&2
                     exit 2
                   fi
 
