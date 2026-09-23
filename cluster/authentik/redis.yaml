@@ -35,7 +35,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: redis
-          image: docker.io/library/redis:7.4.7-alpine
+          image: docker.io/library/redis:8.10.2-alpine@sha256:72cedd9603038893af961e90ac5e1a1a0d8377d5e338dbdad8fe284ea25de18f
           args:
             - --save
             - ''
