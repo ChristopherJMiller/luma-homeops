@@ -22,7 +22,7 @@ data:
           }
         ]
       },
-      "description": "Home Assistant and Mosquitto MQTT metrics for home automation monitoring",
+      "description": "MQTT panels are live. The Home Assistant panels are intentionally empty: HA's prometheus integration is enabled in the repo (cluster/home-assistant/packages/prometheus.yaml) but not yet active, because /api/prometheus needs a long-lived access token that can only be minted from the HA UI. Deferred 2026-09-23. To finish: mint the token, seal it, add a ScrapeConfig with bearer auth against ha-home-assistant:8123/api/prometheus, restart HA, then rename these panels from home_assistant_* to homeassistant_* (one word) -- which is what the integration actually exports.",
       "editable": true,
       "gnetId": null,
       "graphTooltip": 1,
@@ -31,7 +31,7 @@ data:
       "panels": [
         {
           "datasource": "Prometheus",
-          "description": "Home Assistant system health overview",
+          "description": "Home Assistant system health overview NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -118,7 +118,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Home Assistant entity counts by domain",
+          "description": "Home Assistant entity counts by domain NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -197,7 +197,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Entity state changes rate by domain",
+          "description": "Entity state changes rate by domain NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -274,7 +274,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Home Assistant automation performance metrics",
+          "description": "Home Assistant automation performance metrics NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -345,7 +345,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Component health status",
+          "description": "Component health status NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -424,7 +424,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Home Assistant database performance",
+          "description": "Home Assistant database performance NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1070,7 +1070,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Most triggered automations in last 24 hours",
+          "description": "Most triggered automations in last 24 hours NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1121,7 +1121,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Sensor activity heatmap by hour",
+          "description": "Sensor activity heatmap by hour NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "custom": {
@@ -1192,7 +1192,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Device availability status",
+          "description": "Device availability status NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1263,7 +1263,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Energy monitoring metrics",
+          "description": "Energy monitoring metrics NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1358,7 +1358,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Event loop processing lag",
+          "description": "Event loop processing lag NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1446,7 +1446,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Memory usage breakdown by component",
+          "description": "Memory usage breakdown by component NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1508,7 +1508,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "API response time distribution",
+          "description": "API response time distribution NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1585,7 +1585,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Recent errors from Home Assistant",
+          "description": "Recent errors from Home Assistant NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -1658,7 +1658,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Failed automation executions",
+          "description": "Failed automation executions NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
           "fieldConfig": {
             "defaults": {
               "color": {
