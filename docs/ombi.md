@@ -77,6 +77,19 @@ from the message. The `NewRequest` template leads with `{RequestStatus}`, so a
 line reading **Pending Approval** is one you need to action and
 *Processing Request* is one that already went through.
 
+**It currently posts to the same webhook alertmanager uses**, so requests share a
+channel with Ceph warnings and CRITICAL pages. That is why `bootstrap.sh` enables
+*only* `NewRequest` and mutes `RequestAvailable` / `RequestDeclined`: in that
+company, "now available" and "declined" are noise for the operator, while
+`NewRequest` is the one line that asks for an action. Give Ombi its own
+`#media-requests` webhook (swap `discord-webhook-url`, re-seal, re-run) and
+turning the other two back on becomes reasonable.
+
+Worth knowing while you are in there: all three alertmanager receivers
+(`homelab-default`, `critical-alerts`, `storage-alerts`) point at that one
+webhook too, despite the "separate channel" comment — they differ only by title
+emoji.
+
 **It pings for every request, not only the ones needing approval**, and that is
 deliberate rather than an oversight. `SendNotificationRule` decides whether to
 send `NewRequest` by asking whether the *user holds* `AutoApproveMovie` — not
@@ -84,10 +97,10 @@ whether this particular request was auto-approved. So switching
 `DoNotSendNotificationsForAutoApprove` on would also mute the pending-4K ping,
 which is the one that matters. It stays off.
 
-If the noise grates, the one-line fix is dropping `AutoApproveMovie` from
-`defaultRoles` in `bootstrap.sh`: then every movie needs a nod and every ping is
-actionable, at the cost of friction for the family.
-
+If the noise grates — and sharing the alerts channel makes that likelier — the
+one-line fix is dropping `AutoApproveMovie` from `defaultRoles` in
+`bootstrap.sh`: then every movie needs a nod and every ping is actionable, at the
+cost of friction for the family.
 ## Running the bootstrap
 
 ```sh
@@ -101,12 +114,12 @@ seeds Ombi's roles, and **header auth last**, because until that is on nobody is
 auto-provisioned — so a failure midway cannot strand a half-configured Ombi that
 is already minting family accounts.
 
-Two inputs start empty in `cluster/media/ombi-bootstrap.secret.yaml`, and the
-script says so and skips their step rather than guessing:
+One input is still empty in `cluster/media/ombi-bootstrap.secret.yaml`, and the
+script skips its step rather than guessing:
 
 | Key | Get it from | Without it |
 |---|---|---|
-| `discord-webhook-url` | Discord → Server Settings → Integrations → Webhooks | no notifications at all |
+| `discord-webhook-url` | **set** — reusing alertmanager’s webhook (see Discord, above) | no notifications at all |
 | `plex-token` | an `X-Plex-Token` from any Plex web request | no "already in the library" badges; Ombi asks the *arrs instead |
 
 To fill one in: edit the `.secret.yaml`, `./sign.sh`, commit, let Argo apply it,

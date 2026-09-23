@@ -307,29 +307,36 @@ if [ -z "$DISCORD_URL" ]; then
   note "Add it (edit cluster/media/ombi-bootstrap.secret.yaml, ./sign.sh, commit),"
   note "then re-run this script."
 else
-  # GET-patch-POST so Ombi's own seeded templates survive; we only enable the
-  # ones we want and put {RequestStatus} up front so a "Pending Approval" is
-  # obvious at a glance in the channel.
+  # GET-patch-POST so Ombi's own seeded templates survive; we only touch the
+  # ones we care about.
+  #
+  # ONLY NewRequest is enabled, and that is about which channel this lands in.
+  # The webhook is currently the one alertmanager already uses, so these
+  # messages share a channel with Ceph warnings and CRITICAL pages. In that
+  # company, "now available" and "declined" are noise for the operator — who
+  # declined it already knows — while NewRequest is the one line that asks for
+  # an action. Give Ombi its own #media-requests webhook and turning the other
+  # two on becomes reasonable.
+  #
+  # {RequestStatus} leads the subject so "Pending Approval" is legible at a
+  # glance next to an alert; see docs/ombi.md for why every request notifies
+  # rather than only the ones awaiting approval.
   oget v1/Settings/notifications/discord \
     | jq --arg u "$DISCORD_URL" '
         .enabled = true
         | .webhookUrl = $u
         | .username = "Ombi"
         | .notificationTemplates |= map(
-            if .notificationType == 0 then          # NewRequest
+            if .notificationType == 0 then            # NewRequest
               .enabled = true
               | .subject = "{RequestStatus}: {Title}"
               | .message = "{Alias} requested **{Title}** ({Year}) — {Type}, {RequestStatus}. https://requests.chrismiller.xyz/requests"
-            elif .notificationType == 2 then         # RequestAvailable
-              .enabled = true
-              | .subject = "Now available: {Title}"
-              | .message = "**{Title}** ({Year}) is ready to watch."
-            elif .notificationType == 6 then         # RequestDeclined
-              .enabled = true
+            elif .notificationType == 2 or .notificationType == 6 then
+              .enabled = false                        # RequestAvailable / RequestDeclined
             else . end)' \
     | opost v1/Settings/notifications/discord >/dev/null
-  note "webhook set; NewRequest / RequestAvailable / RequestDeclined enabled"
-  note "the NewRequest message leads with {RequestStatus} — 'Pending Approval' is yours to action"
+  note "webhook set; NewRequest enabled, RequestAvailable/RequestDeclined muted"
+  note "subject leads with {RequestStatus} — 'Pending Approval' is the one to action"
 fi
 
 # ======================================================= 8. header auth ======
