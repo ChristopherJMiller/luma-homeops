@@ -21,15 +21,27 @@ spec:
 ---
 # Downloaded CLIP / face-recognition models. Regenerable — deliberately NOT
 # backed up; a fresh pod just re-downloads them.
+#
+# CephFS RWX for the same reason immich-uploads is, plus one specific to a
+# cache: an RWO volume cannot be held by two pods at once, so ANY update
+# deadlocked. With one replica maxUnavailable rounds to 0, so k8s kept the old
+# pod until the new one was Ready, while the new one sat forever in
+# ContainerCreating with "Multi-Attach error" waiting for the volume the old
+# pod still held. A ~2 GB read-mostly model cache has no business being
+# single-attach. (Immich has no object-storage option here — the ML container
+# loads ONNX model files from a POSIX path.)
+#
+# Superseded immich-ml-cache, which was ReadWriteOnce on rook-ceph-block;
+# accessModes and storageClassName are both immutable, hence a new claim.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: immich-ml-cache
+  name: immich-ml-cache-fs
   namespace: immich
 spec:
   accessModes:
-    - ReadWriteOnce
-  storageClassName: rook-ceph-block
+    - ReadWriteMany
+  storageClassName: rook-ceph-fs
   resources:
     requests:
       storage: 10Gi

@@ -126,13 +126,14 @@ spec:
           enabled: true
           controllers:
             main:
-              # Recreate, NOT the chart's default RollingUpdate. The model
-              # cache below is a ReadWriteOnce RBD volume, and with one replica
-              # maxUnavailable rounds to 0 — so a rolling update keeps the old
-              # pod until the new one is Ready, while the new one sits in
-              # ContainerCreating with "Multi-Attach error" because the old one
-              # still holds the volume. That deadlocks forever, on every image
-              # bump. Recreate terminates first, then starts.
+              # The cache is RWX now, so a rolling update no longer deadlocks
+              # on Multi-Attach. Recreate is still the right choice: ML going
+              # away briefly only means smartSearch/faceDetection jobs queue,
+              # whereas a surge pod wants another 1Gi request on a cluster
+              # already tight on memory requests, and would pull ~2 GB of
+              # models through CephFS concurrently with the outgoing pod.
+              # Switch to RollingUpdate if ML ever needs to be continuously
+              # available — with RWX that is now merely a choice, not a trap.
               strategy: Recreate
               containers:
                 main:
@@ -152,7 +153,7 @@ spec:
               # emptyDir default so a restart doesn't re-download ~2 GB.
               enabled: true
               type: persistentVolumeClaim
-              existingClaim: immich-ml-cache
+              existingClaim: immich-ml-cache-fs
               globalMounts:
                 - path: /cache
 
