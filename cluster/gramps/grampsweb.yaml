@@ -85,22 +85,30 @@ spec:
               mountPath: /app/thumbnail_cache
             - name: tmp
               mountPath: /tmp
+          # Probing `/` (the frontend index) rather than an API route on
+          # purpose: /api/metadata/ requires authentication and answers 401,
+          # which kubelet counts as a failure. The app already fails hard at
+          # boot if Postgres is unreachable — alembic migrations run there — so
+          # "gunicorn is serving" is the useful liveness signal here.
           startupProbe:
             httpGet:
-              path: /api/metadata/
+              path: /
               port: http
             # A cold start opens the tree, which is slow on the spinners.
+            timeoutSeconds: 5
             periodSeconds: 10
             failureThreshold: 30
           livenessProbe:
             httpGet:
-              path: /api/metadata/
+              path: /
               port: http
+            timeoutSeconds: 5
             periodSeconds: 30
           readinessProbe:
             httpGet:
-              path: /api/metadata/
+              path: /
               port: http
+            timeoutSeconds: 5
             periodSeconds: 10
           resources:
             requests:

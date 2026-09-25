@@ -47,6 +47,12 @@
       "matchPackageNames": ["quay.io/oauth2-proxy/oauth2-proxy"],
       "automerge": false,
       "description": "oauth2-proxy gates every admin host; a bad bump locks everyone out (and it is what replaced authentik, 2026-09-23). Read the release notes, then merge by hand."
+    },
+    {
+      "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["ghcr.io/gramps-project/grampsweb"],
+      "automerge": false,
+      "description": "Pinned to `latest` by digest because upstream's version tags are months stale. :automergeDigest would otherwise merge a rebuild unseen, and a rebuild can move the bundled Gramps minor — desktop Gramps Web Sync only works when server and laptop agree on Gramps MAJOR.MINOR (60 today, laptop 6.0.6). Before merging, check the new image's GRAMPS_VERSION env; if it is not 60, the laptop upgrades first or sync breaks. See docs/gramps.md."
     }
   ],
   "argocd": {
