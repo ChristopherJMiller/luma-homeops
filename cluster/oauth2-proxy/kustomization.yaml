@@ -9,5 +9,6 @@ resources:
   - emails-family.yaml
   - admin.yaml
   - family.yaml
+  - family-rs.yaml
   - middlewares.yaml
   - servicemonitors.yaml

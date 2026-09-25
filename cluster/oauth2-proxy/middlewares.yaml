@@ -80,3 +80,37 @@ spec:
     query: "/oauth2/sign_in?rd={url}"
     statusRewrites:
       "401": 302
+---
+# The werethemille.rs family pair. Same tier, same allowlist; separate only
+# because the cookie has to be set on that domain (see family-rs.yaml).
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: oauth2-family-rs-auth
+  namespace: oauth2-proxy
+spec:
+  forwardAuth:
+    address: http://oauth2-proxy-family-rs.oauth2-proxy.svc.cluster.local:4180/oauth2/auth
+    trustForwardHeader: true
+    authResponseHeaders:
+      - X-Auth-Request-User
+      - X-Auth-Request-Email
+      - X-Auth-Request-Preferred-Username
+      - Set-Cookie
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: oauth2-family-rs-errors
+  namespace: oauth2-proxy
+spec:
+  errors:
+    status:
+      - "401"
+    service:
+      name: oauth2-proxy-family-rs
+      namespace: oauth2-proxy
+      port: 4180
+    query: "/oauth2/sign_in?rd={url}"
+    statusRewrites:
+      "401": 302

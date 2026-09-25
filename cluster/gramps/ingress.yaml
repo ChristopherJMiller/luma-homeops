@@ -1,19 +1,35 @@
 ---
-# One Ingress with a host — no spec.tls (the wildcard cert covers
-# *.werethemille.rs as of 2026-09-24) and no DNS record (the wildcard CNAME
-# already resolves).
+# family.werethemille.rs, split into three routes because they need three
+# different answers to "who may reach this".
 #
-# No oauth2-proxy middleware, deliberately. Gramps Web has its own users and
-# roles and talks OIDC to Dex itself, and the desktop Web Sync addon
-# authenticates against /api with username+password — the `errors` middleware
-# matches on status code and would rewrite those 401s into a redirect to Dex,
-# which a non-browser client cannot follow. Same trap as Ombi's XHRs; see
-# docs/auth.md. Access control is the app's user list, not an edge allowlist.
+# Traefik prioritises by rule length, so the longest prefix wins:
+#   /api/oidc  (gated)    >  /oauth2  (ungated, in the oauth2-proxy namespace)
+#              >  /api  (ungated)  >  /  (gated)
+#
+# The gate is the family oauth2-proxy tier's werethemille.rs instance, whose
+# allowlist is cluster/oauth2-proxy/emails-family.secret.yaml. That list is the
+# authorization layer: Dex itself does NOT filter — it brokers Google and
+# Microsoft and will authenticate ANY account — so without this gate the only
+# thing standing between the internet and an account here is Gramps Web creating
+# new OIDC logins as DISABLED.
+#
+# Why /api must stay ungated: the desktop Gramps Web Sync addon authenticates at
+# /api/token/ with username and password. The `errors` middleware matches on
+# status code and cannot tell the app's own 401 from oauth2-proxy's, so it would
+# rewrite the addon's 401 into a cross-origin redirect to Dex, which a
+# non-browser client cannot follow. Same trap as Ombi's XHRs — see docs/auth.md.
+#
+# Why /api/oidc must be gated anyway: that is where an account gets CREATED. It
+# is browser-only (the sync addon never touches it), so the gate costs nothing
+# there, and without it anyone could walk the OIDC flow and mint an account.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: grampsweb
   namespace: gramps
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      oauth2-proxy-oauth2-family-rs-errors@kubernetescrd,oauth2-proxy-oauth2-family-rs-auth@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
@@ -21,6 +37,51 @@ spec:
       http:
         paths:
           - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grampsweb
+                port:
+                  number: 80
+---
+# The API: no edge gate, so desktop sync can authenticate with its own
+# credentials. Authorization here is Gramps Web's own user list and roles.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grampsweb-api
+  namespace: gramps
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: family.werethemille.rs
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: grampsweb
+                port:
+                  number: 80
+---
+# The OIDC entry and callback — gated, because this is the account-creation
+# surface. Browser-only, so gating it costs sync nothing.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grampsweb-oidc
+  namespace: gramps
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      oauth2-proxy-oauth2-family-rs-errors@kubernetescrd,oauth2-proxy-oauth2-family-rs-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: family.werethemille.rs
+      http:
+        paths:
+          - path: /api/oidc
             pathType: Prefix
             backend:
               service:

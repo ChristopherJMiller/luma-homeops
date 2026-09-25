@@ -1,0 +1,171 @@
+---
+# oauth2-proxy, FAMILY tier — werethemille.rs copy.
+#
+# Why a second instance instead of pointing the existing family tier at
+# family.werethemille.rs: a session cookie cannot cross registrable domains. The
+# original instance sets `_oauth2_proxy_family` on `.chrismiller.xyz` and
+# completes its dance on auth-family.chrismiller.xyz, so a browser on
+# werethemille.rs would never send the cookie back — every request would 401 and
+# the user would loop through the sign-in forever. oauth2-proxy takes a single
+# --redirect-url, so one instance cannot terminate the flow on both domains.
+#
+# Same trust tier in every way that matters: the SAME allowlist secret, the same
+# Dex client, the same upstream identity. What differs is only where the cookie
+# lives. Adding someone to cluster/oauth2-proxy/emails-family.secret.yaml admits
+# them to both domains, which is the point — there is one family list, not two.
+#
+# The cookie NAME differs so the two sessions cannot be confused, and the flow
+# terminates on the app's own host (/oauth2/* below) rather than a dedicated
+# auth-* hostname — one less public name, and the cookie is then set on exactly
+# the domain that needs it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth2-proxy-family-rs
+  namespace: oauth2-proxy
+  labels:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/instance: family-rs
+spec:
+  replicas: 2 # every gated request hits this; don't make it a single point of failure
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: oauth2-proxy
+      app.kubernetes.io/instance: family-rs
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: oauth2-proxy
+        app.kubernetes.io/instance: family-rs
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: oauth2-proxy
+          image: quay.io/oauth2-proxy/oauth2-proxy:v7.13.0@sha256:56e3daedf765c7a1eea6e366fbe684be7d3084830ade14b6174570d3c7960954
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          args:
+            # Identical to the chrismiller.xyz instance — see family.yaml for the
+            # full reasoning behind each of these.
+            - --provider=oidc
+            - --oidc-issuer-url=https://dex.chrismiller.xyz
+            - --provider-display-name=galaxy
+            # Same Dex staticClient as the other family instance; its
+            # redirectURIs list carries both callbacks.
+            - --client-id=oauth2-proxy-family
+            - --http-address=0.0.0.0:4180
+            - --reverse-proxy=true
+            # The flow terminates on the app's own host, which is what puts the
+            # cookie on werethemille.rs. Requires the /oauth2 Ingress below.
+            - --redirect-url=https://family.werethemille.rs/oauth2/callback
+            - --cookie-name=_oauth2_proxy_family_rs
+            - --cookie-domain=.werethemille.rs
+            - --cookie-secure=true
+            - --cookie-samesite=lax
+            - --cookie-expire=168h
+            - --whitelist-domain=.werethemille.rs
+            # THE allowlist — the same file the chrismiller.xyz family instance
+            # mounts. Fails closed if empty or unreadable.
+            - --authenticated-emails-file=/etc/oauth2-proxy/emails
+            - --set-xauthrequest=true
+            - --code-challenge-method=S256
+            - --prompt=select_account
+            - --skip-provider-button=true
+            - --upstream=static://202
+            - --silence-ping-logging=true
+            - --metrics-address=0.0.0.0:44180
+          env:
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: dex-client-secret-family
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: google-oauth
+                  key: cookie-secret-family
+          ports:
+            - name: http
+              containerPort: 4180
+            - name: metrics
+              containerPort: 44180
+          volumeMounts:
+            - name: emails
+              mountPath: /etc/oauth2-proxy
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: http
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+      volumes:
+        - name: emails
+          secret:
+            secretName: oauth2-proxy-family-emails
+            items:
+              - key: emails
+                path: emails
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth2-proxy-family-rs
+  namespace: oauth2-proxy
+  labels:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/instance: family-rs
+spec:
+  selector:
+    app.kubernetes.io/name: oauth2-proxy
+    app.kubernetes.io/instance: family-rs
+  ports:
+    - name: http
+      port: 4180
+      targetPort: http
+    - name: metrics
+      port: 44180
+      targetPort: metrics
+---
+# The OAuth dance, served on the app's own host. Lives in this namespace because
+# an Ingress backend must be in the same namespace as the Service.
+#
+# Deliberately UNGATED — gating the sign-in path is a redirect loop. It wins over
+# the app's `/` route because Traefik prioritises by rule length.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oauth2-proxy-family-rs
+  namespace: oauth2-proxy
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: family.werethemille.rs
+      http:
+        paths:
+          - path: /oauth2
+            pathType: Prefix
+            backend:
+              service:
+                name: oauth2-proxy-family-rs
+                port:
+                  number: 4180
