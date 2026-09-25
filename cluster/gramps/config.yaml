@@ -8,9 +8,22 @@ metadata:
   name: grampsweb-config
   namespace: gramps
 data:
-  # Single-tree mode: one family, one tree. (Multi-tree is TREE: "*" plus a
-  # POST /trees/ dance, which buys nothing here.)
-  GRAMPSWEB_TREE: "Miller Family"
+  # Multi-tree mode ("*") even though there is exactly one family tree, because
+  # NEW_DB_BACKEND is ONLY honoured in multi-tree mode. In single-tree mode
+  # WebDbManager falls back to its create_backend="sqlite" default and
+  # POST /trees/ answers 405 — which is how the first deploy silently created
+  # two empty SQLite trees on the CephFS volume instead of one Postgres tree.
+  # app.py:161 also only pushes POSTGRES_HOST/PORT into Gramps' own config when
+  # TREE == "*" and NEW_DB_BACKEND != sqlite. Upstream's Postgres guide shows
+  # TREE: "*" for this reason; it is not optional.
+  #
+  # The tree's display name ("Miller Family") is set when the tree is created
+  # through the API, not here.
+  GRAMPSWEB_TREE: "*"
+  # Mandatory companion to multi-tree: media object keys get a per-tree prefix,
+  # so media is s3://galaxy-family/gramps/<tree_id>/... . Without it app.py
+  # warns that media is exposed across trees.
+  GRAMPSWEB_MEDIA_PREFIX_TREE: "true"
   GRAMPSWEB_BASE_URL: https://family.werethemille.rs
 
   # Tree data: the SharedPostgreSQL Gramps addon, which the image already ships.
