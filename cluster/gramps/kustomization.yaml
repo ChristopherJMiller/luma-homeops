@@ -5,4 +5,5 @@ namespace: gramps
 resources:
   - namespace.yaml
   - logical-backup-s3.yaml
+  - oidc.yaml
   - psql.yaml
