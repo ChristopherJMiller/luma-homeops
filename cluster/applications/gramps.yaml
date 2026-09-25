@@ -1,0 +1,24 @@
+---
+# Gramps Web — the family tree at family.werethemille.rs. Runbook: docs/gramps.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: gramps
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/gramps
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: gramps
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

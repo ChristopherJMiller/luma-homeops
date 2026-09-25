@@ -1,0 +1,8 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gramps
+  labels:
+    # grampsweb runs as a non-root uid and needs no extra caps.
+    pod-security.kubernetes.io/enforce: baseline
