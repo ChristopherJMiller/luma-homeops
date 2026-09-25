@@ -87,6 +87,10 @@ spec:
               subPath: thumbnails
             - name: tmp
               mountPath: /tmp
+            - name: frontend-config
+              mountPath: /app/static/config.js
+              subPath: config.js
+              readOnly: true
           # Probing `/` (the frontend index) rather than an API route on
           # purpose: /api/metadata/ requires authentication and answers 401,
           # which kubelet counts as a failure. The app already fails hard at
@@ -128,6 +132,9 @@ spec:
             claimName: gramps-cache
         - name: tmp
           emptyDir: {}
+        - name: frontend-config
+          configMap:
+            name: grampsweb-frontend-config
 ---
 apiVersion: apps/v1
 kind: Deployment

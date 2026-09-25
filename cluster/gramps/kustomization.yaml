@@ -9,6 +9,7 @@ resources:
   - psql.yaml
   - b2.yaml
   - config.yaml
+  - frontend-config.yaml
   - pvc.yaml
   - valkey.yaml
   - grampsweb.yaml

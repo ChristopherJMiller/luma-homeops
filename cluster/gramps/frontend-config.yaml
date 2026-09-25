@@ -1,0 +1,22 @@
+---
+# The frontend's own config, separate from the API's.
+#
+# REGISTRATION_DISABLED (config.yaml) makes the API refuse registration — it
+# answers 405 "Registration is disabled" — but the frontend does not read that
+# flag. The "Register new account" link is gated purely on
+# window.grampsjsConfig.hideRegisterLink (GrampsjsLogin.js), which lives in
+# /app/static/config.js and ships as an empty object. So without this the link
+# is offered and only fails at submit, which is the worst of both.
+#
+# Mounted with subPath so it replaces that one file rather than the static dir.
+# Changing it needs a pod restart (subPath mounts do not hot-reload).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grampsweb-frontend-config
+  namespace: gramps
+data:
+  config.js: |
+    window.grampsjsConfig = {
+      hideRegisterLink: true,
+    }
