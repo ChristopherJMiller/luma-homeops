@@ -8,22 +8,28 @@ metadata:
   name: grampsweb-config
   namespace: gramps
 data:
-  # Multi-tree mode ("*") even though there is exactly one family tree, because
-  # NEW_DB_BACKEND is ONLY honoured in multi-tree mode. In single-tree mode
-  # WebDbManager falls back to its create_backend="sqlite" default and
-  # POST /trees/ answers 405 — which is how the first deploy silently created
-  # two empty SQLite trees on the CephFS volume instead of one Postgres tree.
-  # app.py:161 also only pushes POSTGRES_HOST/PORT into Gramps' own config when
-  # TREE == "*" and NEW_DB_BACKEND != sqlite. Upstream's Postgres guide shows
-  # TREE: "*" for this reason; it is not optional.
+  # Single-tree mode, pinned by directory name.
   #
-  # The tree's display name ("Miller Family") is set when the tree is created
-  # through the API, not here.
-  GRAMPSWEB_TREE: "*"
-  # Mandatory companion to multi-tree: media object keys get a per-tree prefix,
-  # so media is s3://galaxy-family/gramps/<tree_id>/... . Without it app.py
-  # warns that media is exposed across trees.
-  GRAMPSWEB_MEDIA_PREFIX_TREE: "true"
+  # History worth keeping: multi-tree ("*") is the only mode in which
+  # NEW_DB_BACKEND is honoured, so the tree had to be *created* in multi-tree
+  # mode to land on sharedpostgresql instead of SQLite. But multi-tree also
+  # makes an OIDC login fail with 422 "tree is required" — oidc.py's
+  # _validate_tree_id() demands a tree id, which it expects the frontend to
+  # carry across the round trip, and there is no "default tree" setting.
+  #
+  # Going back to single-tree is safe now that the tree exists, because the tree
+  # is self-describing: its own settings.ini holds dbname/host/port for Postgres,
+  # so the connection does not depend on app.py pushing POSTGRES_HOST into
+  # Gramps' config (which it only does in multi-tree mode). database.txt still
+  # says sharedpostgresql, and that is what decides the backend of an EXISTING
+  # tree — NEW_DB_BACKEND below only ever applies to creating a new one.
+  #
+  # TREE_ID is what makes this safe rather than lucky: app.py:139 documents that
+  # "TREE_ID takes precedence: identify tree by dirname, never by name", so a
+  # name mismatch cannot cause a fresh SQLite tree to be created beside the real
+  # one. That is exactly how two empty SQLite trees appeared on 2026-09-25.
+  GRAMPSWEB_TREE: "Miller Family"
+  GRAMPSWEB_TREE_ID: a7d06e65-34ab-474f-a8d5-e8ae6d8946da
   GRAMPSWEB_BASE_URL: https://family.werethemille.rs
 
   # Tree data: the SharedPostgreSQL Gramps addon, which the image already ships.
