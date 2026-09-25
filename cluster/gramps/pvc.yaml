@@ -1,0 +1,18 @@
+---
+# The per-tree directory Gramps keeps on disk even when the tree data itself
+# lives in Postgres: name.txt, the backend marker and a lock file (see
+# gramps_webapi/dbmanager.py). Both the web pods and the celery worker open the
+# same tree, so it has to be RWX — hence CephFS rather than RBD.
+#
+# Metadata only. If this ever grows past a few MB, something is wrong.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gramps-treedir
+  namespace: gramps
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: rook-ceph-fs
+  resources:
+    requests:
+      storage: 1Gi

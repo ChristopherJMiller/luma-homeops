@@ -1,0 +1,48 @@
+---
+# Non-secret configuration. Anything carrying a credential is in gramps-oidc
+# (OIDC client + Flask SECRET_KEY) or gramps-b2 (S3), and the Postgres password
+# comes straight from the operator-generated secret — see grampsweb.yaml.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grampsweb-config
+  namespace: gramps
+data:
+  # Single-tree mode: one family, one tree. (Multi-tree is TREE: "*" plus a
+  # POST /trees/ dance, which buys nothing here.)
+  GRAMPSWEB_TREE: "Miller Family"
+  GRAMPSWEB_BASE_URL: https://family.werethemille.rs
+
+  # Tree data: the SharedPostgreSQL Gramps addon, which the image already ships.
+  GRAMPSWEB_NEW_DB_BACKEND: sharedpostgresql
+  GRAMPSWEB_POSTGRES_HOST: acid-gramps
+  GRAMPSWEB_POSTGRES_PORT: "5432"
+  GRAMPSWEB_POSTGRES_USER: gramps
+
+  # Media in B2. The bucket is the first path segment and everything after it is
+  # an object-key prefix (MediaHandlerS3) — which is how this shares the
+  # existing galaxy-family bucket and its existing bucket-scoped key instead of
+  # needing a new delete-capable one. A delete becomes a B2 *hide*, recoverable
+  # under the bucket's 90-day rule.
+  GRAMPSWEB_MEDIA_BASE_DIR: s3://galaxy-family/gramps
+  AWS_ENDPOINT_URL: https://s3.us-west-004.backblazeb2.com
+  AWS_DEFAULT_REGION: us-west-004
+
+  # Celery broker/results + rate-limit storage. Separate valkey DBs so a
+  # rate-limit flush cannot drop queued tasks.
+  GRAMPSWEB_CELERY_CONFIG__broker_url: redis://valkey:6379/0
+  GRAMPSWEB_CELERY_CONFIG__result_backend: redis://valkey:6379/0
+  GRAMPSWEB_RATELIMIT_STORAGE_URI: redis://valkey:6379/1
+
+  # OIDC via Dex. Local password login stays ENABLED (no
+  # GRAMPSWEB_OIDC_DISABLE_LOCAL_AUTH): the desktop Gramps Web Sync addon
+  # authenticates with username+password, and disabling it breaks sync
+  # (gramps-web#1267). No group mapping is configured, so a first-time OIDC
+  # login lands DISABLED and an owner must approve it — that is the only thing
+  # standing between a public hostname and open registration.
+  GRAMPSWEB_OIDC_ENABLED: "true"
+  GRAMPSWEB_OIDC_ISSUER: https://dex.chrismiller.xyz
+  # Dex's Google/Microsoft connectors both emit a reliable email claim;
+  # preferred_username (the default) is not guaranteed across connectors. This
+  # value becomes the permanent username, including for sync logins.
+  GRAMPSWEB_OIDC_USERNAME_CLAIM: email

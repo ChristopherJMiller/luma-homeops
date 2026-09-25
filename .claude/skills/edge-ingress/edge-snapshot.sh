@@ -7,9 +7,11 @@
 #        diff <(sed "s/ cert=.*//" before.txt) <(sed "s/ cert=.*//" after.txt)
 # Add new public hosts to the list below when you add them.
 set -u
-hosts="$(printf '%s\n' chrismiller.xyz www.chrismiller.xyz ci attic auth-admin auth-family dex galaxy photos home lidarr plex prowlarr radarr sabnzbd share sonarr requests mediadav music dav.music lagrange dashboard rccl-tracker wordarena realliance.net www.realliance.net legacy.realliance.net)"
+hosts="$(printf '%s\n' chrismiller.xyz www.chrismiller.xyz ci attic auth-admin auth-family dex galaxy photos home lidarr plex prowlarr radarr sabnzbd share sonarr requests mediadav music dav.music lagrange dashboard rccl-tracker wordarena realliance.net www.realliance.net legacy.realliance.net family.werethemille.rs)"
 for h in $hosts; do
-  case $h in *.net|*.xyz) fq=$h;; *) fq=$h.chrismiller.xyz;; esac
+  # Fully-qualified if it carries one of our zone suffixes; bare names are
+  # assumed to be chrismiller.xyz, which is where most hosts live.
+  case $h in *.net|*.xyz|*.rs|*.art) fq=$h;; *) fq=$h.chrismiller.xyz;; esac
   for path in / /share/; do
     [ "$path" = /share/ ] && [ "$fq" != share.chrismiller.xyz ] && continue
     out=$(curl -sS -o /dev/null --max-time 15 --resolve "$fq:443:192.168.0.7" \

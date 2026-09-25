@@ -1,0 +1,29 @@
+---
+# One Ingress with a host — no spec.tls (the wildcard cert covers
+# *.werethemille.rs as of 2026-09-24) and no DNS record (the wildcard CNAME
+# already resolves).
+#
+# No oauth2-proxy middleware, deliberately. Gramps Web has its own users and
+# roles and talks OIDC to Dex itself, and the desktop Web Sync addon
+# authenticates against /api with username+password — the `errors` middleware
+# matches on status code and would rewrite those 401s into a redirect to Dex,
+# which a non-browser client cannot follow. Same trap as Ombi's XHRs; see
+# docs/auth.md. Access control is the app's user list, not an edge allowlist.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grampsweb
+  namespace: gramps
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: family.werethemille.rs
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: grampsweb
+                port:
+                  number: 80
