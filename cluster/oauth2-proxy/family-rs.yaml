@@ -69,6 +69,18 @@ spec:
             - --cookie-domain=.werethemille.rs
             - --cookie-secure=true
             - --cookie-samesite=lax
+            # Gramps Web is a PWA, so a first visit fires several requests at
+            # once (the document AND /sw.js). Each unauthenticated one starts its
+            # own sign-in, and with a single CSRF cookie the later start
+            # overwrites the earlier one's PKCE code_verifier — the callback then
+            # arrives with the first flow's code and the last flow's verifier and
+            # Dex rejects it:
+            #   invalid_grant "Invalid code_verifier."  -> a 500 on /oauth2/callback
+            # Per-request CSRF cookies give each concurrent flow its own, which is
+            # what this option exists for. The other two instances gate non-PWA
+            # apps and have not needed it.
+            - --cookie-csrf-per-request=true
+            - --cookie-csrf-expire=15m
             - --cookie-expire=168h
             - --whitelist-domain=.werethemille.rs
             # THE allowlist — the same file the chrismiller.xyz family instance
