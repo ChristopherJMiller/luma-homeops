@@ -16,3 +16,27 @@ spec:
   resources:
     requests:
       storage: 1Gi
+---
+# Staging + caches that the web pod and the celery worker must BOTH see.
+#
+# This is not optional: an upload lands in /app/cache/export/<uuid>.gramps in
+# whichever pod served the request, and the import then runs as a celery task in
+# a different pod. With per-pod emptyDirs the worker found no file and the
+# import failed with a bare "Import failed" 500 — upstream's compose file shares
+# all of its volumes between the two services for exactly this reason.
+#
+# Thumbnails are shared for the same reason in reverse: celery generates them,
+# the web pod serves them, and unshared they would be regenerated on every miss.
+# Both are caches of data whose source of truth is elsewhere (B2 and Postgres),
+# so losing this volume costs CPU, not data.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gramps-cache
+  namespace: gramps
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: rook-ceph-fs
+  resources:
+    requests:
+      storage: 10Gi

@@ -79,10 +79,12 @@ spec:
           volumeMounts:
             - name: treedir
               mountPath: /root/.gramps/grampsdb
-            - name: cache
+            - name: shared-cache
               mountPath: /app/cache
-            - name: thumbnail-cache
+              subPath: cache
+            - name: shared-cache
               mountPath: /app/thumbnail_cache
+              subPath: thumbnails
             - name: tmp
               mountPath: /tmp
           # Probing `/` (the frontend index) rather than an API route on
@@ -121,10 +123,9 @@ spec:
         - name: treedir
           persistentVolumeClaim:
             claimName: gramps-treedir
-        - name: cache
-          emptyDir: {}
-        - name: thumbnail-cache
-          emptyDir: {}
+        - name: shared-cache
+          persistentVolumeClaim:
+            claimName: gramps-cache
         - name: tmp
           emptyDir: {}
 ---
@@ -186,10 +187,12 @@ spec:
           volumeMounts:
             - name: treedir
               mountPath: /root/.gramps/grampsdb
-            - name: cache
+            - name: shared-cache
               mountPath: /app/cache
-            - name: thumbnail-cache
+              subPath: cache
+            - name: shared-cache
               mountPath: /app/thumbnail_cache
+              subPath: thumbnails
             - name: tmp
               mountPath: /tmp
           resources:
@@ -207,10 +210,9 @@ spec:
         - name: treedir
           persistentVolumeClaim:
             claimName: gramps-treedir
-        - name: cache
-          emptyDir: {}
-        - name: thumbnail-cache
-          emptyDir: {}
+        - name: shared-cache
+          persistentVolumeClaim:
+            claimName: gramps-cache
         - name: tmp
           emptyDir: {}
 ---

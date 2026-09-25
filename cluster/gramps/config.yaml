@@ -53,6 +53,16 @@ data:
   # (gramps-web#1267). No group mapping is configured, so a first-time OIDC
   # login lands DISABLED and an owner must approve it — that is the only thing
   # standing between a public hostname and open registration.
+  # No self-service signup: the username/password registration form is off, so
+  # the only ways an account comes into existence are an OIDC login (created
+  # DISABLED, pending approval) or an admin creating one.
+  #
+  # This is REGISTRATION_DISABLED, deliberately NOT OIDC_DISABLE_LOCAL_AUTH.
+  # The latter would also kill password *login*, and the desktop Gramps Web Sync
+  # addon authenticates with username+password (gramps-web#1267) — so local
+  # login stays on for accounts that already have a password, while nobody new
+  # can create one for themselves.
+  GRAMPSWEB_REGISTRATION_DISABLED: "true"
   GRAMPSWEB_OIDC_ENABLED: "true"
   GRAMPSWEB_OIDC_ISSUER: https://dex.chrismiller.xyz
   # Dex's Google/Microsoft connectors both emit a reliable email claim;
