@@ -3,9 +3,12 @@
 # its default (see tlsstore.yaml). Ingresses need no `spec.tls` and apps
 # need no per-host Certificate: a new public app is one Ingress with a host.
 #
-# DNS-01 via the same Cloudflare token cert-manager already uses. The
-# nested wildcard is for dav.music.chrismiller.xyz — `*.chrismiller.xyz`
-# only matches one label.
+# DNS-01 via the same Cloudflare token cert-manager already uses, so every
+# zone here must be in that account. The nested wildcard is for
+# dav.music.chrismiller.xyz — `*.chrismiller.xyz` only matches one label.
+# werethemille.rs and buttert.art were added 2026-09-24 when they came under
+# terraform (cloudflare/dns/); a host in either zone now serves valid TLS with
+# no per-app Certificate, same as the other two.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -23,5 +26,9 @@ spec:
     - '*.music.chrismiller.xyz'
     - realliance.net
     - '*.realliance.net'
+    - werethemille.rs
+    - '*.werethemille.rs'
+    - buttert.art
+    - '*.buttert.art'
   privateKey:
     rotationPolicy: Always

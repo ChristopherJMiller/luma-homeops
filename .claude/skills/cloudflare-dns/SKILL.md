@@ -1,6 +1,6 @@
 ---
 name: cloudflare-dns
-description: Read or change public DNS for chrismiller.xyz / realliance.net via the terraform module in cloudflare/dns/. Use when a hostname doesn't resolve, when a host needs the Cloudflare proxy or a non-wildcard record, when adding MX/TXT/verification records, or when checking for drift. Covers the state-backend login dance, the apex ignore_changes rule, and what "plan is not empty" means. NEVER edits records in the Cloudflare dashboard or via ad-hoc API calls when terraform owns them. NEVER re-introduces external-dns. NEVER removes the wildcard records.
+description: Read or change public DNS for chrismiller.xyz / realliance.net / werethemille.rs / buttert.art via the terraform module in cloudflare/dns/. Use when a hostname doesn't resolve, when a host needs the Cloudflare proxy or a non-wildcard record, when adding MX/TXT/verification records, or when checking for drift. Covers the state-backend login dance, the apex ignore_changes rule, and what "plan is not empty" means. NEVER edits records in the Cloudflare dashboard or via ad-hoc API calls when terraform owns them. NEVER re-introduces external-dns. NEVER removes the wildcard records.
 ---
 
 # cloudflare-dns
@@ -9,9 +9,13 @@ Public DNS is code: `cloudflare/dns/{main,records,imports}.tf`, state in the sha
 
 ```
 chrismiller.xyz    A      <WAN IP>          proxied   ┐ content maintained by
-realliance.net     A      <WAN IP>          DNS-only  ┘ cloudflareddns (WAN is DHCP)
-*.chrismiller.xyz  CNAME  chrismiller.xyz   DNS-only  ┐ static; every public
-*.realliance.net   CNAME  realliance.net    DNS-only  ┘ hostname resolves to the edge
+realliance.net     A      <WAN IP>          DNS-only  │ cloudflareddns (WAN is DHCP)
+werethemille.rs    A      <WAN IP>          DNS-only  │
+buttert.art        A      <WAN IP>          DNS-only  ┘
+*.chrismiller.xyz  CNAME  chrismiller.xyz   DNS-only  ┐
+*.realliance.net   CNAME  realliance.net    DNS-only  │ static; every public
+*.werethemille.rs  CNAME  werethemille.rs   DNS-only  │ hostname resolves to the edge
+*.buttert.art      CNAME  buttert.art       DNS-only  ┘
 ```
 
 ## Ground rules
@@ -19,7 +23,7 @@ realliance.net     A      <WAN IP>          DNS-only  ┘ cloudflareddns (WAN is
 - **terraform owns records; hand edits are drift.** If `plan` is not empty and you didn't change `.tf`, someone (or something) edited Cloudflare directly. Find out what before `apply` reverts it.
 - **The apex A records are half-owned.** terraform owns existence / `proxied` / `ttl` / `comment`; `lifecycle.ignore_changes = [content]` leaves the IP to `cloudflareddns` (ns `dns`), because the WAN interface is DHCP. Don't remove that block "to make plan cleaner" — it would fight the DDNS updater.
 - **Never re-add external-dns.** It's a controller with delete authority over public DNS that wiped every record on a routine minor bump (2026-09-18). 47 identical `<host> CNAME <apex>` records were never a job for a controller.
-- `buttert.art` and `werethemille.rs` are intentionally unmanaged (apex only, cloudflareddns).
+- **All four edge zones are managed as of 2026-09-24**: `chrismiller.xyz`, `realliance.net`, `werethemille.rs`, `buttert.art` (the last two adopted that day — apex imported, wildcard created). Two pre-existing `werethemille.rs` records (`cams`, `home`) are still undeclared on purpose (two external-dns TXT orphans there were deleted 2026-09-24) — see the note at the bottom of `records.tf`. `ipv8.dev`, `mctherealm.net` and `smallturtle.house` are in the account but outside this module.
 
 ## Workflow
 

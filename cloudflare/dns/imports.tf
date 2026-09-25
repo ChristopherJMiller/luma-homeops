@@ -11,6 +11,16 @@ import {
   id = "797612475ed6a8f7193a623ffc107f07/6079876047bd5fbc698f345e207bffc7"
 }
 
+import {
+  to = cloudflare_dns_record.apex["werethemille.rs"]
+  id = "820af0c68573859bd1d0b6bd41185188/f02a760d032f30111976dddc77cec52b"
+}
+
+import {
+  to = cloudflare_dns_record.apex["buttert.art"]
+  id = "d8b2dca633086f6ea526c979b2082276/a18c124d12fae3102c4a23bf80c93355"
+}
+
 # Mail + verification records (mail.tf). All pre-existed by hand; adopting
 # them is what lets terraform correct the two that were wrong (MX host names,
 # and DKIM being proxied).

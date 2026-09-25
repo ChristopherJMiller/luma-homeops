@@ -9,14 +9,15 @@ How public traffic reaches galaxy, and how to change it without breaking the oth
 
 ```
 *.chrismiller.xyz  ──CNAME──▶ chrismiller.xyz ──A──▶ WAN IP ──NAT 80/443──▶ Traefik .7 ──Host header──▶ Ingress ──▶ Service
-*.realliance.net   ──CNAME──▶ realliance.net  ─┘                                │
-                                                                  wildcard-tls (default TLSStore)
+*.realliance.net   ──CNAME──▶ realliance.net  ─┤                                │
+*.werethemille.rs  ──CNAME──▶ werethemille.rs ─┤                    wildcard-tls (default TLSStore)
+*.buttert.art      ──CNAME──▶ buttert.art     ─┘
 ```
 
 Three things make a new app trivial, and all three are invariants — don't erode them:
 
-1. **DNS is two wildcard records** (terraform, `cloudflare/dns/`). Any `<name>.chrismiller.xyz` already resolves to the edge. No record per app.
-2. **TLS is one wildcard cert** (`traefik/wildcard-tls`, SANs `chrismiller.xyz, *.chrismiller.xyz, *.music.chrismiller.xyz, realliance.net, *.realliance.net`) served as Traefik's default TLSStore. No `spec.tls`, no `Certificate` per app.
+1. **DNS is one wildcard record per zone** (terraform, `cloudflare/dns/`) across the four edge zones: `chrismiller.xyz`, `realliance.net`, `werethemille.rs`, `buttert.art`. Any `<name>` in any of them already resolves to the edge. No record per app.
+2. **TLS is one wildcard cert** (`traefik/wildcard-tls`, SANs `chrismiller.xyz, *.chrismiller.xyz, *.music.chrismiller.xyz, realliance.net, *.realliance.net, werethemille.rs, *.werethemille.rs, buttert.art, *.buttert.art`) served as Traefik's default TLSStore. No `spec.tls`, no `Certificate` per app. Adding a zone means adding its two names here — and nothing else.
 3. **Traefik is the default IngressClass.** `ingressClassName` is optional; set it anyway for grep-ability.
 
 ## Add a public app (the whole procedure)
