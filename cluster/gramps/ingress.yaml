@@ -65,8 +65,19 @@ spec:
                 port:
                   number: 80
 ---
-# The OIDC entry and callback — gated, because this is the account-creation
-# surface. Browser-only, so gating it costs sync nothing.
+# The OIDC entry, callback and token exchange — gated, because this is the
+# account-creation surface: a first sign-in here is what CREATES a Gramps
+# account, and Dex authenticates everyone rather than filtering, so without the
+# allowlist in front anyone with a Google account could mint one.
+#
+# `auth` ONLY, deliberately no `errors`. This prefix carries XHRs as well as
+# navigations — the login page fetches /api/oidc/config/ to decide which button
+# to draw — and `errors` matches on status code, so it rewrote that XHR's 401
+# into a cross-origin 302 to Dex, which fetch cannot follow and the browser
+# reports as a CORS error naming Dex. A flat 401 is the right answer to an
+# unauthenticated XHR; navigations here are only reached by people who already
+# hold the gate cookie from `/`. See docs/auth.md, "If the backend itself ever
+# answers 401".
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -74,7 +85,7 @@ metadata:
   namespace: gramps
   annotations:
     traefik.ingress.kubernetes.io/router.middlewares: >-
-      oauth2-proxy-oauth2-family-rs-errors@kubernetescrd,oauth2-proxy-oauth2-family-rs-auth@kubernetescrd
+      oauth2-proxy-oauth2-family-rs-auth@kubernetescrd
 spec:
   ingressClassName: traefik
   rules:
