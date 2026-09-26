@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: gramps-mcp
+  namespace: gramps
+spec:
+  encryptedData:
+    GRAMPS_PASSWORD: AgAzodDt+rOeMRRn/nmumbpKXCpgZ8jiLPoNJUm2Hlun5v5COirjmSzEzvzTKdeI9lDvu/6hseqz+rgX0Bq8dMRH3sUX4z0zxzHJxalMuqkgRIIcvQIH5nNS7tTmur+5uNVhu9zZ9xA29NO7GOanDomF3MQ8GbQtnGopXHs0E+ecyKeHR13Q5K6cgXDW8QOGF1I5t9r21bGqaMztUKemAzjYLIgo6C+3Asq/HBVK2USftD3Aj/2Lefg1tIphsUVgy/7PVjPnULdSmFFqcMEnfn0yEPWWpPSxbf9tbWOK39atQNlT7qD0x6E6Q2JdgT7OYX4AU+ttmWhKCDsrm0yPe14duYFP57GwgGURMCl2zGkOKIt+NRCEQwS+uWA6lSjtU+Bl6XjVqkMzFzV/XWRy9kZcJvQMWWo/cMJbJj0HlCCRx4pHUxKX8SZmM2KsCjGtocIv8XLQjOYLvG/8gO6NopdOR1/Cox1A52Od1JS5FdVqvV6Fm1lqhkKdHJYHplDgyIsa/rrCcqoqUaGV8PsoQ7KqN4R4gOdZdR1eGtjd5nIyG+W1VfFzH7Umd8ZCJeB6RxrFJjZPP9gADsLuHxMP22DK2duHr49QGjRF27qfFe1GO3it8xXoL0QFDxwCb1QLZsdGlJ6lXmXJYx6VslJlpC+Py6sUuSS9qCIhL0TahEiTAvg+fb0mC197PfUwnuTdkX6DzqW0BnA/18w3ebprlm6+n7/STAEAOyYfXLcI4Lrxbw==
+  template:
+    metadata:
+      name: gramps-mcp
+      namespace: gramps

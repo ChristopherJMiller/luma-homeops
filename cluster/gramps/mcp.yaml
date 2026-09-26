@@ -63,7 +63,12 @@ spec:
             # localhost, and every proxied request is rejected — Traefik
             # preserves the original Host header.
             - name: MCP_ALLOWED_HOSTS
-              value: mcp.family.chrismiller.xyz
+              # The gateway preserves the Host header of the public request.
+              value: mcp.chrismiller.xyz
+          envFrom:
+            # GRAMPS_PASSWORD only — see mcp-auth.secret.yaml.
+            - secretRef:
+                name: gramps-mcp
           ports:
             - name: http
               containerPort: 3000
