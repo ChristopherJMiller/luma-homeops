@@ -75,3 +75,11 @@ data:
   # preferred_username (the default) is not guaranteed across connectors. This
   # value becomes the permanent username, including for sync logins.
   GRAMPSWEB_OIDC_USERNAME_CLAIM: email
+  # The label on the login button. Defaults to the literal "OIDC", which means
+  # nothing to a relative; Dex then offers the Google/Microsoft choice.
+  #
+  # Note the button cannot be skipped: the frontend only auto-redirects to the
+  # provider when disable_local_auth AND auto_redirect AND exactly one provider
+  # (GrampsjsLogin.js:212-218), and disabling local auth would break desktop
+  # sync. So one click on this button is structural.
+  GRAMPSWEB_OIDC_NAME: Google or Microsoft
