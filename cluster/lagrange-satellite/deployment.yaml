@@ -83,7 +83,7 @@ spec:
         # exposes 8443 on the pod's eth0 and forwards through wg0. The
         # lagrange-admin Service selects on app=wg-gateway and lands here.
         - name: admin-proxy
-          image: alpine/socat:1.8.1.3@sha256:24220ef2c80a2a421ea08e4624488e985330c421b6aa3329bae14b0933a1d403
+          image: alpine/socat:1.8.1.3@sha256:5ffbd6ae916cbad86a58fabe0d6d5a6fd5c2b47ddf031e82996baac9300e732f
           args:
             - -d
             - TCP-LISTEN:8443,reuseaddr,fork
