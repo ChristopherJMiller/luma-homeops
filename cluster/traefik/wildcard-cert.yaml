@@ -24,6 +24,11 @@ spec:
     - chrismiller.xyz
     - '*.chrismiller.xyz'
     - '*.music.chrismiller.xyz'
+    # mcp.family.chrismiller.xyz — the Gramps MCP endpoint. A TLS wildcard covers
+    # exactly one label, so *.chrismiller.xyz does NOT match a nested name; DNS
+    # wildcards do match multiple labels, which is why the name resolves already.
+    # Same reason *.music.chrismiller.xyz is here for dav.music.
+    - '*.family.chrismiller.xyz'
     - realliance.net
     - '*.realliance.net'
     - werethemille.rs
