@@ -6,6 +6,7 @@ resources:
   - namespace.yaml
   - logical-backup-s3.yaml
   - oidc.yaml
+  - mcp-auth.yaml
   - psql.yaml
   - b2.yaml
   - config.yaml
@@ -13,4 +14,5 @@ resources:
   - pvc.yaml
   - valkey.yaml
   - grampsweb.yaml
+  - mcp.yaml
   - ingress.yaml

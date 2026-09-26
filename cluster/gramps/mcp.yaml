@@ -1,0 +1,135 @@
+---
+# Gramps MCP endpoint — mcp.family.chrismiller.xyz
+#
+# Gives an AI client structured, tool-based access to the family tree. Chosen
+# from four Gramps MCP implementations because it is the only one that
+# authenticates INBOUND clients, and it also offers a read-only mode, DNS-
+# rebinding protection and an actively maintained pinned image.
+#
+# Auth, and why it is a bearer token rather than Dex: an MCP client is not a
+# browser and cannot follow a forward-auth redirect, so oauth2-proxy would break
+# it outright; remote MCP auth otherwise expects OAuth 2.1 with dynamic client
+# registration, which Dex does not implement. So the token in gramps-mcp is the
+# gate, and it is only safe because it is never sent over plain HTTP.
+#
+# Defence in depth: the server logs into Gramps Web as `gramps-mcp`, an account
+# with role 1 (MEMBER) — it may read, including private records, but the API
+# refuses writes with 403. Verified against the live API before deploying, and it
+# matters because GRAMPS_READONLY only hides the write TOOLS, whereas the role is
+# what actually forbids a write. A leaked token cannot change the tree.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gramps-mcp
+  namespace: gramps
+  labels:
+    app.kubernetes.io/name: gramps-mcp
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gramps-mcp
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gramps-mcp
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532 # the image's own `nonroot` user
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: mcp
+          image: ghcr.io/alexey-n-chernyshov/gramps-web-mcp-rs:1.4.0@sha256:b620bb70ff5ce6f3702390e448fd446fcc26775f72d2d65ae8878eb91794b4ed
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          env:
+            # In-cluster, so tree reads never leave the LAN or hairpin through
+            # the edge. This is the site root, not the /api prefix.
+            - name: GRAMPS_API_URL
+              value: http://grampsweb.gramps.svc.cluster.local
+            - name: GRAMPS_USERNAME
+              value: gramps-mcp
+            - name: GRAMPS_READONLY
+              value: "true"
+            - name: MCP_TRANSPORT
+              value: http
+            - name: MCP_HTTP_HOST
+              value: 0.0.0.0
+            - name: MCP_HTTP_PORT
+              value: "3000"
+            # Without this the server's DNS-rebinding protection allows only
+            # localhost, and every proxied request is rejected — Traefik
+            # preserves the original Host header.
+            - name: MCP_ALLOWED_HOSTS
+              value: mcp.family.chrismiller.xyz
+          envFrom:
+            - secretRef:
+                name: gramps-mcp
+          ports:
+            - name: http
+              containerPort: 3000
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: gramps-mcp
+  namespace: gramps
+  labels:
+    app.kubernetes.io/name: gramps-mcp
+spec:
+  selector:
+    app.kubernetes.io/name: gramps-mcp
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+# No oauth2-proxy middleware, deliberately — see the header. The bearer token is
+# the gate. TLS comes from the wildcard cert, which needed
+# *.family.chrismiller.xyz added because this is a nested name.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: gramps-mcp
+  namespace: gramps
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: mcp.family.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: gramps-mcp
+                port:
+                  number: 3000

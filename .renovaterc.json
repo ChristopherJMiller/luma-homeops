@@ -53,6 +53,12 @@
       "matchPackageNames": ["ghcr.io/gramps-project/grampsweb"],
       "automerge": false,
       "description": "Pinned to `latest` by digest because upstream's version tags are months stale. :automergeDigest would otherwise merge a rebuild unseen, and a rebuild can move the bundled Gramps minor — desktop Gramps Web Sync only works when server and laptop agree on Gramps MAJOR.MINOR (60 today, laptop 6.0.6). Before merging, check the new image's GRAMPS_VERSION env; if it is not 60, the laptop upgrades first or sync breaks. See docs/gramps.md."
+    },
+    {
+      "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["ghcr.io/alexey-n-chernyshov/gramps-web-mcp-rs"],
+      "automerge": false,
+      "description": "Third-party MCP server with read access to the family tree, exposed publicly behind nothing but a bearer token. :automergeDigest would otherwise pull a new build unreviewed. Read the diff — particularly anything touching MCP_AUTH_TOKEN handling, MCP_ALLOWED_HOSTS (DNS-rebinding protection) or the read-only tool split — before merging."
     }
   ],
   "argocd": {
