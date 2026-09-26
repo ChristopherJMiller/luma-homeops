@@ -29,7 +29,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: valkey
-          image: docker.io/valkey/valkey:8-alpine@sha256:081c2f5cb575efc901aa80ff9cdbd1ec6a301682fd35e1ebb4b0990a4a4a8507
+          image: docker.io/valkey/valkey:9-alpine@sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11
           args: ["--save", "", "--appendonly", "no"]
           securityContext:
             allowPrivilegeEscalation: false
