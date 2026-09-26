@@ -1,0 +1,25 @@
+---
+# MCP gateway — OAuth (incl. dynamic client registration) in front of the
+# cluster's MCP servers, with identity from Dex. Runbook: docs/gramps.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mcp-gateway
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/mcp-gateway
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mcp-gateway
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

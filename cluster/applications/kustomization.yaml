@@ -14,6 +14,7 @@ resources:
   - fluent-bit.yaml
   - grafana-config.yaml
   - gramps.yaml
+  - mcp-gateway.yaml
   - galaxy-site.yaml
   - immich.yaml
   - immich-release.yaml

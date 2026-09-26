@@ -1,0 +1,8 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-gateway
+  labels:
+    # The image runs as 65532 with no caps, so it clears `restricted`.
+    pod-security.kubernetes.io/enforce: restricted

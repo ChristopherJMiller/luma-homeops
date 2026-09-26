@@ -1,0 +1,26 @@
+---
+# Client certificate for dialing Dex's gRPC API, from the same edge-ca that
+# signed Dex's server cert — mutual TLS needs both sides under one CA we control.
+#
+# This certificate is what authorises creating OAuth clients in Dex. Treat it as
+# an auth-plane credential: anything holding it can register (and delete) clients.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: mcp-gateway-dex-client
+  namespace: mcp-gateway
+spec:
+  secretName: mcp-gateway-dex-client
+  issuerRef:
+    name: edge-ca
+    kind: ClusterIssuer
+  commonName: mcp-gateway
+  usages:
+    - client auth
+    - digital signature
+    - key encipherment
+  duration: 8760h
+  renewBefore: 720h
+  privateKey:
+    algorithm: ECDSA
+    size: 256

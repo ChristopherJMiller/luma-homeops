@@ -1,0 +1,113 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-gateway
+  namespace: mcp-gateway
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+spec:
+  # 2 is safe: the gateway keeps no session state of its own — registrations live
+  # in Dex (as oauth2clients) and tokens are bearer tokens it validates.
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: mcp-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mcp-gateway
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: gateway
+          image: ghcr.io/hyprmcp/mcp-gateway:0.4.0@sha256:fde162c3b0df2f75b31776d1bc6736a7da29bc9665cc6fa872d37d022e2e3040
+          # The root command IS serve (cmd/root.go), so no subcommand.
+          args:
+            - -c
+            - /etc/mcp-gateway/conf/config.yaml
+            - -a
+            - :9000
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 9000
+          volumeMounts:
+            - name: config
+              mountPath: /etc/mcp-gateway/conf
+              readOnly: true
+            - name: dex-client
+              mountPath: /etc/mcp-gateway/dex-client
+              readOnly: true
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 5
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: "1"
+              memory: 256Mi
+      volumes:
+        - name: config
+          configMap:
+            name: mcp-gateway-config
+        - name: dex-client
+          secret:
+            secretName: mcp-gateway-dex-client
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-gateway
+  namespace: mcp-gateway
+  labels:
+    app.kubernetes.io/name: mcp-gateway
+spec:
+  selector:
+    app.kubernetes.io/name: mcp-gateway
+  ports:
+    - name: http
+      port: 9000
+      targetPort: http
+---
+# mcp.chrismiller.xyz — a single label, so the existing *.chrismiller.xyz
+# wildcard already covers it: no cert work, unlike the nested
+# mcp.family.chrismiller.xyz this replaces.
+#
+# No oauth2-proxy middleware, and that is the whole point of this component: the
+# gateway speaks OAuth to the MCP client itself, which forward-auth cannot do
+# because an MCP client is not a browser and cannot follow a redirect.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mcp-gateway
+  namespace: mcp-gateway
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: mcp.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-gateway
+                port:
+                  number: 9000

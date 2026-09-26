@@ -1,0 +1,44 @@
+---
+# MCP gateway config. The point of this component is one thing Dex cannot do:
+# dynamic client registration. An MCP client expects to register itself and then
+# run OAuth; Dex has no DCR endpoint, so the gateway registers clients FOR it
+# through Dex's gRPC API, and proxies the metadata MCP clients discover.
+#
+# Identity still comes from Dex, so the allowlists and connectors that govern
+# every other host apply here too — nothing about who may log in moves here.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-gateway-config
+  namespace: mcp-gateway
+data:
+  config.yaml: |
+    # Public origin, used to build the resource metadata MCP clients read.
+    host: https://mcp.chrismiller.xyz/
+
+    authorization:
+      server: https://dex.chrismiller.xyz/
+      # Serve the OAuth server metadata on this host so clients discover Dex
+      # through us rather than needing it configured.
+      serverMetadataProxyEnabled: true
+      dynamicClientRegistration:
+        enabled: true
+        # MCP clients are public clients: they hold no secret and use PKCE.
+        publicClient: true
+
+    # mTLS to Dex. ca.crt verifies Dex's server cert; tls.crt/key are what
+    # authorise us to create clients. Both come from edge-ca.
+    dexGRPCClient:
+      addr: dex.dex.svc.cluster.local:5557
+      tlsCert: /etc/mcp-gateway/dex-client/tls.crt
+      tlsKey: /etc/mcp-gateway/dex-client/tls.key
+      tlsClientCA: /etc/mcp-gateway/dex-client/ca.crt
+
+    # One entry per MCP server. Paths are namespaced by server so more can be
+    # added without new hostnames, new certs or new OAuth registrations.
+    proxy:
+      - path: /gramps/mcp
+        http:
+          url: http://gramps-mcp.gramps.svc.cluster.local:3000/mcp/
+        authentication:
+          enabled: true
