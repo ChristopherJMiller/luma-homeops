@@ -1,0 +1,39 @@
+---
+# Server certificate for Dex's gRPC API, from the edge-ca ClusterIssuer.
+#
+# This is edge-ca's first real use — it was scaffolded in
+# cluster/cert-manager/issuers.yaml for per-satellite mTLS and has been dormant
+# since. A private CA is right here: the peers are both in-cluster, so there is
+# nothing for a public CA to attest, and mTLS needs a CA we control anyway.
+#
+# Why mTLS rather than plaintext on a ClusterIP: the gRPC API can CREATE and
+# DELETE OAuth clients, which makes it auth-plane. This cluster runs flannel,
+# which does not enforce NetworkPolicy, so a policy restricting who may dial
+# 5557 would be decorative — the client certificate is the only real control.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: dex-grpc-tls
+  namespace: dex
+spec:
+  secretName: dex-grpc-tls
+  issuerRef:
+    name: edge-ca
+    kind: ClusterIssuer
+  commonName: dex-grpc
+  dnsNames:
+    # The in-cluster names the gateway may dial. No public name: this listener
+    # has no Ingress and must never get one.
+    - dex.dex.svc.cluster.local
+    - dex.dex.svc
+    - dex.dex
+    - dex
+  usages:
+    - server auth
+    - digital signature
+    - key encipherment
+  duration: 8760h # 1 year; internal, and rotation is a pod restart
+  renewBefore: 720h # 30 days
+  privateKey:
+    algorithm: ECDSA
+    size: 256

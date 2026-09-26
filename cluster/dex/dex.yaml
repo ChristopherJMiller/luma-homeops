@@ -81,9 +81,15 @@ spec:
               containerPort: 5556
             - name: telemetry
               containerPort: 5558
+            # gRPC API, mTLS only — see grpc-tls.yaml. No Ingress, ever.
+            - name: grpc
+              containerPort: 5557
           volumeMounts:
             - name: config
               mountPath: /etc/dex
+              readOnly: true
+            - name: grpc-tls
+              mountPath: /etc/dex/grpc
               readOnly: true
             # Dex rewrites its config through a temp file at startup to expand
             # env vars; with readOnlyRootFilesystem it dies on
@@ -114,6 +120,9 @@ spec:
             items:
               - key: config.yaml
                 path: config.yaml
+        - name: grpc-tls
+          secret:
+            secretName: dex-grpc-tls
         - name: tmp
           emptyDir: {}
 ---
@@ -131,6 +140,9 @@ spec:
     - name: http
       port: 5556
       targetPort: http
+    - name: grpc
+      port: 5557
+      targetPort: grpc
     - name: telemetry
       port: 5558
       targetPort: telemetry
