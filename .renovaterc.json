@@ -59,6 +59,12 @@
       "matchPackageNames": ["ghcr.io/alexey-n-chernyshov/gramps-web-mcp-rs"],
       "automerge": false,
       "description": "Third-party MCP server with read access to the family tree, exposed publicly behind nothing but a bearer token. :automergeDigest would otherwise pull a new build unreviewed. Read the diff — particularly anything touching MCP_AUTH_TOKEN handling, MCP_ALLOWED_HOSTS (DNS-rebinding protection) or the read-only tool split — before merging."
+    },
+    {
+      "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["ghcr.io/hyprmcp/mcp-gateway"],
+      "automerge": false,
+      "description": "The MCP gateway is the OAuth front door for mcp.chrismiller.xyz AND holds an edge-ca client certificate that can create or delete OAuth clients in Dex, so a bad bump is an auth-plane incident. Never automerge: read the diff around the oauth/, proxy/ and webhook/ packages, and confirm telemetry is still opt-in per route."
     }
   ],
   "argocd": {

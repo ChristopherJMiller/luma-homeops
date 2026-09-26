@@ -7,7 +7,7 @@
 #        diff <(sed "s/ cert=.*//" before.txt) <(sed "s/ cert=.*//" after.txt)
 # Add new public hosts to the list below when you add them.
 set -u
-hosts="$(printf '%s\n' chrismiller.xyz www.chrismiller.xyz ci attic auth-admin auth-family dex galaxy photos home lidarr plex prowlarr radarr sabnzbd share sonarr requests mediadav music dav.music lagrange dashboard rccl-tracker wordarena realliance.net www.realliance.net legacy.realliance.net family.werethemille.rs mcp.family.chrismiller.xyz)"
+hosts="$(printf '%s\n' chrismiller.xyz www.chrismiller.xyz ci attic auth-admin auth-family dex galaxy photos home lidarr plex prowlarr radarr sabnzbd share sonarr requests mediadav music dav.music lagrange dashboard rccl-tracker wordarena realliance.net www.realliance.net legacy.realliance.net family.werethemille.rs mcp)"
 for h in $hosts; do
   # Fully-qualified if it carries one of our zone suffixes; bare names are
   # assumed to be chrismiller.xyz, which is where most hosts live.

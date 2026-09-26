@@ -1,22 +1,17 @@
 ---
-# Gramps MCP endpoint — mcp.family.chrismiller.xyz
+# Gramps MCP server — reachable ONLY through the MCP gateway.
 #
-# Gives an AI client structured, tool-based access to the family tree. Chosen
-# from four Gramps MCP implementations because it is the only one that
-# authenticates INBOUND clients, and it also offers a read-only mode, DNS-
-# rebinding protection and an actively maintained pinned image.
+# It has no inbound auth of its own and no Ingress. Its own static-token mode was
+# removed when mcp.chrismiller.xyz took over: the gateway speaks OAuth to the
+# client and then proxies, and it can only forward a plain URL (ProxyHttp carries
+# no headers), so a token here would simply have blocked it.
 #
-# Auth, and why it is a bearer token rather than Dex: an MCP client is not a
-# browser and cannot follow a forward-auth redirect, so oauth2-proxy would break
-# it outright; remote MCP auth otherwise expects OAuth 2.1 with dynamic client
-# registration, which Dex does not implement. So the token in gramps-mcp is the
-# gate, and it is only safe because it is never sent over plain HTTP.
-#
-# Defence in depth: the server logs into Gramps Web as `gramps-mcp`, an account
-# with role 1 (MEMBER) — it may read, including private records, but the API
-# refuses writes with 403. Verified against the live API before deploying, and it
-# matters because GRAMPS_READONLY only hides the write TOOLS, whereas the role is
-# what actually forbids a write. A leaked token cannot change the tree.
+# What that means honestly: anything that can reach this Service in-cluster can
+# read the tree, and flannel does not enforce NetworkPolicy, so that is not
+# fixable with a policy today. The real containment is that it is not publicly
+# routable and that its Gramps account `gramps-mcp` is role 1 (MEMBER) — reads,
+# including private records, but the API refuses writes with 403. GRAMPS_READONLY
+# only hides the write tools; the role is what forbids a write.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -69,9 +64,6 @@ spec:
             # preserves the original Host header.
             - name: MCP_ALLOWED_HOSTS
               value: mcp.family.chrismiller.xyz
-          envFrom:
-            - secretRef:
-                name: gramps-mcp
           ports:
             - name: http
               containerPort: 3000
@@ -111,25 +103,3 @@ spec:
     - name: http
       port: 3000
       targetPort: http
----
-# No oauth2-proxy middleware, deliberately — see the header. The bearer token is
-# the gate. TLS comes from the wildcard cert, which needed
-# *.family.chrismiller.xyz added because this is a nested name.
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: gramps-mcp
-  namespace: gramps
-spec:
-  ingressClassName: traefik
-  rules:
-    - host: mcp.family.chrismiller.xyz
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: gramps-mcp
-                port:
-                  number: 3000
