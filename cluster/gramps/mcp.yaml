@@ -63,8 +63,13 @@ spec:
             # localhost, and every proxied request is rejected — Traefik
             # preserves the original Host header.
             - name: MCP_ALLOWED_HOSTS
-              # The gateway preserves the Host header of the public request.
-              value: mcp.chrismiller.xyz
+              # The host the GATEWAY sends, not the public one. Its
+              # RewriteHostFunc sets r.Out.URL.Host to the upstream and clears
+              # r.Out.Host, so Go sends the Service address as the Host header —
+              # this server never sees mcp.chrismiller.xyz. With the public name
+              # here instead, the DNS-rebinding check answered 403 and Claude Code
+              # reported "authed but rejected on reconnect".
+              value: gramps-mcp.gramps.svc.cluster.local:3000
           envFrom:
             # GRAMPS_PASSWORD only — see mcp-auth.secret.yaml.
             - secretRef:
