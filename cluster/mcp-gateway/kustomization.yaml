@@ -5,5 +5,17 @@ namespace: mcp-gateway
 resources:
   - namespace.yaml
   - dex-client-cert.yaml
-  - config.yaml
   - deployment.yaml
+
+# Generated, not hand-written, so the ConfigMap NAME carries a content hash.
+#
+# The gateway parses its config once at startup (-c flag), and a volume-mounted
+# ConfigMap updates on disk without restarting anything — so editing the config
+# left the old values running. That produced a 502 on 2026-09-27: the upstream
+# port had moved to 8000 while the process still dialled 3000. With a hashed
+# name, changing this file renames the ConfigMap, which changes the Deployment
+# that references it, which rolls the pods. No remembering required.
+configMapGenerator:
+  - name: mcp-gateway-config
+    files:
+      - config.yaml=config/config.yaml
