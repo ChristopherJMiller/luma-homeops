@@ -21,6 +21,17 @@ data:
       # Serve the OAuth server metadata on this host so clients discover Dex
       # through us rather than needing it configured.
       serverMetadataProxyEnabled: true
+      # Route the authorize step through the gateway instead of sending clients
+      # straight to Dex, which rewrites authorization_endpoint in the published
+      # metadata to /oauth/authorize here.
+      #
+      # Required, not cosmetic: MCP clients do not necessarily ask for the
+      # `openid` scope, and Dex refuses the request outright —
+      #   invalid_scope: Missing required scope(s) ["openid"]
+      # which is what Claude Code hit. This handler appends any missing
+      # openid/profile/email before forwarding, so the client does not have to
+      # know Dex's requirements.
+      authorizationProxyEnabled: true
       dynamicClientRegistration:
         enabled: true
         # MCP clients are public clients: they hold no secret and use PKCE.
