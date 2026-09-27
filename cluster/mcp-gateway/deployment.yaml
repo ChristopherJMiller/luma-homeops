@@ -85,26 +85,22 @@ spec:
     - name: http
       port: 9000
 ---
-# mcp.chrismiller.xyz — a single label, so the existing *.chrismiller.xyz wildcard
-# already covers it; that was half the reason for choosing this name over the
-# nested mcp.family.chrismiller.xyz.
+# mcp.chrismiller.xyz, split by path because the two halves need opposite answers.
 #
-# TWO layers, because the gateway supplies only one of them:
+# THE MCP CALLS — gated by mcp-jwt-auth, which requires a Dex-issued token whose
+# email is on the family allowlist. Two layers, since the gateway supplies only
+# authentication:
 #
-#   mcp-jwt-auth (this annotation)  is the request from somebody on the family
-#                                   allowlist?           -> authorization
-#   the gateway itself              is the token really signed by Dex, and run
-#                                   the OAuth/DCR dance  -> authentication
+#   mcp-jwt-auth   is this somebody on the family allowlist?   authorization
+#   the gateway    is the token signed by Dex, plus OAuth/DCR  authentication
 #
-# The gateway alone was not enough, and this Ingress is annotated rather than bare
-# because of what happened on 2026-09-26: published with authentication only, the
-# endpoint accepted any Dex-issued token, and Dex authenticates any Google or
-# Microsoft account in the world. That made the family tree world-readable until
-# the route was pulled. Do not remove this annotation.
+# The gateway alone was not enough: published with authentication only on
+# 2026-09-26, this endpoint accepted any Dex-issued token, and Dex authenticates
+# any Google or Microsoft account in the world — the family tree was briefly
+# world-readable. Do not remove this annotation.
 #
-# No `errors` middleware alongside: an MCP client is not a browser and cannot
-# follow a redirect, so a flat 401 is correct. The gateway's WWW-Authenticate
-# header is what points the client at the token endpoint.
+# No `errors` middleware: an MCP client cannot follow a sign-in redirect, so a flat
+# 401 is correct, and the gateway's WWW-Authenticate points the client at a token.
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -119,7 +115,49 @@ spec:
     - host: mcp.chrismiller.xyz
       http:
         paths:
-          - path: /
+          # One entry per MCP server. Adding a server means adding a path here
+          # and in the gateway config — deliberately explicit, so a new server
+          # cannot be exposed by accident.
+          - path: /gramps/mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-gateway
+                port:
+                  number: 9000
+---
+# THE OAUTH BOOTSTRAP — ungated, necessarily. A client reaches these BEFORE it can
+# possibly hold a token: it reads the metadata to find the authorization server,
+# registers itself, and only then obtains one. Gating them made the endpoint safe
+# and unusable, which is how this split came about.
+#
+# Safe to leave open: metadata is public by design (RFC 9728/8414), and
+# registration only mints an OAuth client — the family allowlist above still
+# decides whether any resulting token opens anything. The gateway rate-limits
+# registration to 3 per 10 minutes per IP, so the exposure is Dex oauth2client
+# objects, not data.
+#
+# There is deliberately NO catch-all `/` route: only these prefixes and the MCP
+# paths above are reachable at all.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mcp-gateway-oauth
+  namespace: mcp-gateway
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: mcp.chrismiller.xyz
+      http:
+        paths:
+          - path: /.well-known
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-gateway
+                port:
+                  number: 9000
+          - path: /oauth
             pathType: Prefix
             backend:
               service:
