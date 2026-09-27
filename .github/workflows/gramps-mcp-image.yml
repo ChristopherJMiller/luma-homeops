@@ -1,0 +1,90 @@
+---
+name: gramps-mcp image
+
+# The read-write MCP server for the family tree, built from the Nix derivation in
+# ChristopherJMiller/nixos-configs (packages/gramps-mcp) via the flake's
+# gramps-mcp-image output — NOT from a Dockerfile here.
+#
+# That indirection is the point: the derivation carries eight patches against
+# cabout-me/gramps-mcp v1.1.0 that are still open PRs upstream, and it is also
+# what Chris's laptop uses. Copying the patches into this repo would fork them.
+# `nix flake update nixos-configs` is how a patch change gets picked up.
+#
+# Tags :sha-<short> (immutable, what the Deployment pins) and :latest.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - flake.nix
+      - flake.lock
+      - .github/workflows/gramps-mcp-image.yml
+  pull_request:
+    paths:
+      - flake.nix
+      - flake.lock
+      - .github/workflows/gramps-mcp-image.yml
+  workflow_dispatch:
+
+concurrency:
+  group: gramps-mcp-image-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/gramps-mcp
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: DeterminateSystems/nix-installer-action@v20
+
+      - name: Build the image stream script
+        run: nix build .#gramps-mcp-image --print-build-logs
+
+      # streamLayeredImage produces a script that writes the tar to stdout, so
+      # nothing large is ever materialised in the store.
+      - name: Load into the local daemon
+        run: ./result | docker load
+
+      # Proves the entrypoint actually serves before anything is published: the
+      # server binds 8000 with no configuration, and only fails per-request
+      # without GRAMPS_API_URL, so "it starts" is a real signal here.
+      - name: Verify it serves streamable HTTP on 8000
+        run: |
+          set -eux
+          docker run -d --name probe -p 8000:8000 "${IMAGE}:latest"
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null "http://127.0.0.1:8000/mcp" \
+               || [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/mcp)" != "000" ]; then
+              echo "server responded"; break
+            fi
+            [ "$i" = 30 ] && { docker logs probe; exit 1; }
+            sleep 1
+          done
+          docker logs probe 2>&1 | grep -qi "uvicorn running"
+          docker rm -f probe
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push
+        if: github.event_name != 'pull_request'
+        run: |
+          set -eux
+          short="sha-$(git rev-parse --short HEAD)"
+          docker tag "${IMAGE}:latest" "${IMAGE}:${short}"
+          docker push "${IMAGE}:${short}"
+          docker push "${IMAGE}:latest"
+          docker inspect --format '{{index .RepoDigests 0}}' "${IMAGE}:${short}"

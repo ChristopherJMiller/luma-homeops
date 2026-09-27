@@ -16,6 +16,22 @@
         "type": "github"
       }
     },
+    "nixos-configs": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1790272525,
+        "narHash": "sha256-/iZfz6JtZFJmqf/bF1a58C27t/cddjGeaiJubAZ+uRI=",
+        "owner": "ChristopherJMiller",
+        "repo": "nixos-configs",
+        "rev": "109dfb891d06c30a0823804eac1b816f34437cfb",
+        "type": "github"
+      },
+      "original": {
+        "owner": "ChristopherJMiller",
+        "repo": "nixos-configs",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1789785513,
@@ -35,6 +51,7 @@
     "root": {
       "inputs": {
         "flake-compat": "flake-compat",
+        "nixos-configs": "nixos-configs",
         "nixpkgs": "nixpkgs"
       }
     }

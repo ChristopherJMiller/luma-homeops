@@ -6,13 +6,22 @@
   # nix-shell-pin skill) before committing the lock.
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Source-only (flake = false): we want the gramps-mcp derivation from
+    # packages/gramps-mcp, not that repo's flake outputs or its input graph.
+    # Its eight patches against cabout-me/gramps-mcp v1.1.0 stay the single
+    # source of truth there — copying them here would fork them. Pinned by
+    # flake.lock; bump with `nix flake update nixos-configs`.
+    nixos-configs = {
+      url = "github:ChristopherJMiller/nixos-configs";
+      flake = false;
+    };
     flake-compat = {
       url = "github:edolstra/flake-compat";
       flake = false;
     };
   };
 
-  outputs = { self, nixpkgs, ... }:
+  outputs = { self, nixpkgs, nixos-configs, ... }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f (import nixpkgs {
@@ -21,6 +30,38 @@
       }));
     in
     {
+
+      # The MCP server that writes to the family tree, built from Chris's
+      # patched derivation in nixos-configs. Upstream v1.1.0 is a year old and
+      # his fixes (create_family dropping children, get_type crashing on notes,
+      # gender OTHER rejected, a shared-httpx-client teardown race) are still
+      # open PRs upstream, so the patched build is the only usable one.
+      packages = forAllSystems (pkgs: rec {
+        gramps-mcp = pkgs.callPackage "${nixos-configs}/packages/gramps-mcp" { };
+
+        # Container image straight from that derivation — no second Dockerfile,
+        # no copied patches. streamLayeredImage writes the tar to stdout instead
+        # of materialising it in the store; CI pipes it into `docker load`.
+        gramps-mcp-image = pkgs.dockerTools.streamLayeredImage {
+          name = "ghcr.io/christopherjmiller/gramps-mcp";
+          tag = "latest";
+          # fakeNss supplies /etc/passwd so a numeric user is resolvable;
+          # cacert so httpx can verify TLS if the API is ever remote.
+          contents = [ pkgs.cacert pkgs.dockerTools.fakeNss ];
+          extraCommands = "mkdir -p tmp && chmod 1777 tmp";
+          config = {
+            Entrypoint = [ "${gramps-mcp}/bin/gramps-mcp" ];
+            # No argument => streamable HTTP on 8000 (stdio needs `stdio`).
+            ExposedPorts = { "8000/tcp" = { }; };
+            User = "65534:65534";
+            Env = [
+              "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+              "HOME=/tmp"
+              "PYTHONDONTWRITEBYTECODE=1"
+            ];
+          };
+        };
+      });
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           packages = with pkgs; [
