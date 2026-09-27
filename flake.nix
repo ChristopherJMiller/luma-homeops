@@ -70,6 +70,12 @@
             # the repo).
             backblaze-b2
 
+            # Go: images/mcp-jwt-auth is Go source now, and its go.sum has to be
+            # generated somewhere. Without this, `go mod tidy` is impossible
+            # locally and dependency checksums end up resolved at image-build time
+            # instead of pinned in the repo.
+            go
+
             # restic: read the 2022 `luma-backups` restic repo on B2, and drive
             # restore drills against the cluster backup repos (see docs/backups.md).
             restic

@@ -1,0 +1,82 @@
+---
+name: mcp-jwt-auth image
+
+# Forward-auth validator for the MCP endpoint (images/mcp-jwt-auth): verifies a
+# Dex-issued JWT and requires the email claim to be on the family allowlist.
+# Tags :sha-<short> (immutable, what the Deployment pins) and :latest.
+#
+# This sits in the request path for family data, so the smoke test below runs the
+# published image rather than trusting that it compiled.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - images/mcp-jwt-auth/**
+      - .github/workflows/mcp-jwt-auth.yml
+  pull_request:
+    paths:
+      - images/mcp-jwt-auth/**
+      - .github/workflows/mcp-jwt-auth.yml
+  workflow_dispatch:
+
+concurrency:
+  group: mcp-jwt-auth-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository_owner }}/mcp-jwt-auth
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: images/mcp-jwt-auth
+          # amd64 only: every galaxy node is x86_64.
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Fails closed on purpose: with no issuer configured it must refuse to
+      # start rather than come up and wave requests through. Distroless has no
+      # shell, so the binary is exercised directly.
+      - name: Verify it refuses to start without an issuer
+        if: github.event_name != 'pull_request'
+        run: |
+          set -eux
+          img="$(echo '${{ steps.meta.outputs.tags }}' | head -1)"
+          out="$(docker run --rm "$img" 2>&1 || true)"
+          echo "$out"
+          echo "$out" | grep -q "OIDC_ISSUER is required"
