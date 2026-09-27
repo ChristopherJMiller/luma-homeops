@@ -1,0 +1,28 @@
+--- a/src/gramps_mcp/server.py	2026-09-27 14:23:57.113665522 -0700
++++ b/src/gramps_mcp/server.py	2026-09-27 14:23:57.122665597 -0700
+@@ -14,6 +14,7 @@
+ from mcp.server import Server
+ from mcp.server.fastmcp import FastMCP
+ from mcp.server.stdio import stdio_server
++from mcp.server.transport_security import TransportSecuritySettings
+ from mcp.types import Tool
+ from pydantic import BaseModel, Field
+ 
+@@ -338,5 +339,17 @@
+         app.settings.host = "0.0.0.0"  # Listen on all interfaces for Docker
+         app.settings.port = 8000
+ 
++        # Deployment patch (luma-homeops): the MCP SDK arms DNS-rebinding
++        # protection by default and then allows ONLY localhost, so every request
++        # behind a real hostname comes back 421 Misdirected Request. We are
++        # reached solely through the MCP gateway, which rewrites Host to this
++        # Service address, and authorization happens in front of that gateway —
++        # so the check has nothing left to protect here. Upstream documents this
++        # exact case: "behind a reverse proxy that already controls the Host
++        # header, switching the check off is the honest configuration".
++        app.settings.transport_security = TransportSecuritySettings(
++            enable_dns_rebinding_protection=False
++        )
++
+         # Run with streamable-http transport for production use
+         app.run(transport="streamable-http")

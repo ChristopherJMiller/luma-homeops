@@ -37,7 +37,17 @@
       # gender OTHER rejected, a shared-httpx-client teardown race) are still
       # open PRs upstream, so the patched build is the only usable one.
       packages = forAllSystems (pkgs: rec {
-        gramps-mcp = pkgs.callPackage "${nixos-configs}/packages/gramps-mcp" { };
+        # His derivation carries the eight upstream bug fixes. Ours adds one
+        # deployment adaptation on top, kept HERE rather than in his repo
+        # because it is only correct behind this gateway: his laptop uses stdio,
+        # where the SDK localhost default is exactly right.
+        gramps-mcp =
+          (pkgs.callPackage "${nixos-configs}/packages/gramps-mcp" { }).overrideAttrs
+            (old: {
+              patches = (old.patches or [ ]) ++ [
+                ./patches/gramps-mcp-transport-security.patch
+              ];
+            });
 
         # Container image straight from that derivation — no second Dockerfile,
         # no copied patches. streamLayeredImage writes the tar to stdout instead
