@@ -1,7 +1,7 @@
 # Gramps Web — the family tree, and the MCP endpoint over it
 
 `family.werethemille.rs` is the genealogy app; `mcp.chrismiller.xyz/gramps/mcp` is
-an AI-facing, read-only view of the same tree. Both went in 2026-09-25/27.
+an AI-facing, read/write view of the same tree. Both went in 2026-09-25/27.
 
 Almost nothing here is where a first guess would put it, and most of the
 surprises cost an outage or a security hole to find, so this file leads with the
@@ -14,7 +14,7 @@ browser ─▶ Traefik ─▶ oauth2-proxy-family-rs ─▶ grampsweb ─▶ Dex
 desktop Gramps ──(username+password, /api)────────┤   tree data ──▶ Postgres (acid-gramps)
                                                   │   media ──────▶ B2  s3://galaxy-family/gramps
 AI client ─▶ Traefik ─▶ mcp-jwt-auth ─▶ mcp-gateway ─▶ gramps-mcp ─┘   tree dir ──▶ CephFS (1Gi)
-            (mcp.chrismiller.xyz)      (OAuth+DCR)    (read-only)
+            (mcp.chrismiller.xyz)      (OAuth+DCR)    (read/write)
 ```
 
 | Piece | Where | Notes |
@@ -24,7 +24,7 @@ AI client ─▶ Traefik ─▶ mcp-jwt-auth ─▶ mcp-gateway ─▶ gramps-mc
 | Media | B2 `galaxy-family/gramps/` | shares the family bucket and its key |
 | Tree directory | CephFS 1Gi RWX | metadata only — `name.txt`, backend marker, lock |
 | Shared cache | CephFS 10Gi RWX | uploads + thumbnails, **must** be shared |
-| MCP server | `cluster/gramps/mcp.yaml` | `gramps-web-mcp-rs`, read-only, no Ingress |
+| MCP server | `cluster/gramps/mcp.yaml` | Chris's patched cabout-me/gramps-mcp, read/write, no Ingress |
 | MCP gateway | `cluster/mcp-gateway/` | OAuth + dynamic client registration |
 | MCP authorization | `cluster/oauth2-proxy/mcp-jwt-auth.yaml` | our validator, `images/mcp-jwt-auth` |
 
@@ -206,10 +206,28 @@ and POSTs `/oauth/register` *before* it can hold a token. Metadata is public by
 spec, registration only mints a client, and the allowlist still decides whether a
 resulting token opens anything.
 
-The MCP server logs into Gramps as `gramps-mcp`, **role 0 (guest)** — every query
-ships what it reads to OpenAI/Anthropic/Google, and guest cannot read records
-flagged private. All MCP users share that one account, so there are no per-person
-Gramps permissions on this path: the allowlist decides *whether*, not *what*.
+The MCP server logs into Gramps as `gramps-mcp`, **role 3 (editor)** — family are
+editors by decision (2026-09-27), so an assistant can add and change records. Two
+consequences follow and neither is avoidable: `view_private` starts at MEMBER, so
+an account that can edit can also read records flagged private, and every query
+ships what it reads to OpenAI, Anthropic or Google. All MCP users share this one
+account, so there are no per-person Gramps permissions on this path — the
+allowlist decides *whether*, not *what*.
+
+The server is Chris's patched build of cabout-me/gramps-mcp, from the flake's
+`gramps-mcp-image` (built from the derivation in his nixos-configs, so the patches
+are not forked into this repo). Upstream v1.1.0 is a year old and his fixes are
+still open PRs, and they are what make writing usable: `create_family` silently
+dropped children, `get_type(person)` crashed for anyone with notes, gender OTHER
+was rejected at validation, and a process-wide httpx client was torn down by
+whichever concurrent tool call finished first.
+
+One patch lives HERE instead: `patches/gramps-mcp-transport-security.patch`. The
+MCP Python SDK arms DNS-rebinding protection and then allows only localhost, so
+every proxied request came back **421 Misdirected Request** — the gateway rewrites
+Host to the Service address. It is not settable by environment (FastMCP passes the
+field explicitly), and it belongs here rather than in nixos-configs because the
+laptop runs the same package over stdio, where the localhost default is right.
 
 ## Backups
 
@@ -218,13 +236,25 @@ Gramps permissions on this path: the allowlist decides *whether*, not *what*.
 | Tree, users, search index | `enableLogicalBackup` → nightly `pg_dumpall` to B2 | up to 24 h |
 | Media | B2 versioning, 90-day purge of hidden versions | **only copy** — see below |
 | Tree directory | *(nothing)* | metadata only; recreatable from `settings.ini` semantics |
+| Tree XML | nightly `GET /api/exporters/gramps/file` → `galaxy-family/gramps-exports/<date>.gramps`, 02:30 | date-stamped, never overwritten |
 
-Media bytes exist **only** in B2 plus 90 days of versions; the Postgres dump
-covers metadata, not files. A true second copy is an rclone server-side copy of
-that one prefix — cheap, same region, not yet done.
+Media bytes exist **only** in B2 plus 90 days of versions; the Postgres dump covers
+metadata, not files. A true second copy is an rclone server-side copy of that one
+prefix — cheap, same region, not yet done.
 
-**Still to do:** a Gramps XML export CronJob. XML is the format that survives a
-Gramps major-version change, which neither a PG dump nor the media bucket does.
+The XML export is the undo for a bad edit, which matters now that family are
+editors through MCP and sync is bidirectional. It runs as `gramps-backup`, role 1
+(MEMBER), and the role is load-bearing rather than tidy: the exporter passes
+`view_private=has_permissions({PERM_VIEW_PRIVATE})` (exporters.py:229), so a
+guest-role account would produce a backup that silently omits every private
+record. MEMBER is the lowest role that reads everything and still cannot write.
+The job also refuses to upload anything that is not gzipped XML, so an error page
+cannot quietly become that night's backup.
+
+To restore: fetch the dated file from B2 and import it through the Admin page
+(Import), or on the desktop with Gramps' own import. XML is the format that
+survives a Gramps major-version change, which neither the Postgres dump nor the
+media bucket does.
 
 ## Gotchas, condensed
 
@@ -238,6 +268,8 @@ Gramps major-version change, which neither a PG dump nor the media bucket does.
 | MCP client cannot register | the bootstrap paths got gated |
 | Sync fails after an image bump | `GRAMPS_VERSION` moved; match the laptop |
 | A 422 from the register endpoint | it validates payload and tree *before* checking whether registration is disabled — not proof it is open |
+| `421 Misdirected Request` from an MCP server | the SDK's DNS-rebinding check allows only localhost; the gateway sends the Service Host |
+| A backup that is missing people | the exporting account lacks `view_private` — private records are dropped silently |
 
 ## Commands
 
