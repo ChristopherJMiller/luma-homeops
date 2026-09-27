@@ -65,6 +65,12 @@
       "matchPackageNames": ["ghcr.io/hyprmcp/mcp-gateway"],
       "automerge": false,
       "description": "The MCP gateway is the OAuth front door for mcp.chrismiller.xyz AND holds an edge-ca client certificate that can create or delete OAuth clients in Dex, so a bad bump is an auth-plane incident. Never automerge: read the diff around the oauth/, proxy/ and webhook/ packages, and confirm telemetry is still opt-in per route."
+    },
+    {
+      "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["ghcr.io/christopherjmiller/mcp-jwt-auth"],
+      "automerge": false,
+      "description": "Our own forward-auth validator (images/mcp-jwt-auth) — it IS the authorization decision for the MCP endpoint, so a bump is an auth change. The Deployment pins the sha- tag the workflow published; bump it deliberately after reading the diff, never automatically."
     }
   ],
   "argocd": {

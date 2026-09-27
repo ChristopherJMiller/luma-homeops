@@ -11,4 +11,5 @@ resources:
   - family.yaml
   - family-rs.yaml
   - middlewares.yaml
+  - mcp-jwt-auth.yaml
   - servicemonitors.yaml

@@ -84,22 +84,45 @@ spec:
   ports:
     - name: http
       port: 9000
-      targetPort: http
-# NO INGRESS — deliberately, since 2026-09-27.
+---
+# mcp.chrismiller.xyz — a single label, so the existing *.chrismiller.xyz wildcard
+# already covers it; that was half the reason for choosing this name over the
+# nested mcp.family.chrismiller.xyz.
 #
-# The gateway authenticates but does not AUTHORIZE. Its only check is that the
-# bearer token is signed by Dex's JWKS (oauth/oauth.go: jwt.ParseString with
-# WithKeySet and nothing else) — no audience check, no issuer allowlist, and no
-# user allowlist. Dex, in turn, authenticates any Google or Microsoft account in
-# the world: it has no hostedDomains and no allowlist, because access control in
-# this cluster lives in the oauth2-proxy tiers.
+# TWO layers, because the gateway supplies only one of them:
 #
-# Exposed publicly, that combination means anyone could POST /oauth/register,
-# sign in with their own Google account and read the whole family tree. It was
-# briefly live in that state on 2026-09-26 and the route was removed the moment
-# the gap was understood.
+#   mcp-jwt-auth (this annotation)  is the request from somebody on the family
+#                                   allowlist?           -> authorization
+#   the gateway itself              is the token really signed by Dex, and run
+#                                   the OAuth/DCR dance  -> authentication
 #
-# Do not re-add this Ingress until requests are authorized against the family
-# allowlist as well as authenticated. The hard part is that an MCP client is not
-# a browser, so the oauth2-proxy forward-auth used everywhere else cannot be
-# reused as-is; it would need to accept a JWT bearer token rather than a cookie.
+# The gateway alone was not enough, and this Ingress is annotated rather than bare
+# because of what happened on 2026-09-26: published with authentication only, the
+# endpoint accepted any Dex-issued token, and Dex authenticates any Google or
+# Microsoft account in the world. That made the family tree world-readable until
+# the route was pulled. Do not remove this annotation.
+#
+# No `errors` middleware alongside: an MCP client is not a browser and cannot
+# follow a redirect, so a flat 401 is correct. The gateway's WWW-Authenticate
+# header is what points the client at the token endpoint.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mcp-gateway
+  namespace: mcp-gateway
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      oauth2-proxy-mcp-jwt-auth@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: mcp.chrismiller.xyz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-gateway
+                port:
+                  number: 9000
