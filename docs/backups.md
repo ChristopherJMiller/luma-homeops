@@ -7,15 +7,23 @@ Every off-site copy is readable from a laptop with nothing from the cluster.
 | Tier | What | Tool | Where in B2 | Schedule (UTC) |
 |---|---|---|---|---|
 | Family media | CephFS `/family` (PVC `media/family-media`) | rclone mirror, files-as-files | `galaxy-family/current/…`, deletions → `galaxy-family/deleted/<date>/…` | nightly 03:30 |
-| Postgres | all six `postgresql` clusters | postgres-operator logical backup (`pg_dumpall \| gzip`) | `galaxy-cluster-backups/spilo/<cluster>/<uid>/logical_backups/<ts>.sql.gz` | nightly 00:30 |
+| Postgres | all seven `postgresql` clusters | postgres-operator logical backup (`pg_dumpall \| gzip`) | `galaxy-cluster-backups/spilo/<cluster>/<uid>/logical_backups/<ts>.sql.gz` | nightly 00:30 |
 | Config volumes | HA persist, Plex config, gonic data+playlists, CephFS `/satellites` | restic, one repo, host = volume | `galaxy-cluster-backups/restic/config` | nightly 01:00–02:00 |
 | Immich uploads | `immich-uploads` — phone photos | rclone mirror | `galaxy-family/immich/current/…` | nightly 04:30 |
+| Gramps media | `galaxy-family/gramps/…` — scans attached to the family tree | **none — B2 is the primary store**, not a copy | `galaxy-family/gramps/…` | n/a |
 
-Immich's uploads are the only genuinely *new* irreplaceable data this cluster
-produces; the family archive is read-only and already mirrored, and the media
-library is re-acquirable. `thumbs/` and `encoded-video/` are excluded because
-Immich regenerates them. Its database rides the Postgres tier as
-`acid-immich`. See `docs/immich.md`.
+Immich's uploads and the family tree are the genuinely *new* irreplaceable data
+this cluster produces; the family archive is read-only and already mirrored, and
+the media library is re-acquirable. `thumbs/` and `encoded-video/` are excluded
+because Immich regenerates them. Both databases ride the Postgres tier, as
+`acid-immich` and `acid-gramps`. See `docs/immich.md` and `docs/gramps.md`.
+
+Gramps media is the one place where B2 holds the **only** copy: Gramps Web writes
+scans straight there (`MEDIA_BASE_DIR=s3://galaxy-family/gramps`) rather than to a
+volume that then gets mirrored, so there is no second copy and the Postgres dump
+covers metadata only. Versioning plus the bucket's 90-day purge of hidden versions
+is the whole protection today. A real second copy is an rclone server-side copy of
+that prefix — cheap, same region, not yet done.
 
 **Deliberately not backed up** (re-acquirable, or not worth the bytes):
 `media/mm-media` (1.7 TiB arr library), `music-streaming/gonic-music-pvc`
