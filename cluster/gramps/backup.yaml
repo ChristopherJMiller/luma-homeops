@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: gramps-backup
+  namespace: gramps
+spec:
+  encryptedData:
+    GRAMPS_BACKUP_PASSWORD: AgBCRKnu1Qf1GAFAmR4BvykiH6ytvHqHI4MhEkueIBfNf3g6o3MISJZc6dJy0jBYAFmClhq1dtHxtTMA/Mwr5Ke6YYX2Z8Gh+MWNzoDK6UtsEBI5PoJSIan/uBJABy4a2fFokMubWuNAdPCeXCaAwyl1aXsl8wZN6x+y3frNZJz74x5g77qPor/sy9TAfae3KgB2POh/wFYWaJiMXHB0pFu1EA7tJRMZ5nMMrcbOFmxmZQ6Dvv64gjjjpjhBnW1NfOkEvfoZwEOxK4/bTU7lJtGsf/dq1a2kQaqPV+LtAweOXVpFEhBNhKz8iXEhEr8N/ldc3V22/blz4BD258TllNIlbiorc1lBZO4m89789nMrqCGPG/z6eKhu5xjsRt81/YctC3reB6mdnkLNIqVTkt0OlmSQggozmDDESFL5Q+wE5nOz/FaUG+pUabBgqf32kzd5+JNLV3dWqI1WS4Qb1wsYZGZ7YFoHDHBVGquE1GcUdMOfXGLEFnQyh4ZJOzylc7w+8aRrZtXxjx19GOmmHm3GqThiCiGtw0/49mGJwD4yTjrFF05u0HUwA0OgM+PxwyqH83s8/jJTL930BWq3dT1jzErYIxRfE+Sq5PA2dk2pJGJvbEwntBxAa8rsn9lzyMrHODYVJ0BMdrMZs/E46dJWtevmpwYr3T5a59rU3g/xTcQvmXWUt2YgN+6Myjr3GFHi2n/Qx4ScjJ+w3+Y+BUYOiPevwt3mNoOSOAMXorZ8JA==
+  template:
+    metadata:
+      name: gramps-backup
+      namespace: gramps

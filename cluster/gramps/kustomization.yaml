@@ -15,4 +15,6 @@ resources:
   - valkey.yaml
   - grampsweb.yaml
   - mcp.yaml
+  - backup.yaml
+  - export-cronjob.yaml
   - ingress.yaml
