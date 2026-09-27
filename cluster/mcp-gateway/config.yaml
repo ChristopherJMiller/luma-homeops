@@ -50,6 +50,6 @@ data:
     proxy:
       - path: /gramps/mcp
         http:
-          url: http://gramps-mcp.gramps.svc.cluster.local:3000/mcp/
+          url: http://gramps-mcp.gramps.svc.cluster.local:8000/mcp
         authentication:
           enabled: true

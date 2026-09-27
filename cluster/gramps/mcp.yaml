@@ -1,17 +1,23 @@
 ---
-# Gramps MCP server — reachable ONLY through the MCP gateway.
+# Gramps MCP server — read/write, reachable ONLY through the MCP gateway.
 #
-# It has no inbound auth of its own and no Ingress. Its own static-token mode was
-# removed when mcp.chrismiller.xyz took over: the gateway speaks OAuth to the
-# client and then proxies, and it can only forward a plain URL (ProxyHttp carries
-# no headers), so a token here would simply have blocked it.
+# This is Chris's patched build of cabout-me/gramps-mcp (see the flake's
+# gramps-mcp-image output, built from the derivation in nixos-configs). The
+# patches are what make writing usable: upstream's create_family silently drops
+# children, get_type(person) crashes for anyone with notes, gender OTHER is
+# rejected at validation, and a process-wide httpx client gets torn down by
+# whichever concurrent tool call finishes first. All still open PRs upstream.
 #
-# What that means honestly: anything that can reach this Service in-cluster can
-# read the tree, and flannel does not enforce NetworkPolicy, so that is not
-# fixable with a policy today. The real containment is that it is not publicly
-# routable and that its Gramps account `gramps-mcp` is role 1 (MEMBER) — reads,
-# including private records, but the API refuses writes with 403. GRAMPS_READONLY
-# only hides the write tools; the role is what forbids a write.
+# It has no inbound auth of its own and no Ingress: the gateway is the only route,
+# and authorization is the family allowlist in front of the gateway. Anything that
+# can reach this Service in-cluster can read AND WRITE the tree — flannel does not
+# enforce NetworkPolicy, so that is not fixable with a policy today.
+#
+# Family are editors by decision (2026-09-27), so this account can write and can
+# therefore also see records flagged private. Both follow from allowing writes:
+# `view_private` starts at MEMBER and editing needs EDITOR, so the earlier
+# GUEST-only posture is not compatible with an AI that edits the tree. The undo is
+# the nightly pg_dumpall plus the Gramps XML export.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,6 +26,10 @@ metadata:
   labels:
     app.kubernetes.io/name: gramps-mcp
 spec:
+  # 1 replica deliberately: upstream keeps a process-wide httpx client and the
+  # shared-client-lifetime patch fixes teardown races *within* a process. More
+  # replicas is fine for reads but buys nothing here, and writes are easier to
+  # reason about with one writer.
   replicas: 1
   strategy:
     type: Recreate
@@ -33,68 +43,56 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-        runAsUser: 65532 # the image's own `nonroot` user
+        runAsUser: 65534 # the image's nobody, from dockerTools.fakeNss
+        runAsGroup: 65534
         seccompProfile:
           type: RuntimeDefault
       containers:
         - name: mcp
-          image: ghcr.io/alexey-n-chernyshov/gramps-web-mcp-rs:1.4.0@sha256:b620bb70ff5ce6f3702390e448fd446fcc26775f72d2d65ae8878eb91794b4ed
+          image: IMAGE_PLACEHOLDER
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
           env:
-            # In-cluster, so tree reads never leave the LAN or hairpin through
-            # the edge. This is the site root, not the /api prefix.
+            # In-cluster, so tree traffic never leaves the LAN. Site root, not /api.
             - name: GRAMPS_API_URL
               value: http://grampsweb.gramps.svc.cluster.local
             - name: GRAMPS_USERNAME
               value: gramps-mcp
-            - name: GRAMPS_READONLY
-              value: "true"
-            - name: MCP_TRANSPORT
-              value: http
-            - name: MCP_HTTP_HOST
-              value: 0.0.0.0
-            - name: MCP_HTTP_PORT
-              value: "3000"
-            # Without this the server's DNS-rebinding protection allows only
-            # localhost, and every proxied request is rejected — Traefik
-            # preserves the original Host header.
-            - name: MCP_ALLOWED_HOSTS
-              # The host the GATEWAY sends, not the public one. Its
-              # RewriteHostFunc sets r.Out.URL.Host to the upstream and clears
-              # r.Out.Host, so Go sends the Service address as the Host header —
-              # this server never sees mcp.chrismiller.xyz. With the public name
-              # here instead, the DNS-rebinding check answered 403 and Claude Code
-              # reported "authed but rejected on reconnect".
-              value: gramps-mcp.gramps.svc.cluster.local:3000
+            # This server addresses the tree explicitly, unlike the Rust one.
+            - name: GRAMPS_TREE_ID
+              value: a7d06e65-34ab-474f-a8d5-e8ae6d8946da
+            # HOME is /tmp in the image; keep the writable path on an emptyDir so
+            # readOnlyRootFilesystem holds.
+            - name: HOME
+              value: /tmp
           envFrom:
             # GRAMPS_PASSWORD only — see mcp-auth.secret.yaml.
             - secretRef:
                 name: gramps-mcp
           ports:
             - name: http
-              containerPort: 3000
+              containerPort: 8000
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           livenessProbe:
             tcpSocket:
               port: http
-            initialDelaySeconds: 10
+            initialDelaySeconds: 15
           readinessProbe:
             tcpSocket:
               port: http
             initialDelaySeconds: 5
-          volumeMounts:
-            - name: tmp
-              mountPath: /tmp
           resources:
             requests:
-              cpu: 10m
-              memory: 32Mi
+              cpu: 25m
+              memory: 128Mi
             limits:
-              cpu: 500m
-              memory: 256Mi
+              cpu: "1"
+              memory: 512Mi
       volumes:
         - name: tmp
           emptyDir: {}
@@ -111,5 +109,5 @@ spec:
     app.kubernetes.io/name: gramps-mcp
   ports:
     - name: http
-      port: 3000
+      port: 8000
       targetPort: http

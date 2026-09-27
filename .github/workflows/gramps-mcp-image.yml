@@ -35,7 +35,12 @@ permissions:
   packages: write
 
 env:
-  IMAGE: ghcr.io/${{ github.repository_owner }}/gramps-mcp
+  # Lowercase and hardcoded on purpose. github.repository_owner is
+  # "ChristopherJMiller", and Docker rejects a mixed-case repository name — the
+  # other workflows get away with it because docker/metadata-action lowercases
+  # for them, and this one tags by hand. It must also match the `name` in the
+  # flake's gramps-mcp-image, which is what `docker load` produces.
+  IMAGE: ghcr.io/christopherjmiller/gramps-mcp
 
 jobs:
   build:
@@ -54,20 +59,21 @@ jobs:
         run: ./result | docker load
 
       # Proves the entrypoint actually serves before anything is published: the
-      # server binds 8000 with no configuration, and only fails per-request
-      # without GRAMPS_API_URL, so "it starts" is a real signal here.
+      # server binds 8000 with no configuration and only fails per-request
+      # without GRAMPS_API_URL, so "it starts and answers" is a real signal.
       - name: Verify it serves streamable HTTP on 8000
         run: |
           set -eux
           docker run -d --name probe -p 8000:8000 "${IMAGE}:latest"
+          ok=
           for i in $(seq 1 30); do
-            if curl -fsS -o /dev/null "http://127.0.0.1:8000/mcp" \
-               || [ "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/mcp)" != "000" ]; then
-              echo "server responded"; break
-            fi
-            [ "$i" = 30 ] && { docker logs probe; exit 1; }
+            code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8000/mcp || true)"
+            # Any HTTP status means it is serving; 000 means not listening yet.
+            if [ "$code" != "000" ]; then ok="$code"; break; fi
             sleep 1
           done
+          docker logs probe
+          test -n "$ok"
           docker logs probe 2>&1 | grep -qi "uvicorn running"
           docker rm -f probe
 
