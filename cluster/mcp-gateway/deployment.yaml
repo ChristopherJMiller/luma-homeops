@@ -85,29 +85,21 @@ spec:
     - name: http
       port: 9000
       targetPort: http
----
-# mcp.chrismiller.xyz — a single label, so the existing *.chrismiller.xyz
-# wildcard already covers it: no cert work, unlike the nested
-# mcp.family.chrismiller.xyz this replaces.
+# NO INGRESS — deliberately, since 2026-09-27.
 #
-# No oauth2-proxy middleware, and that is the whole point of this component: the
-# gateway speaks OAuth to the MCP client itself, which forward-auth cannot do
-# because an MCP client is not a browser and cannot follow a redirect.
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: mcp-gateway
-  namespace: mcp-gateway
-spec:
-  ingressClassName: traefik
-  rules:
-    - host: mcp.chrismiller.xyz
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: mcp-gateway
-                port:
-                  number: 9000
+# The gateway authenticates but does not AUTHORIZE. Its only check is that the
+# bearer token is signed by Dex's JWKS (oauth/oauth.go: jwt.ParseString with
+# WithKeySet and nothing else) — no audience check, no issuer allowlist, and no
+# user allowlist. Dex, in turn, authenticates any Google or Microsoft account in
+# the world: it has no hostedDomains and no allowlist, because access control in
+# this cluster lives in the oauth2-proxy tiers.
+#
+# Exposed publicly, that combination means anyone could POST /oauth/register,
+# sign in with their own Google account and read the whole family tree. It was
+# briefly live in that state on 2026-09-26 and the route was removed the moment
+# the gap was understood.
+#
+# Do not re-add this Ingress until requests are authorized against the family
+# allowlist as well as authenticated. The hard part is that an MCP client is not
+# a browser, so the oauth2-proxy forward-auth used everywhere else cannot be
+# reused as-is; it would need to accept a JWT bearer token rather than a cookie.
