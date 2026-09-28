@@ -8,7 +8,7 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     # Source-only (flake = false): we want the gramps-mcp derivation from
     # packages/gramps-mcp, not that repo's flake outputs or its input graph.
-    # Its eight patches against cabout-me/gramps-mcp v1.1.0 stay the single
+    # Its patches against cabout-me/gramps-mcp v1.1.0 stay the single
     # source of truth there — copying them here would fork them. Pinned by
     # flake.lock; bump with `nix flake update nixos-configs`.
     nixos-configs = {
@@ -37,7 +37,7 @@
       # gender OTHER rejected, a shared-httpx-client teardown race) are still
       # open PRs upstream, so the patched build is the only usable one.
       packages = forAllSystems (pkgs: rec {
-        # His derivation carries the eight upstream bug fixes. Ours adds one
+        # His derivation carries the upstream bug fixes. Ours adds one
         # deployment adaptation on top, kept HERE rather than in his repo
         # because it is only correct behind this gateway: his laptop uses stdio,
         # where the SDK localhost default is exactly right.

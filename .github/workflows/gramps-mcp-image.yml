@@ -5,7 +5,7 @@ name: gramps-mcp image
 # ChristopherJMiller/nixos-configs (packages/gramps-mcp) via the flake's
 # gramps-mcp-image output — NOT from a Dockerfile here.
 #
-# That indirection is the point: the derivation carries eight patches against
+# That indirection is the point: the derivation carries the patches against
 # cabout-me/gramps-mcp v1.1.0 that are still open PRs upstream, and it is also
 # what Chris's laptop uses. Copying the patches into this repo would fork them.
 # `nix flake update nixos-configs` is how a patch change gets picked up.
