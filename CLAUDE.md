@@ -94,6 +94,8 @@ The deploy flow for runtime secrets:
 3. Commit both the `.secret.yaml` (encrypted) and the generated `.yaml` (SealedSecret, plaintext but only the controller's private key can open it)
 4. Argo applies the SealedSecret; the in-cluster controller writes the real Secret.
 
+One `.secret.yaml` is itself **generated** and must not be hand-edited: `cluster/gramps/new-user-emails.secret.yaml` is derived from `cluster/oauth2-proxy/emails-family.secret.yaml` — the single family allowlist of record — by `scripts/mirror-family-list.sh`, which pre-commit runs like a formatter. A Secret cannot be mounted across namespaces, and Gramps Web needs that list in its own namespace, so the object is duplicated while the source is not. Edit the oauth2-proxy file, commit, reseal when the hook stops you, `git add` both.
+
 ---
 
 ## Satellites (NixOS edge devices)
@@ -141,6 +143,7 @@ These are real problems in the current cluster — flag, don't silently fix:
 3. **Talos v1.10.9 / k8s v1.33.13** (hops through 2026-07-17, #2506): k8s is at Talos 1.10's max supported minor. Remaining sequence (no skips, one node at a time, Ceph healthy between): Talos 1.11 (**etcd 3.5→3.6 rides along — snapshot first!**) → k8s 1.34 → Talos 1.12 → 1.13 → k8s 1.35 → 1.36. See #2506 + the talos-upgrade skill (factory installer image, not ghcr). Gotcha: `upgrade-k8s` watches through the VIP can dead-stall at "waiting for kubelet restart" while the cluster is actually fine — run it with `-n 192.168.0.240 -e 192.168.0.240` (a direct node IP), and if stalled, kill + re-run (idempotent).
 4. **~~authentik~~ — removed 2026-09-23.** Replaced by oauth2-proxy (Google) with two trust tiers, `admin` and `family`; config is `cluster/oauth2-proxy/`, runbook is `docs/auth.md`. It had been pinned at 2024.12.3 facing an 8-hop upgrade, to serve one app / one provider / two users. Gate a host by referencing the tier's **middleware pair** (errors first). Microsoft/Outlook accounts need the planned Dex step — oauth2-proxy is single-provider.
 5. **kube-prometheus-stack 79.12.0** — one stepwise hop to ~84.x remains (#2515).
+6. **Some workloads run images WE build, and a Renovate bump does not ship them.** `images/*` (`grampsweb`, `mcp-jwt-auth`, `spilo-vchord`, `ceph-nfs-export-operator`) plus the flake-built `gramps-mcp` are pinned in their Deployments as `:sha-<commit>@sha256:…`. Renovate bumps the **base** image inside the Dockerfile; CI then publishes a new `sha-` tag; the Deployment pin is a **second, manual commit**. So merging a base bump changes nothing at runtime until someone re-pins — the safe direction, but don't assume a merged Renovate PR is deployed. Corollary, and the one that bites: **don't reason about these apps from upstream's behaviour.** `grampsweb` carries a patch that creates a family-listed address as an editor on first login (`GRAMPSWEB_OIDC_NEW_USER_ROLE`), which stock Gramps Web does not do; check `images/<app>/` before concluding upstream does something.
 
 ---
 
