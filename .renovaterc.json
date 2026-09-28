@@ -49,10 +49,10 @@
       "description": "oauth2-proxy gates every admin host; a bad bump locks everyone out (and it is what replaced authentik, 2026-09-23). Read the release notes, then merge by hand."
     },
     {
-      "matchManagers": ["kubernetes"],
+      "matchManagers": ["kubernetes", "dockerfile"],
       "matchPackageNames": ["ghcr.io/gramps-project/grampsweb"],
       "automerge": false,
-      "description": "Pinned to `latest` by digest because upstream's version tags are months stale. :automergeDigest would otherwise merge a rebuild unseen, and a rebuild can move the bundled Gramps minor — desktop Gramps Web Sync only works when server and laptop agree on Gramps MAJOR.MINOR (60 today, laptop 6.0.6). Before merging, check the new image's GRAMPS_VERSION env; if it is not 60, the laptop upgrades first or sync breaks. See docs/gramps.md."
+      "description": "Upstream Gramps Web, now the FROM of images/grampsweb rather than the image the Deployment runs (hence the dockerfile manager). Pinned to `latest` by digest because upstream's version tags are months stale. :automergeDigest would otherwise merge a rebuild unseen, and a rebuild can move the bundled Gramps minor — desktop Gramps Web Sync only works when server and laptop agree on Gramps MAJOR.MINOR (60 today, laptop 6.0.6). Before merging, check the new image's GRAMPS_VERSION env (the workflow prints it and warns); if it is not 60, the laptop upgrades first or sync breaks. Merging this does NOT ship it: the workflow publishes a new sha- tag, and a second commit pins that tag in cluster/gramps/grampsweb.yaml. See docs/gramps.md."
     },
     {
       "matchManagers": ["kubernetes"],
@@ -71,6 +71,12 @@
       "matchPackageNames": ["ghcr.io/christopherjmiller/mcp-jwt-auth"],
       "automerge": false,
       "description": "Our own forward-auth validator (images/mcp-jwt-auth) — it IS the authorization decision for the MCP endpoint, so a bump is an auth change. The Deployment pins the sha- tag the workflow published; bump it deliberately after reading the diff, never automatically."
+    },
+    {
+      "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["ghcr.io/christopherjmiller/grampsweb"],
+      "automerge": false,
+      "description": "Our own Gramps Web (images/grampsweb): upstream plus the patch that creates a listed family address as an editor on first login. That patch decides who gets into the family tree with no human in the loop, so a bump is an auth change — read the diff and confirm the workflow's fail-closed smoke test passed. Renovate bumps the upstream FROM in the Dockerfile; the sha- tag here is pinned by hand after the workflow publishes it."
     }
   ],
   "argocd": {

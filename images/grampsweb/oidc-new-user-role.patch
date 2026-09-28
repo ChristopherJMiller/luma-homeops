@@ -1,0 +1,120 @@
+--- a/gramps_webapi/auth/oidc.py
++++ b/gramps_webapi/auth/oidc.py
+@@ -267,6 +267,98 @@
+     return email
+ 
+ 
++def _new_user_role(userinfo: dict) -> int:
++    """Return the role to give an OIDC account that is being created right now.
++
++    Deployment patch (luma-homeops), not upstream behaviour. Upstream always
++    creates a new OIDC account as ROLE_DISABLED, so every relative's first login
++    needs a hand-written UPDATE before they can get in — and while they wait they
++    see a bare ``Internal Server Error``, because the callback resolves
++    PERMISSIONS[role] before it checks for a disabled role.
++
++    ``OIDC_NEW_USER_ROLE`` is the role to grant instead, and it is granted ONLY
++    to an address listed in ``OIDC_NEW_USER_ROLE_EMAILS_FILE`` (one per line,
++    ``#`` comments allowed). That file is the point of the patch: Dex brokers
++    Google and Microsoft and will authenticate anybody, so "authenticated" must
++    not imply "authorized". The edge proxy already gates this host on the same
++    list; this is the second of two independent checks, not the only one.
++
++    Everything unexpected returns ROLE_DISABLED, which is exactly upstream's
++    behaviour — a missing or unreadable file, an unlisted address, a provider
++    that says the address is unverified, or a role above editor (auto-granting
++    owner or admin from a list of e-mail addresses is not a thing this should be
++    able to do, since owner can then manage every other account).
++    """
++    configured = current_app.config.get("OIDC_NEW_USER_ROLE", ROLE_DISABLED)
++    try:
++        role = int(configured)
++    except (TypeError, ValueError):
++        logger.error(
++            "OIDC_NEW_USER_ROLE is %r, which is not an integer; creating the "
++            "account disabled",
++            configured,
++        )
++        return ROLE_DISABLED
++
++    if role == ROLE_DISABLED:
++        return ROLE_DISABLED
++
++    if not ROLE_GUEST <= role <= ROLE_EDITOR:
++        logger.error(
++            "OIDC_NEW_USER_ROLE is %s; refusing to auto-grant anything outside "
++            "guest..editor. Creating the account disabled.",
++            role,
++        )
++        return ROLE_DISABLED
++
++    path = current_app.config.get("OIDC_NEW_USER_ROLE_EMAILS_FILE")
++    if not path:
++        logger.error(
++            "OIDC_NEW_USER_ROLE is set but OIDC_NEW_USER_ROLE_EMAILS_FILE is "
++            "not; refusing to grant a role to an unlisted account"
++        )
++        return ROLE_DISABLED
++
++    email = (userinfo.get("email") or "").strip().lower()
++    if not email:
++        return ROLE_DISABLED
++
++    # Absent is fine (not every connector sends it); present-and-false is not.
++    if userinfo.get("email_verified") is False:
++        logger.warning(
++            "Provider says %s is unverified; creating the account disabled", email
++        )
++        return ROLE_DISABLED
++
++    try:
++        with open(path, encoding="utf-8") as allowlist:
++            allowed = {
++                line.strip().lower()
++                for line in allowlist
++                if line.strip() and not line.lstrip().startswith("#")
++            }
++    except OSError as exc:
++        logger.error(
++            "Cannot read OIDC_NEW_USER_ROLE_EMAILS_FILE %s (%s); creating the "
++            "account disabled",
++            path,
++            exc,
++        )
++        return ROLE_DISABLED
++
++    if email not in allowed:
++        logger.info(
++            "%s is not on the new-user role list; creating the account disabled",
++            email,
++        )
++        return ROLE_DISABLED
++
++    logger.info(
++        "%s is on the new-user role list; creating it with role %s", email, role
++    )
++    return role
++
++
+ def create_or_update_oidc_user(
+     userinfo: dict, tree_id: str | None, provider_id: str
+ ) -> str:
+@@ -362,8 +454,16 @@
+     random_password = secrets.token_urlsafe(32)
+ 
+     # For new users, use role from claims if role mapping is configured,
+-    # otherwise default to DISABLED so an admin has to approve the account
+-    final_role = role_from_claims if role_from_claims is not None else ROLE_DISABLED
++    # otherwise fall back to _new_user_role(), which grants
++    # OIDC_NEW_USER_ROLE to a listed address and ROLE_DISABLED to anyone
++    # else. Only the creation path is patched: an EXISTING user's role is
++    # still whatever it already was, because passing a role here for an
++    # existing account is what demotes a working admin.
++    final_role = (
++        role_from_claims
++        if role_from_claims is not None
++        else _new_user_role(userinfo)
++    )
+ 
+     email = get_usable_email(userinfo)
+ 

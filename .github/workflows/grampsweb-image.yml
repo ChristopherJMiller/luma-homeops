@@ -1,0 +1,96 @@
+---
+name: grampsweb image
+
+# Gramps Web plus oidc-new-user-role.patch (images/grampsweb): a listed family
+# address is created as an editor on first login instead of landing DISABLED and
+# needing a manual UPDATE. Tags :sha-<short> (immutable, what the Deployment
+# pins) and :latest.
+#
+# The patch decides who gets into the family tree with no human in the loop, so
+# the smoke test runs the PUBLISHED image and asserts every fail-closed case,
+# rather than trusting that the hunk applied.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - images/grampsweb/**
+      - .github/workflows/grampsweb-image.yml
+  pull_request:
+    paths:
+      - images/grampsweb/**
+      - .github/workflows/grampsweb-image.yml
+  workflow_dispatch:
+
+concurrency:
+  group: grampsweb-image-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository_owner }}/grampsweb
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: images/grampsweb
+          # amd64 only: every galaxy node is x86_64.
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Every case that is not "a listed, verified address and a sane role" must
+      # come back ROLE_DISABLED. A pull request tests the locally loaded image;
+      # main tests the one that was just published.
+      - name: Verify the patch fails closed
+        run: |
+          set -eux
+          img="$(echo '${{ steps.meta.outputs.tags }}' | head -1)"
+          docker run --rm --entrypoint /venv/bin/python3 \
+            -v "$PWD/images/grampsweb/smoke_test.py:/tmp/smoke_test.py:ro" \
+            "$img" /tmp/smoke_test.py
+
+      # Desktop Gramps Web Sync only works when the server and the laptop agree
+      # on Gramps MAJOR.MINOR, so a base bump that moves this is a breaking
+      # change that must be noticed here rather than by a failing sync. 60 today;
+      # see docs/gramps.md.
+      - name: Report the bundled Gramps version
+        run: |
+          set -eux
+          img="$(echo '${{ steps.meta.outputs.tags }}' | head -1)"
+          v="$(docker run --rm --entrypoint printenv "$img" GRAMPS_VERSION)"
+          echo "GRAMPS_VERSION=$v"
+          test "$v" = "60" || echo "::warning::GRAMPS_VERSION is $v, not 60 — desktop sync needs the laptop to match before this ships"

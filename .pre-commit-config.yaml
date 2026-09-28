@@ -43,7 +43,7 @@ repos:
             # A unified diff carries meaning in leading and trailing space: a
             # context line for an empty source line is a single space, and
             # stripping it can make the patch unapplyable.
-            |patches/.*\.patch
+            |(patches|images)/.*\.patch
             |cluster/home-assistant/(packages|blueprints|dashboards|themes)/.*\.yaml
           )$
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -64,7 +64,7 @@ repos:
             # A unified diff carries meaning in leading and trailing space: a
             # context line for an empty source line is a single space, and
             # stripping it can make the patch unapplyable.
-            |patches/.*\.patch
+            |(patches|images)/.*\.patch
           )$
       - id: fix-byte-order-marker
         name: Fix UTF-8 byte order marker
@@ -78,5 +78,5 @@ repos:
             # A unified diff carries meaning in leading and trailing space: a
             # context line for an empty source line is a single space, and
             # stripping it can make the patch unapplyable.
-            |patches/.*\.patch
+            |(patches|images)/.*\.patch
           )$
