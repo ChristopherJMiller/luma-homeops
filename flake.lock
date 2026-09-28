@@ -19,11 +19,11 @@
     "nixos-configs": {
       "flake": false,
       "locked": {
-        "lastModified": 1790563039,
-        "narHash": "sha256-gD2nIa6PyYVS915PQE4sO9/nTxWrNi4YWXTnvsk5/N0=",
+        "lastModified": 1790563838,
+        "narHash": "sha256-RQMt1/2zj5LvUvS+bOX3pCqPNh6DULrIHaF0hS/mfgQ=",
         "owner": "ChristopherJMiller",
         "repo": "nixos-configs",
-        "rev": "1e4a1477f77b9537bc5eaf6d19064f3d1c8dc754",
+        "rev": "0137af1656926f0de392abcc6ad8a5d5863c76b8",
         "type": "github"
       },
       "original": {
