@@ -51,7 +51,7 @@ spec:
         - name: mcp
           # Built from the flake's gramps-mcp-image (Chris's patched derivation),
           # published by .github/workflows/gramps-mcp-image.yml.
-          image: ghcr.io/christopherjmiller/gramps-mcp:sha-1a36cb2@sha256:f87f4ff2eb881289990550a2493ffa764aacca810637fdd35abd53c9af252330
+          image: ghcr.io/christopherjmiller/gramps-mcp:sha-dcd90bf@sha256:c5c6dfb07163ded951072c55f4c232a75c751981a5f50e30c73de6726b267576
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
