@@ -220,7 +220,22 @@ are not forked into this repo). Upstream v1.1.0 is a year old and his fixes are
 still open PRs, and they are what make writing usable: `create_family` silently
 dropped children, `get_type(person)` crashed for anyone with notes, gender OTHER
 was rejected at validation, and a process-wide httpx client was torn down by
-whichever concurrent tool call finished first.
+whichever concurrent tool call finished first. A second round (2026-09-27): citation
+confidence was silently dropped, so every citation read Normal; `create_note`
+failed validation on every call; and nothing could be deleted, detached from a
+list, or uploaded.
+
+**The assistant can delete.** `delete_object` refuses while anything still refers
+to the target and names what does; with `force=true` Gramps strips those
+references, and deleting a *source* takes all of its citations with it. Every
+allowlisted relative's assistant gets this through the one shared editor account.
+The nightly XML export (below) is the undo.
+
+**Uploads read the pod's own disk.** `create_media` takes a `file_location` on
+the MCP server's filesystem, not the caller's, and `/tmp` (an emptyDir) is the
+only writable path in the container. A file has to be put there first, which
+needs cluster access; otherwise upload through the web UI and let the assistant
+link and describe the media afterwards.
 
 One patch lives HERE instead: `patches/gramps-mcp-transport-security.patch`. The
 MCP Python SDK arms DNS-rebinding protection and then allows only localhost, so
