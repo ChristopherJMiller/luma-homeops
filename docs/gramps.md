@@ -231,11 +231,16 @@ references, and deleting a *source* takes all of its citations with it. Every
 allowlisted relative's assistant gets this through the one shared editor account.
 The nightly XML export (below) is the undo.
 
-**Uploads read the pod's own disk.** `create_media` takes a `file_location` on
-the MCP server's filesystem, not the caller's, and `/tmp` (an emptyDir) is the
-only writable path in the container. A file has to be put there first, which
-needs cluster access; otherwise upload through the web UI and let the assistant
-link and describe the media afterwards.
+**Uploads come from a URL, fetched by the pod.** MCP carries tool arguments, not
+files, so `create_media` takes a `source_url` and the server downloads it. That
+fetch runs *inside the cluster*, so it is fenced: https only, every resolved
+address and the address actually connected to must be public (no pod, Service,
+node or LAN address, and no DNS rebinding between check and connect), redirects
+re-checked hop by hop, 25 MB cap, PDFs and images only, sniffed from the bytes.
+The URL is kept on the media as a `Source URL` attribute. A file that exists
+only on someone's computer still goes through the web UI; the assistant can then
+link and describe it. (`file_location`, a path on the pod's own disk, also works
+but needs the file copied into `/tmp` first.)
 
 One patch lives HERE instead: `patches/gramps-mcp-transport-security.patch`. The
 MCP Python SDK arms DNS-rebinding protection and then allows only localhost, so
