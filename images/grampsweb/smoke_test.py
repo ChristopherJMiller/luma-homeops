@@ -61,6 +61,17 @@ CASES = [
 app = Flask(__name__)
 failures = 0
 
+# negative-role-permissions.patch: without it get_permissions() raises KeyError
+# for a disabled account and the callback 500s instead of rendering the review
+# page, which is what anyone NOT auto-promoted above would see.
+from gramps_webapi.auth.const import PERMISSIONS, ROLE_UNCONFIRMED  # noqa: E402
+
+for role, name in ((ROLE_DISABLED, "disabled"), (ROLE_UNCONFIRMED, "unconfirmed")):
+    ok = PERMISSIONS.get(role) == set()
+    failures += not ok
+    print(f"{'ok  ' if ok else 'FAIL'}  a {name} role resolves to no permissions "
+          f"rather than raising: {PERMISSIONS.get(role, 'MISSING KEY')!r}")
+
 for description, config, userinfo, expected in CASES:
     app.config.update(
         {"OIDC_NEW_USER_ROLE": ROLE_DISABLED, "OIDC_NEW_USER_ROLE_EMAILS_FILE": None}
@@ -72,5 +83,6 @@ for description, config, userinfo, expected in CASES:
     failures += not ok
     print(f"{'ok  ' if ok else 'FAIL'}  {description}: expected {expected}, got {got}")
 
-print(f"\n{len(CASES) - failures}/{len(CASES)} passed")
+checks = len(CASES) + 2
+print(f"\n{checks - failures}/{checks} passed")
 sys.exit(1 if failures else 0)

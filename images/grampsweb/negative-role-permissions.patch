@@ -1,0 +1,33 @@
+Backport of upstream gramps-web-api 99f5eff ("Fix OIDC login 500 for
+disabled/unconfirmed accounts (negative roles)", PR #998, fixes #997,
+2026-09-22).
+
+Carried here because the fix is in upstream's git but not in any published
+image: ghcr.io/gramps-project/grampsweb:latest was last rebuilt 2026-09-20,
+two days before this landed, and that rebuild is the digest this image is
+built FROM. Without it, get_permissions() raises KeyError for a negative role
+and any account that is not auto-promoted by oidc-new-user-role.patch gets a
+bare "Internal Server Error" instead of the "Account Under Review" page.
+
+DELETE THIS FILE when the base image is bumped to a rebuild that includes it.
+The build applies patches with --fuzz=0, so it will fail loudly rather than
+silently double-apply.
+index f143e9f..e8d27c1 100644
+--- a/gramps_webapi/auth/const.py
++++ b/gramps_webapi/auth/const.py
+@@ -129,6 +129,15 @@ PERMISSIONS[ROLE_ADMIN] = PERMISSIONS[ROLE_OWNER] | {
+     PERM_DISABLE_TREE,
+ }
+ 
++# Users with a negative role (disabled or unconfirmed) hold no permissions,
++# but the role must still be a key here: get_permissions() looks up
++# PERMISSIONS[user.role] directly, and the OIDC callback resolves permissions
++# before it checks for a disabled account, so a missing key raises instead of
++# reaching the "Account Under Review" page. Local login is unaffected (it
++# rejects a negative role before any permission lookup).
++PERMISSIONS[ROLE_DISABLED] = set()
++PERMISSIONS[ROLE_UNCONFIRMED] = set()
++
+ # keys/values for user claims
+ CLAIM_LIMITED_SCOPE = "limited_scope"
+ SCOPE_RESET_PW = "reset_password"
