@@ -20,6 +20,7 @@ AI client ─▶ Traefik ─▶ mcp-jwt-auth ─▶ mcp-gateway ─▶ gramps-mc
 | Piece | Where | Notes |
 |---|---|---|
 | App | `cluster/gramps/` | web + celery + valkey, Argo app `gramps` |
+| App image | `images/grampsweb/` | upstream, plus a patch that creates a listed family address as an editor on first login (and a backport of upstream's own fix for the 500 it otherwise causes) |
 | Tree data, users, search index | `acid-gramps` (Zalando, PG 16) | 7th postgres cluster; stock Spilo |
 | Media | B2 `galaxy-family/gramps/` | shares the family bucket and its key |
 | Tree directory | CephFS 1Gi RWX | metadata only — `name.txt`, backend marker, lock |
@@ -69,11 +70,12 @@ only in the celery log. `run_import` swallows plugin failures into that generic
 
 ## Who gets in
 
-Two independent layers, because each answers a different question:
+Three independent layers, because each answers a different question:
 
 | Layer | Question | Where |
 |---|---|---|
 | oauth2-proxy `family-rs` | may this person reach the site at all? | Ingress annotations |
+| `OIDC_NEW_USER_ROLE` + its list | should a brand-new account be live or pending? | `cluster/gramps/new-user-emails.secret.yaml` |
 | Gramps Web's own users | what may they do once inside? | roles, below |
 
 The edge gate exists because **Dex does not filter** — no `hostedDomains`, no
@@ -82,6 +84,22 @@ allowlist is `cluster/oauth2-proxy/emails-family.secret.yaml`, and
 `oauth2-proxy-family-rs` is a *second instance* of the family tier purely because
 a cookie cannot cross registrable domains (see `docs/auth.md`). Same list, same
 Dex client; only the cookie name and domain differ.
+
+The middle layer holds a **copy** of that same list, in the `gramps` namespace,
+because a Secret cannot be mounted across namespaces and because a role granted
+automatically should not rest on the edge gate alone: if the `auth` middleware
+ever came off `/api/oidc`, granting editor to whoever asked is the failure mode,
+and that is precisely how the MCP endpoint was world-readable for a day on
+2026-09-26. `scripts/check-family-lists.sh` is a pre-commit hook that fails if
+the two copies disagree, so the duplication cannot rot; every possible drift
+fails safe in any case (pending account in one direction, no access at all in the
+other).
+
+Nobody is *told* about a pending account, by the way: `send_email_new_user` fires
+and fails, because no `EMAIL_HOST` is configured and it falls back to
+`localhost:465` → `ConnectionRefused` in the celery log. With the list doing the
+promoting that matters less than it did, but a stranger who signs in is invisible
+until someone reads the user table.
 
 The host splits three ways, and each split is load-bearing:
 
@@ -116,21 +134,66 @@ without rewrites.
 
 ### Adding a person
 
-1. Add their address to `emails-family.secret.yaml`, `rm` the sealed sibling,
-   `nix develop -c ./sign.sh`, commit. (This also admits them to the MCP endpoint.)
-2. They sign in with Google/Microsoft at `family.werethemille.rs`.
-3. **They will see `Internal Server Error`. This is expected.** New OIDC accounts
-   are created with `ROLE_DISABLED` (-1), and the callback then mints a token,
-   which calls `get_permissions()` → `PERMISSIONS[-1]`. That dict only covers
-   guest..admin, so `auth/__init__.py:425` raises `KeyError: -1`. **The account is
-   created regardless.**
-4. Promote it, then have them sign in again:
+1. Add their address to `cluster/oauth2-proxy/emails-family.secret.yaml`, **and
+   mirror it into `cluster/gramps/new-user-emails.secret.yaml`**, `rm` both sealed
+   siblings, `nix develop -c ./sign.sh`, commit. (This also admits them to the MCP
+   endpoint.) A pre-commit hook fails if the two lists disagree, so this is hard
+   to half-do; `scripts/check-family-lists.sh` explains why there are two.
+2. They sign in with Google/Microsoft at `family.werethemille.rs`, and they are
+   **in, as an editor, on that first login** — no promotion step.
+
+That second step is the whole point of our own image
+(`images/grampsweb/oidc-new-user-role.patch`): upstream creates every new OIDC
+account as `ROLE_DISABLED` and expects an owner to promote it by hand.
+`GRAMPSWEB_OIDC_NEW_USER_ROLE` is the role to create it with instead, and it is
+granted **only** to an address on the mounted list — Dex authenticates anyone
+with a Google or Microsoft account, so the list is what makes this authorization
+rather than authentication. The list is a mounted Secret, not a subPath, so
+kubelet refreshes it and adding a relative needs no restart. Everything
+unexpected still means a disabled account: an unlisted address, an unreadable
+list, a provider that reports the address unverified, or a role above editor
+(the patch refuses to auto-grant owner or admin at all).
+
+Someone who reaches the site but is **not** on the list gets Gramps' own
+`Account Under Review` page. Promote them by hand if that was a mistake, then
+have them sign in again:
 
 ```bash
 nix develop -c kubectl -n gramps exec -i acid-gramps-0 -c postgres -- \
   psql -U postgres -d grampswebuser -c \
   "UPDATE users SET role=3, tree='<tree_id>' WHERE name='<email>' AND role=-1;"
 ```
+
+**One person can become two accounts.** Gramps keys an identity on
+`(provider, sub)`, and Dex encodes its *connector* in `sub` — so signing in with
+the Microsoft button and then the Google button creates two accounts for one
+relative, the second suffixed `_1`. That is how Mum ended up with two on
+2026-09-28. Bind both identities to one account rather than promoting both:
+
+```bash
+# which identities exist, and which connector each came from
+nix develop -c kubectl -n gramps exec acid-gramps-0 -c postgres -- \
+  psql -U postgres -d grampswebuser -Atc \
+  "select u.name, u.role, a.subject_id from oidc_accounts a join users u on u.id=a.user_id;"
+# ... the connector is the tail of the base64: echo '<subject_id>==' | base64 -d
+
+# then, in one transaction: re-point the duplicate's identity at the account you
+# are keeping BEFORE deleting it, or ON DELETE CASCADE takes the identity with it
+nix develop -c kubectl -n gramps exec -i acid-gramps-0 -c postgres -- \
+  psql -U postgres -d grampswebuser -v ON_ERROR_STOP=1 <<'SQL'
+BEGIN;
+UPDATE oidc_accounts SET user_id = (SELECT id FROM users WHERE name = '<keep>')
+ WHERE provider_id = 'custom' AND subject_id = '<the duplicate's subject_id>';
+DELETE FROM users WHERE name = '<keep>_1' AND role = -1;
+UPDATE users SET role = 3, tree = '<tree_id>' WHERE name = '<keep>' AND role = -1;
+COMMIT;
+SQL
+```
+
+Deleting the duplicate is safe **only** while it is still `role = -1`: nothing in
+the tree references a user (the only foreign keys are `oidc_accounts.user_id` and
+`access_tokens.user_id`), but an account that has been used has edits attributed
+to it in Gramps' own history.
 
 Registration by username/password is off (`REGISTRATION_DISABLED`), and the
 frontend link is hidden separately via `hideRegisterLink` in
@@ -140,12 +203,15 @@ so both are needed or people see an invitation that 405s.
 Do **not** set `OIDC_DISABLE_LOCAL_AUTH`: password login is what desktop sync
 uses (upstream gramps-web#1267).
 
-Auto-assigning a role instead of promoting by hand is not practical:
-`get_role_from_claims()` reads the *userinfo* response, Dex's userinfo carries no
-claim with a predictable constant value, and half-configuring it is actively
-dangerous — for an existing user the callback passes `role=role_from_claims` to
-`modify_user`, so a present-but-unmatched claim **demotes a working admin to
-disabled**, who then hits the `KeyError` on every login.
+Auto-assigning the role **from OIDC claims** is still off the table, and that is
+why the patch above exists instead. `get_role_from_claims()` reads the *userinfo*
+response, Dex's userinfo carries no claim with a predictable constant value, and
+half-configuring it is actively dangerous: for an existing user the callback
+passes `role=role_from_claims` to `modify_user`, so a present-but-unmatched claim
+**demotes a working admin to disabled**. `OIDC_NEW_USER_ROLE` is deliberately
+narrower — it is consulted only where upstream would have written
+`ROLE_DISABLED`, on the creation path, so it cannot touch an account that already
+exists. Leave `OIDC_GROUP_*` unset.
 
 ## Desktop sync
 
@@ -280,7 +346,9 @@ media bucket does.
 
 | Symptom | Cause |
 |---|---|
-| `Internal Server Error` on someone's first OIDC login | expected — `KeyError: -1`, account still created, promote it |
+| `Internal Server Error` on someone's first OIDC login | was `KeyError: -1` — fixed upstream in #998 and backported in `images/grampsweb`. If it returns, the Deployment is back on a stock image |
+| One relative, two accounts, the second suffixed `_1` | they used the Microsoft button once and the Google button once; Dex encodes the connector in `sub`. Merge them — see *Adding a person* |
+| Someone on the family list still lands `Account Under Review` | the two allowlists drifted, or the Secret is mounted with a `subPath` (which never refreshes). `kubectl -n gramps exec deploy/grampsweb -c grampsweb -- cat /etc/gramps/new-user-emails/emails` |
 | Tree data appearing in SQLite | single-tree mode ignores `NEW_DB_BACKEND`; check `database.txt` |
 | `500 "Import failed"` | read the **celery** log; usually the shared cache volume |
 | Register link visible though registration is off | `hideRegisterLink` is a separate frontend setting |

@@ -8,13 +8,20 @@
 # index are all in Postgres, media is in B2. That leaves caches and the per-tree
 # metadata dir, so a pod can be thrown away freely.
 #
-# On the image tag: upstream's container release tags are badly stale (the
-# newest, 26.3.1.1, is from March 2026 while `latest` was rebuilt
-# 2026-09-20), so `latest` pinned by digest is the honest choice — reproducible,
-# and Renovate can bump the digest. The thing to check on ANY bump is the
-# image's GRAMPS_VERSION env: it is 60 today, and desktop Gramps Web Sync
-# requires the server and the laptop to agree on MAJOR.MINOR. A jump to 61
-# breaks sync until the laptop follows.
+# On the image: this is OUR build (images/grampsweb), which is upstream's
+# `latest` plus the patch that creates a listed family address as an editor on
+# first login instead of leaving it disabled behind a 500. Upstream's own
+# container release tags are badly stale (the newest, 26.3.1.1, is from March
+# 2026 while `latest` was rebuilt 2026-09-20), so the Dockerfile pins `latest` by
+# digest and Renovate bumps it THERE.
+#
+# Consequence: merging a Renovate base bump does not ship it. The workflow
+# publishes a new sha- tag and this pin is then updated by hand — so the pod keeps
+# running the old image until someone does, which is the safe direction. The thing
+# to check on ANY bump is the image's GRAMPS_VERSION env: it is 60 today, and
+# desktop Gramps Web Sync requires the server and the laptop to agree on
+# MAJOR.MINOR. A jump to 61 breaks sync until the laptop follows; the workflow
+# prints it and warns.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -42,7 +49,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: grampsweb
-          image: ghcr.io/gramps-project/grampsweb:latest@sha256:ac4db1ba963f5d2604e6b9a34be50c5a2c37271699f5a6df93c9492ecc8870e5
+          image: ghcr.io/christopherjmiller/grampsweb:sha-6bebffc@sha256:d714320095cced604bc5039a8fc9b9fff8b0faa4866f23d1eef395426dabdaa1
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -91,6 +98,14 @@ spec:
               mountPath: /app/static/config.js
               subPath: config.js
               readOnly: true
+            # Which first-time OIDC login is created as an editor rather than
+            # disabled — see OIDC_NEW_USER_ROLE in config.yaml. Mounted as a
+            # DIRECTORY, deliberately: a subPath mount is a one-time copy that
+            # kubelet never refreshes, so adding a relative would silently need a
+            # pod restart to take effect.
+            - name: new-user-emails
+              mountPath: /etc/gramps/new-user-emails
+              readOnly: true
           # Probing `/` (the frontend index) rather than an API route on
           # purpose: /api/metadata/ requires authentication and answers 401,
           # which kubelet counts as a failure. The app already fails hard at
@@ -135,6 +150,14 @@ spec:
         - name: frontend-config
           configMap:
             name: grampsweb-frontend-config
+        # Only the web pod needs this: account creation happens in the request
+        # path, never in a celery task.
+        - name: new-user-emails
+          secret:
+            secretName: gramps-new-user-emails
+            items:
+              - key: emails
+                path: emails
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -160,7 +183,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: celery
-          image: ghcr.io/gramps-project/grampsweb:latest@sha256:ac4db1ba963f5d2604e6b9a34be50c5a2c37271699f5a6df93c9492ecc8870e5
+          image: ghcr.io/christopherjmiller/grampsweb:sha-6bebffc@sha256:d714320095cced604bc5039a8fc9b9fff8b0faa4866f23d1eef395426dabdaa1
           command:
             - celery
             - -A

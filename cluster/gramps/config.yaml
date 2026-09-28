@@ -56,12 +56,15 @@ data:
   # OIDC via Dex. Local password login stays ENABLED (no
   # GRAMPSWEB_OIDC_DISABLE_LOCAL_AUTH): the desktop Gramps Web Sync addon
   # authenticates with username+password, and disabling it breaks sync
-  # (gramps-web#1267). No group mapping is configured, so a first-time OIDC
-  # login lands DISABLED and an owner must approve it — that is the only thing
-  # standing between a public hostname and open registration.
+  # (gramps-web#1267). No group mapping is configured — that is deliberate and
+  # must stay that way, because get_role_from_claims() is consulted for EXISTING
+  # users too, so a claim that is present but unmatched demotes a working admin
+  # to disabled. Role assignment for new accounts is OIDC_NEW_USER_ROLE at the
+  # bottom of this file instead, which only ever touches the creation path.
   # No self-service signup: the username/password registration form is off, so
-  # the only ways an account comes into existence are an OIDC login (created
-  # DISABLED, pending approval) or an admin creating one.
+  # the only ways an account comes into existence are an OIDC login (created as
+  # an editor if the address is on the family list, DISABLED pending approval if
+  # it is not) or an admin creating one.
   #
   # This is REGISTRATION_DISABLED, deliberately NOT OIDC_DISABLE_LOCAL_AUTH.
   # The latter would also kill password *login*, and the desktop Gramps Web Sync
@@ -83,3 +86,25 @@ data:
   # (GrampsjsLogin.js:212-218), and disabling local auth would break desktop
   # sync. So one click on this button is structural.
   GRAMPSWEB_OIDC_NAME: Google or Microsoft
+
+  # First-time OIDC logins: created as an editor if the address is on the family
+  # list, otherwise disabled (upstream's behaviour).
+  #
+  # This pair only does anything on our own image — it is
+  # images/grampsweb/oidc-new-user-role.patch, not upstream. Upstream creates
+  # EVERY new OIDC account as ROLE_DISABLED, which means a relative's first login
+  # ends in a bare "Internal Server Error" (the callback resolves
+  # PERMISSIONS[role] before it checks for a disabled role) and stays broken until
+  # someone hand-writes an UPDATE. Chris's mother hit that on 2026-09-28.
+  #
+  # Editor because family are editors by decision (2026-09-27) — the same role
+  # the MCP path uses. The patch refuses to auto-grant owner or admin at all, so
+  # raising this above 3 silently does nothing except disable the account.
+  #
+  # The file is the whole safety argument: Dex authenticates anyone with a Google
+  # or Microsoft account, so the role is granted ONLY to an address on the family
+  # list, which is the second of two independent checks (the edge middleware on
+  # /api/oidc is the first). It is a mounted Secret rather than a subPath so that
+  # kubelet keeps it current — adding a relative takes effect without a restart.
+  GRAMPSWEB_OIDC_NEW_USER_ROLE: "3"
+  GRAMPSWEB_OIDC_NEW_USER_ROLE_EMAILS_FILE: /etc/gramps/new-user-emails/emails

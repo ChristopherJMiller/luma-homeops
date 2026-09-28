@@ -1,0 +1,14 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: gramps-new-user-emails
+  namespace: gramps
+spec:
+  encryptedData:
+    emails: AgBs/jpG1wBmfQISiKFrxPh4LnrVv8p6UlIh6ZN6Z64PDEjIpsD1tNRcH3cKlUlfENbdbhATSlggNvDrAZIdoNaUP73KzlAh/j8kwsEGKoauBrubWw5zzKeWAb/9Wp1J690g9lGUe2CUEnoJt5Jd1lfnh0jWLrwLZQ84l4hbpb4WRGwdBUsbQJkS10ZogwCj73iu/chrLDnenqdyBkbbdRfeT/lJiMfpwc4eXiQy9vcdUFPpkFBS6Sm2Kul5nk6HyvgfUQRWtXchvaAmCblTU8GQxoN38nH61ndv2WDtubVfzTkscdwnhdst2Ds6fVK9ZO82sPxz/IrwQNBZjRZJZyvzGyZVv4trAMbnbeMW02YQ+fH2UkpNKl+QjGVRM5pXjMmWDWI66yO2i5VyByzGPwb+xvQy3wVqI20gI9n9fFn7ZDxEskiKikjbNI5VD2BlkPvCOrdcNEViFyE7oc5zJ3wMm24Nt7C9OLOyUP65e6Us+ax4izREnzdj5Y1L74lTpZfeh0d08yULTiAYt2uxzWUPDaPxB907e6A63SYcHpyqWNOQkiJB56e01gkA/CEQrQc9gBJBx24W+IRL3ZiUy1ocuCCRzsXszBs9ubHcRSPf/rk59fzK8iR96E36txr0Fo9cbhhCHYPaf1f17T7z8PZy5/cRS99y4VE4UXaNgx73Bp/FCuS761mA87FfO3UjN2yXe5uFt00tLKh/Y2TOGOsABR0hj/E04E/I5H7fE6yTf3CWVC4PFPcLkZHL9LfuFveas0q2DoVF33FrSF9Zyo22LTzoTXFBwBFTTOTLSrhtmMaIlQW/dsElZ6SHv1J5DuSndfAAxE8Muho=
+  template:
+    metadata:
+      name: gramps-new-user-emails
+      namespace: gramps
+    type: Opaque
