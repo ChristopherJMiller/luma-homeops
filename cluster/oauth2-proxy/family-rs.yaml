@@ -14,6 +14,12 @@
 # lives. Adding someone to cluster/oauth2-proxy/emails-family.secret.yaml admits
 # them to both domains, which is the point — there is one family list, not two.
 #
+# That file is the list of record for a fourth reader as well: Gramps Web decides
+# from it which first-time OIDC login is created as an editor. A Secret cannot be
+# mounted across namespaces, so cluster/gramps/new-user-emails.secret.yaml is a
+# GENERATED copy of it (scripts/mirror-family-list.sh, run by pre-commit) — still
+# one list, still edited in one place.
+#
 # The cookie NAME differs so the two sessions cannot be confused, and the flow
 # terminates on the app's own host (/oauth2/* below) rather than a dedicated
 # auth-* hostname — one less public name, and the cookie is then set on exactly

@@ -85,15 +85,15 @@ allowlist is `cluster/oauth2-proxy/emails-family.secret.yaml`, and
 a cookie cannot cross registrable domains (see `docs/auth.md`). Same list, same
 Dex client; only the cookie name and domain differ.
 
-The middle layer holds a **copy** of that same list, in the `gramps` namespace,
-because a Secret cannot be mounted across namespaces and because a role granted
-automatically should not rest on the edge gate alone: if the `auth` middleware
-ever came off `/api/oidc`, granting editor to whoever asked is the failure mode,
-and that is precisely how the MCP endpoint was world-readable for a day on
-2026-09-26. `scripts/check-family-lists.sh` is a pre-commit hook that fails if
-the two copies disagree, so the duplication cannot rot; every possible drift
-fails safe in any case (pending account in one direction, no access at all in the
-other).
+The middle layer reads a **generated copy** of that same list, in the `gramps`
+namespace. The copy exists because a Secret cannot be mounted across namespaces,
+and it is a separate check rather than a restatement of the edge gate because a
+role granted with no human in the loop should not rest on one middleware
+annotation: if `auth` ever came off `/api/oidc`, granting editor to whoever asked
+is the failure mode, and that is precisely how the MCP endpoint was world-readable
+for a day on 2026-09-26. Only the oauth2-proxy file is ever edited;
+`scripts/mirror-family-list.sh` derives the other on commit, so there is still one
+list in the sense that matters.
 
 Nobody is *told* about a pending account, by the way: `send_email_new_user` fires
 and fails, because no `EMAIL_HOST` is configured and it falls back to
@@ -134,11 +134,13 @@ without rewrites.
 
 ### Adding a person
 
-1. Add their address to `cluster/oauth2-proxy/emails-family.secret.yaml`, **and
-   mirror it into `cluster/gramps/new-user-emails.secret.yaml`**, `rm` both sealed
-   siblings, `nix develop -c ./sign.sh`, commit. (This also admits them to the MCP
-   endpoint.) A pre-commit hook fails if the two lists disagree, so this is hard
-   to half-do; `scripts/check-family-lists.sh` explains why there are two.
+1. Add their address to `cluster/oauth2-proxy/emails-family.secret.yaml` — the one
+   list of record — `rm` its sealed sibling, `nix develop -c ./sign.sh`, commit.
+   (This also admits them to the MCP endpoint.) `git commit` regenerates
+   `cluster/gramps/new-user-emails.secret.yaml` from it and stops so you can
+   reseal that too: run `./sign.sh` again and `git add` both. You never type an
+   address twice, and the two cannot drift — see `scripts/mirror-family-list.sh`
+   for why a second object has to exist at all.
 2. They sign in with Google/Microsoft at `family.werethemille.rs`, and they are
    **in, as an editor, on that first login** — no promotion step.
 

@@ -26,14 +26,14 @@ repos:
         entry: scripts/check-kustomizations.sh
         pass_filenames: false
         files: ^cluster/.*\.(yaml|yml)$
-      # The family allowlist exists in two files, because a Secret cannot be
-      # mounted across namespaces: the edge gate lives in oauth2-proxy/ and the
-      # Gramps new-user gate needs the same list in gramps/. Keeping them equal
-      # is what lets the duplication stay honest -- see the script.
-      - id: check-family-lists
-        name: family allowlists agree (edge gate vs Gramps new-user gate)
+      # The family allowlist feeds four mounts across two namespaces, and a Secret
+      # cannot be mounted across namespaces -- so the gramps-side copy is GENERATED
+      # from the one list of record rather than maintained by hand. Behaves like a
+      # formatter: if it rewrites the file, the commit stops so you can reseal.
+      - id: mirror-family-list
+        name: mirror the family allowlist into the gramps namespace
         language: system
-        entry: scripts/check-family-lists.sh
+        entry: scripts/mirror-family-list.sh
         pass_filenames: false
         files: ^cluster/(oauth2-proxy/emails-family|gramps/new-user-emails)\.secret\.yaml$
   - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
