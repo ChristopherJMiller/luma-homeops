@@ -32,7 +32,7 @@ jobs:
       matrix:
         host: [octoprint, printer]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
 
       - uses: DeterminateSystems/nix-installer-action@main
         with:
@@ -103,7 +103,7 @@ jobs:
           ls -lh "$img"
 
       - name: Upload SD image as artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: sdImage-${{ matrix.host }}
           path: ${{ steps.image.outputs.path }}
