@@ -103,7 +103,7 @@ automation:
       - trigger: state
         entity_id: input_boolean.wake_up_pending
         to: "on"
-        for: 03:00:00
+        for: "03:00:00"
     actions:
       - action: input_boolean.turn_off
         target:

@@ -1,64 +1,37 @@
 ---
 name: HA config check
 
-# Validates the git-tracked Home Assistant packages (and blueprints) with HA's
-# own `check_config`, in the SAME image version deployed via Argo. This is the
-# pre-merge gate so a bad automation/template can't reach the cluster.
+# Pre-merge gate for git-tracked Home Assistant config and the hactl toolkit:
+# hactl's unit tests, then `hactl lint --offline` (package filenames,
+# kustomization listing, YAML 1.1 quoting, config revision, and HA's own
+# check_config in the SAME image version Argo deploys).
 
 on:
   pull_request:
     paths:
-      - cluster/home-assistant/packages/**
-      - cluster/home-assistant/blueprints/**
+      - cluster/home-assistant/**
+      - cluster/applications/home-assistant-release.yaml
+      - tools/hactl/**
       - .github/workflows/ha-check-config.yaml
   push:
     branches: [main]
     paths:
-      - cluster/home-assistant/packages/**
-      - cluster/home-assistant/blueprints/**
+      - cluster/home-assistant/**
+      - cluster/applications/home-assistant-release.yaml
+      - tools/hactl/**
+      - .github/workflows/ha-check-config.yaml
 
 jobs:
   check-config:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Resolve HA image tag from the Argo release
-        id: tag
-        run: |
-          tag=$(grep -oE 'tag: [0-9]{4}\.[0-9]+\.[0-9]+' \
-            cluster/applications/home-assistant-release.yaml | head -1 | awk '{print $2}')
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          echo "Validating against HA $tag"
-
-      - name: Assemble config (packages + blueprints, like the pod)
-        run: |
-          mkdir -p hacheck/packages hacheck/blueprints hacheck/dashboards
-          cp cluster/home-assistant/packages/*.yaml hacheck/packages/
-          cp -r cluster/home-assistant/blueprints/. hacheck/blueprints/ 2>/dev/null || true
-          cp cluster/home-assistant/dashboards/*.yaml hacheck/dashboards/ 2>/dev/null || true
-          printf 'homeassistant:\n  packages: !include_dir_named packages/\n' > hacheck/configuration.yaml
-          : > hacheck/secrets.yaml
-
-      - name: Fetch custom integrations referenced by packages
-        run: |
-          # Custom components aren't in the vanilla HA image; check_config needs
-          # them present to validate their config schemas. Add new ones here as
-          # packages start using them.
-          mkdir -p hacheck/custom_components
-          # adaptive_lighting -> packages/lighting.yaml
-          git clone --depth 1 https://github.com/basnijholt/adaptive-lighting /tmp/adaptive-lighting
-          cp -r /tmp/adaptive-lighting/custom_components/adaptive_lighting hacheck/custom_components/
-
-      - name: check_config
-        run: |
-          # NOTE: `check_config` exits 0 even when it finds config errors — it
-          # only prints them. So we capture the output and fail on error markers.
-          docker run --rm -v "$PWD/hacheck":/config \
-            "docker.io/homeassistant/home-assistant:${{ steps.tag.outputs.tag }}" \
-            python -m homeassistant --script check_config -c /config 2>&1 | tee check.log
-          if grep -qiE 'ERROR|Invalid config|could not be validated|will not be initialized|invalid slug|Setup of package .* failed|Failed to' check.log; then
-            echo "::error::Home Assistant check_config reported problems (see log above)"
-            exit 1
-          fi
-          echo "check_config clean ✓"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install hactl's offline dependencies
+        run: pip install pyyaml pytest
+      - name: hactl unit tests
+        run: python -m pytest -q tools/hactl
+      - name: hactl lint --offline (includes check_config)
+        run: tools/hactl/bin/hactl lint --offline
