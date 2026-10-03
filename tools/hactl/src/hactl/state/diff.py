@@ -1,6 +1,8 @@
 """Compare declared state (model.Manifest) with live HA (live.Snapshot) -> ordered Changes."""
 from dataclasses import dataclass, field
 
+from hactl.state.model import BUILTIN_DASHBOARDS, HELPER_DOMAINS
+
 SYMBOL = {"create": "+", "update": "~", "delete": "-", "remove": "-", "manual": "!"}
 
 
@@ -122,3 +124,107 @@ def diff_entities(declared, remove, entities) -> list:
         if e is not None:
             out.append(Change("remove", "entity", e["entity_id"], "listed under remove:", data={"entity_id": e["entity_id"]}))
     return out
+
+
+def diff_config_entries(kind, declared, entries, options, credentials, credentials_locked=False) -> list:
+    """Helpers: fully managed (prunable). Integrations: presence + options, never deleted."""
+    helper = kind == "helper"
+    by_key = {}
+    for e in entries:
+        if (e["domain"] in HELPER_DOMAINS) == helper:
+            by_key.setdefault((e["domain"], e["title"]), []).append(e)
+    out = []
+    for d in declared:
+        key, name = (d["domain"], d["title"]), f"{d['domain']}/{d['title']}"
+        found = by_key.get(key, [])
+        if len(found) > 1:
+            out.append(Change("manual", kind, name, f"{len(found)} entries share this domain and title; rename one in HA"))
+            continue
+        if not found:
+            if d.get("create") is None:
+                out.append(Change("manual", kind, name, d.get("manual") or "add it in HA (Settings -> Devices & services)"))
+            elif d.get("credentials") and credentials_locked:
+                out.append(Change("manual", kind, name, "needs credentials.yaml, which is encrypted: git-crypt unlock"))
+            else:
+                answers = {**d.get("options", {}), **credentials.get(d.get("credentials"), {}), **d["create"].get("answers", {})}
+                out.append(Change("create", kind, name, "via its config flow",
+                                  data={"domain": d["domain"], "title": d["title"], "answers": answers,
+                                        "menu": d["create"].get("menu", [])}))
+            continue
+        if "options" in d:
+            cur = options.get(key)
+            if cur is None:
+                out.append(Change("manual", kind, name, "its options could not be read (no options flow?)"))
+                continue
+            delta = {k: v for k, v in d["options"].items() if not same(v, cur["values"].get(k))}
+            if delta:
+                out.append(Change("update", kind, name, _describe(delta, cur["values"]),
+                                  data={"entry_id": found[0]["entry_id"], "options": d["options"]}))
+    declared_keys = {(d["domain"], d["title"]) for d in declared}
+    for (domain, title), found in sorted(by_key.items()):
+        if (domain, title) in declared_keys:
+            continue
+        for e in found:
+            if helper:
+                out.append(Change("delete", kind, f"{domain}/{title}", "is not declared", data={"entry_id": e["entry_id"]}, prune=True))
+            else:
+                out.append(Change("manual", kind, f"{domain}/{title}", "is not declared in integrations.yaml (declare it, or delete it in HA)"))
+    return out
+
+
+DASHBOARD_DEFAULTS = {"icon": None, "require_admin": False, "show_in_sidebar": True}
+
+
+def diff_dashboards(declared, live) -> list:
+    storage = {x["url_path"]: x for x in live if x.get("mode") == "storage"}
+    out = []
+    for d in declared:
+        want = {"title": d["title"], **{k: d.get(k, v) for k, v in DASHBOARD_DEFAULTS.items()}}
+        cur = storage.get(d["url_path"])
+        if cur is None:
+            if d["url_path"] in BUILTIN_DASHBOARDS:
+                out.append(Change("manual", "dashboard", d["url_path"], "built-in dashboard is missing; HA recreates it"))
+            else:
+                out.append(Change("create", "dashboard", d["url_path"], repr(d["title"]),
+                                  data={"url_path": d["url_path"], "mode": "storage", **want}))
+            continue
+        delta = {k: v for k, v in want.items() if not same(v, cur.get(k))}
+        if delta:
+            out.append(Change("update", "dashboard", d["url_path"], _describe(delta, cur), data={"dashboard_id": cur["id"], **delta}))
+    declared_paths = {d["url_path"] for d in declared}
+    out += [Change("delete", "dashboard", u, "is not declared", data={"dashboard_id": x["id"]}, prune=True)
+            for u, x in storage.items() if u not in declared_paths and u not in BUILTIN_DASHBOARDS]
+    return out
+
+
+def diff_resources(declared, live) -> list:
+    by_url = {x["url"]: x for x in live}
+    out = []
+    for d in declared:
+        cur = by_url.get(d["url"])
+        if cur is None:
+            out.append(Change("create", "resource", d["url"], d["type"], data={"res_type": d["type"], "url": d["url"]}))
+        elif cur.get("type") != d["type"]:
+            out.append(Change("update", "resource", d["url"], f"type {cur.get('type')!r} -> {d['type']!r}",
+                              data={"resource_id": cur["id"], "res_type": d["type"], "url": d["url"]}))
+    declared_urls = {d["url"] for d in declared}
+    out += [Change("delete", "resource", x["url"], "is not declared", data={"resource_id": x["id"]}, prune=True)
+            for x in live if x["url"] not in declared_urls]
+    return out
+
+
+def plan(m, snap) -> list:
+    """Every change needed to make HA match the manifests, in apply order."""
+    return (diff_registry("floor", m.floors, snap.floors)
+            + diff_registry("label", m.labels, snap.labels)
+            + diff_registry("area", m.areas, snap.areas)
+            + diff_config_entries("helper", m.helpers, snap.entries, snap.options, m.credentials, m.credentials_locked)
+            + diff_config_entries("integration", m.integrations, snap.entries, snap.options, m.credentials, m.credentials_locked)
+            + diff_devices(m.devices, snap.devices)
+            + diff_entities(m.entities, m.remove, snap.entities)
+            + diff_dashboards(m.dashboards, snap.dashboards)
+            + diff_resources(m.resources, snap.resources))
+
+
+def options_wanted(m) -> set:
+    return {(x["domain"], x["title"]) for x in m.helpers + m.integrations if "options" in x}
