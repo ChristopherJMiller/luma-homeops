@@ -43,3 +43,49 @@ def test_failed_hook_raises():
 def test_timeout():
     with pytest.raises(HactlError, match="timed out"):
         run([st(OLD, "Synced", "Succeeded", OLD)], timeout=30)
+
+
+def test_failed_screenshots_keep_the_health_report(monkeypatch, capsys):
+    import argparse
+
+    monkeypatch.setattr(deploy, "_git", lambda *a: HEAD if a[0] == "rev-parse" else "origin/main")
+    monkeypatch.setattr(deploy, "wait_for_rollout", lambda head, timeout: None)
+    monkeypatch.setattr(deploy.health, "collect", lambda client: {"marker": True})
+    monkeypatch.setattr(deploy.health, "render", lambda report: (["health: ok"], False))
+
+    def boom(*a, **k):
+        raise HactlError("HA answered HTTP 502 for /home-ops/0: restarting?")
+
+    monkeypatch.setattr(deploy.shot, "take", boom)
+    monkeypatch.setattr("hactl.client.Client", lambda: object())
+    rc = deploy._run(argparse.Namespace(timeout=10, shot=True, json=False))
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "health: ok" in out and "screenshots failed" in out
+
+
+def dep(generation=2, observed=2, replicas=1, updated=1, ready=1, current=1):
+    return {"metadata": {"generation": generation}, "spec": {"replicas": replicas},
+            "status": {"observedGeneration": observed, "updatedReplicas": updated, "readyReplicas": ready, "replicas": current}}
+
+
+def test_rollout_done():
+    assert deploy.rollout_done(dep())
+    assert not deploy.rollout_done(dep(observed=1))          # controller hasn't seen the new spec
+    assert not deploy.rollout_done(dep(updated=0))           # new pod not created yet
+    assert not deploy.rollout_done(dep(ready=0))             # new pod not ready (init containers, startup)
+    assert not deploy.rollout_done(dep(current=2))           # old pod still around
+
+
+def test_wait_until_retries_errors_and_times_out():
+    clock = {"t": 0.0}
+
+    def sleep(s):
+        clock["t"] += s
+
+    answers = [HactlError("down"), False, True]
+    assert deploy.wait_until(lambda: (lambda a: (_ for _ in ()).throw(a) if isinstance(a, Exception) else a)(answers.pop(0)),
+                             "x", timeout=100, interval=10, clock=lambda: clock["t"], sleep=sleep, log=lambda m: None)
+    with pytest.raises(HactlError, match="timed out after 30s waiting for HA to report RUNNING"):
+        deploy.wait_until(lambda: False, "HA to report RUNNING", timeout=30, interval=10,
+                          clock=lambda: clock["t"], sleep=sleep, log=lambda m: None)

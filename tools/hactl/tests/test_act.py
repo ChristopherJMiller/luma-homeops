@@ -21,3 +21,10 @@ def test_needs_chris(service):
 def test_malformed_service():
     with pytest.raises(HactlError, match="domain.service"):
         act.check_actuation("turn_on", confirmed=False)
+
+
+@pytest.mark.parametrize("service", ["Lock.unlock", "LOCK.UNLOCK", "Notify.mobile_app_x", "HomeAssistant.Restart"])
+def test_gate_is_case_insensitive(service):
+    # HA lowercases domain and service before dispatch, so the gate must too.
+    with pytest.raises(PolicyError):
+        act.check_actuation(service, confirmed=False)

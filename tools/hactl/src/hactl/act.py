@@ -16,7 +16,8 @@ CONFIRM_EXACT = frozenset({"homeassistant.restart", "homeassistant.stop"})
 def check_actuation(service: str, confirmed: bool) -> None:
     if service.count(".") != 1:
         raise HactlError(f"{service!r}: expected domain.service, e.g. light.turn_on")
-    if (service.startswith(CONFIRM_PREFIXES) or service in CONFIRM_EXACT) and not confirmed:
+    name = service.lower()  # HA lowercases domain and service before dispatching
+    if (name.startswith(CONFIRM_PREFIXES) or name in CONFIRM_EXACT) and not confirmed:
         raise PolicyError(f"{service} needs Chris's OK first (actuation policy); re-run with --confirmed once he says yes")
 
 

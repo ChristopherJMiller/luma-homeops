@@ -86,10 +86,11 @@ def parse_since(text: str) -> timedelta:
 
 
 def fetch_history(client, ids, since: timedelta) -> list:
-    start = datetime.now(timezone.utc) - since
-    data = client.get(
+    end = datetime.now(timezone.utc)
+    start = end - since
+    data = client.get(  # end_time is required: HA defaults it to start + 1 day
         f"/api/history/period/{quote(start.isoformat())}?filter_entity_id={','.join(ids)}"
-        "&minimal_response&no_attributes"
+        f"&end_time={quote(end.isoformat())}&minimal_response&no_attributes"
     )
     events = []
     for series in data or []:

@@ -47,7 +47,7 @@ metadata:
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
 spec:
   backoffLimit: 0
-  activeDeadlineSeconds: 1500
+  activeDeadlineSeconds: 2100  # > worst case: 360 reload + 600 running + 30 + 900 after restart
   template:
     metadata:
       labels:

@@ -82,3 +82,19 @@ def test_format_log():
     rows = query.format_log(entries, errors_only=True)
     assert [(r["name"], r["count"], r["message"]) for r in rows] == [("b", 9, "e more")]
     assert [r["name"] for r in query.format_log(entries)] == ["b", "a"]
+
+
+def test_fetch_history_asks_for_the_whole_window():
+    # HA's history API defaults end_time to start + 1 day; --since 3d must still reach now.
+    class FakeClient:
+        path = None
+
+        def get(self, path, raw=False):
+            FakeClient.path = path
+            return []
+
+    query.fetch_history(FakeClient(), ["sun.sun"], timedelta(days=3))
+    assert "&end_time=" in FakeClient.path
+    end = FakeClient.path.split("&end_time=")[1].split("&")[0]
+    from urllib.parse import unquote
+    assert abs((datetime.fromisoformat(unquote(end)) - datetime.now(timezone.utc)).total_seconds()) < 60

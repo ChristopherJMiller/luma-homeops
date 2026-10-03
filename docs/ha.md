@@ -31,7 +31,13 @@ All three are long-lived tokens on Chris's own HA account (his choice; HA has no
 | gitops-reload | `cluster/home-assistant/ha-reload-token.secret.yaml` (git-crypt) → sealed `ha-reload-token.yaml` | the `ha-reload` hook |
 | prometheus-scrape | (ops-fixes plan) | Prometheus |
 
-Rotate: mint a new token in HA and replace the file's value. For the sealed one, regenerate the `.secret.yaml` with `kubectl create secret generic ha-reload-token -n home-assistant --from-file=token=<file> --dry-run=client -o yaml`, delete the old `ha-reload-token.yaml`, and run `./sign.sh`. Commit, push, then revoke the old token. Symptom of a dead hactl token: `HA rejected the token (401)`, or `shot` failing with "HA showed its login page".
+Rotate: mint a new token in HA and save it to a mode-600 file (never paste it into a terminal or chat). For the sealed one, regenerate the `.secret.yaml` straight to disk (never let it print; don't `cat` it afterwards):
+
+```bash
+( umask 077 && kubectl create secret generic ha-reload-token -n home-assistant --from-file=token="$HOME/.config/galaxy/reload-token" --dry-run=client -o yaml > cluster/home-assistant/ha-reload-token.secret.yaml )
+```
+
+Then delete the old `ha-reload-token.yaml`, run `./sign.sh`, commit, push, and revoke the old token. Symptom of a dead hactl token: `HA rejected the token (401)`, or `shot` failing with "HA showed its login page".
 
 ## How a change reaches HA
 

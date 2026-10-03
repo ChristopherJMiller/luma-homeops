@@ -66,3 +66,23 @@ def test_console_summary_drops_benign_and_opaque_and_counts_repeats():
 def test_rejection_listener_reports_the_reason():
     assert "unhandledrejection" in shot.REJECTION_JS
     assert "unhandled rejection: " in shot.REJECTION_JS
+
+
+def test_response_problem():
+    assert shot.response_problem(200) is None
+    assert "502" in shot.response_problem(502)
+    assert "no response" in shot.response_problem(None)
+
+
+def test_unreachable_ha_is_a_clean_error(tmp_path, monkeypatch):
+    pytest.importorskip("playwright")
+    monkeypatch.delenv("LD_LIBRARY_PATH", raising=False)  # the host's breaks the nix browser (see bin/hactl)
+
+    class Unreachable:
+        url = "http://127.0.0.1:9"
+
+        def bearer(self):
+            return "x.y.z"
+
+    with pytest.raises(HactlError, match="HA"):
+        shot.take(Unreachable(), shot.plan_shots(["/home-ops/0"], ["phone"], ["dark"]), tmp_path)

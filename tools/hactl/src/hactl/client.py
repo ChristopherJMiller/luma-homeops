@@ -4,6 +4,7 @@ The token comes from $HA_TOKEN or tools/hactl/agent.secret.yaml (git-crypt).
 It is never printed: error messages are redacted.
 """
 import asyncio
+import http.client
 import json
 import os
 import re
@@ -60,6 +61,8 @@ class Client:
             raise HactlError(f"{method} {path} -> HTTP {e.code}: {self._redact(detail)}") from None
         except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
             raise HactlError(f"cannot reach HA at {self.url}: {getattr(e, 'reason', e)}") from None
+        except http.client.HTTPException as e:  # e.g. IncompleteRead while HA restarts
+            raise HactlError(f"HA dropped the connection mid-response ({type(e).__name__}): restarting?") from None
         if raw:
             return text
         try:

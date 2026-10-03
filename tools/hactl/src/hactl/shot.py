@@ -107,12 +107,28 @@ def summarize_console(raw) -> list:
     return [f"{m} (x{n})" if n > 1 else m for m, n in Counter(kept).items()]
 
 
+def response_problem(status):
+    """Why a page load is unusable, or None. HA restarting shows up as 502/503 from Traefik."""
+    if status is None:
+        return "no response from HA"
+    if status >= 400:
+        return f"HA answered HTTP {status}: restarting, or the path doesn't exist?"
+    return None
+
+
+def _check_login(page) -> None:
+    if "/auth/authorize" in page.url:
+        raise HactlError("HA showed its login page: the token was rejected (see docs/ha.md)")
+
+
 def _settle(page, timeout_s=20.0) -> dict:
     """Wait until the ha-card count is stable for 1.5 s."""
     deadline = time.monotonic() + timeout_s
     last, since = None, time.monotonic()
+    _check_login(page)
     info = page.evaluate(PROBE_JS)
     while time.monotonic() < deadline:
+        _check_login(page)
         info = page.evaluate(PROBE_JS)
         if info["cards"] != last:
             last, since = info["cards"], time.monotonic()
@@ -128,10 +144,12 @@ def _shoot(ctx, base, spec, out_dir) -> dict:
     page.on("console", lambda m: console.append(f"console: {m.text[:200]}") if m.type == "error" else None)
     page.on("pageerror", lambda e: console.append(f"pageerror: {str(e)[:200]}"))
     t0 = time.monotonic()
-    page.goto(base + spec.path, wait_until="domcontentloaded", timeout=30000)
+    resp = page.goto(base + spec.path, wait_until="domcontentloaded", timeout=30000)
+    problem = response_problem(resp.status if resp else None)
+    if problem:
+        raise HactlError(f"{spec.path}: {problem}")
     info = _settle(page)
-    if "/auth/authorize" in page.url:
-        raise HactlError("HA showed its login page: the token was rejected (see docs/ha.md)")
+    _check_login(page)
     vp = VIEWPORTS[spec.viewport]
     if info["height"] > vp["height"]:  # HA scrolls inside its view; grow the viewport to hold it all
         page.set_viewport_size({"width": vp["width"], "height": min(info["height"] + 40, 8000)})
@@ -146,6 +164,16 @@ def _shoot(ctx, base, spec, out_dir) -> dict:
 
 
 def take(client, specs, out_dir: Path) -> list:
+    from playwright.sync_api import Error as PlaywrightError
+
+    try:
+        return _take(client, specs, out_dir)
+    except PlaywrightError as e:  # unreachable HA, timeouts, a page torn down mid-load
+        first = str(e).strip().splitlines()[0] if str(e).strip() else type(e).__name__
+        raise HactlError(f"browser could not load HA at {client.url}: {first}") from None
+
+
+def _take(client, specs, out_dir: Path) -> list:
     from playwright.sync_api import sync_playwright
 
     out_dir.mkdir(parents=True, exist_ok=True)

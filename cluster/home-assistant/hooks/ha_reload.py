@@ -4,15 +4,18 @@
 1. Read the revision git just shipped (packages/config_revision.yaml).
 2. Call homeassistant.reload_all until sensor.ha_config_revision shows it.
    Kubelet takes up to ~2 min to update the pod's ConfigMap volume.
-3. Every top-level key in the packages is an integration. Any that HA has not
-   loaded (e.g. a new `prometheus:`) needs a restart: patch the Deployment's
-   restartedAt annotation once, then wait until everything declared is loaded.
+3. Every top-level key in the packages is an integration. Once HA reports
+   RUNNING (during STARTING its component list is still incomplete), any that
+   it has not loaded (e.g. a new `prometheus:`) needs a restart: patch the
+   Deployment's restartedAt annotation once, then wait until everything
+   declared is loaded.
 Exits non-zero on failure, so Argo marks the hook failed.
 
 Stdlib only (runs in plain python:alpine). Tested by
 tools/hactl/tests/test_ha_reload.py. Runbook: docs/ha.md.
 """
 import datetime
+import http.client
 import json
 import os
 import re
@@ -66,7 +69,7 @@ def poll(attempt, timeout, interval, clock=time.monotonic, sleep=time.sleep) -> 
         try:
             if attempt():
                 return True
-        except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
+        except (urllib.error.URLError, http.client.HTTPException, OSError, ValueError, KeyError) as e:
             log(f"  not yet: {e}")
         if clock() >= deadline:
             return False
@@ -85,6 +88,24 @@ def reload_until_revision(ha, expected, timeout=360, interval=20, clock=time.mon
 def missing_integrations(ha, declared) -> set:
     components = set(ha("GET", "/api/config")["components"])
     return {d for d in declared if d not in components}
+
+
+def missing_when_running(ha, declared, timeout=600, interval=15, clock=time.monotonic, sleep=time.sleep):
+    """Declared integrations HA hasn't loaded, judged only once HA reports RUNNING.
+
+    None if HA never reached RUNNING within the timeout.
+    """
+    result = {}
+
+    def attempt():
+        cfg = ha("GET", "/api/config")
+        if cfg.get("state") != "RUNNING":
+            log(f"  HA state: {cfg.get('state')}")
+            return False
+        result["missing"] = {d for d in declared if d not in set(cfg["components"])}
+        return True
+
+    return result["missing"] if poll(attempt, timeout, interval, clock=clock, sleep=sleep) else None
 
 
 def restart_home_assistant(namespace="home-assistant", name="ha-home-assistant"):
@@ -110,15 +131,22 @@ def main() -> int:
     if not reload_until_revision(ha, expected):
         log("FAIL: HA never showed the expected revision (ConfigMap not propagated, or reload failing)")
         return 1
-    missing = missing_integrations(ha, declared)
+    missing = missing_when_running(ha, declared)
+    if missing is None:
+        log("FAIL: HA never reported RUNNING")
+        return 1
     if not missing:
         log("ok: revision loaded; every declared integration is loaded")
         return 0
     log(f"not loaded: {sorted(missing)} -> restarting Home Assistant once")
     restart_home_assistant()
     time.sleep(30)  # strategy Recreate: let the old pod go before polling
-    if not poll(lambda: not missing_integrations(ha, declared), timeout=900, interval=15):
-        log(f"FAIL: after the restart, still not loaded: {sorted(missing_integrations(ha, declared))} (check the HA log)")
+    missing = missing_when_running(ha, declared, timeout=900)
+    if missing is None:
+        log("FAIL: after the restart, HA never reported RUNNING (check the pod and its check-config init container)")
+        return 1
+    if missing:
+        log(f"FAIL: after the restart, still not loaded: {sorted(missing)} (check the HA log)")
         return 1
     log("ok: restarted once; every declared integration is loaded")
     return 0

@@ -95,3 +95,24 @@ def test_ws_refused():
     pytest.importorskip("websockets")
     with pytest.raises(HactlError, match="websocket"):
         Client(url="http://127.0.0.1:9", token=TOKEN).ws({"type": "ping"})
+
+
+def test_response_cut_off_mid_body_is_reported():
+    # HA restarting can drop the connection mid-response (IncompleteRead).
+    import socket
+
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    port = srv.getsockname()[1]
+
+    def serve():
+        conn, _ = srv.accept()
+        conn.recv(4096)
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n{\"partial\":")
+        conn.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    with pytest.raises(HactlError, match="cannot reach HA|dropped"):
+        Client(url=f"http://127.0.0.1:{port}", token=TOKEN).get("/ok")
+    srv.close()

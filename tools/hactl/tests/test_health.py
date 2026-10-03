@@ -43,3 +43,16 @@ def test_render_problem_flags():
     assert any("fridge_door_contact" in line for line in lines)
     assert health.render(dict(base, hook="failed"))[1]
     assert health.render(dict(base, drift=["x"]))[1]
+
+
+def test_aborted_by_a_condition_is_not_failing():
+    # HA marks a run "aborted" when an action-sequence condition is false: a normal early exit.
+    traces = [t("night", "1", "aborted", "2026-10-03T10:00")]
+    detail = {"trace": {"action/0": [{"path": "action/0", "error": None, "result": {"result": False}}]}}
+    assert health.failing_automations(traces, get_trace=lambda item, run: detail) == []
+
+
+def test_aborted_with_an_error_is_failing():
+    traces = [t("blinds", "1", "aborted", "2026-10-03T10:00")]
+    detail = {"trace": {"action/0": [{"path": "action/0", "error": "UndefinedError: 'x' is undefined"}]}}
+    assert [f["item_id"] for f in health.failing_automations(traces, get_trace=lambda item, run: detail)] == ["blinds"]

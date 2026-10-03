@@ -37,4 +37,8 @@ YAML dashboards live in `cluster/home-assistant/dashboards/` and are declared in
 - **Context-based loop guards don't work for Hue/z2m devices**: they report state back with fresh contexts. Never write bidirectional sync automations; one source of truth per behaviour.
 - **On/off conditions need a `binary_sensor`.** A template `sensor` returning a boolean has state `True`/`False`, never `on` (this hid the commute tile for months).
 - **`.storage` (integrations, entity/device/area registry, UI helpers, storage dashboards) is not in git yet** — plan 2 of the overhaul adds `state/` manifests with `hactl plan/apply`. Until then, ask Chris before changing any of it, and never change it ad hoc.
+- **Package filenames must use underscores**: HA rejects hyphenated package slugs and silently skips the whole file (`Package will not be initialized`). Lint enforces it.
+- **The chart's `check-config` init container blocks a bad restart**: if HA restarts (the hook, an upgrade, a node reboot) with a config `check_config` rejects, the pod stalls in `Init` and HA is down on its RWO volume. Read `kubectl -n home-assistant logs deploy/ha-home-assistant -c check-config`, fix in git (or `git revert`), push. Never edit the Deployment by hand.
+- **The recorder excludes the `automation` and `update` domains**, so they never appear in history or the recorder DB; use `hactl trace` / `hactl state` for automations.
+- **`.storage` islands**: integrations/config entries, the entity/device/area registries, UI helpers and storage-mode dashboards are not files; rely on the restic `.storage` backup for recovery. To export a storage dashboard: `json.load('/config/.storage/lovelace.lovelace')['data']['config']`.
 - **Never `--no-verify`** (CLAUDE.md S6).

@@ -4,20 +4,38 @@ import subprocess
 
 from hactl import output, paths, query, refs, revision, yamlload
 
-ERROR_EXECUTIONS = frozenset({"error", "unhandled_error", "aborted"})
+ERROR_EXECUTIONS = frozenset({"error", "unhandled_error"})
+# "aborted" is also what HA records when an action-sequence condition is false
+# or a wait times out: normal. It is a failure only if some step errored.
+ABORTED = "aborted"
 
 
-def failing_automations(trace_list) -> list:
-    """Automations whose most recent stored run errored. Cancelled/condition-failed runs are normal."""
+def _trace_errored(trace: dict) -> bool:
+    if trace.get("error"):
+        return True
+    return any(step.get("error") for steps in (trace.get("trace") or {}).values() for step in steps)
+
+
+def failing_automations(trace_list, get_trace=None) -> list:
+    """Automations whose most recent stored run errored. Cancelled/condition-failed runs are normal.
+
+    get_trace(item_id, run_id) -> full trace; needed to judge "aborted" runs.
+    """
     latest = {}
     for t in trace_list:
         start = (t.get("timestamp") or {}).get("start", "")
         if t["item_id"] not in latest or start > (latest[t["item_id"]].get("timestamp") or {}).get("start", ""):
             latest[t["item_id"]] = t
+    def failed(item, t):
+        execution = t.get("script_execution")
+        if execution in ERROR_EXECUTIONS:
+            return True
+        return execution == ABORTED and get_trace is not None and _trace_errored(get_trace(item, t["run_id"]))
+
     return [
         {"item_id": k, "run_id": t["run_id"], "execution": t.get("script_execution"), "start": (t.get("timestamp") or {}).get("start")}
         for k, t in sorted(latest.items())
-        if t.get("script_execution") in ERROR_EXECUTIONS
+        if failed(k, t)
     ]
 
 
@@ -63,7 +81,8 @@ def collect(client, ha_dir=paths.HA_DIR) -> dict:
         "drift": drift(revision.compute(ha_dir), states.get("sensor.ha_config_revision"),
                        declared_domains(yamlload.load_dir(ha_dir / "packages")), components),
         "hook": hook_status(),
-        "failing": failing_automations(traces),
+        "failing": failing_automations(traces, get_trace=lambda item, run: client.ws(
+            {"type": "trace/get", "domain": "automation", "item_id": item, "run_id": run})[0]),
         "repairs": [{"domain": i["domain"], "issue_id": i["issue_id"], "severity": i.get("severity")}
                     for i in repairs["issues"] if not i.get("ignored")],
         "log_errors": sorted(query.format_log(log, errors_only=True), key=lambda e: -e["count"])[:10],
