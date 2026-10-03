@@ -495,7 +495,7 @@ VLAN 20 doesn't exist yet. Ask Chris to run this in his own terminal (sudo will
 want a password; `!` in the Claude prompt works only if sudo doesn't), then
 paste the output:
 ```
-nix shell nixpkgs#busybox --command sudo env "PATH=$PATH" router/scripts/verify-voice-vlan.sh enp3s0
+router/scripts/verify-voice-vlan.sh enp3s0
 ```
 Expected: `FAIL  no DHCP lease on VLAN 20` and exit 1. The namespace is
 cleaned up afterwards (`ip netns list` shows no `voicetest`).
@@ -719,7 +719,7 @@ count is ≥ 30; a new backup file from this run.
 - [ ] **Step 11: Chris re-runs the acceptance test (in his terminal); it must pass**
 
 ```
-nix shell nixpkgs#busybox --command sudo env "PATH=$PATH" router/scripts/verify-voice-vlan.sh enp3s0
+router/scripts/verify-voice-vlan.sh enp3s0
 ```
 Expected: every line `PASS`, ending `ALL PASS`, exit 0. If DHCP fails
 while `eth2.20` is `u/u`, the switch path is dropping tagged frames
