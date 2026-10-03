@@ -36,6 +36,17 @@ repos:
         entry: scripts/mirror-family-list.sh
         pass_filenames: false
         files: ^cluster/(oauth2-proxy/emails-family|gramps/new-user-emails)\.secret\.yaml$
+      # Home Assistant config revision. A hash of packages/, dashboards/ and
+      # themes/ written into packages/config_revision.yaml as a sensor; the
+      # ha-reload PostSync hook reloads HA until the sensor matches, so every
+      # change provably lands. Behaves like a formatter: if it rewrites the
+      # file, the commit stops so you can `git add` it.
+      - id: ha-config-revision
+        name: HA config revision (packages/config_revision.yaml)
+        language: system
+        entry: tools/hactl/bin/hactl revision --write
+        pass_filenames: false
+        files: ^cluster/home-assistant/(packages|dashboards|themes)/.*\.yaml$
   - repo: https://github.com/jumanjihouse/pre-commit-hook-yamlfmt
     rev: 0.2.1
     hooks:

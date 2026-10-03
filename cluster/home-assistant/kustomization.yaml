@@ -28,6 +28,7 @@ configMapGenerator:
       - packages/presence.yaml
       - packages/zigbee_hygiene.yaml
       - packages/prometheus.yaml
+      - packages/config_revision.yaml
   - name: ha-dashboards
     files:
       - dashboards/overview.yaml
