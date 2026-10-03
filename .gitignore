@@ -19,3 +19,7 @@ router/ansible/ansible.log
 # *.secret.yaml (git-crypt) and are sealed into the cluster by ./sign.sh.
 galaxy-sso.env
 *.env
+
+# Python bytecode (hactl tests import cluster/home-assistant/hooks/*.py)
+__pycache__/
+.pytest_cache/

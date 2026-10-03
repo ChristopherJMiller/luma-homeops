@@ -1,0 +1,102 @@
+---
+# ha-reload: Argo PostSync hook that makes the running Home Assistant match git
+# after every sync of this app. It calls reload_all until
+# sensor.ha_config_revision equals packages/config_revision.yaml, and restarts
+# HA once if an integration declared in the packages isn't loaded.
+# Script: hooks/ha_reload.py. Runbook: docs/ha.md.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ha-reload
+  namespace: home-assistant
+---
+# Its only power: restart the one Deployment (patch its restartedAt annotation).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ha-reload
+  namespace: home-assistant
+rules:
+  - apiGroups: [apps]
+    resources: [deployments]
+    resourceNames: [ha-home-assistant]
+    verbs: [get, patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ha-reload
+  namespace: home-assistant
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ha-reload
+subjects:
+  - kind: ServiceAccount
+    name: ha-reload
+    namespace: home-assistant
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ha-reload
+  namespace: home-assistant
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    # Keep the last run (and its logs) until the next sync replaces it.
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1500
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ha-reload
+    spec:
+      serviceAccountName: ha-reload
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: reload
+          image: docker.io/library/python:3.13-alpine@sha256:2dd78ad5cf13a0b68f5134dc49aa9950203a8cf4b7463431b9f3b398287c5059
+          command: [python3, /app/ha_reload.py]
+          env:
+            - name: HA_URL
+              value: http://ha-home-assistant.home-assistant.svc:8123
+            - name: HA_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ha-reload-token
+                  key: token
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: packages
+              mountPath: /packages
+              readOnly: true
+            - name: script
+              mountPath: /app
+              readOnly: true
+      volumes:
+        - name: packages
+          configMap:
+            name: ha-packages
+        - name: script
+          configMap:
+            name: ha-reload-script

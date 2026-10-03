@@ -9,12 +9,14 @@ resources:
   - psql.yaml
   - postgres-podmonitor.yaml
   - mosquitto-servicemonitor.yaml
+  - ha-reload.yaml
+  - ha-reload-token.yaml
 
 # HA config packages (git-tracked source of truth). Rendered into a ConfigMap
 # that the ha-helm chart mounts at /config/packages via extraConfigMounts.
-# Stable name (no hash suffix) so the chart can reference it directly. NOTE:
-# no reloader is deployed — package changes need a manual
-# `kubectl -n home-assistant rollout restart deploy/ha-home-assistant`.
+# Stable name (no hash suffix) so the chart can reference it directly. After
+# every sync the ha-reload PostSync hook (ha-reload.yaml) reloads HA until it
+# runs this revision, restarting it once if a new integration needs it.
 configMapGenerator:
   - name: ha-packages
     files:
@@ -35,6 +37,10 @@ configMapGenerator:
   - name: ha-themes
     files:
       - themes/warm-minimal.yaml
+  # The ha-reload PostSync hook's script (ha-reload.yaml).
+  - name: ha-reload-script
+    files:
+      - hooks/ha_reload.py
 
 generatorOptions:
   disableNameSuffixHash: true
