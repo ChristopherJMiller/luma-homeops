@@ -1,89 +1,40 @@
 ---
 name: ha-config
-description: Add or edit git-tracked Home Assistant config — automations, helpers, templates, scenes, dashboards — as HA "packages" in cluster/home-assistant/packages/, validate with check_config, and deploy safely. Use whenever changing HA automations/helpers/entities, migrating UI config to git, or wiring new HA behavior. NEVER edit these automations in the HA UI (they are package-defined and read-only there). NEVER trust check_config's exit code. NEVER let a generic YAML formatter touch HA config.
+description: Change or inspect Home Assistant on galaxy — automations, helpers, templates, scenes, dashboards, themes — through git and the hactl toolkit, and verify the result live (screenshots, traces, health). Use for ANY HA config or dashboard work, any "why did this automation do X", and any HA debugging. NEVER edit package automations or YAML dashboards in the HA UI. NEVER deploy without `hactl lint`. NEVER call lock/notify actions without Chris's OK. NEVER let a generic YAML formatter touch HA config.
 ---
 
 # ha-config
 
-Home Assistant runs in-cluster (Argo `home-assistant-release`, chart from `~/Repos/ha-helm`). Its git-tracked config is delivered as **packages**, not edited in the UI.
+HA runs in-cluster (Argo `home-assistant-release`, chart `~/Repos/ha-helm`). Its config is git: `cluster/home-assistant/{packages,dashboards,themes}` → kustomize ConfigMaps → `/config`. **`hactl`** (`tools/hactl`, on PATH inside `nix develop`) is how you look at HA, check a change, see it, and verify the deploy. Runbook: `docs/ha.md`.
 
-## Architecture (how config reaches HA)
+## The loop (do every step)
 
-```
-cluster/home-assistant/packages/*.yaml      <- SOURCE OF TRUTH (edit here)
-  -> kustomize configMapGenerator (disableNameSuffixHash) => ConfigMap ha-packages
-  -> ha-helm extraConfigMounts mounts it at /config/packages
-  -> HA loads it via  homeassistant.packages: !include_dir_named packages/
-```
-Relevant chart values in `cluster/applications/home-assistant-release.yaml`:
-`externalUrl`, `packages.enabled: true`, `extraConfigMounts`, `checkConfig.enabled: true`.
-Each package file bundles any mix of domains (`automation:`, `template:`, `input_boolean:`, `adaptive_lighting:`, …) for one feature/room.
+1. **Look first.** `hactl find <text> [--area Bedroom] [--domain light] [--unavailable]`, `hactl state <id>`, `hactl history <id…> --since 6h` (flags flapping), `hactl trace automation.<x>`, `hactl log --errors`, `hactl health`. Never guess an entity_id: they are sticky after Zigbee renames and mangled by integrations.
+2. **Edit** files under `cluster/home-assistant/`. A new file must be listed in `kustomization.yaml` (lint catches a miss). Package filenames: lowercase + underscores.
+3. **Check.** Render new templates against live state first: `hactl template -f snippet.j2`. Then `hactl lint`: unknown entity ids, broken dashboard templates, quoting, kustomization, revision, and HA's `check_config` in the deployed image. An entity referenced on purpose before it exists goes in `cluster/home-assistant/lint-allow-missing.txt` with a reason.
+4. **See dashboards before committing.** `hactl preview cluster/home-assistant/dashboards/overview.yaml --view N` pushes to the admin-only `/claude-preview` dashboard and screenshots phone (412) + desktop (1440). **Read the PNGs.** Fix every error card, every unexpected "unavailable", every visual problem; iterate until right.
+5. **Commit and push** (`nix develop --command git commit …`). Pre-commit regenerates `packages/config_revision.yaml`; if it stops the commit, `git add` it and commit again.
+6. **Deploy and verify.** `hactl deploy --shot` (run it in the background) waits for Argo and the `ha-reload` hook, then runs `health` and screenshots. Then exercise the change for real: trigger it with reversible actions (`hactl call …`), read the run (`hactl trace …`), and look (`hactl shot …`). A change is done when you have seen it work, not when it is pushed.
 
-## Workflow: edit -> validate -> deploy
+## Actuation policy (Chris, 2026-10-03)
 
-### 1. Edit the package
-Add/modify `cluster/home-assistant/packages/<feature>.yaml`. If it's a new file, add it to the `configMapGenerator.files` list in `cluster/home-assistant/kustomization.yaml`.
+Anything reversible is free while testing: lights, scenes, fans, covers/blinds, the AC, adaptive-lighting switches, the preview dashboard. **Ask Chris first** for locks, phone notifications, speech/announcements, and HA restart/stop; `hactl call` refuses those without `--confirmed`. The same rule applies to the HA MCP server's tools.
 
-**Filenames MUST use underscores** (`morning_routine.yaml`, not `morning-routine.yaml`). HA rejects hyphen package slugs and *silently skips the whole file* (`Package will not be initialized`).
+## How a change reaches HA
 
-### 2. Look up real entity_ids first
-Automations reference entity_ids, and HA's are often not what you'd guess (sticky after Zigbee renames, mangled by integrations). Get the truth from the recorder:
-```bash
-export KUBECONFIG=/tmp/galaxy-kubeconfig   # refresh from Talos if needed
-kubectl -n home-assistant exec acid-ha-0 -c postgres -- psql -U postgres -d homeassistant -tAc \
-  "SELECT entity_id FROM states_meta WHERE entity_id LIKE 'switch.%bedroom%' ORDER BY 1;"
-```
-Notes: the recorder **excludes the `automation` and `update` domains**, so those won't appear. YAML-platform entities without a unique_id aren't in `.storage/core.entity_registry`. The HA MCP server (`.mcp.json`) is **read/call only** — it can't create helpers or rename entities; use the HA UI or WS/REST API for that.
-
-### 3. Validate with real check_config (never skip)
-`check_config` is the gate. Run it in the **deployed image version**, with any custom integrations present.
-```bash
-SC=/tmp/ha-check; rm -rf "$SC"; mkdir -p "$SC/packages" "$SC/custom_components"
-cp cluster/home-assistant/packages/*.yaml "$SC/packages/"
-cp -r cluster/home-assistant/blueprints/. "$SC/blueprints/" 2>/dev/null || true
-printf 'homeassistant:\n  packages: !include_dir_named packages/\n' > "$SC/configuration.yaml"
-: > "$SC/secrets.yaml"
-# custom components aren't in the vanilla image — fetch any the packages use:
-git clone --depth 1 https://github.com/basnijholt/adaptive-lighting /tmp/al && \
-  cp -r /tmp/al/custom_components/adaptive_lighting "$SC/custom_components/"
-TAG=$(grep -oE 'tag: [0-9]{4}\.[0-9]+\.[0-9]+' cluster/applications/home-assistant-release.yaml | head -1 | awk '{print $2}')
-docker run --rm -v "$SC":/config "docker.io/homeassistant/home-assistant:$TAG" \
-  python -m homeassistant --script check_config -c /config 2>&1 | sed -E 's/\x1b\[[0-9;]*m//g' \
-  | grep -iE 'ERROR|Invalid config|could not be validated|will not be initialized|invalid slug|Platform error' \
-  && echo "!!! FIX ERRORS ABOVE" || echo "CLEAN"
-```
-**check_config EXITS 0 EVEN ON ERRORS** — always grep the output; never trust `$?`. It also **cannot catch runtime template errors** (e.g. a `device_class: timestamp` sensor returning `""` when its source is unknown) — guard those with an `availability:` template.
-
-For a full-fidelity check (whole live config + your changes), assemble it inside the running pod against a `/tmp/cfgtest` copy of `/config` and run the pod's own `check_config` — do this before enabling anything gate-like on a RWO volume.
-
-### 4. Deploy
-Commit + push (pre-commit runs; direct main pushes are fine here). Argo syncs the `home-assistant` app (updates the ConfigMap) and, for chart-value changes, the release.
-**There is no stakater/reloader deployed**, so a packages-only edit (ConfigMap content change) does NOT auto-reload HA:
-```bash
-# after Argo has synced the ha-packages ConfigMap:
-kubectl -n home-assistant rollout restart deploy/ha-home-assistant
-```
-Watch the rollout with the `safe-rollout` skill / `Monitor`. The `check-config` **init container** re-validates before the main container starts — a non-zero exit there stalls the pod (HA down on this RWO volume), so validate first.
+push → Argo syncs the `home-assistant` app (ConfigMaps) → the **`ha-reload` PostSync Job** calls `homeassistant.reload_all` until `sensor.ha_config_revision` equals the committed revision, and restarts HA once if a top-level integration in the packages isn't loaded (e.g. a new `prometheus:`). A failed hook shows in Argo and in `hactl health`; read it with `kubectl -n home-assistant logs job/ha-reload`. There is no manual `rollout restart` step any more.
 
 ## Dashboards (YAML mode)
 
-Dashboards live in `cluster/home-assistant/dashboards/*.yaml`, built into the `ha-dashboards` ConfigMap (kustomize), mounted at `/config/dashboards`, and declared via the chart `lovelace` value:
-```yaml
-lovelace:
-  enabled: true
-  dashboards:
-    - urlPath: home-ops        # MUST contain a hyphen — HA rejects hyphenless custom paths
-      filename: dashboards/overview.yaml
-      title: Home
-      showInSidebar: true
-```
-- **Never flip global `lovelace: mode: yaml`** — it disables the UI custom-card **resource registry** cluster-wide, breaking HACS cards (mushroom, etc.) on every dashboard. Global mode stays `storage`; add YAML-mode dashboards *alongside* it. In this mixed mode the UI-registered resources still apply to the YAML dashboards.
-- To export an existing storage dashboard: `json.load('/config/.storage/lovelace.lovelace')['data']['config']` → `yaml.dump`.
-- `check_config` validates the `lovelace:` schema (this is how the missing-hyphen error is caught pre-start) but NOT the dashboard file contents — verify custom cards render in the browser after deploy.
+YAML dashboards live in `cluster/home-assistant/dashboards/` and are declared in the chart's `lovelace.dashboards` value (`urlPath` must contain a hyphen). **Never flip global `lovelace: mode: yaml`** — it disables the UI resource registry and breaks every add-on card. `check_config` validates the `lovelace:` schema, not dashboard contents — that is what `hactl lint` (templates, entity ids) and `hactl preview`/`shot` (error cards, rendering) are for.
 
 ## Hard rules / gotchas
-- **Never edit package automations in the HA UI** — it reports "Only automations in automations.yaml can be deleted"; they're read-only there by design.
-- **yamlfmt corrupts HA YAML**: it strips quotes, and YAML 1.1 then coerces `'on'`→bool and `'HH:MM:SS'`→sexagesimal int. HA config dirs are excluded from yamlfmt in `.pre-commit-config.yaml`; keep them excluded and keep `'on'`/`'off'`/times quoted in packages. (Values inside the Argo `valuesObject` are safe — Go YAML re-quotes on render.)
-- **Never `--no-verify`** — fix hook failures (repo rule S6).
-- `.storage` islands (integrations/config_entries, entity/device/area registry, UI helpers, storage-mode dashboards) are **not** git-trackable — bootstrap manually, and rely on a `.storage` backup for recovery. Everything downstream (automations/scripts/scenes/templates/helpers/packages/blueprints/YAML dashboards) IS git-trackable.
-- CI (`.github/workflows/ha-check-config.yaml`) runs this same check on every packages change; add new custom integrations to its fetch step.
+
+- **Never edit package automations in the HA UI** (read-only there by design).
+- **yamlfmt corrupts HA YAML** (strips quotes; YAML 1.1 then turns `on` into a boolean and `03:00:00` into 10800). HA dirs are excluded from yamlfmt; keep them excluded. Quote `'on'`/`'off'`/times (lint enforces it).
+- **`check_config` exits 0 even on errors**; `hactl lint` greps it. It also can't catch runtime template errors: guard template sensors with `availability:` and check `hactl log --errors` after deploy.
+- **Custom-component packages need the component present** to validate: add new ones to `CUSTOM_COMPONENTS` in `tools/hactl/src/hactl/lint.py`.
+- **Context-based loop guards don't work for Hue/z2m devices**: they report state back with fresh contexts. Never write bidirectional sync automations; one source of truth per behaviour.
+- **On/off conditions need a `binary_sensor`.** A template `sensor` returning a boolean has state `True`/`False`, never `on` (this hid the commute tile for months).
+- **`.storage` (integrations, entity/device/area registry, UI helpers, storage dashboards) is not in git yet** — plan 2 of the overhaul adds `state/` manifests with `hactl plan/apply`. Until then, ask Chris before changing any of it, and never change it ad hoc.
+- **Never `--no-verify`** (CLAUDE.md S6).
