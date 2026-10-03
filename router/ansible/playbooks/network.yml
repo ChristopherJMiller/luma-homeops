@@ -65,5 +65,9 @@
       lines:
         - "set interfaces ethernet {{ voice.parent_interface }} vif {{ voice.vlan_id }} address '{{ voice.address }}'"
         - "set interfaces ethernet {{ voice.parent_interface }} vif {{ voice.vlan_id }} description '{{ voice.description }}'"
+        # No IPv6 on the voice VLAN: the phones are IPv4-only and there is no
+        # IPv6 firewall, so a link-local address here would expose everything
+        # listening on :: (sshd, the zigbee2mqtt frontend) to the phones.
+        - "set interfaces ethernet {{ voice.parent_interface }} vif {{ voice.vlan_id }} ipv6 address no-default-link-local"
       save: false
     tags: [network, voice]

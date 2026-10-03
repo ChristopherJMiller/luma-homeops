@@ -53,12 +53,15 @@ save
 
 ### Safe Deployment with Rollback Timer
 
-Built in. `site.yml` arms VyOS's commit-confirm timer before any
-`network`, `firewall`, `nat` or `services` include
-(`playbooks/commit-confirm-arm.yml`). It checks from this machine that
-the LAN still reaches the WAN and the port-forwards still answer
-(`commit_confirm_verify_urls`), then cancels the timer
-(`playbooks/commit-confirm-verify.yml`) and saves. If anything fails
+Built in, on every run (the parachute tasks are tagged `always`, so no
+`--tags`/`--skip-tags` combination escapes it). `site.yml` refuses to start
+if a rollback is already pending, arms VyOS's commit-confirm timer and
+asserts it is running (`playbooks/commit-confirm-arm.yml`), applies, then
+checks from this machine that the LAN still reaches the WAN and the
+port-forwards still answer (`commit_confirm_verify_urls`) and that a
+*fresh* SSH login works, cancels the timer
+(`playbooks/commit-confirm-verify.yml`), and saves only once the timer is
+confirmed stopped. If anything fails
 first, the router reboots to its last saved config after
 `commit_confirm_minutes`. Don't race it.
 

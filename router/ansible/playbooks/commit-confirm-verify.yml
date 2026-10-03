@@ -1,13 +1,18 @@
 ---
 # Commit-confirm parachute, part 2 of 2 (part 1: commit-confirm-arm.yml).
 #
-# Post-apply check, run from the control node (on the LAN). Each URL in
-# commit_confirm_verify_urls must return a status < 500. The apex
-# hostnames are Cloudflare-proxied, so a request leaves via the WAN and
-# comes back in through the port-forwards. A pass proves LAN→WAN
-# forwarding, WAN→Traefik NAT and that we still manage the router (we
-# are talking to it). A DNS-only name would take NAT reflection and
-# prove nothing.
+# Two post-apply checks from the control node (on the LAN), both before the
+# timer is cancelled:
+#
+# 1. Each URL in commit_confirm_verify_urls must return a status < 500. The
+#    apex hostnames are Cloudflare-proxied, so a request leaves via the WAN
+#    and comes back in through the port-forwards. A pass proves LAN→WAN
+#    forwarding and WAN→Traefik NAT. A DNS-only name would take NAT
+#    reflection and prove nothing.
+# 2. A brand-new SSH login must succeed. Ansible's own session is
+#    persistent and already established, so it survives a change that
+#    blocks *new* connections (firewall, sshd listen address, keys). Only a
+#    fresh connection proves we can still get back in.
   - name: Verify LAN egress and port-forwards (via Cloudflare)
     ansible.builtin.uri:
       url: '{{ item }}'
@@ -21,7 +26,30 @@
     retries: 3
     delay: 5
     until: commit_confirm_verify is succeeded
-    tags: [network, firewall, nat, services]
+    tags: [always]
+
+  - name: Verify a fresh SSH login to the router still works
+    ansible.builtin.command:
+      argv:
+        - ssh
+        - -o
+        - BatchMode=yes
+        - -o
+        - ControlMaster=no
+        - -o
+        - ControlPath=none
+        - -o
+        - ConnectTimeout=10
+        - -o
+        - StrictHostKeyChecking=no
+        - -i
+        - '{{ ansible_ssh_private_key_file }}'
+        - '{{ ansible_user }}@{{ ansible_host }}'
+        - 'true'
+    delegate_to: localhost
+    when: not ansible_check_mode
+    changed_when: false
+    tags: [always]
 
 # `config-mgmt confirm` stops the reboot timer, then tries to finalise a
 # commit-log entry that only the interactive CLI writes (it exports
@@ -38,4 +66,4 @@
     when: not ansible_check_mode
     changed_when: true
     failed_when: "'inactive' not in commit_confirm_result.stdout[-1]"
-    tags: [network, firewall, nat, services]
+    tags: [always]

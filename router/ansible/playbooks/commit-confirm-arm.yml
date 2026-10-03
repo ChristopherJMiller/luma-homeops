@@ -3,13 +3,29 @@
 #
 # Arms VyOS's commit-confirm timer (`config-mgmt commit_confirm`): unless it
 # is cancelled, the router reboots to its *saved* config after N minutes.
-# site.yml includes this before, and part 2 after, every high-risk include
-# (network, firewall, nat, services). Each vyos_config task commits as it
-# goes (save: false), so one timer covers them all; site.yml saves only
-# after part 2 has verified and cancelled it. vyos_config itself has no
-# commit-confirm support, and an interactive `commit-confirm` in another
-# session can't cover Ansible's commits (VyOS refuses: "No configuration
-# changes to commit").
+# site.yml includes this before, and part 2 after, every task include. It
+# is tagged `always`, so no --tags/--skip-tags combination can run a change
+# without it (system.yml touches sshd and login keys; monitoring.yml adds
+# input rules). Each vyos_config task commits as it goes (save: false), so
+# one timer covers them all; site.yml saves only after part 2 has verified
+# and cancelled it. vyos_config itself has no commit-confirm support, and
+# an interactive `commit-confirm` in another session can't cover Ansible's
+# commits (VyOS refuses: "No configuration changes to commit").
+#
+# The timer's state is asserted on both sides of arming: a timer that is
+# already running means a rollback is pending from an earlier run (stacking
+# a second change on top would be saved over it), and a timer that isn't
+# running after arming means the parachute silently failed to open.
+  - name: Refuse to start while a rollback is already pending
+    vyos.vyos.vyos_command:
+      commands:
+        - systemctl is-active commit-confirm.timer || true
+    register: commit_confirm_before
+    when: not ansible_check_mode
+    changed_when: false
+    failed_when: commit_confirm_before.stdout[-1].strip() == 'active'
+    tags: [always]
+
   - name: Arm commit-confirm rollback timer ({{ commit_confirm_minutes }} min)
     vyos.vyos.vyos_command:
       commands:
@@ -17,4 +33,14 @@
         - sudo sg vyattacfg 'config-mgmt commit_confirm -y -t={{ commit_confirm_minutes }}'
     when: not ansible_check_mode
     changed_when: true
-    tags: [network, firewall, nat, services]
+    tags: [always]
+
+  - name: Assert the rollback timer is armed
+    vyos.vyos.vyos_command:
+      commands:
+        - systemctl is-active commit-confirm.timer || true
+    register: commit_confirm_armed
+    when: not ansible_check_mode
+    changed_when: false
+    failed_when: commit_confirm_armed.stdout[-1].strip() != 'active'
+    tags: [always]

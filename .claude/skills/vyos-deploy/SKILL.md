@@ -49,12 +49,15 @@ An interactive `commit-confirm` opened alongside Ansible does NOT cover
 Ansible's commits — VyOS refuses it with "No configuration changes to
 commit" because the config session is empty. (Learned 2026-09-19, #2507.)
 
-The parachute is site-level: `site.yml` includes
+The parachute is site-level and tagged `always`: `site.yml` includes
 `playbooks/commit-confirm-arm.yml` before and
-`playbooks/commit-confirm-verify.yml` after the high-risk includes,
-tagged `network`, `firewall`, `nat` and `services`, so any run with one of
-those tags is covered (vars: `commit_confirm_minutes`,
-`commit_confirm_verify_urls`). Rehearsed 2026-10-02. The chain:
+`playbooks/commit-confirm-verify.yml` after every task include, so no
+`--tags`/`--skip-tags` combination runs a change without it (vars:
+`commit_confirm_minutes`, `commit_confirm_verify_urls`). Arm refuses to
+start if a rollback is already pending and asserts the timer is running;
+verify also requires a *fresh* SSH login (Ansible's persistent session
+would survive a change that blocks new ones); the save is refused while the
+timer is active. Rehearsed 2026-10-02. The chain:
 
 ```
 arm     vyos_command: sudo sg vyattacfg 'config-mgmt commit_confirm -y -t=N'
@@ -120,7 +123,10 @@ From `router/ansible/site.yml`:
 - `services` — DHCP, syslog, prometheus exporter (MEDIUM RISK)
 - `monitoring` — prometheus + syslog only
 
-`network`, `firewall`, `nat` always need commit-confirm.
+Every run gets the commit-confirm parachute (its tasks are tagged `always`).
+Select work by the playbook tags above only: inner task tags (`voice`,
+`dhcp`, `static`, …) select nothing on their own, because the includes are
+dynamic and the include itself is skipped.
 
 ## When to abort and surface
 

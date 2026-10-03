@@ -41,11 +41,15 @@
         tags: [always, backup]
 
     tasks:
-      # Parachute (see playbooks/commit-confirm-arm.yml). Tags select it for
-      # every high-risk run; system and monitoring runs skip it.
+      # Parachute (see playbooks/commit-confirm-arm.yml). Tagged `always`:
+      # every run that can change the router is wrapped, whatever
+      # --tags/--skip-tags say. Select work by playbook tag (system,
+      # network, firewall, nat, services, monitoring); inner task tags such
+      # as `voice` or `dhcp` match nothing on their own, because the
+      # includes are dynamic.
       - name: Arm commit-confirm parachute
         include_tasks: playbooks/commit-confirm-arm.yml
-        tags: [network, firewall, nat, services]
+        tags: [always]
 
       - name: Include system configuration
         include_tasks: playbooks/system.yml
@@ -67,13 +71,26 @@
         include_tasks: playbooks/services.yml
         tags: [services]
 
-      - name: Verify and confirm (cancels the parachute)
-        include_tasks: playbooks/commit-confirm-verify.yml
-        tags: [network, firewall, nat, services]
-
       - name: Include monitoring configuration
         include_tasks: playbooks/monitoring.yml
         tags: [monitoring]
+
+      - name: Verify and confirm (cancels the parachute)
+        include_tasks: playbooks/commit-confirm-verify.yml
+        tags: [always]
+
+      # The save is what makes a change survive the rollback reboot, so it
+      # must never run while the timer is still pending (for example if a
+      # failed verify was skipped past).
+      - name: Refuse to save while a rollback is pending
+        vyos.vyos.vyos_command:
+          commands:
+            - systemctl is-active commit-confirm.timer || true
+        register: commit_confirm_pending
+        when: not ansible_check_mode
+        changed_when: false
+        failed_when: commit_confirm_pending.stdout[-1].strip() == 'active'
+        tags: [always, commit]
 
       - name: Commit and save all changes
         vyos.vyos.vyos_config:
