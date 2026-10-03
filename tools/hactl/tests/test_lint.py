@@ -70,3 +70,41 @@ def test_check_config_restores_ownership_portably(tmp_path):
     assert 'chown -R "$(stat -c %u:%g /config)" /config' in script
     assert f"{tmp_path}:/config" in cmd
     assert "docker.io/homeassistant/home-assistant:2026.7.2" in cmd
+
+
+def test_entity_refs_unknown_vs_declared(tmp_path):
+    ha = make_ha(tmp_path, {
+        "packages/a.yaml": (
+            "input_boolean:\n  guest_mode: {}\n"
+            "automation:\n  - alias: X\n    triggers:\n      - trigger: state\n"
+            "        entity_id: input_boolean.guest_mode\n"
+            "    actions:\n      - action: light.turn_on\n        target:\n          entity_id: light.missing_lamp\n"
+        ),
+        "dashboards/d.yaml": "views:\n  - cards:\n      - entity: sun.sun\n",
+    })
+    found = lint.check_entity_refs(ha, known={"sun.sun"})
+    assert [(f.rule, f.message.split()[0], f.line) for f in found] == [("entity-ref", "light.missing_lamp", 11)]
+    assert lint.check_entity_refs(ha, known={"sun.sun"}, allow={"light.missing_lamp"}) == []
+
+
+def test_allow_missing_file(tmp_path):
+    f = tmp_path / "lint-allow-missing.txt"
+    f.write_text("# integrations still to add\nweather.toronto  # plan 3: met.no Toronto\n\nsensor.toronto_work_commute\n")
+    assert lint.load_allow_missing(f) == {"weather.toronto", "sensor.toronto_work_commute"}
+    assert lint.load_allow_missing(tmp_path / "absent.txt") == set()
+
+
+def test_template_strings_and_render_errors(tmp_path):
+    ha = make_ha(tmp_path, {"dashboards/d.yaml": (
+        "views:\n  - cards:\n"
+        "      - primary: \"{{ states('sun.sun') }}\"\n"
+        "      - primary: \"{{ as_timestamp(None) }}\"\n"
+        "      - primary: plain text\n"
+    )})
+
+    def render(text):
+        if "None" in text:
+            raise lint.HactlError("Template error: as_timestamp got invalid input")
+
+    found = lint.check_dashboard_templates(ha, render)
+    assert [(f.rule, f.line) for f in found] == [("dashboard-template", 4)]

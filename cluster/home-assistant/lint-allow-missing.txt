@@ -1,0 +1,10 @@
+# Entity ids the HA config references on purpose before they exist.
+# `hactl lint` accepts these; everything else unknown is an error.
+# One id per line; say why, and what will make it exist (or remove it).
+
+# overview_brain.yaml's Toronto branch (used while the "not in Seattle"
+# calendar is on). Both integrations are still "ADD via UI": the ops-fixes
+# plan of the HA overhaul adds them as declared integrations, or drops the
+# Toronto branch.
+weather.toronto
+sensor.toronto_work_commute

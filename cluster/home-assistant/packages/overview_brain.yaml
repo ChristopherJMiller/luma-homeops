@@ -49,6 +49,10 @@ template:
           {% set c = state_attr('sensor.current_city','commute_entity') %}
           {% if c and states(c) not in ['unknown','unavailable','none'] %}{{ states(c) | round(0) }}{% endif %}
 
+  # A binary sensor (on/off): the dashboard's commute tile is conditional on
+  # binary_sensor.show_commute being "on". It was a plain sensor ("True"/
+  # "False") until 2026-10-03, so the tile never showed; `hactl lint` caught it.
+  - binary_sensor:
       - name: Show Commute
         unique_id: show_commute
         # Only surface the commute when it's a workday in the active city AND

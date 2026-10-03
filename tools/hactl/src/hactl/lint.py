@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from hactl import output, paths, revision
+from hactl import output, paths, refs, revision, yamlload
 from hactl.errors import HactlError
 
 _SLUG = re.compile(r"^[a-z0-9_]+\.yaml$")
@@ -132,8 +132,76 @@ def offline(ha_dir: Path = paths.HA_DIR, run_check_config: bool = True) -> list:
     return findings
 
 
+def _line_of(path: Path, needle: str):
+    for n, line in enumerate(path.read_text().splitlines(), 1):
+        if needle in line:
+            return n
+    return None
+
+
+ALLOW_MISSING = paths.HA_DIR / "lint-allow-missing.txt"
+
+
+def load_allow_missing(path: Path = ALLOW_MISSING) -> set:
+    """Entity ids that are referenced on purpose before they exist (one per line, # comments)."""
+    if not path.exists():
+        return set()
+    return {line.split("#")[0].strip() for line in path.read_text().splitlines()} - {""}
+
+
+def check_entity_refs(ha_dir: Path, known: set, allow: set = frozenset()) -> list:
+    declared = refs.declared_entities(yamlload.load_dir(ha_dir / "packages"))
+    out = []
+    for sub in ("packages", "dashboards"):
+        for f in sorted((ha_dir / sub).glob("*.yaml")):
+            for ref in sorted(refs.extract_refs(yamlload.load(f))):
+                if ref not in known and ref not in declared and ref not in allow:
+                    out.append(Finding("entity-ref", paths.rel(f), _line_of(f, ref), f"{ref} does not exist in HA"))
+    return out
+
+
+def template_strings(obj) -> list:
+    if isinstance(obj, dict):
+        return [s for v in obj.values() for s in template_strings(v)]
+    if isinstance(obj, list):
+        return [s for v in obj for s in template_strings(v)]
+    if isinstance(obj, str) and ("{{" in obj or "{%" in obj):
+        return [obj]
+    return []
+
+
+def check_dashboard_templates(ha_dir: Path, render) -> list:
+    out = []
+    for f in sorted((ha_dir / "dashboards").glob("*.yaml")):
+        for text in template_strings(yamlload.load(f)):
+            try:
+                render(text)
+            except HactlError as e:
+                first = text.strip().splitlines()[0][:60]
+                out.append(Finding("dashboard-template", paths.rel(f), _line_of(f, first), str(e)[:300]))
+    return out
+
+
+def live(ha_dir: Path, client) -> list:
+    states = client.get("/api/states")
+    entities = client.ws({"type": "config/entity_registry/list"})[0]
+    known = {s["entity_id"] for s in states} | {e["entity_id"] for e in entities}
+    # Card templates may use the card's own variables; give them harmless values.
+    variables = {"entity": "", "user": "", "config": {}}
+
+    def render(text):
+        client.post("/api/template", {"template": text, "variables": variables}, raw=True)
+
+    allow = load_allow_missing(ha_dir / "lint-allow-missing.txt")
+    return check_entity_refs(ha_dir, known, allow) + check_dashboard_templates(ha_dir, render)
+
+
 def _run(args) -> int:
     findings = offline(paths.HA_DIR, run_check_config=not args.no_check_config)
+    if not args.offline:
+        from hactl.client import Client
+
+        findings += live(paths.HA_DIR, Client())
     output.emit(args, [asdict(f) for f in findings], [str(f) for f in findings] or ["lint: clean"])
     return 1 if any(f.severity == "error" for f in findings) else 0
 
