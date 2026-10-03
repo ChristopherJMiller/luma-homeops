@@ -20,7 +20,8 @@ and all of it tied to whether he is home.
 
 | Topic | Decision |
 |---|---|
-| Sequencing | One spec, four phases, toolkit first (each phase uses the previous one). |
+| Sequencing | One spec, four phases, toolkit first (each phase uses the previous one). Implemented as five plans: Phase 1 splits into toolkit core and declarative state. |
+| Infrastructure as code | Everything that can be described lives in git. HA's `.storage` state (areas, devices, entity overrides, helpers, integrations, storage dashboards, card resources) is described by manifests and converged with `hactl plan`/`apply` (§4.11). Custom integrations and cards are pinned and installed by the chart, not HACS (§5). No imperative "set it once" steps. |
 | Toolkit shape | In-repo Python CLI (`hactl`), not an off-the-shelf stack, not an MCP server (yet). |
 | Dashboard audience | Chris only: phone (Pixel 9 Pro XL) and desktop browser. |
 | Dashboard style | Keep the add-on card stack (mushroom, layout-card, card-mod). |
@@ -41,9 +42,11 @@ voice/Assist; Zigbee changes (z2m stays as it is).
    phone and desktop width, all through `hactl`.
 2. Every git change to HA config is applied and verified automatically after
    Argo syncs, and drift (repo ≠ running) is detected.
-3. HA is on current stable, and the known silent failures (§2) are fixed.
-4. The automation behaviours in §7 run with zero errored traces for a week.
-5. The dashboard shows the new controls, the known visual bugs are gone, and
+3. Everything HA-side that can be declared is declared in git; `hactl plan`
+   is empty, and a non-empty plan is reported as drift.
+4. HA is on current stable, and the known silent failures (§2) are fixed.
+5. The automation behaviours in §7 run with zero errored traces for a week.
+6. The dashboard shows the new controls, the known visual bugs are gone, and
    before/after screenshots at 412 px and 1440 px have no error cards.
 
 ## 2. Starting state
@@ -73,8 +76,9 @@ Observed read-only on 2026-10-03.
 | **In-repo CLI (`hactl`) + one verified deploy path** | **Chosen.** Encodes *our* layout (packages via ConfigMap, YAML dashboards, `check_config` quirks) in code instead of skill prose. Testable, versioned, usable from any subagent via Bash, costs no context until used. An MCP wrapper later is thin. |
 | Off-the-shelf (`hass-cli` + chrome-devtools MCP + a community HA MCP server) | Rejected. None of it knows the GitOps layout, so the knowledge stays in prose — the thing that has been failing. Community HA MCP servers write config into HA's `.storage`, which fights GitOps, and would hold an admin token. |
 | Our own MCP server now | Deferred. Same functions as `hactl`, but tool schemas ride every turn and it is harder to iterate. Revisit once the command set is stable. |
+| Imperative `registry` / `flow` commands in `hactl` | Rejected (Chris, 2026-10-03). One-off writes into `.storage` that no file describes are drift by construction. Replaced by manifests + `plan`/`apply` (§4.11). |
 | Reloader (stakater) for config changes | Rejected. A full restart for every package edit (HA down ~1–2 min, in-flight `for:` timers lost) and it still would not *verify* anything. |
-| Declaring the agent user in the chart | Rejected. HA users live in `.storage/auth` (internal format; tokens are JWTs signed with per-token keys stored there). Writing it from an init container would break on HA upgrades. One manual user creation + a runbook instead. |
+| A dedicated `agent` user (declared in the chart, or made by hand) | Not needed. Users can't be declared (they live in `.storage/auth`, an internal format), and HA has no scoped tokens, so a hand-made user would only add logbook attribution. Chris's own account holds the tokens. |
 
 ## 4. Phase 1 — the toolkit
 
@@ -91,7 +95,8 @@ tools/hactl/
     preview.py           # !include resolution, claude-preview dashboard
     lint.py              # static + live checks, check_config runner
     health.py            # repairs, errors, failing automations, drift
-    act.py               # call (with actuation policy), registry, flow
+    act.py               # call (with actuation policy)
+    state/               # declarative .storage state: model, live read, plan, apply, import, flows (§4.11)
     deploy.py            # wait for Argo sync + hook, then verify
     revision.py          # config revision hash (pre-commit + hook share it)
   tests/                 # pytest, fixtures only (no live HA)
@@ -113,8 +118,9 @@ Output is short human-readable text by default; every command takes `--json`.
 
 ### 4.2 Auth and tokens
 
-- Chris creates an HA user **`agent`** (administrator) once in the UI, and
-  mints three long-lived tokens while logged in as it (separately revocable):
+- **Tokens live on Chris's own (owner) account** — his choice. HA has no
+  scoped tokens, so a separate user would only add logbook attribution. Three
+  long-lived tokens, separately revocable from his profile:
   - `hactl` → `tools/hactl/agent.secret.yaml` (`token: …`). git-crypt covers
     it via the existing `*.secret.yaml` rule; it lives outside `cluster/`, so
     `sign.sh` never seals it into the cluster.
@@ -123,13 +129,10 @@ Output is short human-readable text by default; every command takes `--json`.
   - `prometheus-scrape` → `cluster/home-assistant/ha-metrics-token.secret.yaml`,
     sealed, for Prometheus (§5 item 1). Placed in the namespace where the
     `ScrapeConfig` lives.
+- Chris handed them over in `~/.config/galaxy/{ha-token,reload-token,
+  prom-token}` (mode 600); implementation copies them into the files above.
 - Token lookup order: `$HA_TOKEN`, then `tools/hactl/agent.secret.yaml`.
-  The spike token at `~/.config/galaxy/ha-token` (minted under Chris's
-  account) is revoked once `agent` works.
-- HA has no scoped tokens; `agent` is admin because saving dashboards, editing
-  the registry and running config flows require it. The separate user buys
-  attribution (logbook shows "agent") and independent revocation.
-- Runbook for creating/rotating the user and tokens goes in `docs/ha.md`.
+- Runbook for rotating the tokens goes in `docs/ha.md`.
 
 ### 4.3 Commands
 
@@ -147,10 +150,11 @@ Output is short human-readable text by default; every command takes `--json`.
 | `lint [--offline]` | §4.7. `--offline` is the subset CI runs. | local + live |
 | `health` | Repairs issues, top log errors, automations whose last run errored, referenced entities that are unavailable, drift (§4.6). | WS + REST |
 | `call <domain.service> [--data]` | Call an action, under the actuation policy (§4.8). | REST |
-| `registry …` | Rename entity_id, set area, labels, enable/disable. | WS `config/entity_registry/update` etc. |
-| `flow …` | Start/continue a config flow (add OctoPrint, AirNow, a `switch_as_x` helper). | `/api/config/config_entries/flow` |
+| `import` | Write the `state/` manifests from live HA (bootstrap, §4.11). | WS registries, config entries, lovelace |
+| `plan` | Diff `state/` manifests against live HA. Exit 0 when empty, 2 when not. | same |
+| `apply [--prune]` | Converge live HA to the manifests (§4.11). | WS registry/lovelace APIs, config and options flows |
 | `scene capture <room> <name>` | Read current light states of a room group and write them as a git scene definition. | REST |
-| `deploy` | After a push: wait for Argo, wait for the hook, then `health` and `shot`. Read-only on the cluster. | `kubectl` (read) + REST |
+| `deploy` | After a push: wait for Argo, wait for the hook, `apply`, then `health` and `shot`. Read-only on the cluster. | `kubectl` (read) + REST/WS |
 | `selftest` | Read-only end-to-end smoke test against live HA. | all of the above |
 
 ### 4.4 Preview without committing
@@ -178,7 +182,7 @@ Proven in the spike (8 authenticated shots in 28 s):
 - Waits until the `ha-card` count is stable for 1.5 s, then grows the viewport
   to the view's scroll height so one PNG holds the whole view.
 - Theme: shots must render with warm-minimal, as on Chris's devices. The
-  mechanism (backend default theme or the agent user's own selection) is
+  mechanism (backend default theme or a per-browser selection) is
   settled during implementation; `shot` asserts a warm-minimal CSS variable
   is present and fails if not.
 - The report (stdout/JSON) lists, per shot: card count, `hui-error-card`
@@ -226,9 +230,10 @@ integration declared in packages but not loaded; `ha-reload` hook last
 failed.
 
 **`hactl deploy`:** after `git push`, waits until the `home-assistant` Argo
-app reports the pushed commit synced and the hook Job succeeded, then runs
-`health` and (when dashboards changed) `shot` on the affected views. It makes
-no cluster writes; Argo and the hook do the work. This is the same path a
+app reports the pushed commit synced and the hook Job succeeded, runs `apply`
+for the `state/` manifests (§4.11), then `health` and (when dashboards
+changed) `shot` on the affected views. It makes no cluster writes; Argo and
+the hook do the cluster side. This is the same path a
 human push takes, so a forgotten restart cannot recur.
 
 ### 4.7 Lint
@@ -265,11 +270,13 @@ HA MCP server's tools.
 ### 4.9 Skill and docs
 
 - Rewrite `.claude/skills/ha-config/SKILL.md` around the loop: **find → edit →
-  lint → preview/shot → commit/push → deploy → verify** (health, traces,
-  shots). Keep the existing hard-won gotchas. Remove the manual
+  lint → plan → preview/shot → commit/push → deploy → verify** (health,
+  traces, shots). Registry, helper and integration changes are made by
+  editing `state/` manifests, never ad hoc. Keep the existing hard-won gotchas. Remove the manual
   `rollout restart` step.
-- `docs/ha.md`: runbook (agent user and tokens, deploy path, what the hook
-  does, how to read a failed hook, `.storage`-only items).
+- `docs/ha.md`: runbook (tokens, deploy path, what the hook
+  does, how to read a failed hook, the `state/` manifests, and the short list
+  of things that cannot be declared).
 - `CLAUDE.md`: one line in the topology table pointing at `hactl` and the
   skill.
 
@@ -281,6 +288,47 @@ HA MCP server's tools.
 - `hactl selftest` exercises every read path against live HA (no writes).
 - The Phase 2 `prometheus` deploy is the end-to-end test of §4.6: the hook
   must detect the unloaded integration and restart exactly once.
+
+### 4.11 Declarative HA state
+
+Everything HA keeps in `.storage` that can be declared is declared, in
+`cluster/home-assistant/state/`: plain YAML read by `hactl`, not a kustomize
+input and not mounted into the pod. The model is the one `cloudflare/dns/`
+uses with terraform: `hactl plan` diffs the manifests against live HA,
+`hactl apply` converges, and `health` reports a non-empty plan as drift.
+Pushing to git stays the only way config changes; `hactl deploy` runs `apply`
+after Argo syncs.
+
+| File | Describes | Matched by | Managed |
+|---|---|---|---|
+| `areas.yaml` | floors, labels, areas (name, floor, icon) | their ids | Fully: create/update; delete needs `--prune`. |
+| `devices.yaml` | area, display name, labels, disabled | any `identifiers` pair (Zigbee IEEE, Hue id…), which survives renames | Listed devices only. |
+| `entities.yaml` | entity_id, name, area, labels, hidden, disabled; plus a `remove:` list | `platform` + `unique_id`, which survives renames | Overrides only: unlisted entities are untouched. |
+| `helpers.yaml` | config-entry helpers (`switch_as_x`, group helpers) | domain + title | Fully (`--prune` to delete). |
+| `integrations.yaml` | integrations that must exist, their flow answers and options; interactive ones carry the manual instruction | domain + title | Presence and options; never deleted. |
+| `dashboards.yaml` | storage dashboards (`claude-preview`, `map`, `lovelace`) and Lovelace resources | `url_path` / `url` | Fully (`--prune` to delete). Dashboard *contents* are not here: YAML dashboards are files, `claude-preview` is scratch. |
+| `credentials.yaml` | secrets that flows need (API keys) | — | git-crypt via an explicit `.gitattributes` line (deliberately not `*.secret.yaml`, so `sign.sh` never tries to seal it). |
+
+- `hactl import` writes the first version of every manifest from live state,
+  so the repo starts as an accurate description. After that the files are
+  edited like any other config.
+- `plan` prints `+ create`, `~ update (field: old → new)`, `- delete (needs
+  --prune)` and `! manual: <instruction>`.
+- `apply` order: floors → labels → areas → helpers → integrations → devices →
+  entities → dashboards/resources, so areas and renamed ids exist before
+  anything refers to them.
+- Config flows are driven generically: at each step `hactl` answers the
+  step's schema fields from the manifest's `flow:` answers merged with
+  `credentials.yaml`. A required field with no answer stops with a clear
+  message. Interactive steps (Hue link button, Plex sign-in, OctoPrint key
+  approval, phone app registration) print their instruction, and `plan` stays
+  non-empty until they are done.
+- Values that would otherwise be "set once by hand" are in git instead: the
+  home SSID via `!secret` (§7.2) and the climate tunables via `initial:`
+  (§7.6).
+- **Not declarable**, and listed as such in `docs/ha.md`: users and
+  long-lived tokens, the human step of interactive integrations, and runtime
+  state (recorder history, restore-state).
 
 ## 5. Phase 2 — ops fixes
 
@@ -309,25 +357,46 @@ HA MCP server's tools.
    Secret (`$(PGPASSWORD)` dependent env). The generated `configuration.yaml`
    then holds no password. The existing value has also been in the
    restic-encrypted config backups; the DB is ClusterIP-only, so no rotation.
+   The same chart release adds two features:
+   - **`secrets.yaml` from a Secret:** a sealed `ha-secrets` Secret mounted at
+     `/config/secrets.yaml` (subPath), so packages can use `!secret` (first
+     user: the home SSID, §7.2). `lint --offline` writes dummy values for
+     every `!secret` name it finds so `check_config` still runs in CI.
+   - **Pinned components instead of HACS:** `cluster/home-assistant/
+     components.yaml` lists every custom integration (adaptive_lighting,
+     mail_and_packages, smartrent) and card (mushroom, layout-card, card-mod,
+     horizon-card, calendar-card-pro, bubble-card, ultra-card,
+     weather-alerts-card) with its GitHub repo and exact release. A
+     ConfigMap of it feeds a chart init container that installs exactly
+     those versions into `/config/custom_components` and
+     `/config/www/community`. `hacs: false`; HACS is removed. Lovelace
+     resources move to `/local/community/…?v=<version>` URLs declared in
+     `state/dashboards.yaml`. A Renovate custom manager (github-releases)
+     proposes version bumps. Before/after screenshots of every view gate the
+     switch.
 5. **Guards:**
    - Plant blinds automation: condition on the cover not being `unavailable`
      and the battery above 0, `max_exceeded: silent`.
    - Air-quality template rewired to the new AirNow sensor, with an
      `availability:` template.
    - `sensor.active_commute`: `availability:` template.
-6. **Integrations** (via `hactl flow` where a flow allows it):
+6. **Integrations**, declared in `state/integrations.yaml` and created by
+   `hactl apply`:
    - OctoPrint at `192.168.0.243:80` — Chris approves the app key in
      OctoPrint's UI.
    - AirNow — needs Chris's free API key.
    - Plex — re-pointed at `http://mm-plex.media.svc.cluster.local:32400`
      (Chris in the UI if plex.tv sign-in is required).
-   - Camp Lamp as a light via a `switch_as_x` helper (`light.camp_lamp`).
+   - Camp Lamp as a light via a `switch_as_x` helper (`light.camp_lamp`),
+     declared in `state/helpers.yaml`.
 7. **Current city:** `sensor.current_city` uses the phone's time-zone sensor
    (`America/Toronto` → Toronto, else Seattle), falling back to the calendar
    when the sensor is unavailable.
 8. **Registry cleanup:** `hactl health --registry` lists devices without an
    area, entities unavailable > 30 days, and orphaned entities. Chris
-   approves the deletion list; every device ends up in an area.
+   approves the deletion list, which becomes the `remove:` list in
+   `state/entities.yaml`; area assignments go into `state/devices.yaml`.
+   Every device ends up in an area.
 
 ## 6. Hardware follow-ups (Chris, outside this spec)
 
@@ -352,10 +421,12 @@ HA MCP server's tools.
 
 ### 7.2 Presence (`packages/presence.yaml`)
 
-- `input_text.home_wifi_ssid`: set once via `hactl` (kept out of the public
-  repo; restored across restarts).
+- `sensor.home_wifi_ssid`: a template sensor whose `state: !secret
+  home_wifi_ssid` comes from the sealed `ha-secrets` (§5 item 4), so the SSID
+  is declared in git but not readable in the public repo.
 - `binary_sensor.chris_home` (template): on when `person.chris_m` is `home`
-  **or** `sensor.pixel_9_pro_xl_wifi_connection` equals the home SSID;
+  **or** `sensor.pixel_9_pro_xl_wifi_connection` equals
+  `sensor.home_wifi_ssid`;
   `delay_off: 5 min`. Wi-Fi gives a fast, indoor-reliable "home"; GPS covers
   the rest.
 - `input_boolean.guest_mode` (manual; dashboard chip).
@@ -426,9 +497,9 @@ whole feature can be paused from the dashboard.
 - `binary_sensor.window_insert_installed`: slider contact open, `delay_on:
   30 min`, `delay_off: 5 min`. When off, vent fan and AC #1 automations stand
   down.
-- Tunables (`input_number`, no `initial`, set once via `hactl`, persisted by
-  restore-state): `free_cooling_delta` 2 °F, `free_cooling_floor` 70 °F,
-  `aqi_limit` 100, `ac_cool_threshold` 78 °F.
+- Tunables (`input_number` with `initial:` from git, so git is the source of
+  truth; change them by editing git): `free_cooling_delta` 2 °F,
+  `free_cooling_floor` 70 °F, `aqi_limit` 100, `ac_cool_threshold` 78 °F.
 - **Free cooling** — `binary_sensor.free_cooling_wanted`: insert installed,
   outdoor (`weather.forecast_home` temperature) ≤ indoor (Living Room) −
   delta, indoor ≥ floor, AQI ≤ limit (AQI unavailable → allowed). Hysteresis
@@ -461,7 +532,7 @@ whole feature can be paused from the dashboard.
     highlighted.
   - Climate strip (Living Room view, summary chip on Home): insert in/out,
     `free_cooling_status`, floor fan (incl. "paused for print"), AC #1
-    (assumed state), the tunables.
+    (assumed state), the tunables (read-only).
   - Printer tile on Home while printing.
 - Fixes:
   - Light counts use the HA groups.
@@ -474,8 +545,8 @@ whole feature can be paused from the dashboard.
 
 | Phase | Done when |
 |---|---|
-| 1 | `hactl selftest` passes. `shot` and `preview` produce warm-minimal PNGs at 412 and 1440 with a render report. `lint --offline` replaces the CI logic and passes. pytest passes. The `prometheus` deploy goes through `ha-reload`, which restarts HA once and finishes green; `/api/prometheus` returns 200. `ha-config` skill rewritten. |
-| 2 | HA on latest 2026.9.x; before/after shots and `health` show no regressions. Prometheus has `homeassistant_*` series and the dashboard's HA panels show data. Renovate rule merged. No password in `/config/configuration.yaml`. OctoPrint, AirNow and Plex entities live. `health` shows zero errored automation runs and no log errors from the guarded automations/templates. Registry cleanup approved and applied. |
+| 1 | `hactl selftest` passes. `shot` and `preview` produce warm-minimal PNGs at 412 and 1440 with a render report. `lint --offline` replaces the CI logic and passes. pytest passes. The `prometheus` deploy goes through `ha-reload`, which restarts HA once and finishes green; `/api/prometheus` returns 200. `hactl import` manifests committed and `hactl plan` empty. `ha-config` skill rewritten. |
+| 2 | HA on latest 2026.9.x; before/after shots and `health` show no regressions. Prometheus has `homeassistant_*` series and the dashboard's HA panels show data. Renovate rule merged. No password in `/config/configuration.yaml`. OctoPrint, AirNow and Plex entities live. Every custom integration and card is installed from `components.yaml` by the chart; HACS is gone; screenshots unchanged. `hactl plan` empty. `health` shows zero errored automation runs and no log errors from the guarded automations/templates. Registry cleanup approved and applied. |
 | 3 | Each behaviour in §7 is exercised once live (reversible actuation) with a clean trace. Bedroom switch on/off ×5 produces exactly one lamp transition each, with no flapping (`hactl history` shows no burst). Free cooling and floor-fan behaviours verified by trace when their conditions next occur. A week later, `health` shows zero errored runs. |
 | 4 | `lint` clean. Final `shot` set (all views × 412/1440 × dark, plus one light-mode set) has zero error cards and no unexpected "Unavailable". Before/after set shown to Chris. |
 
@@ -487,12 +558,14 @@ whole feature can be paused from the dashboard.
 | Bad package reaches HA | CI `lint --offline` (incl. `check_config`) gates merges; the chart's `check-config` init container still blocks a bad restart. |
 | HA upgrade migrates the recorder schema | Fresh dump first; rollback = revert tag + restore. |
 | New climate logic misbehaves | `input_boolean.climate_auto` pauses it; each automation verified by trace. |
-| Agent token leaks | git-crypt at rest, never printed; revoke from the `agent` user's profile; separate in-cluster token. |
+| Agent token leaks | git-crypt at rest, never printed; each token revocable individually from Chris's profile; in-cluster tokens are separate. |
 | Preview dashboard confuses Chris | Admin-only, not in the sidebar, named `claude-preview`. |
+| `apply` deletes or renames something wrongly | Creates/updates only by default; deletions need `--prune` and always show in `plan` first; `entities.yaml` is overrides-only, so unlisted entities are never touched. |
+| Pinned components break the UI on switch-over | Before/after screenshots of every view; the old HACS files stay on the PVC until the new set is verified. |
 
 ## 11. Chris's actions
 
-1. Create the `agent` HA user (admin) and mint the three tokens (§4.2).
+1. ~~Mint the three tokens (§4.2).~~ Done 2026-10-03.
 2. Approve the OctoPrint app key when `hactl flow` asks.
 3. Get a free AirNow API key.
 4. Plex sign-in if the re-add flow requires it.
