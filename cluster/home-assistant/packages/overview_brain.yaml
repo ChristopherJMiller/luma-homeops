@@ -56,10 +56,12 @@ template:
       - name: Show Commute
         unique_id: show_commute
         # Only surface the commute when it's a workday in the active city AND
-        # you're home (no point once you've left).
+        # you're home (no point once you've left). current_city's
+        # workday_entity is None until it renders (startup, reloads), and
+        # is_state(None, …) raises, hence the guard.
         state: >-
           {% set wd = state_attr('sensor.current_city','workday_entity') %}
-          {{ is_state(wd,'on') and is_state('person.chris_m','home') }}
+          {{ wd is not none and is_state(wd,'on') and is_state('person.chris_m','home') }}
 
   # ---- Weather forecast for the active city (precip chance + amount today) ----
   - trigger:
