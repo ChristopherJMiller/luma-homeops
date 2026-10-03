@@ -31,6 +31,16 @@ spec:
   # Important: if you reinstall the cluster, make sure you delete this directory from each host or else the mons will fail to start on the new cluster.
   # In Minikube, the '/data' directory is configured to persist across reboots. Use "/data/rook" in Minikube environment.
   dataDirHostPath: /var/lib/rook
+  # Ceph's central config database, applied by the operator (`ceph config set`).
+  cephConfig:
+    mon:
+      # Mon stores live on each node's /var (the NVMe system partition), which
+      # is mostly container images; kubelet only garbage-collects images
+      # between 85% and 80% used (15-20% free). Ceph's default warning at 30%
+      # free fired on middle's normal state (2026-10-03: 69% used, 113 GB of
+      # images). 15% still warns before kubelet evicts pods (10% free) and
+      # before a mon shuts itself down (mon_data_avail_crit, 5%).
+      mon_data_avail_warn: "15"
   # Whether or not upgrade should continue even if a check fails
   # This means Ceph's status could be degraded and we don't recommend upgrading but you might decide otherwise
   # Use at your OWN risk
