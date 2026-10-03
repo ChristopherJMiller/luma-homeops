@@ -59,3 +59,11 @@
         - set service dns forwarding listen-address '192.168.0.1'
       save: false
     tags: [network, dns]
+
+  - name: Configure voice VLAN sub-interface
+    vyos.vyos.vyos_config:
+      lines:
+        - "set interfaces ethernet {{ voice.parent_interface }} vif {{ voice.vlan_id }} address '{{ voice.address }}'"
+        - "set interfaces ethernet {{ voice.parent_interface }} vif {{ voice.vlan_id }} description '{{ voice.description }}'"
+      save: false
+    tags: [network, voice]

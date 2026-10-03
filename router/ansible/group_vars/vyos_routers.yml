@@ -75,6 +75,27 @@ dhcp:
       mac: d8:5e:d3:f8:2a:7c
       ip: 192.168.0.244
 
+# Voice VLAN for the telephony lab
+# (docs/superpowers/specs/2026-10-02-telephony-lab-design.md §4).
+# A tagged sub-interface of the LAN port. Phones tag their own frames
+# (Admin VLAN ID 20) until a managed switch puts them on access ports, a
+# move that needs no change here. The router routes VOICE<->LAN without
+# NAT; firewall.yml lets VOICE reach only the PBX.
+voice:
+  parent_interface: eth2
+  vlan_id: 20
+  description: VOICE
+  address: 192.168.20.1/24
+  gateway: 192.168.20.1
+  network: 192.168.20.0/24
+  pbx_address: 192.168.0.240    # Asterisk: hostNetwork pod pinned to node `top`
+  dhcp:
+    shared_network: VOICE
+    subnet_id: 2                # LAN is 1
+    lease_time: 86400
+    range_start: 192.168.20.100
+    range_stop: 192.168.20.199
+
 # Firewall Groups
 firewall_groups:
   interface_groups:

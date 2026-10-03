@@ -22,6 +22,21 @@
     loop: "{{ dhcp.static_mappings }}"
     tags: [services, dhcp, static]
 
+  # Voice VLAN. Cisco phones look for option 150, then fall back to 66
+  # (tftp-server-name). This VyOS build has no plain option 150, so 66 it is.
+  - name: Configure DHCP server for the voice VLAN
+    vyos.vyos.vyos_config:
+      lines:
+        - "set service dhcp-server shared-network-name {{ voice.dhcp.shared_network }} subnet {{ voice.network }} lease '{{ voice.dhcp.lease_time }}'"
+        - "set service dhcp-server shared-network-name {{ voice.dhcp.shared_network }} subnet {{ voice.network }} option default-router '{{ voice.gateway }}'"
+        - "set service dhcp-server shared-network-name {{ voice.dhcp.shared_network }} subnet {{ voice.network }} option ntp-server '{{ voice.gateway }}'"
+        - "set service dhcp-server shared-network-name {{ voice.dhcp.shared_network }} subnet {{ voice.network }} option tftp-server-name '{{ voice.pbx_address }}'"
+        - "set service dhcp-server shared-network-name {{ voice.dhcp.shared_network }} subnet {{ voice.network }} range 0 start '{{ voice.dhcp.range_start }}'"
+        - "set service dhcp-server shared-network-name {{ voice.dhcp.shared_network }} subnet {{ voice.network }} range 0 stop '{{ voice.dhcp.range_stop }}'"
+        - "set service dhcp-server shared-network-name {{ voice.dhcp.shared_network }} subnet {{ voice.network }} subnet-id '{{ voice.dhcp.subnet_id }}'"
+      save: false
+    tags: [services, dhcp, voice]
+
   - name: Configure Zigbee2MQTT container
     vyos.vyos.vyos_config:
       lines:

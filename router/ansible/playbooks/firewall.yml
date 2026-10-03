@@ -74,3 +74,56 @@
         - set firewall ipv4 name VyOS_MANAGEMENT rule 21 state 'new'
       save: false
     tags: [firewall, chains]
+
+  - name: Configure voice VLAN firewall (VOICE may reach only the PBX)
+    vyos.vyos.vyos_config:
+      lines:
+      # Groups
+        - "set firewall group interface-group VOICE interface '{{ voice.parent_interface }}.{{ voice.vlan_id }}'"
+        - "set firewall group network-group NET-VOICE-v4 network '{{ voice.network }}'"
+        - "set firewall group address-group PBX-v4 address '{{ voice.pbx_address }}'"
+      # VOICE-OUT: everything a phone may start. The default drop covers the
+      # rest of the LAN and the WAN (the voice subnet has no source NAT
+      # either). Replies to flows the LAN starts (Asterisk INVITEs, RTP,
+      # TFTP data from ephemeral ports) pass on the global
+      # established/related policy.
+        - set firewall ipv4 name VOICE-OUT default-action 'drop'
+        - set firewall ipv4 name VOICE-OUT rule 10 action 'accept'
+        - set firewall ipv4 name VOICE-OUT rule 10 description 'SIP'
+        - set firewall ipv4 name VOICE-OUT rule 10 destination group address-group 'PBX-v4'
+        - set firewall ipv4 name VOICE-OUT rule 10 destination port '5060'
+        - set firewall ipv4 name VOICE-OUT rule 10 protocol 'tcp_udp'
+        - set firewall ipv4 name VOICE-OUT rule 20 action 'accept'
+        - set firewall ipv4 name VOICE-OUT rule 20 description 'RTP'
+        - set firewall ipv4 name VOICE-OUT rule 20 destination group address-group 'PBX-v4'
+        - set firewall ipv4 name VOICE-OUT rule 20 destination port '10000-10099'
+        - set firewall ipv4 name VOICE-OUT rule 20 protocol 'udp'
+        - set firewall ipv4 name VOICE-OUT rule 30 action 'accept'
+        - set firewall ipv4 name VOICE-OUT rule 30 description 'TFTP provisioning'
+        - set firewall ipv4 name VOICE-OUT rule 30 destination group address-group 'PBX-v4'
+        - set firewall ipv4 name VOICE-OUT rule 30 destination port '69'
+        - set firewall ipv4 name VOICE-OUT rule 30 protocol 'udp'
+        - set firewall ipv4 name VOICE-OUT rule 40 action 'accept'
+        - set firewall ipv4 name VOICE-OUT rule 40 description 'Phone directory (HTTP)'
+        - set firewall ipv4 name VOICE-OUT rule 40 destination group address-group 'PBX-v4'
+        - set firewall ipv4 name VOICE-OUT rule 40 destination port '8088'
+        - set firewall ipv4 name VOICE-OUT rule 40 protocol 'tcp'
+      # Forward hooks. There is no forward default-deny, so WAN→VOICE is
+      # dropped explicitly.
+        - set firewall ipv4 forward filter rule 110 action 'drop'
+        - set firewall ipv4 forward filter rule 110 description 'WAN to voice VLAN'
+        - set firewall ipv4 forward filter rule 110 destination group network-group 'NET-VOICE-v4'
+        - set firewall ipv4 forward filter rule 110 inbound-interface group 'WAN'
+        - set firewall ipv4 forward filter rule 200 action 'jump'
+        - set firewall ipv4 forward filter rule 200 description 'Voice VLAN egress'
+        - set firewall ipv4 forward filter rule 200 inbound-interface group 'VOICE'
+        - set firewall ipv4 forward filter rule 200 jump-target 'VOICE-OUT'
+      # Input: phones may ask the router for the time. DHCP needs no rule:
+      # Kea listens on raw sockets, which see packets before this filter.
+        - set firewall ipv4 input filter rule 70 action 'accept'
+        - set firewall ipv4 input filter rule 70 description 'NTP from voice VLAN'
+        - set firewall ipv4 input filter rule 70 destination port '123'
+        - set firewall ipv4 input filter rule 70 protocol 'udp'
+        - set firewall ipv4 input filter rule 70 source group network-group 'NET-VOICE-v4'
+      save: false
+    tags: [firewall, voice]
