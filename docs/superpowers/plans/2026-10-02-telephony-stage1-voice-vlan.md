@@ -268,7 +268,7 @@ It's harmless and makes a real diff under the `firewall` tag. In
 insert after `- set firewall ipv4 forward filter rule 100 action 'jump'`:
 
 ```yaml
-        - set firewall ipv4 forward filter rule 100 description 'WAN to inside: OUTSIDE-IN'
+        - set firewall ipv4 forward filter rule 100 description 'WAN to inside, via OUTSIDE-IN'
 ```
 
 - [ ] **Step 7: Check that no old var names remain and the syntax is valid**
@@ -288,7 +288,7 @@ Run:
 nix develop . --command bash -c 'cd router/ansible && ansible-playbook site.yml --check --diff --tags firewall'
 ```
 Expected: the only changed line is
-`set firewall ipv4 forward filter rule 100 description 'WAN to inside: OUTSIDE-IN'`.
+`set firewall ipv4 forward filter rule 100 description 'WAN to inside, via OUTSIDE-IN'`.
 The arm, verify and confirm tasks show as skipped (check mode). **Any
 other changed line means drift: stop and report it.**
 

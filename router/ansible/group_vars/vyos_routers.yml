@@ -173,10 +173,10 @@ monitoring:
       listen_address: 0.0.0.0
       port: 9100
 
-# playbooks/nat.yml: commit-confirm window and the outside-in check that
-# must pass before the commit is confirmed. The apex is
-# Cloudflare-proxied, so the request comes back in through eth0 (a
-# DNS-only name would take NAT reflection and prove nothing).
-nat_commit_confirm_minutes: 10
-nat_verify_urls:
+# Commit-confirm parachute (playbooks/commit-confirm-*.yml): the rollback
+# window, and the outside-in check that must pass before it is cancelled.
+# The apex is Cloudflare-proxied, so the request comes back in through
+# eth0 (a DNS-only name would take NAT reflection and prove nothing).
+commit_confirm_minutes: 10
+commit_confirm_verify_urls:
   - https://chrismiller.xyz/

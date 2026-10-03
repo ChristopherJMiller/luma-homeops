@@ -1,0 +1,20 @@
+---
+# Commit-confirm parachute, part 1 of 2 (part 2: commit-confirm-verify.yml).
+#
+# Arms VyOS's commit-confirm timer (`config-mgmt commit_confirm`): unless it
+# is cancelled, the router reboots to its *saved* config after N minutes.
+# site.yml includes this before, and part 2 after, every high-risk include
+# (network, firewall, nat, services). Each vyos_config task commits as it
+# goes (save: false), so one timer covers them all; site.yml saves only
+# after part 2 has verified and cancelled it. vyos_config itself has no
+# commit-confirm support, and an interactive `commit-confirm` in another
+# session can't cover Ansible's commits (VyOS refuses: "No configuration
+# changes to commit").
+  - name: Arm commit-confirm rollback timer ({{ commit_confirm_minutes }} min)
+    vyos.vyos.vyos_command:
+      commands:
+      # -y: skip the interactive "Proceed ?" prompt (hangs a non-tty session).
+        - sudo sg vyattacfg 'config-mgmt commit_confirm -y -t={{ commit_confirm_minutes }}'
+    when: not ansible_check_mode
+    changed_when: true
+    tags: [network, firewall, nat, services]

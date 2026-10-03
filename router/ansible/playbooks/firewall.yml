@@ -40,6 +40,7 @@
         - set firewall ipv4 input filter rule 60 source group network-group 'NET-INSIDE-v4'
       # Forward filter rules
         - set firewall ipv4 forward filter rule 100 action 'jump'
+        - set firewall ipv4 forward filter rule 100 description 'WAN to inside, via OUTSIDE-IN'
         - set firewall ipv4 forward filter rule 100 destination group network-group 'NET-INSIDE-v4'
         - set firewall ipv4 forward filter rule 100 inbound-interface group 'WAN'
         - set firewall ipv4 forward filter rule 100 jump-target 'OUTSIDE-IN'

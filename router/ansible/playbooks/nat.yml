@@ -1,24 +1,9 @@
 ---
 # VyOS NAT Configuration Tasks
 #
-# Safety net: before any rule is touched, arm VyOS's commit-confirm timer
-# (`config-mgmt commit_confirm`). It schedules a reboot to the *saved* boot
-# config unless `confirm` runs first. Each vyos_config task below commits
-# immediately (save: false), so the timer covers all of them. `confirm` at
-# the end only runs after the post-apply check passes; if anything fails
-# the play aborts, the timer fires, and the router returns to the last
-# saved config. (vyos_config itself has no commit-confirm support, and
-# `commit-confirm` in an interactive session can't cover a separate
-# Ansible session — it refuses with "No configuration changes to commit".)
-  - name: Arm commit-confirm rollback timer ({{ nat_commit_confirm_minutes | default(10) }} min)
-    vyos.vyos.vyos_command:
-      commands:
-      # -y: skip the interactive "Proceed ?" prompt (hangs a non-tty session).
-        - sudo sg vyattacfg 'config-mgmt commit_confirm -y -t={{ nat_commit_confirm_minutes | default(10) }}'
-    when: not ansible_check_mode
-    changed_when: true
-    tags: [nat]
-
+# High-risk: covered by the site-level commit-confirm parachute
+# (playbooks/commit-confirm-arm.yml / commit-confirm-verify.yml), which
+# site.yml wraps around every network/firewall/nat/services run.
   - name: Configure destination NAT rules
     vyos.vyos.vyos_config:
       lines:
@@ -72,39 +57,3 @@
     loop: '{{ nat.source_rules }}'
     when: item.description is defined and item.protocol is defined
     tags: [nat, source]
-
-# Post-apply check, run from the control node. Each URL in
-# nat_verify_urls must return an HTTP status < 500 — the apex hostnames
-# are Cloudflare-proxied, so the request genuinely leaves via the WAN and
-# re-enters through the port-forward rules rather than NAT reflection.
-  - name: Verify port-forwards from outside (via Cloudflare)
-    ansible.builtin.uri:
-      url: '{{ item }}'
-      method: GET
-      status_code: [200, 301, 302, 401, 403, 404]
-      timeout: 15
-    loop: '{{ nat_verify_urls | default([]) }}'
-    delegate_to: localhost
-    when: not ansible_check_mode
-    register: nat_verify
-    retries: 3
-    delay: 5
-    until: nat_verify is succeeded
-    tags: [nat]
-
-# `config-mgmt confirm` stops the reboot timer, then tries to finalise a
-# commit-log entry that only the interactive CLI writes (it exports
-# IN_COMMIT_CONFIRM around its commit; vyos_config's commits are logged
-# normally at commit time instead). That second step throws a harmless
-# traceback, so stop the timer directly and assert it is gone.
-  - name: Confirm commit (cancel rollback timer)
-    vyos.vyos.vyos_command:
-      commands:
-        - sudo systemctl stop --quiet commit-confirm.timer
-        - sudo pkill -f commit-confirm-notify.py || true
-        - systemctl is-active commit-confirm.timer || true
-    register: nat_confirm
-    when: not ansible_check_mode
-    changed_when: true
-    failed_when: "'inactive' not in nat_confirm.stdout[-1]"
-    tags: [nat]

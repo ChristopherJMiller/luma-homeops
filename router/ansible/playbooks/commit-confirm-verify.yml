@@ -1,0 +1,41 @@
+---
+# Commit-confirm parachute, part 2 of 2 (part 1: commit-confirm-arm.yml).
+#
+# Post-apply check, run from the control node (on the LAN). Each URL in
+# commit_confirm_verify_urls must return a status < 500. The apex
+# hostnames are Cloudflare-proxied, so a request leaves via the WAN and
+# comes back in through the port-forwards. A pass proves LAN→WAN
+# forwarding, WAN→Traefik NAT and that we still manage the router (we
+# are talking to it). A DNS-only name would take NAT reflection and
+# prove nothing.
+  - name: Verify LAN egress and port-forwards (via Cloudflare)
+    ansible.builtin.uri:
+      url: '{{ item }}'
+      method: GET
+      status_code: [200, 301, 302, 401, 403, 404]
+      timeout: 15
+    loop: '{{ commit_confirm_verify_urls }}'
+    delegate_to: localhost
+    when: not ansible_check_mode
+    register: commit_confirm_verify
+    retries: 3
+    delay: 5
+    until: commit_confirm_verify is succeeded
+    tags: [network, firewall, nat, services]
+
+# `config-mgmt confirm` stops the reboot timer, then tries to finalise a
+# commit-log entry that only the interactive CLI writes (it exports
+# IN_COMMIT_CONFIRM around its commit; vyos_config's commits are logged
+# normally at commit time instead). That second step throws a harmless
+# traceback, so stop the timer directly and assert it is gone.
+  - name: Confirm commit (cancel rollback timer)
+    vyos.vyos.vyos_command:
+      commands:
+        - sudo systemctl stop --quiet commit-confirm.timer
+        - sudo pkill -f commit-confirm-notify.py || true
+        - systemctl is-active commit-confirm.timer || true
+    register: commit_confirm_result
+    when: not ansible_check_mode
+    changed_when: true
+    failed_when: "'inactive' not in commit_confirm_result.stdout[-1]"
+    tags: [network, firewall, nat, services]
