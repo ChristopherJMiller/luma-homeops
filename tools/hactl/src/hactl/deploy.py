@@ -1,9 +1,14 @@
 """After a push: wait for Argo, the ha-reload hook and the HA rollout, then verify.
 
 Read-only on the cluster: Argo applies, the hook reloads/restarts; this waits
-and checks. Both Argo apps are waited on (config: home-assistant; chart and
-image: home-assistant-release), then the Deployment rollout, then HA reporting
-RUNNING. Argo polls git every ~3 min, so expect a short wait.
+and checks:
+  1. `home-assistant` (config ConfigMaps + the hook) has synced HEAD;
+  2. the app-of-apps root `applications` has synced HEAD, and if that changed
+     an Application (e.g. home-assistant-release.yaml: image tag, chart
+     values), `home-assistant-release` has reconciled since and is Synced.
+     Its revision is the ha-helm chart repo's, never this repo's HEAD;
+  3. the Deployment has rolled out, and HA reports RUNNING.
+Argo polls git every ~3 min, so expect a short wait.
 """
 import json
 import subprocess
@@ -13,7 +18,7 @@ from hactl import health, output, paths, shot
 from hactl.errors import HactlError
 
 DEFAULT_VIEWS = ["/home-ops/0", "/home-ops/1", "/home-ops/2", "/home-ops/3"]
-ARGO_APPS = ("home-assistant", "home-assistant-release")
+CONFIG_APP, ROOT_APP, RELEASE_APP = "home-assistant", "applications", "home-assistant-release"
 
 
 def _git(*args) -> str:
@@ -29,7 +34,7 @@ def argo_status(app="home-assistant") -> dict:
     op = st.get("operationState") or {}
     return {"sync_revision": (st.get("sync") or {}).get("revision"), "sync": (st.get("sync") or {}).get("status"),
             "phase": op.get("phase"), "op_revision": (op.get("syncResult") or {}).get("revision"),
-            "message": op.get("message", "")}
+            "message": op.get("message", ""), "finished_at": op.get("finishedAt"), "reconciled_at": st.get("reconciledAt")}
 
 
 def wait_synced(head, status=argo_status, timeout=900, interval=10, clock=time.monotonic, sleep=time.sleep, log=print) -> dict:
@@ -53,6 +58,13 @@ def wait_synced(head, status=argo_status, timeout=900, interval=10, clock=time.m
         if clock() >= deadline:
             raise HactlError(f"timed out after {timeout}s waiting for Argo to sync {head[:8]}")
         sleep(interval)
+
+
+def release_settled(st: dict, since) -> bool:
+    """The release app is Synced, idle, and (if `since`) has reconciled after the root app applied a change."""
+    if st.get("sync") != "Synced" or st.get("phase") in ("Running", "Terminating"):
+        return False
+    return since is None or (st.get("reconciled_at") or "") >= since
 
 
 def rollout_done(dep: dict) -> bool:
@@ -87,14 +99,20 @@ def wait_until(check, what, timeout, interval=10, clock=time.monotonic, sleep=ti
         sleep(interval)
 
 
-def wait_for_rollout(head, timeout) -> None:
-    from hactl.client import Client
+def wait_for_rollout(head, timeout, status=argo_status, deployment=deployment_status, ha_running=None,
+                     clock=time.monotonic, sleep=time.sleep, log=print) -> None:
+    if ha_running is None:
+        from hactl.client import Client
 
-    for app in ARGO_APPS:
-        wait_synced(head, status=lambda app=app: argo_status(app), timeout=timeout)
-    wait_until(lambda: rollout_done(deployment_status()), "the HA Deployment to roll out", timeout)
-    client = Client()
-    wait_until(lambda: client.get("/api/config").get("state") == "RUNNING", "HA to report RUNNING", timeout)
+        client = Client()
+        ha_running = lambda: client.get("/api/config").get("state") == "RUNNING"  # noqa: E731
+    timing = {"clock": clock, "sleep": sleep, "log": log}
+    wait_synced(head, status=lambda: status(CONFIG_APP), timeout=timeout, **timing)
+    root = wait_synced(head, status=lambda: status(ROOT_APP), timeout=timeout, **timing)
+    since = root.get("finished_at") if root.get("op_revision") == head else None  # root changed an Application
+    wait_until(lambda: release_settled(status(RELEASE_APP), since), f"{RELEASE_APP} to sync", timeout, **timing)
+    wait_until(lambda: rollout_done(deployment()), "the HA Deployment to roll out", timeout, **timing)
+    wait_until(ha_running, "HA to report RUNNING", timeout, **timing)
 
 
 def _run(args) -> int:

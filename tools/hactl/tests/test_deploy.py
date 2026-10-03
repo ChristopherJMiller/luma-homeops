@@ -89,3 +89,24 @@ def test_wait_until_retries_errors_and_times_out():
     with pytest.raises(HactlError, match="timed out after 30s waiting for HA to report RUNNING"):
         deploy.wait_until(lambda: False, "HA to report RUNNING", timeout=30, interval=10,
                           clock=lambda: clock["t"], sleep=sleep, log=lambda m: None)
+
+
+def test_release_settled():
+    ok = {"sync": "Synced", "phase": "Succeeded", "reconciled_at": "2026-10-03T23:30:00Z"}
+    assert deploy.release_settled(ok, since=None)
+    assert deploy.release_settled(ok, since="2026-10-03T23:29:00Z")
+    assert not deploy.release_settled(ok, since="2026-10-03T23:31:00Z")       # hasn't seen the new spec yet
+    assert not deploy.release_settled(dict(ok, phase="Running"), since=None)
+    assert not deploy.release_settled(dict(ok, sync="OutOfSync"), since=None)
+
+
+def test_rollout_wait_does_not_need_the_chart_repo_to_match_head():
+    # home-assistant-release tracks the ha-helm repo: its revision is never this repo's HEAD.
+    chart = "c" * 40
+    apps = {
+        "home-assistant": st(HEAD, "Synced", "Succeeded", HEAD),
+        "applications": dict(st(HEAD, "Synced", "Succeeded", HEAD), finished_at="2026-10-03T23:00:00Z"),
+        "home-assistant-release": dict(st(chart, "Synced", "Succeeded", chart), reconciled_at="2026-10-03T23:00:05Z"),
+    }
+    deploy.wait_for_rollout(HEAD, timeout=30, status=lambda app: apps[app], deployment=lambda: dep(),
+                            ha_running=lambda: True, clock=lambda: 0.0, sleep=lambda s: None, log=lambda m: None)
