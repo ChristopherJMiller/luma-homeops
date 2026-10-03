@@ -72,7 +72,15 @@
           };
         };
       });
-      devShells = forAllSystems (pkgs: {
+      devShells = forAllSystems (pkgs:
+        let
+          # tools/hactl (Home Assistant agent toolkit): websockets + pyyaml for
+          # the HA API, playwright for screenshots, pytest for its tests. The
+          # browsers (playwright-driver.browsers below) come from the same
+          # nixpkgs pin, so their versions match.
+          hactlPython = pkgs.python313.withPackages (ps: [ ps.websockets ps.pyyaml ps.playwright ps.pytest ]);
+        in
+        {
         default = pkgs.mkShell {
           packages = with pkgs; [
             git
@@ -109,7 +117,9 @@
             # operators/ceph-nfs-export-operator/: kopf-based reconciler.
             # python3 + uv for dep management; ruff for lint; docker for local image
             # build/test before pushing to ghcr.
-            python313
+            # (python313 itself comes via hactlPython; uv-managed venvs are unaffected)
+            hactlPython
+            playwright-driver.browsers
             uv
             ruff
             docker_29
@@ -131,6 +141,15 @@
             # restore drills against the cluster backup repos (see docs/backups.md).
             restic
           ];
+          # hactl: its python first on PATH (another package drags in a bare
+          # python 3.14 that would otherwise win `python3`), the wrapper on
+          # PATH, and Playwright pointed at the nix-built browsers (the ones it
+          # downloads itself don't run on NixOS).
+          shellHook = ''
+            export PATH="${hactlPython}/bin:$(git rev-parse --show-toplevel 2>/dev/null || pwd)/tools/hactl/bin:$PATH"
+            export PLAYWRIGHT_BROWSERS_PATH=${pkgs.playwright-driver.browsers}
+            export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
+          '';
         };
       });
     };

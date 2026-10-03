@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# hactl — Home Assistant agent toolkit. See tools/hactl/README.md.
+#
+# The host exports LD_LIBRARY_PATH (a system alsa-lib built against a newer
+# glibc than the flake's), which kills the nix-built browser. Drop it.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec env -u LD_LIBRARY_PATH PYTHONPATH="$here/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m hactl "$@"

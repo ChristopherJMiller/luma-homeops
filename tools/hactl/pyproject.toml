@@ -1,0 +1,9 @@
+# hactl — Home Assistant agent toolkit. Not packaged; run via bin/hactl.
+[project]
+name = "hactl"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "../../cluster/home-assistant/hooks"]
+testpaths = ["tests"]
