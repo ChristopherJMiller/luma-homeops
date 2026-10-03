@@ -52,20 +52,18 @@ save
 ```
 
 ### Safe Deployment with Rollback Timer
-```bash
-# For major changes, use commit-confirm on router
-ssh chris@192.168.0.1
-configure
-commit-confirm 10  # Auto-rollback in 10 minutes
 
-# Run Ansible deployment
-ansible-playbook site.yml
+Built in. `site.yml` arms VyOS's commit-confirm timer before any
+`network`, `firewall`, `nat` or `services` include
+(`playbooks/commit-confirm-arm.yml`). It checks from this machine that
+the LAN still reaches the WAN and the port-forwards still answer
+(`commit_confirm_verify_urls`), then cancels the timer
+(`playbooks/commit-confirm-verify.yml`) and saves. If anything fails
+first, the router reboots to its last saved config after
+`commit_confirm_minutes`. Don't race it.
 
-# If everything works, confirm on router:
-confirm
-
-# If something breaks, just wait 10 minutes for auto-rollback
-```
+Don't open `commit-confirm` in a separate SSH session: it can't cover
+Ansible's commits (VyOS answers "No configuration changes to commit").
 
 ## Verification
 ```bash

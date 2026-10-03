@@ -49,9 +49,12 @@ An interactive `commit-confirm` opened alongside Ansible does NOT cover
 Ansible's commits — VyOS refuses it with "No configuration changes to
 commit" because the config session is empty. (Learned 2026-09-19, #2507.)
 
-`playbooks/nat.yml` is the reference implementation; copy the pattern into
-any other high-risk playbook (`network.yml`, `firewall.yml`) before you
-first need it there:
+The parachute is site-level: `site.yml` includes
+`playbooks/commit-confirm-arm.yml` before and
+`playbooks/commit-confirm-verify.yml` after the high-risk includes,
+tagged `network`, `firewall`, `nat` and `services`, so any run with one of
+those tags is covered (vars: `commit_confirm_minutes`,
+`commit_confirm_verify_urls`). Rehearsed 2026-10-02. The chain:
 
 ```
 arm     vyos_command: sudo sg vyattacfg 'config-mgmt commit_confirm -y -t=N'
@@ -59,7 +62,7 @@ arm     vyos_command: sudo sg vyattacfg 'config-mgmt commit_confirm -y -t=N'
           (-y skips the "Proceed ?" prompt, which hangs a non-tty session)
 apply   the vyos_config tasks (each commits immediately, save: false)
 verify  ansible.builtin.uri from the control node against
-          <playbook>_verify_urls — use a Cloudflare-PROXIED hostname so the
+          commit_confirm_verify_urls — use a Cloudflare-PROXIED hostname so the
           request genuinely leaves via WAN and re-enters through eth0
           (a DNS-only name takes NAT reflection and proves nothing)
 confirm vyos_command: sudo systemctl stop commit-confirm.timer, then assert
