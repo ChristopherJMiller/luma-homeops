@@ -167,41 +167,99 @@ in_ns ip addr add "$addr/24" dev "$IF"
 in_ns ip route add default via "$GW"
 
 # --- Reachability -------------------------------------------------------
-# answers <ns|host> <ip> <port>: true if anything answers within 3 s.
-# An expired timeout exits 124 (coreutils) or 143 (busybox); a connect
-# exits 0 and a refusal 1.
+# answers <ns|host> <tcp|udp> <ip> <port> [payload]: true only if the target
+# itself answers within 5 s. TCP: it connects or refuses. UDP: it replies,
+# or its ICMP port-unreachable comes back as "Connection refused" on the
+# connected socket. Everything else is silence: a timeout, and also "No
+# route to host", which a dead LAN host produces when ARP gives up after
+# about 3 s (counting that as an answer once let a dead target pass).
+# Payloads are printf formats, sent so a live listener has something to
+# answer: SIP OPTIONS, a TFTP read request, a DNS query. A UDP probe gets a
+# second try 1.5 s later, because hosts rate-limit ICMP port-unreachable to
+# about one per second per peer, and probes run back to back.
 answers() {
-  local rc=0
-  if [ "$1" = ns ]; then
-    in_ns timeout 3 bash -c "exec 3<>/dev/tcp/$2/$3" 2>/dev/null || rc=$?
-  else
-    timeout 3 bash -c "exec 3<>/dev/tcp/$2/$3" 2>/dev/null || rc=$?
-  fi
-  [ "$rc" -lt 124 ]
+  local where=$1 tries=1 err rc
+  [ "$2" = udp ] && tries=2
+  shift
+  # shellcheck disable=SC2016  # expanded by the inner bash, from its arguments
+  local probe='
+    if [ "$1" = tcp ]; then exec 3<>"/dev/tcp/$2/$3"; exit; fi
+    exec 3<>"/dev/udp/$2/$3"
+    printf -- "$4" >&3
+    read -r -t 4 -n 1 _ <&3'
+  while :; do
+    rc=0
+    if [ "$where" = ns ]; then
+      err=$(in_ns timeout 5 bash -c "$probe" probe "$1" "$2" "$3" "${4:-x}" 2>&1 >/dev/null) || rc=$?
+    else
+      err=$(timeout 5 bash -c "$probe" probe "$1" "$2" "$3" "${4:-x}" 2>&1 >/dev/null) || rc=$?
+    fi
+    if [ "$rc" -eq 0 ] || [[ $err == *"Connection refused"* ]]; then return 0; fi
+    tries=$((tries - 1))
+    [ "$tries" -gt 0 ] || return 1
+    sleep 1.5
+  done
 }
-reachable() { # ip port why
-  if answers ns "$1" "$2"; then pass "VLAN 20 reaches $1:$2 ($3)"
-  else fail "VLAN 20 cannot reach $1:$2 ($3)"; fi
+reachable() { # proto ip port why [payload]
+  if answers ns "$1" "$2" "$3" "${5:-}"; then pass "VLAN 20 reaches $2 $1/$3 ($4)"
+  else fail "VLAN 20 cannot reach $2 $1/$3 ($4)"; fi
 }
-blocked() { # ip port why
-  if ! answers host "$1" "$2"; then
-    fail "$1:$2 ($3) silent even from the LAN; can't judge the firewall"
-  elif answers ns "$1" "$2"; then
-    fail "VLAN 20 reached $1:$2 ($3); must be dropped"
+blocked() { # proto ip port why [payload]
+  if ! answers host "$1" "$2" "$3" "${5:-}"; then
+    fail "$2 $1/$3 ($4) silent even from the LAN; can't judge the firewall"
+  elif answers ns "$1" "$2" "$3" "${5:-}"; then
+    fail "VLAN 20 reached $2 $1/$3 ($4); must be dropped"
   else
-    pass "VLAN 20 blocked from $1:$2 ($3)"
+    pass "VLAN 20 blocked from $2 $1/$3 ($4)"
   fi
 }
 
-reachable "$PBX" 5060 "SIP"
-reachable "$PBX" 8088 "phone directory"
-blocked "$PBX" 50000 "Talos apid: PBX host but not a voice port"
-blocked 192.168.0.7 443 "Traefik"
-blocked 192.168.0.58 80 "HDHomeRun"
-blocked 192.168.0.1 22 "router SSH, LAN address"
-blocked "$GW" 22 "router SSH, voice address"
-blocked "$GW" 53 "router DNS"
-blocked 1.1.1.1 443 "internet"
+sip_options="OPTIONS sip:probe@$PBX SIP/2.0\r\nVia: SIP/2.0/UDP 0.0.0.0:5060;rport;branch=z9hG4bKvoiceprobe\r\nMax-Forwards: 70\r\nFrom: <sip:probe@invalid>;tag=probe\r\nTo: <sip:probe@$PBX>\r\nCall-ID: voice-vlan-probe\r\nCSeq: 1 OPTIONS\r\nContent-Length: 0\r\n\r\n"
+tftp_rrq='\0\001voice-vlan-probe\0octet\0'
+dns_query='\x12\x34\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x01\x00\x01'
+
+reachable tcp "$PBX" 5060 "SIP"
+reachable udp "$PBX" 5060 "SIP" "$sip_options"
+reachable udp "$PBX" 69 "TFTP" "$tftp_rrq"
+reachable udp "$PBX" 10099 "RTP, top of the range"
+reachable tcp "$PBX" 8088 "phone directory"
+blocked tcp "$PBX" 50000 "Talos apid: PBX host but not a voice port"
+blocked udp "$PBX" 9999 "PBX host, UDP outside the voice ports"
+blocked tcp 192.168.0.7 443 "Traefik"
+blocked tcp 192.168.0.58 80 "HDHomeRun"
+blocked tcp 192.168.0.1 22 "router SSH, LAN address"
+blocked tcp "$GW" 22 "router SSH, voice address"
+blocked tcp "$GW" 53 "router DNS"
+blocked udp 192.168.0.1 53 "router DNS, LAN address" "$dns_query"
+blocked tcp 1.1.1.1 443 "internet"
+
+# --- IPv6 ---------------------------------------------------------------
+# The phones are IPv4-only and there is no IPv6 firewall, so the router must
+# have no IPv6 presence on VLAN 20 at all. A link-local address there would
+# expose everything listening on :: (sshd, the zigbee2mqtt frontend). Two
+# checks: probe the EUI-64 link-local derived from its MAC, and see whether
+# it answers an all-nodes ping under any address.
+router_mac=$(in_ns ip neigh show "$GW" | awk '{print $5; exit}')
+if [ -z "$router_mac" ]; then
+  fail "IPv6: couldn't learn the router's MAC on VLAN 20"
+else
+  IFS=: read -r -a m <<<"$router_mac"
+  ll=$(printf 'fe80::%02x%02x:%02xff:fe%02x:%02x%02x' \
+    $((0x${m[0]} ^ 2)) $((0x${m[1]})) $((0x${m[2]})) $((0x${m[3]})) $((0x${m[4]})) $((0x${m[5]})))
+  for port in 22 8585; do
+    if answers ns tcp "$ll%$IF" "$port"; then
+      fail "IPv6: router answers on [$ll]:$port over VLAN 20"
+    else
+      pass "IPv6: router silent on [$ll]:$port"
+    fi
+  done
+  in_ns ping -6 -c 2 -w 3 -I "$IF" ff02::1 >/dev/null 2>&1 || true
+  if in_ns ip -6 neigh show dev "$IF" | grep -qi "lladdr $router_mac"; then
+    fail "IPv6: the router answers all-nodes pings on VLAN 20"
+  else
+    pass "IPv6: the router has no presence on VLAN 20"
+  fi
+fi
 
 # --- NTP ----------------------------------------------------------------
 ntp_out=$(in_ns timeout 10 "$BUSYBOX" ntpd -n -w -d -p "$GW" 2>&1 || true)
