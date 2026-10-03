@@ -1,6 +1,6 @@
 module github.com/ChristopherJMiller/luma-homeops/images/mcp-jwt-auth
 
-go 1.25
+go 1.27.1
 
 require github.com/coreos/go-oidc/v3 v3.16.0
 
