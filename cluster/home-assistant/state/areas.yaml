@@ -1,0 +1,16 @@
+---
+# Floors, labels and areas. Fully managed: `hactl apply` creates and updates them;
+# deleting one needs `hactl apply --prune`. An id is HA's slug of the name when it was created.
+# Written by `hactl import`, then edited by hand; converge with `hactl apply`.
+floors: []
+labels: []
+areas:
+  - id: bedroom
+    name: Bedroom
+    icon: mdi:bed
+  - id: kitchen
+    name: Kitchen
+    icon: mdi:fridge
+  - id: living_room
+    name: Living Room
+    icon: mdi:sofa

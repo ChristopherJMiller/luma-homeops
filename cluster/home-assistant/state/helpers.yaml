@@ -1,0 +1,17 @@
+---
+# Config-entry helpers (group, switch_as_x, ...): created by their config flow from `create`,
+# `options` enforced, undeclared ones deleted with --prune.
+# Written by `hactl import`, then edited by hand; converge with `hactl apply`.
+helpers:
+  - domain: group
+    title: Bedroom Blinds
+    create:
+      menu:
+        - cover
+      answers:
+        name: Bedroom Blinds
+    options:
+      entities:
+        - cover.window_left
+        - cover.window_right
+      hide_members: false

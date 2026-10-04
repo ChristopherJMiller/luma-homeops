@@ -1,0 +1,185 @@
+---
+# Device overrides (area, name, labels, disabled), matched by one hardware identifier
+# that survives renames. Only listed devices, and only listed fields, are managed.
+# Written by `hactl import`, then edited by hand; converge with `hactl apply`.
+devices:
+  - match:
+      identifiers:
+        - switchbot_cloud
+        - 01-202507281617-44845622
+    about: Air Conditioner · SwitchBot Air Conditioner
+    area: living_room
+  - match:
+      identifiers:
+        - hue
+        - d769b20a-ca3f-4da5-907d-09683c416559
+    about: Bedroom · Signify Netherlands B.V. Room
+    area: bedroom
+  - match:
+      identifiers:
+        - ecobee
+        - '413717234013'
+    about: Bedroom · ecobee ecobee3 lite Smart Thermostat
+    area: bedroom
+  - match:
+      identifiers:
+        - id
+        - '3794708'
+    about: Bedroom - Thermostat · SmartRent Thermostat
+    area: bedroom
+  - match:
+      identifiers:
+        - mqtt
+        - zigbee2mqtt_0x0022a3000034cd39
+    about: Bedroom Light Switch · Leviton Decora smart Zigbee 3.0 certified 15A switch (DG15S-1BW)
+    area: bedroom
+  - match:
+      identifiers:
+        - mqtt
+        - zigbee2mqtt_0x00124b0029135ed7
+    about: Camp Lamp · SONOFF Zigbee smart plug (US version) (S31ZB)
+    area: living_room
+  - match:
+      identifiers:
+        - mqtt
+        - zigbee2mqtt_0xa4c138f2cbb8fee4
+    about: Desk Underlight · Tuya Zigbee RGB light (TS0503B)
+    area: living_room
+  - match:
+      identifiers:
+        - hue
+        - 764d6aa2-789b-42cc-8eee-d083fde6106b
+    about: Dresser Lamp · Signify Netherlands B.V. Hue color lamp
+    area: bedroom
+  - match:
+      identifiers:
+        - mqtt
+        - zigbee2mqtt_0x00124b0029ddd18a
+    about: Floor Fan · SONOFF 15A Zigbee smart plug (S40ZBTPB)
+    area: living_room
+  - match:
+      identifiers:
+        - hue
+        - d470f6a3-757f-409d-80ce-30414ff398c7
+    about: Floor Lamp · Signify Netherlands B.V. Hue color lamp
+    area: bedroom
+  - match:
+      identifiers:
+        - hue
+        - 697aa460-0f1d-4de2-83af-fd7c6201e8ee
+    about: Floor Lamp A · Signify Netherlands B.V. Hue color lamp
+    area: living_room
+  - match:
+      identifiers:
+        - hue
+        - 52bf58ae-88fc-4b0d-b85d-ecc1b32edf9d
+    about: Floor Lamp B · Signify Netherlands B.V. Hue color lamp
+    area: living_room
+  - match:
+      identifiers:
+        - mqtt
+        - zigbee2mqtt_0x00158d0008d951a3
+    about: Freezer Door · Aqara Door and window sensor (MCCGQ11LM)
+    area: kitchen
+  - match:
+      identifiers:
+        - mqtt
+        - zigbee2mqtt_0x00158d0008e12aa4
+    about: Fridge Door · Aqara Door and window sensor (MCCGQ11LM)
+    area: kitchen
+  - match:
+      identifiers:
+        - hue
+        - 8966c12a-89b8-4bc4-b550-7042c18fcce1
+    about: Ground Spot · Signify Netherlands B.V. Hue color lamp
+    area: living_room
+  - match:
+      connections:
+        - mail_and_packages
+        - 01K0G7CWPDJDAX9K4Y3AJJTDNW
+    about: imap.fastmail.com · IMAP E-Mail
+    name: hello@chrismiller.xyz
+  - match:
+      identifiers:
+        - id
+        - '676365'
+    about: Kitchen Sink - Leak Sensor · SmartRent LeakSensor
+    area: kitchen
+  - match:
+      identifiers:
+        - mqtt
+        - zigbee2mqtt_0xa4c1384ebb0d3217
+    about: Kitchen Underlight · Tuya Zigbee RGB light (TS0503B)
+    area: kitchen
+  - match:
+      identifiers:
+        - hue
+        - 53356060-441f-4706-bd40-f0d3e65dfd42
+    about: Living Room · Signify Netherlands B.V. Room
+    area: living_room
+  - match:
+      identifiers:
+        - ecobee
+        - '415566297236'
+    about: Living Room · ecobee ecobee3 lite Smart Thermostat
+    area: living_room
+  - match:
+      identifiers:
+        - id
+        - '3794704'
+    about: Living Room - Thermostat · SmartRent Thermostat
+    area: living_room
+  - match:
+      identifiers:
+        - hue
+        - 841e40fe-c41b-47dd-a2eb-7f4098cb7f0a
+    about: Nightstand Lamp · Signify Netherlands B.V. Hue color lamp
+    area: bedroom
+  - match:
+      identifiers:
+        - opower
+        - scl_8849020728
+    about: ELEC account 8849020728 · Opower Seattle City Light (SCL)
+    name: Seattle City Lights
+  - match:
+      identifiers:
+        - mqtt
+        - zigbee2mqtt_0x0022a3000034bd99
+    about: Sidetable Lamp · Leviton Indoor Decora smart Zigbee 3.0 certified plug-in dimmer (DG3HL-1BW)
+    area: living_room
+  - match:
+      identifiers:
+        - mqtt
+        - zigbee2mqtt_0x00158d0008d9552c
+    about: Slider Door · Aqara Door and window sensor (MCCGQ11LM)
+    area: living_room
+  - match:
+      identifiers:
+        - id
+        - '676391'
+    about: Smart plug  · SmartRent BinarySwitch
+    area: living_room
+  - match:
+      identifiers:
+        - hue
+        - b7820dcc-0f2f-4f11-bdd9-7f2b704af904
+    about: TV Accent · Signify Netherlands B.V. Hue color lamp
+    area: living_room
+  - match:
+      identifiers:
+        - mqtt
+        - zigbee2mqtt_0x00124b003030826d
+    about: Unused Switch · SONOFF Zigbee smart plug (US version) (S31ZB)
+    area: bedroom
+  - match:
+      identifiers:
+        - mqtt
+        - zigbee2mqtt_0x00124b00302af2aa
+    about: Vent Fan Switch · SONOFF Zigbee smart plug (US version) (S31ZB)
+    area: living_room
+  - match:
+      identifiers:
+        - id
+        - '676403'
+    about: Water Heater - Leak Sensor · SmartRent LeakSensor
+    area: kitchen

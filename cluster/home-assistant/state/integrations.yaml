@@ -1,0 +1,89 @@
+---
+# Integrations that must exist. hactl never deletes one. `create` answers its config flow
+# (secrets via `credentials:` from credentials.yaml); `manual` says what a person must do.
+# Written by `hactl import`, then edited by hand; converge with `hactl apply`.
+integrations:
+  - domain: adaptive_lighting
+    title: circadian
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> adaptive_lighting'
+  - domain: analytics
+    title: Analytics
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> analytics'
+  - domain: backup
+    title: Backup
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> backup'
+  - domain: caldav
+    title: cmiller548@gmail.com - Main
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> caldav'
+  - domain: dlna_dms
+    title: 'Plex Media Server: plex.chrismiller.xyz'
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> dlna_dms'
+  - domain: ecobee
+    title: ecobee
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> ecobee'
+  - domain: go2rtc
+    title: go2rtc
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> go2rtc'
+  - domain: google_translate
+    title: Google Translate text-to-speech
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> google_translate'
+  - domain: hacs
+    title: ''
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> hacs'
+  - domain: hue
+    title: Hue Bridge 001788465e9e
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> hue'
+  - domain: local_calendar
+    title: Home Maintenance
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> local_calendar'
+  - domain: mail_and_packages
+    title: imap.fastmail.com
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> mail_and_packages'
+  - domain: mcp_server
+    title: Assist
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> mcp_server'
+  - domain: met
+    title: Home
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> met'
+  - domain: mobile_app
+    title: Pixel 6 Pro
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> mobile_app'
+  - domain: mobile_app
+    title: Pixel 9 Pro XL
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> mobile_app'
+  - domain: mqtt
+    title: mosquitto
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> mqtt'
+  - domain: opower
+    title: Seattle City Light (SCL) (cmiller548)
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> opower'
+  - domain: plex
+    title: http://10.244.4.204:32400
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> plex'
+  - domain: radio_browser
+    title: Radio Browser
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> radio_browser'
+  - domain: shopping_list
+    title: Shopping list
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> shopping_list'
+  - domain: smartrent
+    title: cmiller548@gmail.com
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> smartrent'
+  - domain: sun
+    title: Sun
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> sun'
+  - domain: switchbot_cloud
+    title: SwitchBot Cloud
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> switchbot_cloud'
+  - domain: thread
+    title: Thread
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> thread'
+  - domain: waze_travel_time
+    title: Seattle Work Commute
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> waze_travel_time'
+  - domain: workday
+    title: Workday Sensor CA ON
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> workday'
+  - domain: workday
+    title: Workday Sensor US WA
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> workday'
