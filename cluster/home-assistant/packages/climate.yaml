@@ -79,11 +79,12 @@ template:
           {% else %}{{ is_state('binary_sensor.slider_door_contact', 'on') }}{% endif %}
 
   - binary_sensor:
+      # Instant (no delay_on/off): a delayed template restarts as `off` after every reload,
+      # which made the vent fan automation switch the fan off on each deploy. The
+      # hysteresis delays live on the automation triggers instead (`for:`).
       - name: Free Cooling Wanted
         unique_id: free_cooling_wanted
         icon: mdi:weather-windy
-        delay_on: "00:10:00"
-        delay_off: "00:10:00"
         availability: >-
           {{ states('binary_sensor.window_insert_installed') in ['on', 'off']
              and states('sensor.living_room_temperature') | is_number
@@ -98,13 +99,11 @@ template:
              and (aqi is none or aqi <= states('input_number.aqi_limit') | float(100)) }}
 
       # Hysteresis on both edges: the threshold (on at T, off below T - 2) and the
-      # "outside air can't do it" margin (+1°F to start, -1°F to stop), plus 5 min
-      # either way, so an IR compressor isn't short-cycled.
+      # "outside air can't do it" margin (+1°F to start, -1°F to stop); the AC
+      # automation adds 5 min either way, so an IR compressor isn't short-cycled.
       - name: AC Cool Wanted
         unique_id: ac_cool_wanted
         icon: mdi:snowflake
-        delay_on: "00:05:00"
-        delay_off: "00:05:00"
         availability: >-
           {{ states('binary_sensor.window_insert_installed') in ['on', 'off']
              and states('binary_sensor.house_occupied') in ['on', 'off']
@@ -145,9 +144,17 @@ automation:
       While the insert is in, the vent fan runs exactly when free cooling is wanted;
       resyncs on the first known value after a reload and when Climate Auto comes back on.
     triggers:
+      # 10 min hysteresis on real changes ...
       - trigger: state
         entity_id: binary_sensor.free_cooling_wanted
-        not_to: [unavailable, unknown]
+        from: ["on", "off"]
+        to: ["on", "off"]
+        for: "00:10:00"
+      # ... immediate resync on the first known value after a reload, or when Climate Auto returns
+      - trigger: state
+        entity_id: binary_sensor.free_cooling_wanted
+        from: [unavailable, unknown]
+        to: ["on", "off"]
       - trigger: state
         entity_id: input_boolean.climate_auto
         from: "off"
@@ -240,7 +247,14 @@ automation:
     triggers:
       - trigger: state
         entity_id: binary_sensor.ac_cool_wanted
-        not_to: [unavailable, unknown]
+        from: ["on", "off"]
+        to: ["on", "off"]
+        for: "00:05:00"
+        id: sync
+      - trigger: state
+        entity_id: binary_sensor.ac_cool_wanted
+        from: [unavailable, unknown]
+        to: ["on", "off"]
         id: sync
       - trigger: state
         entity_id: input_boolean.climate_auto
