@@ -110,7 +110,33 @@ def test_rollout_wait_does_not_need_the_chart_repo_to_match_head():
         "home-assistant-release": dict(st(chart, "Synced", "Succeeded", chart), reconciled_at="2026-10-03T23:00:05Z"),
     }
     deploy.wait_for_rollout(HEAD, timeout=30, status=lambda app: apps[app], deployment=lambda: dep(),
-                            ha_running=lambda: True, clock=lambda: 0.0, sleep=lambda s: None, log=lambda m: None)
+                            ha_running=lambda: True, config_revision=lambda: "r1", want_revision="r1",
+                            hook=lambda: "succeeded", clock=lambda: 0.0, sleep=lambda s: None, log=lambda m: None)
+
+
+def _apps():
+    return {"home-assistant": st(HEAD, "Synced", "Succeeded", HEAD),
+            "applications": st(HEAD, "Synced", "Succeeded", OLD),
+            "home-assistant-release": dict(st("c" * 40, "Synced", "Succeeded", "c" * 40), reconciled_at="2026-10-03T23:00:05Z")}
+
+
+def test_rollout_waits_until_ha_runs_the_committed_config_revision():
+    # Without a pod restart Argo reports Succeeded while the ha-reload hook is still waiting for the
+    # ConfigMap to reach the pod: deploy must not apply state/ or run health against the old config.
+    loaded = iter(["old", "old", "new"])
+    clock = {"t": 0.0}
+    deploy.wait_for_rollout(HEAD, timeout=300, status=lambda app: _apps()[app], deployment=lambda: dep(),
+                            ha_running=lambda: True, config_revision=lambda: next(loaded), want_revision="new",
+                            hook=lambda: "running", clock=lambda: clock["t"],
+                            sleep=lambda s: clock.__setitem__("t", clock["t"] + s), log=lambda m: None)
+    assert clock["t"] == 20  # two polls of "old", then "new"
+
+
+def test_failed_hook_stops_the_config_wait_at_once():
+    with pytest.raises(HactlError, match="ha-reload hook failed"):
+        deploy.wait_for_rollout(HEAD, timeout=300, status=lambda app: _apps()[app], deployment=lambda: dep(),
+                                ha_running=lambda: True, config_revision=lambda: "old", want_revision="new",
+                                hook=lambda: "failed", clock=lambda: 0.0, sleep=lambda s: None, log=lambda m: None)
 
 
 def test_deploy_converges_state_and_fails_on_leftovers(monkeypatch, capsys):

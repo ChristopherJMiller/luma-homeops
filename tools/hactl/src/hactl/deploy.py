@@ -14,7 +14,7 @@ import json
 import subprocess
 import time
 
-from hactl import health, output, paths, shot
+from hactl import health, output, paths, revision, shot
 from hactl.errors import HactlError
 from hactl.state import cli as state_cli
 
@@ -86,13 +86,19 @@ def deployment_status() -> dict:
     return json.loads(r.stdout)
 
 
+class Fatal(HactlError):
+    """Raised by a wait check when waiting longer cannot help."""
+
+
 def wait_until(check, what, timeout, interval=10, clock=time.monotonic, sleep=time.sleep, log=print) -> bool:
-    """Poll check() until true. HactlError (HA or kubectl briefly away) counts as 'not yet'."""
+    """Poll check() until true. HactlError (HA or kubectl briefly away) counts as 'not yet'; Fatal stops."""
     deadline = clock() + timeout
     while True:
         try:
             if check():
                 return True
+        except Fatal:
+            raise
         except HactlError as e:
             log(f"  waiting for {what}: {e}")
         if clock() >= deadline:
@@ -100,13 +106,23 @@ def wait_until(check, what, timeout, interval=10, clock=time.monotonic, sleep=ti
         sleep(interval)
 
 
+def config_loaded(want, loaded, hook) -> bool:
+    if hook() == "failed":
+        raise Fatal("the ha-reload hook failed: kubectl -n home-assistant logs job/ha-reload")
+    return loaded() == want
+
+
 def wait_for_rollout(head, timeout, status=argo_status, deployment=deployment_status, ha_running=None,
+                     config_revision=None, want_revision=None, hook=health.hook_status,
                      clock=time.monotonic, sleep=time.sleep, log=print) -> None:
-    if ha_running is None:
+    if ha_running is None or config_revision is None:
         from hactl.client import Client
 
         client = Client()
-        ha_running = lambda: client.get("/api/config").get("state") == "RUNNING"  # noqa: E731
+        ha_running = ha_running or (lambda: client.get("/api/config").get("state") == "RUNNING")
+        config_revision = config_revision or (lambda: client.get("/api/states/sensor.ha_config_revision")["state"])
+    if want_revision is None:
+        want_revision = revision.parse((paths.HA_DIR / revision.REVISION_FILE).read_text())
     timing = {"clock": clock, "sleep": sleep, "log": log}
     wait_synced(head, status=lambda: status(CONFIG_APP), timeout=timeout, **timing)
     root = wait_synced(head, status=lambda: status(ROOT_APP), timeout=timeout, **timing)
@@ -114,6 +130,9 @@ def wait_for_rollout(head, timeout, status=argo_status, deployment=deployment_st
     wait_until(lambda: release_settled(status(RELEASE_APP), since), f"{RELEASE_APP} to sync", timeout, **timing)
     wait_until(lambda: rollout_done(deployment()), "the HA Deployment to roll out", timeout, **timing)
     wait_until(ha_running, "HA to report RUNNING", timeout, **timing)
+    # Without a pod restart Argo is done while the hook still waits for the ConfigMap to reach the pod.
+    wait_until(lambda: config_loaded(want_revision, config_revision, hook),
+               f"HA to load config revision {want_revision}", timeout, **timing)
 
 
 def _run(args) -> int:
