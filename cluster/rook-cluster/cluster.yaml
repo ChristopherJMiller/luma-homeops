@@ -387,6 +387,11 @@ spec:
       mon:
         disabled: false
         interval: 45s
+        # Default 10m. With 3 nodes and allowMultiplePerNode=false a failover has no
+        # spare node to place a mon on: it only scales the out-of-quorum mon to 0 and
+        # strands it (2026-10-04, mon-u during bottom's maintenance). 2h covers a
+        # node maintenance window; a mon that is really gone still fails over.
+        timeout: 2h
       osd:
         disabled: false
         interval: 60s
