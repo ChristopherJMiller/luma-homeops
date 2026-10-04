@@ -76,6 +76,47 @@ def hook_status():
     return "failed" if st.get("failed") else "succeeded" if st.get("succeeded") else "running"
 
 
+GONE = ("unavailable", "unknown")
+
+
+def registry_report(devices, entities, states, long_unavailable_ids) -> dict:
+    """Area-less devices (enabled, physical or integration-made, with an enabled entity), registry entries
+    no integration provides any more (HA only restored them), and entities unavailable for 30+ days."""
+    live_devices = {e.get("device_id") for e in entities if not e.get("disabled_by")}
+    no_area = sorted(d.get("name_by_user") or d.get("name") or d["id"] for d in devices
+                     if not d.get("area_id") and d.get("entry_type") != "service" and not d.get("disabled_by")
+                     and d["id"] in live_devices)
+    restored = sorted(e["entity_id"] for e in entities
+                      if (states.get(e["entity_id"]) or {}).get("attributes", {}).get("restored"))
+    return {"no_area": no_area, "restored": restored, "long_unavailable": sorted(long_unavailable_ids)}
+
+
+def long_unavailable(client, entity_ids, days=30) -> list:
+    """Of these entities, the ones that were `unavailable` throughout the last `days` days (`unknown` is the normal
+    state of buttons, scenes, notify and event entities, so it doesn't count)."""
+    if not entity_ids:
+        return []
+    from datetime import datetime, timedelta, timezone
+    from urllib.parse import quote
+
+    now = datetime.now(timezone.utc)
+    start, end = quote((now - timedelta(days=days)).isoformat()), quote(now.isoformat())
+    # end_time is required: HA defaults it to start + 1 day. The recorder keeps fewer days than this
+    # window (purge_keep_days), so in practice this is "unavailable for all recorded history".
+    hist = client.get(f"/api/history/period/{start}?end_time={end}&filter_entity_id={','.join(entity_ids)}"
+                      "&minimal_response&no_attributes")
+    return [series[0]["entity_id"] for series in hist if series and all(s.get("state") == "unavailable" for s in series)]
+
+
+def collect_registry(client) -> dict:
+    devices, entities = client.ws({"type": "config/device_registry/list"}, {"type": "config/entity_registry/list"})
+    states = {s["entity_id"]: s for s in client.get("/api/states")}
+    candidates = [e["entity_id"] for e in entities if not e.get("disabled_by")
+                  and (states.get(e["entity_id"]) or {}).get("state") == "unavailable"
+                  and not states[e["entity_id"]].get("attributes", {}).get("restored")]
+    return registry_report(devices, entities, states, long_unavailable(client, candidates))
+
+
 def collect(client, ha_dir=paths.HA_DIR) -> dict:
     states = {s["entity_id"]: s["state"] for s in client.get("/api/states")}
     components = set(client.get("/api/config")["components"])
@@ -121,13 +162,22 @@ def render(r: dict) -> tuple:
     section("repairs", r["repairs"], lambda i: f"{i['domain']}/{i['issue_id']} [{i['severity']}]")
     section("log errors, top 10 by count", r["log_errors"], lambda e: f"{e['count']}x {e['name']}: {e['message'][:140]}")
     section("referenced entities that are unavailable (warning)", r["unavailable"])
+    if "registry" in r:
+        g = r["registry"]
+        section("devices without an area", g["no_area"])
+        section("registry entries no integration provides (restored; remove: in entities.yaml)", g["restored"])
+        section("unavailable for all recorded history (up to 30 days)", g["long_unavailable"])
+        problem = problem or bool(g["restored"])
     return lines, problem
 
 
 def _run(args) -> int:
     from hactl.client import Client
 
-    report = collect(Client())
+    client = Client()
+    report = collect(client)
+    if args.registry:
+        report["registry"] = collect_registry(client)
     lines, problem = render(report)
     output.emit(args, report, lines)
     return 1 if problem else 0
@@ -135,4 +185,5 @@ def _run(args) -> int:
 
 def register(sub) -> None:
     p = sub.add_parser("health", parents=[output.COMMON], help="drift, failing automations, repairs, log errors")
+    p.add_argument("--registry", action="store_true", help="also list area-less devices and dead registry entries")
     p.set_defaults(func=_run)

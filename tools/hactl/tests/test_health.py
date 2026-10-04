@@ -72,3 +72,49 @@ def test_not_loaded_entries():
                {"domain": "hue", "title": "Hue", "state": "loaded", "reason": None, "disabled_by": None},
                {"domain": "x", "title": "Off", "state": "not_loaded", "reason": None, "disabled_by": "user"}]
     assert health.not_loaded(entries) == ["plex/Plex: setup_retry (timeout)"]
+
+
+def test_registry_report_lists_arealess_restored_and_long_unavailable():
+    from hactl import health
+    devices = [
+        {"id": "d1", "name": "Plant Blinds", "area_id": None, "entry_type": None, "disabled_by": None},
+        {"id": "d2", "name": "Lamp", "area_id": "bedroom", "entry_type": None, "disabled_by": None},
+        {"id": "d3", "name": "Sun", "area_id": None, "entry_type": "service", "disabled_by": None},
+        {"id": "d4", "name": "Old", "area_id": None, "entry_type": None, "disabled_by": "user"},
+        {"id": "d5", "name": "Ghost", "area_id": None, "entry_type": None, "disabled_by": None},
+    ]
+    entities = [
+        {"entity_id": "cover.plant_blinds", "device_id": "d1", "disabled_by": None},
+        {"entity_id": "light.lamp", "device_id": "d2", "disabled_by": None},
+        {"entity_id": "sensor.sun", "device_id": "d3", "disabled_by": None},
+        {"entity_id": "sensor.ghost", "device_id": "d5", "disabled_by": "integration"},
+        {"entity_id": "sensor.mail_old", "device_id": None, "disabled_by": None},
+    ]
+    states = {"sensor.mail_old": {"state": "unavailable", "attributes": {"restored": True}},
+              "cover.plant_blinds": {"state": "open", "attributes": {}}}
+    r = health.registry_report(devices, entities, states, ["sensor.fridge"])
+    assert r == {"no_area": ["Plant Blinds"], "restored": ["sensor.mail_old"], "long_unavailable": ["sensor.fridge"]}
+
+
+def test_long_unavailable_uses_history():
+    from hactl import health
+
+    class C:
+        def get(self, path, raw=False):
+            assert "filter_entity_id=sensor.a,sensor.b" in path and "no_attributes" in path
+            assert "end_time=" in path  # HA defaults end_time to start + 1 day
+            return [[{"entity_id": "sensor.a", "state": "unavailable"}],
+                    [{"entity_id": "sensor.b", "state": "unavailable"}, {"state": "on"}]]
+    assert health.long_unavailable(C(), ["sensor.a", "sensor.b"]) == ["sensor.a"]
+    assert health.long_unavailable(C(), []) == []
+
+
+def test_unknown_is_not_dead():
+    # buttons, scenes, notify, tts, events sit at `unknown` until used: only `unavailable` means dead
+    from hactl import health
+
+    class C:
+        def get(self, path, raw=False):
+            return [[{"entity_id": "button.restart", "state": "unknown"}],
+                    [{"entity_id": "sensor.fridge", "state": "unavailable"}]]
+    assert health.long_unavailable(C(), ["button.restart", "sensor.fridge"]) == ["sensor.fridge"]
