@@ -125,8 +125,19 @@ def check_config(ha_dir: Path, tag: str) -> list:
         return [Finding("check_config", f"(HA {tag})", None, line.strip()) for line in text.splitlines() if _CHECK_MARKERS.search(line)]
 
 
+def check_state(ha_dir: Path) -> list:
+    from hactl.state import model  # local: keeps `hactl lint` importable without the state package loaded
+
+    try:
+        model.load(ha_dir / "state")
+    except HactlError as e:
+        return [Finding("state", paths.rel(ha_dir / "state"), None, line.strip()) for line in str(e).splitlines()[1:]]
+    return []
+
+
 def offline(ha_dir: Path = paths.HA_DIR, run_check_config: bool = True) -> list:
-    findings = check_filenames(ha_dir) + check_kustomization(ha_dir) + check_quoting(ha_dir) + check_revision(ha_dir)
+    findings = (check_filenames(ha_dir) + check_kustomization(ha_dir) + check_quoting(ha_dir)
+                + check_revision(ha_dir) + check_state(ha_dir))
     if run_check_config:
         findings += check_config(ha_dir, deployed_tag())
     return findings

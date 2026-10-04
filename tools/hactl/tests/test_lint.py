@@ -108,3 +108,11 @@ def test_template_strings_and_render_errors(tmp_path):
 
     found = lint.check_dashboard_templates(ha, render)
     assert [(f.rule, f.line) for f in found] == [("dashboard-template", 4)]
+
+
+def test_state_manifest_problems_are_lint_findings(tmp_path):
+    ha = make_ha(tmp_path, {"packages/a.yaml": "automation: []\n"})
+    (ha / "state").mkdir()
+    (ha / "state" / "areas.yaml").write_text("areas:\n  - {id: x, name: X, floor: nowhere}\n")
+    found = lint.check_state(ha)
+    assert [f.rule for f in found] == ["state"] and "floor 'nowhere' is not declared" in found[0].message
