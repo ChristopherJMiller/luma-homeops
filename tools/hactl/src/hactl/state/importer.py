@@ -17,6 +17,7 @@ HEADERS = {
                "# `options` enforced, undeclared ones deleted with --prune.",
     "integrations": "Integrations that must exist. hactl never deletes one. `create` answers its config flow\n"
                     "# (secrets via `credentials:` from credentials.yaml); `manual` says what a person must do.",
+    "people": "Zones (fully managed; deleting one needs --prune) and persons (never deleted by hactl).",
     "dashboards": "Storage-mode dashboards (YAML ones are the chart's lovelace.dashboards) and Lovelace\n"
                   "# resources. Fully managed; deleting needs --prune. lovelace and map are HA built-ins.",
 }
@@ -84,6 +85,13 @@ def build(snap) -> dict:
                         "require_admin": bool(x.get("require_admin")), "show_in_sidebar": bool(x.get("show_in_sidebar", True))}
                        for x in sorted(snap.dashboards, key=lambda x: x["url_path"]) if x.get("mode") == "storage"],
         "resources": [{"url": r["url"], "type": r["type"]} for r in snap.resources],
+    }
+    files["people"] = {
+        "zones": [{**_compact({"id": z["id"], "name": z["name"], "icon": z.get("icon")}), "latitude": z["latitude"],
+                   "longitude": z["longitude"], "radius": z.get("radius", 100), **({"passive": True} if z.get("passive") else {})}
+                  for z in snap.zones],
+        "persons": [_compact({"id": p["id"], "name": p["name"], "user_id": p.get("user_id"),
+                              "device_trackers": p.get("device_trackers"), "picture": p.get("picture")}) for p in snap.persons],
     }
     return files
 

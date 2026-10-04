@@ -72,6 +72,58 @@ def diff_registry(kind, declared, live) -> list:
     return out
 
 
+ZONE_FIELDS = ("name", "latitude", "longitude", "radius", "icon", "passive")
+ZONE_DEFAULTS = {"radius": 100, "icon": None, "passive": False}
+PERSON_FIELDS = ("name", "user_id", "device_trackers", "picture")
+
+
+def diff_zones(declared, live) -> list:
+    """Fully managed: undeclared zones are prunable."""
+    by_id = {z["id"]: z for z in live}
+    out = []
+    for d in declared:
+        want = {f: d.get(f, ZONE_DEFAULTS.get(f)) for f in ZONE_FIELDS}
+        cur = by_id.get(d["id"])
+        if cur is None:
+            out.append(Change("create", "zone", d["id"], repr(d["name"]), data={"id": d["id"], **want}))
+            continue
+        delta = {f: v for f, v in want.items() if not same(v, cur.get(f))}
+        if delta:
+            out.append(Change("update", "zone", d["id"], _describe(delta, cur), data={"zone_id": d["id"], **delta}))
+    declared_ids = {d["id"] for d in declared}
+    out += [Change("delete", "zone", z["id"], f"{z.get('name')!r} is not declared", data={"zone_id": z["id"]}, prune=True)
+            for z in live if z["id"] not in declared_ids]
+    return out
+
+
+def _person_value(d, f):
+    return d.get(f, [] if f == "device_trackers" else None)
+
+
+def diff_persons(declared, live) -> list:
+    """Persons are never deleted by hactl: an undeclared one is manual."""
+    by_id = {p["id"]: p for p in live}
+    out = []
+    for d in declared:
+        cur = by_id.get(d["id"])
+        if cur is None:
+            out.append(Change("create", "person", d["id"], repr(d["name"]),
+                              data={"id": d["id"], **{f: _person_value(d, f) for f in PERSON_FIELDS}}))
+            continue
+        delta = {f: _person_value(d, f) for f in PERSON_FIELDS if not same(_person_value(d, f), cur.get(f))}
+        if delta:
+            out.append(Change("update", "person", d["id"], _describe(delta, cur), data={"person_id": d["id"], **delta}))
+    declared_ids = {d["id"] for d in declared}
+    out += [Change("manual", "person", p["id"], "is not declared in people.yaml (declare it; hactl never deletes a person)")
+            for p in live if p["id"] not in declared_ids]
+    return out
+
+
+def diff_storage_helpers(storage_helpers) -> list:
+    return [Change("manual", "ui-helper", f"{d}.{i}", f"UI-made {d} {n!r}: move it into a package, then delete it in HA")
+            for d, i, n in storage_helpers]
+
+
 DEVICE_FIELDS = {"name": "name_by_user", "area": "area_id", "labels": "labels"}
 ENTITY_FIELDS = {"name": "name", "icon": "icon", "area": "area_id", "labels": "labels"}
 
@@ -229,6 +281,9 @@ def plan(m, snap) -> list:
     return (diff_registry("floor", m.floors, snap.floors)
             + diff_registry("label", m.labels, snap.labels)
             + diff_registry("area", m.areas, snap.areas)
+            + diff_zones(m.zones, snap.zones)
+            + diff_persons(m.persons, snap.persons)
+            + diff_storage_helpers(snap.storage_helpers)
             + diff_config_entries("helper", m.helpers, snap.entries, snap.options, m.credentials, m.credentials_locked)
             + diff_config_entries("integration", m.integrations, snap.entries, snap.options, m.credentials, m.credentials_locked)
             + diff_devices(m.devices, snap.devices)

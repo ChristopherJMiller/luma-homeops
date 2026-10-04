@@ -157,7 +157,10 @@ def test_resources():
 
 
 def test_plan_orders_kinds_and_lists_wanted_options():
-    m = model.Manifest(areas=[{"id": "office", "name": "Office"}], helpers=[GROUP],
+    m = model.Manifest(zones=[{"id": "work", "name": "Work", "latitude": 47.64, "longitude": -122.13, "radius": 606, "icon": "mdi:microsoft-office"}],
+                       persons=[{"id": "chris_m", "name": "Chris", "user_id": "u1",
+                                                "device_trackers": ["device_tracker.pixel_6_pro", "device_tracker.pixel_9_pro_xl"]}],
+                       areas=[{"id": "office", "name": "Office"}], helpers=[GROUP],
                        integrations=[{"domain": "hue", "title": "Hue Bridge", "manual": "x"}, {"domain": "plex", "title": "Plex", "manual": "x"}],
                        dashboards=[{"url_path": "lovelace", "title": "Overview", "icon": "mdi:view-dashboard"},
                                    {"url_path": "claude-preview", "title": "Claude Preview", "icon": "mdi:flask-outline",

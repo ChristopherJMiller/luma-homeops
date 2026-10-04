@@ -40,6 +40,10 @@ SCHEMA = {
         "dashboards": ({"url_path", "title"}, {"icon", "require_admin", "show_in_sidebar"}),
         "resources": ({"url", "type"}, set()),
     },
+    "people": {
+        "zones": ({"id", "name", "latitude", "longitude"}, {"radius", "icon", "passive"}),
+        "persons": ({"id", "name"}, {"user_id", "device_trackers", "picture"}),
+    },
 }
 
 
@@ -55,6 +59,8 @@ class Manifest:
     integrations: list = field(default_factory=list)
     dashboards: list = field(default_factory=list)
     resources: list = field(default_factory=list)
+    zones: list = field(default_factory=list)
+    persons: list = field(default_factory=list)
     credentials: dict = field(default_factory=dict)
     credentials_locked: bool = False
 
@@ -132,6 +138,8 @@ STRING_FIELDS = {
     "integrations": ("integration", ("domain", "title", "credentials", "manual")),
     "dashboards": ("dashboard", ("url_path", "title", "icon")),
     "resources": ("resource", ("url", "type")),
+    "zones": ("zone", ("id", "name", "icon")),
+    "persons": ("person", ("id", "name", "user_id", "picture")),
 }
 
 
@@ -143,6 +151,15 @@ def check_types(m: Manifest) -> list:
             for f in fields:
                 if f in x and x[f] is not None and not isinstance(x[f], str):
                     p.append(f"{kind} {who}: {f} must be a string, not {type(x[f]).__name__} (quote it)")
+    for z in m.zones:
+        for f in ("latitude", "longitude", "radius"):
+            if f in z and z[f] is not None and (isinstance(z[f], bool) or not isinstance(z[f], (int, float))):
+                p.append(f"zone {z.get('id')}: {f} must be a number")
+        if "passive" in z and not isinstance(z["passive"], bool):
+            p.append(f"zone {z.get('id')}: passive must be true or false")
+    for x in m.persons:
+        if "device_trackers" in x and not _strlist(x["device_trackers"]):
+            p.append(f"person {x.get('id')}: device_trackers must be a list of entity ids")
     for x in m.floors:
         if x.get("level") is not None and not isinstance(x["level"], int):
             p.append(f"floor {x.get('id')}: level must be a whole number")
@@ -187,7 +204,7 @@ def check(m: Manifest) -> list:
     floor_ids = {f.get("id") for f in m.floors}
     label_ids = {lab.get("id") for lab in m.labels}
     area_ids = {a.get("id") for a in m.areas}
-    for kind, items in (("floor", m.floors), ("label", m.labels), ("area", m.areas)):
+    for kind, items in (("floor", m.floors), ("label", m.labels), ("area", m.areas), ("zone", m.zones), ("person", m.persons)):
         p += [f"duplicate {kind} id {d!r}" for d in _dupes([x.get("id") for x in items])]
     for a in m.areas:
         if a.get("floor") is not None and a["floor"] not in floor_ids:

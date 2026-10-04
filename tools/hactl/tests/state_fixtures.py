@@ -2,7 +2,7 @@
 import re
 
 from hactl.errors import HactlError
-from hactl.state.live import Snapshot
+from hactl.state.live import STORAGE_HELPER_DOMAINS, Snapshot
 
 
 def snapshot() -> Snapshot:
@@ -45,6 +45,11 @@ def snapshot() -> Snapshot:
         resources=[{"id": "r1", "url": "/hacsfiles/mushroom.js", "type": "module"}],
         options={("group", "Bedroom Blinds"): {"step_id": "cover",
                                                "values": {"entities": ["cover.window_left", "cover.window_right"], "hide_members": False}}},
+        zones=[{"id": "work", "name": "Work", "latitude": 47.64, "longitude": -122.13, "radius": 606.0,
+                "icon": "mdi:microsoft-office", "passive": False}],
+        persons=[{"id": "chris_m", "name": "Chris", "user_id": "u1", "picture": None,
+                  "device_trackers": ["device_tracker.pixel_6_pro", "device_tracker.pixel_9_pro_xl"]}],
+        storage_helpers=[],
     )
 
 
@@ -66,7 +71,8 @@ class FakeHA:
                   "config/area_registry": ("areas", "area_id")}
 
     def __init__(self, snap):
-        for name in ("floors", "labels", "areas", "devices", "entities", "entries", "dashboards", "resources"):
+        for name in ("floors", "labels", "areas", "devices", "entities", "entries", "dashboards", "resources",
+                     "zones", "persons"):
             setattr(self, name, [dict(x) for x in getattr(snap, name)])
         self.calls = []
 
@@ -92,6 +98,33 @@ class FakeHA:
             if t == f"{base}/delete":
                 items[:] = [i for i in items if i[idk] != args[idk]]
                 return None
+        if t == "zone/list":
+            return [dict(x) for x in self.zones]
+        if t == "zone/create":
+            x = {"id": _slug(args["name"]), **args}
+            self.zones.append(x)
+            return dict(x)
+        if t == "zone/update":
+            zone_id = args.pop("zone_id")
+            x = next(z for z in self.zones if z["id"] == zone_id)
+            x.update(args)
+            return dict(x)
+        if t == "zone/delete":
+            self.zones = [z for z in self.zones if z["id"] != args["zone_id"]]
+            return None
+        if t == "person/list":
+            return {"storage": [dict(x) for x in self.persons], "config": []}
+        if t == "person/create":
+            x = {"id": _slug(args["name"]), **args}
+            self.persons.append(x)
+            return dict(x)
+        if t == "person/update":
+            person_id = args.pop("person_id")
+            x = next(q for q in self.persons if q["id"] == person_id)
+            x.update(args)
+            return dict(x)
+        if t.split("/")[0] in STORAGE_HELPER_DOMAINS and t.endswith("/list"):
+            return []
         if t == "config/device_registry/list":
             return [dict(x) for x in self.devices]
         if t == "config/device_registry/update":

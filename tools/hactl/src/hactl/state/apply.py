@@ -24,6 +24,20 @@ def run_change(client, c) -> str:
         else:
             client.ws({"type": f"{base}/{c.action}", **c.data})
         return ""
+    if c.kind == "zone":
+        if c.action == "create":
+            got = client.ws({"type": "zone/create", **_without_empty({k: v for k, v in c.data.items() if k != "id"})})[0]["id"]
+            if got != c.data["id"]:
+                raise HactlError(f"HA created zone id {got!r}, the manifest says {c.data['id']!r}: set id: {got} in people.yaml")
+        else:
+            client.ws({"type": f"zone/{c.action}", **c.data})
+        return ""
+    if c.kind == "person":
+        if c.action == "create":
+            client.ws({"type": "person/create", **_without_empty({k: v for k, v in c.data.items() if k != "id"})})
+        else:
+            client.ws({"type": "person/update", **c.data})
+        return ""
     if c.kind == "device":
         client.ws({"type": "config/device_registry/update", **c.data})
         return ""
