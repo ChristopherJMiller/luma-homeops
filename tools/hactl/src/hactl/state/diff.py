@@ -83,9 +83,11 @@ def _override_delta(d, cur, fields) -> dict:
 
 
 def find_device(match, devices):
+    """Manifests hold identifiers as strings; some integrations report ints (SmartRent: ['id', 676365])."""
     (kind, pair), = match.items()
+    want = [str(x) for x in pair]
     for dev in devices:
-        if list(pair) in [list(x) for x in dev.get(kind) or []]:
+        if want in [[str(y) for y in x] for x in dev.get(kind) or []]:
             return dev
     return None
 

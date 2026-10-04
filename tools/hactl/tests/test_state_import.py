@@ -53,3 +53,13 @@ def test_numeric_unique_ids_stay_strings(tmp_path):
     m = model.load(tmp_path)
     assert m.entities[0]["match"]["unique_id"] == "1741747401508"
     assert diff.plan(m, snap) == []
+
+
+def test_integer_device_identifiers_round_trip(tmp_path):
+    # SmartRent reports identifiers as ints (['id', 676365]); manifests hold strings.
+    snap = snapshot()
+    snap.devices.append({"id": "d9", "identifiers": [["id", 676365]], "connections": [], "name": "Kitchen Sink - Leak Sensor",
+                         "name_by_user": None, "area_id": "kitchen", "labels": [], "disabled_by": None,
+                         "manufacturer": "SmartRent", "model": "LeakSensor"})
+    importer.write(tmp_path, importer.build(snap))
+    assert diff.plan(model.load(tmp_path), snap) == []
