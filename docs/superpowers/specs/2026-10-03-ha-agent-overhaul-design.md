@@ -326,6 +326,13 @@ after Argo syncs.
 - Values that would otherwise be "set once by hand" are in git instead: the
   home SSID via `!secret` (§7.2) and the climate tunables via `initial:`
   (§7.6).
+- **As built (plan 2, 2026-10-03):** `create` is `{menu: [step ids], answers: {…}}`;
+  creation answers are options ∪ credentials ∪ `create.answers`. Built-in
+  dashboards `lovelace` and `map` are never created or deleted. `plan` exits
+  0/2/1; `apply` exits 0 only when converged. Options are read from each
+  entry's options-flow form (`suggested_value`/`default`) and the flow is
+  aborted. Device identifiers are compared as strings (SmartRent reports
+  ints). yamlfmt formats the manifests on commit.
 - **Not declarable**, and listed as such in `docs/ha.md`: users and
   long-lived tokens, the human step of interactive integrations, and runtime
   state (recorder history, restore-state).

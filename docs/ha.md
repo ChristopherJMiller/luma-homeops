@@ -16,6 +16,9 @@ HA on galaxy: `https://home.chrismiller.xyz`, namespace `home-assistant`, Argo a
 | `call DOMAIN.SERVICE` | Actions; locks/notify/tts/restart need `--confirmed` |
 | `deploy [--shot]` | After a push: wait for Argo + hook, then health (+ shots) |
 | `revision`, `selftest` | Config revision hash; read-only end-to-end check |
+| `import [--force]` | Write `state/` manifests from live HA (bootstrap; refuses to overwrite) |
+| `plan` | Diff `state/` manifests against live HA; exit 2 when there are changes |
+| `apply [--prune]` | Converge HA to the manifests; deletes only with `--prune`; never deletes integrations |
 
 `deploy` and `health` read the cluster with kubectl: `export KUBECONFIG=/tmp/galaxy-kubeconfig` first.
 
@@ -52,6 +55,20 @@ A failed hook: `kubectl -n home-assistant logs job/ha-reload`. It keeps the last
 
 HA's frontend keeps OAuth tokens in `localStorage.hassTokens`, not a cookie. `hactl shot` plants the hactl token there before the frontend boots, in a throwaway browser context. The wrapper drops the host's `LD_LIBRARY_PATH` (a system alsa-lib built against a newer glibc kills the nix-built browser). HA's frontend logs a harmless "Subscription not found" rejection on most loads; the report filters it.
 
-## Not in git (yet)
+## Declarative state (`cluster/home-assistant/state/`)
 
-Integrations/config entries, the entity/device/area registries, UI helpers, storage dashboards (`lovelace`, `map`, `claude-preview`) and Lovelace resources live in HA's `.storage`. The next plan describes them in `cluster/home-assistant/state/` with `hactl import/plan/apply`. Users and tokens can never be declared.
+HA's `.storage` parts are described in git and converged with `hactl apply` (terraform-style). `hactl deploy` runs `apply` after every push; `hactl health` reports a non-empty plan as drift.
+
+| File | Holds | Matched by | Managed |
+|---|---|---|---|
+| `areas.yaml` | floors, labels, areas | id (HA's slug of the name at creation) | fully; deletes need `--prune` |
+| `devices.yaml` | area, name, labels, disabled | one `identifiers`/`connections` pair (compared as strings) | listed devices and fields only |
+| `entities.yaml` | entity_id, name, icon, area, labels, hidden, disabled; `remove:` list | platform + unique_id | listed entities and fields only |
+| `helpers.yaml` | config-entry helpers: `create` (menu + answers), `options` | domain + title | fully; deletes need `--prune` |
+| `integrations.yaml` | integrations that must exist; `create`, `options`, `credentials`, `manual` | domain + title | presence + options; never deleted |
+| `dashboards.yaml` | storage dashboards, Lovelace resources | url_path / url | fully; deletes need `--prune` |
+| `credentials.yaml` | secrets for config flows (git-crypt; never print it) | key named by `credentials:` | — |
+
+To change any of it: edit the manifest, `hactl plan`, then commit and push (deploy applies), or `hactl apply` directly. Never change these things in the HA UI or with ad-hoc API calls; the next plan flags them and apply reverts them. yamlfmt formats these files on commit; that is expected.
+
+Cannot be declared: users and long-lived tokens; the human step of interactive integrations (Hue link button, Plex sign-in, phone app registration: `plan` shows their `manual:` text until done); runtime state (history, restore-state).
