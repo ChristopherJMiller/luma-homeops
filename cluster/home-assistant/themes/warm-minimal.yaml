@@ -9,6 +9,16 @@ Warm Minimal:
   mush-icon-border-radius: "14"
   mush-card-primary-font-weight: "600"
 
+  # card-mod theme rules (card-mod v4 tags each card with a `type-<card>` class).
+  # Light tiles: 18px corners and a transparent icon shape (replaces the per-card
+  # &lighttile block on 13 cards).
+  card-mod-theme: Warm Minimal
+  card-mod-card: |
+    :host(.type-custom-mushroom-light-card) ha-card,
+    ha-card.type-custom-mushroom-light-card { border-radius: 18px; }
+    :host(.type-custom-mushroom-light-card) mushroom-shape-icon,
+    ha-card.type-custom-mushroom-light-card mushroom-shape-icon { --shape-color: transparent; }
+
   modes:
     # =========================== DARK (hero) ===========================
     dark:
