@@ -101,7 +101,9 @@ def render(name, data) -> str:
             + yaml.safe_dump(data, sort_keys=False, allow_unicode=True, width=1000))
 
 
-def write(state_dir: Path, files: dict, force=False) -> list:
+def write(state_dir: Path, files: dict, force=False, only=None) -> list:
+    if only:
+        files = {n: d for n, d in files.items() if n in only}
     existing = [f"{n}.yaml" for n in files if (state_dir / f"{n}.yaml").exists()]
     if existing and not force:
         raise HactlError(f"refusing to overwrite {', '.join(existing)} (hand edits would be lost); use --force")

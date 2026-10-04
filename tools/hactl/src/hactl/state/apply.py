@@ -61,6 +61,12 @@ def run_change(client, c) -> str:
         if c.action == "delete":
             client.rest("DELETE", f"/api/config/config_entries/entry/{c.data['entry_id']}")
             return ""
+    if c.kind == "default-dashboard":
+        client.ws({"type": "frontend/set_system_data", **c.data})
+        return ""
+    if c.kind == "dashboard-config":
+        client.ws({"type": "lovelace/config/save", **c.data})
+        return ""
     if c.kind == "dashboard":
         data = _without_empty(c.data) if c.action == "create" else c.data
         client.ws({"type": f"lovelace/dashboards/{c.action}", **data})

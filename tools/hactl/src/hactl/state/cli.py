@@ -11,7 +11,7 @@ def _client():
 
 def compute(client, state_dir=None):
     m = model.load(state_dir or model.STATE_DIR)  # raises before any API call if the manifests are wrong
-    snap = live.fetch(client, want_options=diff.options_wanted(m))
+    snap = live.fetch(client, want_options=diff.options_wanted(m), want_configs=list(m.dashboard_configs))
     return m, snap, diff.plan(m, snap)
 
 
@@ -45,7 +45,8 @@ def _import(args) -> int:
     client = _client()
     entries = client.ws({"type": "config_entries/get"})[0]
     want = {(e["domain"], e["title"]) for e in entries if e["domain"] in model.HELPER_DOMAINS}
-    written = importer.write(model.STATE_DIR, importer.build(live.fetch(client, want_options=want)), force=args.force)
+    written = importer.write(model.STATE_DIR, importer.build(live.fetch(client, want_options=want)),
+                             force=args.force, only=args.only)
     lines = [f"wrote {paths.rel(p)}" for p in written] + ["next: review the files, then `hactl plan` (should say in sync)"]
     output.emit(args, [str(p) for p in written], lines)
     return 0
@@ -54,6 +55,7 @@ def _import(args) -> int:
 def register(sub) -> None:
     p = sub.add_parser("import", parents=[output.COMMON], help="write state/ manifests from live HA (bootstrap)")
     p.add_argument("--force", action="store_true", help="overwrite existing manifests (credentials.yaml is never touched)")
+    p.add_argument("--only", action="append", help="write only this manifest (e.g. people); repeatable")
     p.set_defaults(func=_import)
     p = sub.add_parser("plan", parents=[output.COMMON], help="diff state/ manifests against live HA (exit 2 = changes)")
     p.set_defaults(func=_plan)

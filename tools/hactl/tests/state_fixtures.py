@@ -50,6 +50,8 @@ def snapshot() -> Snapshot:
         persons=[{"id": "chris_m", "name": "Chris", "user_id": "u1", "picture": None,
                   "device_trackers": ["device_tracker.pixel_6_pro", "device_tracker.pixel_9_pro_xl"]}],
         storage_helpers=[],
+        system_core={"default_panel": "lovelace"},
+        dashboard_configs={},
     )
 
 
@@ -74,6 +76,8 @@ class FakeHA:
         for name in ("floors", "labels", "areas", "devices", "entities", "entries", "dashboards", "resources",
                      "zones", "persons"):
             setattr(self, name, [dict(x) for x in getattr(snap, name)])
+        self.system_core = dict(snap.system_core)
+        self.lovelace_configs = {}
         self.calls = []
 
     def ws(self, *commands):
@@ -98,6 +102,16 @@ class FakeHA:
             if t == f"{base}/delete":
                 items[:] = [i for i in items if i[idk] != args[idk]]
                 return None
+        if t == "frontend/get_system_data":
+            return {"value": dict(self.system_core)}
+        if t == "frontend/set_system_data":
+            self.system_core = dict(args["value"])
+            return None
+        if t == "lovelace/config":
+            return self.lovelace_configs.get(args.get("url_path"), {"views": []})
+        if t == "lovelace/config/save":
+            self.lovelace_configs[args.get("url_path")] = args["config"]
+            return None
         if t == "zone/list":
             return [dict(x) for x in self.zones]
         if t == "zone/create":

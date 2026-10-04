@@ -37,7 +37,7 @@ SCHEMA = {
     "helpers": {"helpers": ({"domain", "title", "create"}, {"options", "credentials"})},
     "integrations": {"integrations": ({"domain", "title"}, {"create", "options", "credentials", "manual"})},
     "dashboards": {
-        "dashboards": ({"url_path", "title"}, {"icon", "require_admin", "show_in_sidebar"}),
+        "dashboards": ({"url_path", "title"}, {"icon", "require_admin", "show_in_sidebar", "config"}),
         "resources": ({"url", "type"}, set()),
     },
     "people": {
@@ -63,6 +63,8 @@ class Manifest:
     persons: list = field(default_factory=list)
     credentials: dict = field(default_factory=dict)
     credentials_locked: bool = False
+    default_dashboard: str | None = None  # dashboards.yaml top-level `default:`
+    dashboard_configs: dict = field(default_factory=dict)  # url_path -> Lovelace config from dashboard_configs/<file>
 
 
 def _load_credentials(path: Path, problems: list):
@@ -84,8 +86,36 @@ def _load_credentials(path: Path, problems: list):
     return data, False
 
 
+SCALARS = {"dashboards": {"default"}}  # top-level non-list keys a file may carry
+
+
+def _load_dashboard_configs(state_dir: Path, dashboards: list, problems: list) -> dict:
+    out = {}
+    for d in dashboards:
+        name = d.get("config")
+        if name is None:
+            continue
+        if not isinstance(name, str):
+            problems.append(f"dashboards.yaml {d.get('url_path')}: config must be a file name in dashboard_configs/")
+            continue
+        path = state_dir / "dashboard_configs" / name
+        if not path.is_file():
+            problems.append(f"dashboards.yaml {d.get('url_path')}: config file dashboard_configs/{name} not found")
+            continue
+        try:
+            cfg = yaml.safe_load(path.read_text())
+        except yaml.YAMLError as e:
+            problems.append(f"dashboard_configs/{name}: {e}")
+            continue
+        if not isinstance(cfg, dict) or not isinstance(cfg.get("views"), list):
+            problems.append(f"dashboard_configs/{name}: must be a mapping with a `views:` list")
+            continue
+        out[d.get("url_path")] = cfg
+    return out
+
+
 def load(state_dir: Path = STATE_DIR) -> Manifest:
-    sections, problems = {}, []
+    sections, problems, scalars = {}, [], {}
     for name, file_sections in SCHEMA.items():
         path = state_dir / f"{name}.yaml"
         data = {}
@@ -97,8 +127,10 @@ def load(state_dir: Path = STATE_DIR) -> Manifest:
             if not isinstance(data, dict):
                 problems.append(f"{name}.yaml: expected a mapping")
                 data = {}
+        for key in SCALARS.get(name, ()):
+            scalars[key] = data.get(key)
         for key in data:
-            if key not in file_sections:
+            if key not in file_sections and key not in SCALARS.get(name, ()):
                 problems.append(f"{name}.yaml: unknown section {key!r} (expected: {', '.join(file_sections)})")
         for section, (required, optional) in file_sections.items():
             items = data.get(section) or []
@@ -118,7 +150,8 @@ def load(state_dir: Path = STATE_DIR) -> Manifest:
                 good.append(item)
             sections[section] = good
     creds, locked = _load_credentials(state_dir / CREDENTIALS, problems)
-    m = Manifest(**sections, credentials=creds, credentials_locked=locked)
+    m = Manifest(**sections, credentials=creds, credentials_locked=locked, default_dashboard=scalars.get("default"),
+                 dashboard_configs=_load_dashboard_configs(state_dir, sections.get("dashboards", []), problems))
     type_problems = check_types(m)
     problems += type_problems or check(m)  # cross-checks assume the types are right
     if problems:
@@ -145,6 +178,8 @@ STRING_FIELDS = {
 
 def check_types(m: Manifest) -> list:
     p = []
+    if m.default_dashboard is not None and not isinstance(m.default_dashboard, str):
+        p.append("dashboards.yaml: default must be a dashboard url_path (a string)")
     for section, (kind, fields) in STRING_FIELDS.items():
         for x in getattr(m, section):
             who = str(x.get("id") or x.get("url_path") or x.get("url") or x.get("title") or x.get("about") or "")

@@ -276,6 +276,19 @@ def diff_resources(declared, live) -> list:
     return out
 
 
+def diff_default_dashboard(declared, system_core) -> list:
+    if declared is None or system_core.get("default_panel") == declared:
+        return []
+    return [Change("update", "default-dashboard", "core", f"default_panel {system_core.get('default_panel')!r} -> {declared!r}",
+                   data={"key": "core", "value": {**system_core, "default_panel": declared}})]
+
+
+def diff_dashboard_configs(declared, live) -> list:
+    return [Change("update", "dashboard-config", u, "contents differ from the declared file",
+                   data={"url_path": None if u == "lovelace" else u, "config": cfg})
+            for u, cfg in sorted(declared.items()) if live.get(u) != cfg]
+
+
 def plan(m, snap) -> list:
     """Every change needed to make HA match the manifests, in apply order."""
     return (diff_registry("floor", m.floors, snap.floors)
@@ -289,7 +302,9 @@ def plan(m, snap) -> list:
             + diff_devices(m.devices, snap.devices)
             + diff_entities(m.entities, m.remove, snap.entities)
             + diff_dashboards(m.dashboards, snap.dashboards)
-            + diff_resources(m.resources, snap.resources))
+            + diff_resources(m.resources, snap.resources)
+            + diff_default_dashboard(m.default_dashboard, snap.system_core)
+            + diff_dashboard_configs(m.dashboard_configs, snap.dashboard_configs))
 
 
 def options_wanted(m) -> set:
