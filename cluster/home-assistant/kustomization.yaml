@@ -37,6 +37,12 @@ configMapGenerator:
   - name: ha-dashboards
     files:
       - dashboards/overview.yaml
+      - dashboards/overview_home.yaml
+      - dashboards/overview_living_room.yaml
+      - dashboards/overview_bedroom.yaml
+      - dashboards/overview_kitchen.yaml
+      - dashboards/overview_calendar.yaml
+      - dashboards/overview_energy.yaml
   - name: ha-themes
     files:
       - themes/warm-minimal.yaml

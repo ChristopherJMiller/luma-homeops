@@ -1,0 +1,22 @@
+title: Calendar
+icon: mdi:calendar
+cards:
+- type: custom:mushroom-title-card
+  title: Calendar
+  subtitle: Events & Schedules
+- type: calendar
+  entities:
+  - calendar.cmiller548_gmail_com
+  - calendar.chris_is_not_in_seattle_calendar
+  - calendar.birthdays
+  - calendar.holidays_in_united_states
+  - calendar.home_maintenance
+  - calendar.seattle_kraken_2022_23_schedule
+  - calendar.family
+- type: custom:mushroom-title-card
+  title: Current Events
+- type: custom:mushroom-entity-card
+  entity: calendar.chris_is_not_in_seattle_calendar
+  name: Travel Status
+  icon: mdi:airplane
+  icon_color: blue

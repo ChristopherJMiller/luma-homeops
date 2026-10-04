@@ -1,0 +1,42 @@
+title: Energy
+icon: mdi:lightning-bolt
+cards:
+- type: custom:mushroom-title-card
+  title: Energy Usage
+  subtitle: Power Monitoring
+- type: vertical-stack
+  cards:
+  - type: custom:mushroom-entity-card
+    entity: sensor.current_bill_electric_usage_to_date
+    name: Current Usage
+    icon: mdi:flash
+    icon_color: amber
+  - type: custom:mushroom-entity-card
+    entity: sensor.current_bill_electric_cost_to_date
+    name: Current Cost
+    icon: mdi:currency-usd
+    icon_color: green
+  - type: custom:mushroom-entity-card
+    entity: sensor.current_bill_electric_forecasted_usage
+    name: Forecasted Usage
+    icon: mdi:chart-line
+    icon_color: blue
+  - type: custom:mushroom-entity-card
+    entity: sensor.current_bill_electric_forecasted_cost
+    name: Forecasted Cost
+    icon: mdi:cash-clock
+    icon_color: orange
+- type: custom:mushroom-title-card
+  title: Monthly Typical
+- type: horizontal-stack
+  cards:
+  - type: custom:mushroom-entity-card
+    entity: sensor.typical_monthly_electric_usage
+    name: Typical Usage
+    icon: mdi:home-lightning-bolt
+    icon_color: purple
+  - type: custom:mushroom-entity-card
+    entity: sensor.typical_monthly_electric_cost
+    name: Typical Cost
+    icon: mdi:cash
+    icon_color: teal
