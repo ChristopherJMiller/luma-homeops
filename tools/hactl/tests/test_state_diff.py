@@ -186,3 +186,37 @@ def test_missing_helper_next_to_an_undeclared_one_of_its_domain_is_manual():
     changes = entries("helper", [renamed])
     assert [(c.action, c.key) for c in changes] == [("manual", "group/Blinds"), ("delete", "group/Bedroom Blinds")]
     assert "renamed" in changes[0].detail
+
+
+TWINS = [  # HA keys entities by (domain, platform, unique_id): template sensors may share a unique_id
+    {"entity_id": "sensor.show_commute", "platform": "template", "unique_id": "show_commute"},
+    {"entity_id": "binary_sensor.show_commute", "platform": "template", "unique_id": "show_commute"},
+]
+
+
+def test_remove_with_domain_picks_only_that_entity():
+    changes = diff.diff_entities([], [{"platform": "template", "unique_id": "show_commute", "domain": "sensor"}], TWINS)
+    assert [(c.action, c.key) for c in changes] == [("remove", "sensor.show_commute")]
+
+
+def test_ambiguous_remove_is_manual_never_a_guess():
+    changes = diff.diff_entities([], [{"platform": "template", "unique_id": "show_commute"}], TWINS)
+    assert [c.action for c in changes] == ["manual"]
+    assert "sensor.show_commute" in changes[0].detail and "binary_sensor.show_commute" in changes[0].detail
+    assert "domain" in changes[0].detail
+
+
+def test_ambiguous_override_is_manual_and_domain_resolves_it():
+    [c] = diff.diff_entities([{"match": {"platform": "template", "unique_id": "show_commute"}, "name": "X"}], [], TWINS)
+    assert c.action == "manual" and "domain" in c.detail
+    [c] = diff.diff_entities([{"match": {"platform": "template", "unique_id": "show_commute", "domain": "binary_sensor"},
+                               "name": "X"}], [], [dict(e, name=None) for e in TWINS])
+    assert (c.action, c.key) == ("update", "binary_sensor.show_commute")
+
+
+def test_match_and_remove_accept_an_optional_domain(tmp_path):
+    from state_fixtures import write_manifests
+    m = model.load(write_manifests(tmp_path, {"entities.yaml": (
+        "entities:\n  - match: {platform: template, unique_id: show_commute, domain: binary_sensor}\n    name: X\n"
+        "remove:\n  - {platform: template, unique_id: show_commute, domain: sensor}\n")}))
+    assert m.remove[0]["domain"] == "sensor" and m.entities[0]["match"]["domain"] == "binary_sensor"

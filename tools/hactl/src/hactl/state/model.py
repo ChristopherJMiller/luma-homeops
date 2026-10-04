@@ -32,7 +32,7 @@ SCHEMA = {
     "devices": {"devices": ({"match"}, {"about", "name", "area", "labels", "disabled"})},
     "entities": {
         "entities": ({"match"}, {"about", "entity_id", "name", "icon", "area", "labels", "hidden", "disabled"}),
-        "remove": ({"platform", "unique_id"}, {"about"}),
+        "remove": ({"platform", "unique_id"}, {"about", "domain"}),
     },
     "helpers": {"helpers": ({"domain", "title", "create"}, {"options", "credentials"})},
     "integrations": {"integrations": ({"domain", "title"}, {"create", "options", "credentials", "manual"})},
@@ -285,13 +285,15 @@ def check(m: Manifest) -> list:
     entity_keys = []
     for x in m.entities:
         mt = x.get("match")
-        if isinstance(mt, dict) and set(mt) == {"platform", "unique_id"} and all(isinstance(v, str) for v in mt.values()):
-            entity_keys.append((mt["platform"], mt["unique_id"]))
+        if (isinstance(mt, dict) and {"platform", "unique_id"} <= set(mt) <= {"platform", "unique_id", "domain"}
+                and all(isinstance(v, str) for v in mt.values())):
+            entity_keys.append((mt["platform"], mt["unique_id"], mt.get("domain")))
         else:
-            p.append(f"entity {_name(x)}: match must be {{platform: ..., unique_id: '...'}} (quote numeric ids)")
+            p.append(f"entity {_name(x)}: match must be {{platform: ..., unique_id: '...'}} plus optional domain"
+                     " (quote numeric ids)")
     for r in m.remove:
         if isinstance(r.get("platform"), str) and isinstance(r.get("unique_id"), str):
-            entity_keys.append((r["platform"], r["unique_id"]))
+            entity_keys.append((r["platform"], r["unique_id"], r.get("domain")))
         else:
             p.append(f"remove {r}: platform and unique_id must be strings (quote numeric ids)")
     p += [f"entity {d[0]}/{d[1]} is declared more than once (entities/remove)" for d in _dupes(entity_keys)]

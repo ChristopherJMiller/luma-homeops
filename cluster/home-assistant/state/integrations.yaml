@@ -54,9 +54,6 @@ integrations:
     title: Home
     manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> met'
   - domain: mobile_app
-    title: Pixel 6 Pro
-    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> mobile_app'
-  - domain: mobile_app
     title: Pixel 9 Pro XL
     manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> mobile_app'
   - domain: mqtt

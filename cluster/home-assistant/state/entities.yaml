@@ -9,4 +9,51 @@ entities:
       unique_id: 01M425PWDJPKY0NAJ4EC54F8ZC
     about: Camp Lamp (switch_as_x of switch.camp_lamp)
     entity_id: light.camp_lamp
-remove: []
+# Registry entries no integration provides any more (restored-only), removed 2026-10-03.
+remove:
+  - about: automation.wake_up_early (automation no longer in config)
+    platform: automation
+    unique_id: '1743475639161'
+  - about: camera.mail_amazon_delivery_camera (pre-2026 Mail and Packages prefix; live set is *_hello_chrismiller_xyz_mail_*)
+    platform: mail_and_packages
+    unique_id: 'imap.fastmail.com_Mail Amazon Delivery Camera_01K0G7CWPDJDAX9K4Y3AJJTDNW'
+  - about: camera.mail_usps_camera (pre-2026 Mail and Packages prefix; live set is *_hello_chrismiller_xyz_mail_*)
+    platform: mail_and_packages
+    unique_id: 'imap.fastmail.com_Mail USPS Camera_01K0G7CWPDJDAX9K4Y3AJJTDNW'
+  - about: sensor.mail_amazon_exception (pre-2026 Mail and Packages prefix; live set is *_hello_chrismiller_xyz_mail_*)
+    platform: mail_and_packages
+    unique_id: 'imap.fastmail.com_Mail Amazon Exception_01K0G7CWPDJDAX9K4Y3AJJTDNW'
+  - about: sensor.mail_amazon_hub_packages (pre-2026 Mail and Packages prefix; live set is *_hello_chrismiller_xyz_mail_*)
+    platform: mail_and_packages
+    unique_id: 'imap.fastmail.com_Mail Amazon Hub Packages_01K0G7CWPDJDAX9K4Y3AJJTDNW'
+  - about: sensor.mail_amazon_packages (pre-2026 Mail and Packages prefix; live set is *_hello_chrismiller_xyz_mail_*)
+    platform: mail_and_packages
+    unique_id: 'imap.fastmail.com_Mail Amazon Packages_01K0G7CWPDJDAX9K4Y3AJJTDNW'
+  - about: sensor.mail_amazon_packages_delivered (pre-2026 Mail and Packages prefix; live set is *_hello_chrismiller_xyz_mail_*)
+    platform: mail_and_packages
+    unique_id: 'imap.fastmail.com_Mail Amazon Packages Delivered_01K0G7CWPDJDAX9K4Y3AJJTDNW'
+  - about: sensor.mail_image_system_path (pre-2026 Mail and Packages prefix; live set is *_hello_chrismiller_xyz_mail_*)
+    platform: mail_and_packages
+    unique_id: 'imap.fastmail.com_Mail Image System Path_01K0G7CWPDJDAX9K4Y3AJJTDNW'
+  - about: sensor.mail_image_url (pre-2026 Mail and Packages prefix; live set is *_hello_chrismiller_xyz_mail_*)
+    platform: mail_and_packages
+    unique_id: 'imap.fastmail.com_Mail Image URL_01K0G7CWPDJDAX9K4Y3AJJTDNW'
+  - about: sensor.mail_usps_delivered (pre-2026 Mail and Packages prefix; live set is *_hello_chrismiller_xyz_mail_*)
+    platform: mail_and_packages
+    unique_id: 'imap.fastmail.com_Mail USPS Delivered_01K0G7CWPDJDAX9K4Y3AJJTDNW'
+  - about: sensor.mail_usps_delivering (pre-2026 Mail and Packages prefix; live set is *_hello_chrismiller_xyz_mail_*)
+    platform: mail_and_packages
+    unique_id: 'imap.fastmail.com_Mail USPS Delivering_01K0G7CWPDJDAX9K4Y3AJJTDNW'
+  - about: sensor.mail_usps_exception (pre-2026 Mail and Packages prefix; live set is *_hello_chrismiller_xyz_mail_*)
+    platform: mail_and_packages
+    unique_id: 'imap.fastmail.com_Mail USPS Exception_01K0G7CWPDJDAX9K4Y3AJJTDNW'
+  - about: sensor.mail_usps_mail (pre-2026 Mail and Packages prefix; live set is *_hello_chrismiller_xyz_mail_*)
+    platform: mail_and_packages
+    unique_id: 'imap.fastmail.com_Mail USPS Mail_01K0G7CWPDJDAX9K4Y3AJJTDNW'
+  - about: sensor.show_commute (superseded by binary_sensor.show_commute (2026-10-03); same unique_id, hence domain)
+    platform: template
+    unique_id: 'show_commute'
+    domain: sensor
+  - about: switch.smart_plug (SmartRent no longer reports it; removal approved by Chris 2026-10-03)
+    platform: smartrent
+    unique_id: '676391'

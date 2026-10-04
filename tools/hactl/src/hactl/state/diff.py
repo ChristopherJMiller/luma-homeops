@@ -161,15 +161,29 @@ def diff_devices(declared, devices) -> list:
     return out
 
 
+def _entity_matches(entities, platform, unique_id, domain=None) -> list:
+    """HA keys entities by (domain, platform, unique_id): e.g. a template sensor and binary_sensor may share one."""
+    return [e for e in entities if e["platform"] == platform and str(e["unique_id"]) == unique_id
+            and (domain is None or e["entity_id"].split(".", 1)[0] == domain)]
+
+
+def _ambiguous(found) -> str:
+    return f"matches {', '.join(sorted(e['entity_id'] for e in found))}: add `domain:` to say which"
+
+
 def diff_entities(declared, remove, entities) -> list:
-    by_key = {(e["platform"], str(e["unique_id"])): e for e in entities}
     out = []
     for d in declared:
-        e = by_key.get((d["match"]["platform"], d["match"]["unique_id"]))
-        if e is None:
-            out.append(Change("manual", "entity", d.get("about") or f"{d['match']['platform']}/{d['match']['unique_id']}",
-                              "not found in HA: update its match"))
+        mt = d["match"]
+        found = _entity_matches(entities, mt["platform"], mt["unique_id"], mt.get("domain"))
+        label = d.get("about") or f"{mt['platform']}/{mt['unique_id']}"
+        if not found:
+            out.append(Change("manual", "entity", label, "not found in HA: update its match"))
             continue
+        if len(found) > 1:
+            out.append(Change("manual", "entity", label, _ambiguous(found)))
+            continue
+        e = found[0]
         delta = _override_delta(d, e, ENTITY_FIELDS)
         if "entity_id" in d and d["entity_id"] != e["entity_id"]:
             delta["new_entity_id"] = d["entity_id"]
@@ -177,8 +191,12 @@ def diff_entities(declared, remove, entities) -> list:
             out.append(Change("update", "entity", e["entity_id"], _describe(delta, {**e, "new_entity_id": e["entity_id"]}),
                               data={"entity_id": e["entity_id"], **delta}))
     for r in remove:
-        e = by_key.get((r["platform"], r["unique_id"]))
-        if e is not None:
+        found = _entity_matches(entities, r["platform"], r["unique_id"], r.get("domain"))
+        if len(found) > 1:
+            out.append(Change("manual", "entity", r.get("about") or f"{r['platform']}/{r['unique_id']}",
+                              "remove: " + _ambiguous(found)))
+        elif found:
+            e = found[0]
             out.append(Change("remove", "entity", e["entity_id"], "listed under remove:", data={"entity_id": e["entity_id"]}))
     return out
 
