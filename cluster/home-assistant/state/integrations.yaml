@@ -62,12 +62,24 @@ integrations:
   - domain: mqtt
     title: mosquitto
     manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> mqtt'
+  - domain: octoprint
+    title: 192.168.0.243
+    manual: 'HA: Add integration -> OctoPrint, host 192.168.0.243, port 80, path /, SSL off; then approve the Home Assistant app key in OctoPrint (Settings -> Application Keys)'
   - domain: opower
     title: Seattle City Light (SCL) (cmiller548)
     manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> opower'
+  # Plex by its Service name via the manual-setup flow: plex.tv sign-in stores whatever address
+  # plex.tv advertises (the pod IP), which breaks whenever the pod moves. Token in credentials.yaml.
   - domain: plex
-    title: http://10.244.4.204:32400
-    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> plex'
+    title: http://mm-plex.media.svc.cluster.local:32400
+    create:
+      menu: [manual_setup]
+      answers:
+        host: mm-plex.media.svc.cluster.local
+        port: 32400
+        ssl: false
+        verify_ssl: true
+    credentials: plex
   - domain: radio_browser
     title: Radio Browser
     manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> radio_browser'
@@ -86,9 +98,6 @@ integrations:
   - domain: thread
     title: Thread
     manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> thread'
-  - domain: waze_travel_time
-    title: Seattle Work Commute
-    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> waze_travel_time'
   - domain: workday
     title: Workday Sensor CA ON
     manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> workday'
