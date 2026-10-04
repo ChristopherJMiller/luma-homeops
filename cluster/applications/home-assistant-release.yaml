@@ -96,7 +96,9 @@ spec:
               unit_time: h  # degrees per hour
               time_window: 00:30:00    # 30 minute window
 
-          # http: moved to HA storage in 2026.9; declared in cluster/home-assistant/state/system.yaml
+          # http moved to HA storage in 2026.9 (declared in cluster/home-assistant/state/system.yaml);
+          # Empty (= null) on purpose: drops the chart default block, which HA would flag as ignored YAML.
+          http:
         ingress:
           enabled: true
           className: traefik
