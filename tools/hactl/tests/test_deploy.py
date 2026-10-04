@@ -161,3 +161,20 @@ def test_deploy_refuses_uncommitted_state_edits(monkeypatch):
     monkeypatch.setattr(deploy, "_git", lambda *a: answers.get(a[0], ""))
     with pytest.raises(HactlError, match="commit"):
         deploy._run(argparse.Namespace(timeout=10, shot=False, json=False))
+
+
+def test_loaded_revision_wins_over_a_stale_failed_hook():
+    # A push that starts no sync leaves the previous (failed) ha-reload Job around; if HA already
+    # runs the wanted revision that must not stop the deploy.
+    assert deploy.config_loaded("r1", loaded=lambda: "r1", hook=lambda: "failed") is True
+
+
+def test_want_revision_comes_from_head_not_the_working_tree(monkeypatch):
+    seen = {}
+
+    def fake_git(*args):
+        seen["args"] = args
+        return 'sensor:\n  - platform: template\n    state: "abcdef012345"\n'
+    monkeypatch.setattr(deploy, "_git", fake_git)
+    assert deploy.committed_revision() == "abcdef012345"
+    assert seen["args"][0] == "show" and seen["args"][1].startswith("HEAD:")

@@ -5,8 +5,9 @@
 #
 # Two phases, armed by input_boolean.wake_up_pending so a daytime flip of the
 # bedroom switch never triggers "start your day":
-#   Phase 1 (Gentle)  — 1 min before the phone alarm: disable circadian, ease the
-#                       bedroom into a warm dim glow, and ARM the routine.
+#   Phase 1 (Gentle)  — 1 min before the phone alarm: take the bedroom lamps out of
+#                       adaptive lighting (manual), ease them into a warm dim glow,
+#                       and ARM the routine. Other rooms keep adapting (sleep mode).
 #   Phase 2 (Start)   — flipping the bedroom light switch WHILE ARMED runs
 #                       script.start_your_day (via bedroom.yaml), which re-enables
 #                       circadian and turns the rooms on, then disarms.
@@ -44,15 +45,11 @@ script:
       - action: input_boolean.turn_off
         target:
           entity_id: input_boolean.wake_up_pending
-      # clear bedtime sleep mode (night_routine.yaml) before re-enabling
-      # adaptation, or the day would start at 1% / 1000K
+      # clear bedtime sleep mode (night_routine.yaml), or the day would start at 1% / 1000K
       - action: switch.turn_off
         target:
           entity_id: switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian
-      - action: switch.turn_on
-        target:
-          entity_id: switch.circadian_adaptive_lighting_circadian
-      # bedroom back to Auto (Phase 1's warm dim was manual), then the living room on in Auto
+      # bedroom back to Auto (Phase 1 made its lamps manual), then the living room on in Auto
       - action: script.room_auto
         data:
           room: bedroom
@@ -67,8 +64,8 @@ automation:
   - id: morning_wake_up_gentle
     alias: Morning - Wake Up Gentle Light
     description: >-
-      One minute before the phone alarm, disable circadian lighting and ease the
-      bedroom into a warm dim glow, then arm the "start your day" trigger.
+      One minute before the phone alarm, take the bedroom lamps out of adaptive
+      lighting and ease them into a warm dim glow, then arm "start your day".
     triggers:
       - trigger: time
         at: sensor.wake_up_light_time
@@ -77,9 +74,13 @@ automation:
         entity_id: person.chris_m
         zone: zone.home
     actions:
-      - action: switch.turn_off
-        target:
+      # Per-room manual control, not the global adaptive-lighting switch: turning that off
+      # left the whole house unadapted all day whenever "start your day" didn't happen.
+      - action: adaptive_lighting.set_manual_control
+        data:
           entity_id: switch.circadian_adaptive_lighting_circadian
+          lights: [light.nightstand_lamp, light.dresser_lamp, light.floor_lamp]
+          manual_control: true
       - action: light.turn_on
         target:
           entity_id: light.bedroom_all
@@ -96,7 +97,7 @@ automation:
   # Safety — auto-disarm if the switch flip never happens (e.g. slept in / away)
   - id: morning_disarm_timeout
     alias: Morning - Disarm Wake Pending (timeout)
-    description: Clear the armed flag 3 hours after Phase 1 if Start Your Day never ran.
+    description: 3 hours after Phase 1, if Start Your Day never ran, disarm and hand the bedroom back to adaptive lighting.
     triggers:
       - trigger: state
         entity_id: input_boolean.wake_up_pending
@@ -106,4 +107,7 @@ automation:
       - action: input_boolean.turn_off
         target:
           entity_id: input_boolean.wake_up_pending
+      - action: script.room_auto
+        data:
+          room: bedroom
     mode: single

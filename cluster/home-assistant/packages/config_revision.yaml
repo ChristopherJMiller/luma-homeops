@@ -7,4 +7,4 @@ template:
       - name: HA Config Revision
         unique_id: ha_config_revision
         icon: mdi:source-commit
-        state: "bc1f0f849896"
+        state: "7947b2923b09"

@@ -162,3 +162,35 @@ automation:
         data:
           option: Auto
     mode: queued
+
+  # Adaptive lighting resets EVERY light when sleep mode or its main switch changes
+  # (22:30, 10:00, the Sleep/Adaptive chips) and on restart; a room holding a scene
+  # gets it back (Chris, 2026-10-03: scenes hold until Auto).
+  - id: lighting_hold_scenes_after_adaptive_reset
+    alias: Lighting - Re-apply Held Scenes After Adaptive Resets
+    description: After adaptive lighting's global resets, every room that holds a scene and is on gets its scene back.
+    triggers:
+      - trigger: state
+        entity_id:
+          - switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian
+          - switch.circadian_adaptive_lighting_circadian
+        not_from: [unavailable, unknown]
+        not_to: [unavailable, unknown]
+      - trigger: homeassistant
+        event: start
+    actions:
+      - delay: "00:00:05"
+      - repeat:
+          for_each: [living_room, bedroom, kitchen]
+          sequence:
+            - if:
+                - condition: template
+                  value_template: >-
+                    {{ states('input_select.' ~ repeat.item ~ '_light_mode') not in ['Auto', 'unknown', 'unavailable']
+                       and is_state('light.' ~ repeat.item ~ '_all', 'on') }}
+              then:
+                - action: script.room_scene
+                  data:
+                    room: "{{ repeat.item }}"
+                    scene: "{{ states('input_select.' ~ repeat.item ~ '_light_mode') }}"
+    mode: restart

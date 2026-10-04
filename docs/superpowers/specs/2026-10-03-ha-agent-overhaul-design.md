@@ -590,6 +590,17 @@ whole feature can be paused from the dashboard.
   ignores `unknown` (stateless entities sit there).
 - Every device is in an area; a `Network` area holds the Zigbee bridge, phone,
   IMAP mailbox and Plex server.
+- Final review fixes: climate decision sensors are `unavailable` while an input is
+  unknown, the insert sensor is trigger-based (survives reloads), and the
+  actuators resync on the first known value / when Climate Auto returns — the
+  state-based version could lose the AC's off edge after a deploy. AC #1 follows
+  `house_occupied` (Chris: guests keep cooling), has ±1 °F / 5 min hysteresis on
+  the free-cooling edge, and is only turned off from `cool`. The floor fan resumes
+  after a print only if climate paused it. Held scenes survive adaptive lighting's
+  global resets (Chris: "scene holds"): a guardian re-applies them after sleep-mode
+  / main-switch changes and restarts. The morning routine marks only the bedroom
+  lamps manual instead of switching adaptive lighting off for the house.
+- §7.3's "dashboard chips stop pointing at Hue scenes" moved to plan 5 (§8).
 
 ## 8. Phase 4 — dashboard
 

@@ -7,6 +7,7 @@ from hactl import output
 from hactl.errors import HactlError
 
 RESTORE = "hactl_capture_restore"
+AL_SWITCH = "switch.circadian_adaptive_lighting_circadian"
 
 
 def light_entry(state: dict) -> dict:
@@ -15,7 +16,7 @@ def light_entry(state: dict) -> dict:
     a = state["attributes"]
     out = {"state": "on"}
     if a.get("brightness") is not None:
-        out["brightness"] = a["brightness"]
+        out["brightness"] = max(1, a["brightness"])  # Hue's 1% reads back as 0, which replays as off
     mode = a.get("color_mode")
     if mode == "color_temp" and a.get("color_temp_kelvin"):
         out["color_temp_kelvin"] = a["color_temp_kelvin"]
@@ -46,13 +47,21 @@ def render(entry: dict) -> str:
 def capture(client, lights: list, scene_id: str, name: str, activate=None, settle=4.0) -> dict:
     if activate:
         client.post("/api/services/scene/create", {"scene_id": RESTORE, "snapshot_entities": lights})
-        client.post("/api/services/scene/turn_on", {"entity_id": activate})
-        time.sleep(settle)
     try:
+        if activate:
+            client.post("/api/services/scene/turn_on", {"entity_id": activate})
+            time.sleep(settle)
         return scene_entry(scene_id, name, [client.get(f"/api/states/{e}") for e in lights])
     finally:
         if activate:
             client.post("/api/services/scene/turn_on", {"entity_id": f"scene.{RESTORE}"})
+            # Both scene changes made adaptive lighting mark the lamps manual (take_over_control):
+            # hand them back, or they stop adapting while their room still says Auto.
+            try:
+                client.post("/api/services/adaptive_lighting/set_manual_control",
+                            {"entity_id": AL_SWITCH, "lights": lights, "manual_control": False})
+            except HactlError:
+                pass  # no adaptive lighting here
 
 
 def _run(args) -> int:

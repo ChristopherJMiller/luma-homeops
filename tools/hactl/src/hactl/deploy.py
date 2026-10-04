@@ -107,9 +107,16 @@ def wait_until(check, what, timeout, interval=10, clock=time.monotonic, sleep=ti
 
 
 def config_loaded(want, loaded, hook) -> bool:
+    if loaded() == want:  # a stale failed Job from an earlier sync doesn't matter once HA runs it
+        return True
     if hook() == "failed":
         raise Fatal("the ha-reload hook failed: kubectl -n home-assistant logs job/ha-reload")
-    return loaded() == want
+    return False
+
+
+def committed_revision() -> str:
+    """The revision HEAD carries (not the working tree's: uncommitted edits never reach HA)."""
+    return revision.parse(_git("show", f"HEAD:{paths.rel(paths.HA_DIR / revision.REVISION_FILE)}"))
 
 
 def wait_for_rollout(head, timeout, status=argo_status, deployment=deployment_status, ha_running=None,
@@ -122,7 +129,7 @@ def wait_for_rollout(head, timeout, status=argo_status, deployment=deployment_st
         ha_running = ha_running or (lambda: client.get("/api/config").get("state") == "RUNNING")
         config_revision = config_revision or (lambda: client.get("/api/states/sensor.ha_config_revision")["state"])
     if want_revision is None:
-        want_revision = revision.parse((paths.HA_DIR / revision.REVISION_FILE).read_text())
+        want_revision = committed_revision()
     timing = {"clock": clock, "sleep": sleep, "log": log}
     wait_synced(head, status=lambda: status(CONFIG_APP), timeout=timeout, **timing)
     root = wait_synced(head, status=lambda: status(ROOT_APP), timeout=timeout, **timing)

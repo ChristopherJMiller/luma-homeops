@@ -53,7 +53,28 @@ def test_capture_activates_reads_then_restores():
     entry = scene.capture(fake, ["light.a"], "x", "X", activate="scene.hue_x", settle=0)
     assert entry["entities"]["light.a"] == {"state": "on", "brightness": 5}
     assert [c[0] for c in fake.calls] == ["/api/services/scene/create", "/api/services/scene/turn_on",
-                                          "/api/services/scene/turn_on"]
+                                          "/api/services/scene/turn_on", "/api/services/adaptive_lighting/set_manual_control"]
     assert fake.calls[0][1] == {"scene_id": "hactl_capture_restore", "snapshot_entities": ["light.a"]}
     assert fake.calls[1][1] == {"entity_id": "scene.hue_x"}
     assert fake.calls[2][1] == {"entity_id": "scene.hactl_capture_restore"}
+
+
+def test_on_light_never_captures_brightness_zero():
+    # Hue's 1% reads back as brightness 0, which replays as off
+    assert scene.light_entry(st("light.n", "on", brightness=0, color_mode="xy", xy_color=[0.5, 0.4]))["brightness"] == 1
+
+
+def test_capture_hands_the_lights_back_to_adaptive_lighting_after_restore():
+    fake = FakeClient({"light.a": st("light.a", "on", brightness=5, color_mode="brightness")})
+    scene.capture(fake, ["light.a"], "x", "X", activate="scene.hue_x", settle=0)
+    assert fake.calls[-1] == ("/api/services/adaptive_lighting/set_manual_control",
+                              {"entity_id": scene.AL_SWITCH, "lights": ["light.a"], "manual_control": False})
+
+
+def test_interrupted_settle_still_restores(monkeypatch):
+    import pytest
+    fake = FakeClient({"light.a": st("light.a", "on", brightness=5, color_mode="brightness")})
+    monkeypatch.setattr(scene.time, "sleep", lambda s: (_ for _ in ()).throw(KeyboardInterrupt()))
+    with pytest.raises(KeyboardInterrupt):
+        scene.capture(fake, ["light.a"], "x", "X", activate="scene.hue_x", settle=1)
+    assert ("/api/services/scene/turn_on", {"entity_id": "scene.hactl_capture_restore"}) in fake.calls

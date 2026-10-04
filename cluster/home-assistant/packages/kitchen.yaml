@@ -12,14 +12,20 @@ automation:
     triggers:
       - trigger: sun
         event: sunset
+        id: sunset
       - trigger: state
         entity_id: binary_sensor.house_occupied
         from: "off"
         to: "on"
     conditions:
-      - condition: state
-        entity_id: sun.sun
-        state: below_horizon
+      # sun.sun may not read below_horizon yet when the sunset trigger itself fires
+      - condition: or
+        conditions:
+          - condition: trigger
+            id: sunset
+          - condition: state
+            entity_id: sun.sun
+            state: below_horizon
       - condition: state
         entity_id: binary_sensor.house_occupied
         state: "on"

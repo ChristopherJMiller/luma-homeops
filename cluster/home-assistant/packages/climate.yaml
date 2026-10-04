@@ -4,12 +4,21 @@
 # slider being open means the insert is in. Tunables are input_numbers whose
 # `initial:` makes git the source of truth (edit them here, not in the UI).
 #
+# Safety rules (plan-4 review): a decision sensor is `unavailable` while any of
+# its inputs is unknown, so missing data never sends a command; the actuator
+# automations act on the first known value after a reload (so they resync),
+# and AC #1 is only ever turned off from `cool` (a manual fan mode is left alone).
+#
 # GitOps source of truth (see bedroom.yaml header for the mount mechanism).
 
 input_boolean:
   climate_auto:
     name: Climate Auto
     icon: mdi:thermostat-auto
+  # Set when climate paused the floor fan for a print, so only that pause is undone.
+  floor_fan_paused_for_print:
+    name: Floor Fan Paused for Print
+    icon: mdi:fan-off
 
 input_number:
   free_cooling_delta:
@@ -45,42 +54,72 @@ input_number:
     mode: box
 
 template:
-  - binary_sensor:
+  # Trigger-based so it keeps its state across reloads and restarts (a state-based
+  # template with delay_on would sit `unknown` for 30 min after every deploy).
+  - triggers:
+      - trigger: state
+        entity_id: binary_sensor.slider_door_contact
+        to: "on"
+        for: "00:30:00"
+      - trigger: state
+        entity_id: binary_sensor.slider_door_contact
+        to: "off"
+        for: "00:05:00"
+      - trigger: homeassistant
+        event: start
+      - trigger: event
+        event_type: event_template_reloaded
+    binary_sensor:
       - name: Window Insert Installed
         unique_id: window_insert_installed
         icon: mdi:window-shutter-open
-        delay_on: "00:30:00"
-        delay_off: "00:05:00"
-        state: "{{ is_state('binary_sensor.slider_door_contact', 'on') }}"
+        state: >-
+          {% if trigger.platform == 'state' %}{{ trigger.to_state.state == 'on' }}
+          {% elif this.state in ['on', 'off'] %}{{ this.state == 'on' }}
+          {% else %}{{ is_state('binary_sensor.slider_door_contact', 'on') }}{% endif %}
 
+  - binary_sensor:
       - name: Free Cooling Wanted
         unique_id: free_cooling_wanted
         icon: mdi:weather-windy
         delay_on: "00:10:00"
         delay_off: "00:10:00"
+        availability: >-
+          {{ states('binary_sensor.window_insert_installed') in ['on', 'off']
+             and states('sensor.living_room_temperature') | is_number
+             and state_attr('weather.forecast_home', 'temperature') | is_number }}
         state: >-
-          {% set indoor = states('sensor.living_room_temperature') | float(none) %}
-          {% set outdoor = state_attr('weather.forecast_home', 'temperature') | float(none) %}
+          {% set indoor = states('sensor.living_room_temperature') | float %}
+          {% set outdoor = state_attr('weather.forecast_home', 'temperature') | float %}
           {% set aqi = states('sensor.airnow_air_quality_index') | float(none) %}
           {{ is_state('binary_sensor.window_insert_installed', 'on')
-             and indoor is not none and outdoor is not none
              and outdoor <= indoor - states('input_number.free_cooling_delta') | float(2)
              and indoor >= states('input_number.free_cooling_floor') | float(70)
              and (aqi is none or aqi <= states('input_number.aqi_limit') | float(100)) }}
 
+      # Hysteresis on both edges: the threshold (on at T, off below T - 2) and the
+      # "outside air can't do it" margin (+1°F to start, -1°F to stop), plus 5 min
+      # either way, so an IR compressor isn't short-cycled.
       - name: AC Cool Wanted
         unique_id: ac_cool_wanted
         icon: mdi:snowflake
+        delay_on: "00:05:00"
+        delay_off: "00:05:00"
+        availability: >-
+          {{ states('binary_sensor.window_insert_installed') in ['on', 'off']
+             and states('binary_sensor.house_occupied') in ['on', 'off']
+             and states('sensor.living_room_temperature') | is_number
+             and state_attr('weather.forecast_home', 'temperature') | is_number }}
         state: >-
-          {% set indoor = states('sensor.living_room_temperature') | float(none) %}
-          {% set outdoor = state_attr('weather.forecast_home', 'temperature') | float(none) %}
+          {% set indoor = states('sensor.living_room_temperature') | float %}
+          {% set outdoor = state_attr('weather.forecast_home', 'temperature') | float %}
           {% set threshold = states('input_number.ac_cool_threshold') | float(78) %}
           {% set delta = states('input_number.free_cooling_delta') | float(2) %}
+          {% set on = this.state == 'on' %}
           {{ is_state('binary_sensor.window_insert_installed', 'on')
-             and is_state('binary_sensor.chris_home', 'on')
-             and indoor is not none
-             and indoor >= (threshold - 2 if this.state == 'on' else threshold)
-             and (outdoor is none or outdoor > indoor - delta) }}
+             and is_state('binary_sensor.house_occupied', 'on')
+             and indoor >= (threshold - 2 if on else threshold)
+             and outdoor > indoor - delta + (-1 if on else 1) }}
 
   - sensor:
       - name: Free Cooling Status
@@ -102,12 +141,17 @@ template:
 automation:
   - id: climate_vent_fan_free_cooling
     alias: Climate - Vent Fan Follows Free Cooling
-    description: While the insert is in, the vent fan runs exactly when free cooling is wanted.
+    description: >-
+      While the insert is in, the vent fan runs exactly when free cooling is wanted;
+      resyncs on the first known value after a reload and when Climate Auto comes back on.
     triggers:
       - trigger: state
         entity_id: binary_sensor.free_cooling_wanted
-        not_from: [unavailable, unknown]
         not_to: [unavailable, unknown]
+      - trigger: state
+        entity_id: input_boolean.climate_auto
+        from: "off"
+        to: "on"
     conditions:
       - condition: state
         entity_id: input_boolean.climate_auto
@@ -116,26 +160,34 @@ automation:
         entity_id: binary_sensor.window_insert_installed
         state: "on"
       - condition: template
-        value_template: "{{ states('switch.vent_fan_switch') not in ['unavailable', 'unknown'] }}"
+        value_template: >-
+          {{ states('binary_sensor.free_cooling_wanted') in ['on', 'off']
+             and states('switch.vent_fan_switch') not in ['unavailable', 'unknown'] }}
     actions:
-      - action: "switch.turn_{{ trigger.to_state.state }}"
+      - action: "switch.turn_{{ states('binary_sensor.free_cooling_wanted') }}"
         target:
           entity_id: switch.vent_fan_switch
-    mode: single
+    mode: queued
 
   - id: climate_floor_fan_print_pause
     alias: Climate - Floor Fan Off While Printing
-    description: The oscillating fan next to the printer warps prints. Off while printing, on after; a manual change sticks.
+    description: >-
+      The oscillating fan next to the printer warps prints: paused while printing
+      and resumed afterwards (even if OctoPrint was unavailable when the print ended).
+      Only a pause climate made is undone, so a manual off sticks.
     triggers:
       - trigger: state
         entity_id: binary_sensor.octoprint_printing
-        from: "off"
         to: "on"
         id: printing
       - trigger: state
         entity_id: binary_sensor.octoprint_printing
-        from: "on"
         to: "off"
+        id: done
+      - trigger: state
+        entity_id: input_boolean.climate_auto
+        from: "off"
+        to: "on"
         id: done
     conditions:
       - condition: state
@@ -144,35 +196,88 @@ automation:
       - condition: template
         value_template: "{{ states('switch.floor_fan') not in ['unavailable', 'unknown'] }}"
     actions:
-      - action: "{{ 'switch.turn_off' if trigger.id == 'printing' else 'switch.turn_on' }}"
-        target:
-          entity_id: switch.floor_fan
+      - choose:
+          - conditions:
+              - condition: trigger
+                id: printing
+              - condition: state
+                entity_id: switch.floor_fan
+                state: "on"
+            sequence:
+              - action: switch.turn_off
+                target:
+                  entity_id: switch.floor_fan
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.floor_fan_paused_for_print
+          - conditions:
+              - condition: trigger
+                id: done
+              - condition: state
+                entity_id: input_boolean.floor_fan_paused_for_print
+                state: "on"
+              - condition: not
+                conditions:
+                  - condition: state
+                    entity_id: binary_sensor.octoprint_printing
+                    state: "on"
+            sequence:
+              - action: switch.turn_on
+                target:
+                  entity_id: switch.floor_fan
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.floor_fan_paused_for_print
     mode: queued
 
   - id: climate_ac_follows_cool_wanted
     alias: Climate - AC Follows Cooling Need
     description: >-
       AC #1 (in the insert, IR through SwitchBot: one-way, so HA's state is
-      assumed) cools while the insert is in, Chris is home, the room is hot
-      and outside air can't do it.
+      assumed) cools while the insert is in, the house is occupied, the room is
+      hot and outside air can't do it. Off when that stops or the house empties,
+      but only from cool: a fan mode set by hand is left alone.
     triggers:
       - trigger: state
         entity_id: binary_sensor.ac_cool_wanted
-        not_from: [unavailable, unknown]
         not_to: [unavailable, unknown]
+        id: sync
+      - trigger: state
+        entity_id: input_boolean.climate_auto
+        from: "off"
+        to: "on"
+        id: sync
+      - trigger: state
+        entity_id: binary_sensor.house_occupied
+        from: "on"
+        to: "off"
+        id: away
     conditions:
       - condition: state
         entity_id: input_boolean.climate_auto
         state: "on"
-      - condition: state
-        entity_id: binary_sensor.window_insert_installed
-        state: "on"
       - condition: template
         value_template: "{{ states('climate.air_conditioner') not in ['unavailable', 'unknown'] }}"
     actions:
-      - action: climate.set_hvac_mode
-        target:
-          entity_id: climate.air_conditioner
-        data:
-          hvac_mode: "{{ 'cool' if trigger.to_state.state == 'on' else 'off' }}"
-    mode: single
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ trigger.id == 'sync' and is_state('binary_sensor.ac_cool_wanted', 'on') }}"
+            sequence:
+              - action: climate.set_hvac_mode
+                target:
+                  entity_id: climate.air_conditioner
+                data:
+                  hvac_mode: cool
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ (trigger.id == 'away' or is_state('binary_sensor.ac_cool_wanted', 'off'))
+                     and is_state('climate.air_conditioner', 'cool') }}
+            sequence:
+              - action: climate.set_hvac_mode
+                target:
+                  entity_id: climate.air_conditioner
+                data:
+                  hvac_mode: "off"
+    mode: queued
