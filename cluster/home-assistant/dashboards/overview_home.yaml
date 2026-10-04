@@ -68,11 +68,7 @@ cards:
               radial-gradient(130% 200% at 10% -20%, rgba(221,161,94,0.22), transparent 60%),
               var(--card-background-color);
             border-radius: 24px;
-            --mush-icon-size: 52px;
           }
-          mushroom-shape-icon { --shape-color: transparent; }
-          mushroom-state-info $ .primary { font-size: 22px; font-weight: 700; }
-          mushroom-state-info $ .secondary { font-size: 14px; }
     # ---------- TODAY: transit (work days only) + mail ----------
     # Household chips: guest mode, the climate brain's verdict, air quality.
     - type: custom:mushroom-chips-card
@@ -98,8 +94,9 @@ cards:
           content: "AQI {{ states('sensor.airnow_air_quality_index') }}"
           icon: mdi:air-filter
           icon_color: >-
-            {% set a = states('sensor.airnow_air_quality_index') | float(0) %}
-            {{ 'red' if a > 100 else ('amber' if a > 50 else 'green') }}
+            {% set a = states('sensor.airnow_air_quality_index') | float(none) %}
+            {% set limit = states('input_number.aqi_limit') | float(100) %}
+            {{ 'disabled' if a is none else ('red' if a > limit else ('amber' if a > 50 else 'green')) }}
     # Only while printing.
     - type: conditional
       conditions:
@@ -139,7 +136,6 @@ cards:
         card_mod:
           style: |
             ha-card { border-radius: 20px; }
-            mushroom-shape-icon { --shape-color: transparent; }
     - type: custom:mushroom-chips-card
       alignment: start
       chips:
@@ -215,7 +211,6 @@ cards:
       card_mod:
         style: |
           ha-card { border-radius: 22px; }
-          mushroom-shape-icon { --shape-color: transparent; }
 # ---------- REMINDERS ----------
 - type: vertical-stack
   view_layout:

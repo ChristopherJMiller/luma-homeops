@@ -180,8 +180,9 @@ cards:
           content: "AQI {{ states('sensor.airnow_air_quality_index') }}"
           icon: mdi:air-filter
           icon_color: >-
-            {% set a = states('sensor.airnow_air_quality_index') | float(0) %}
-            {{ 'red' if a > 100 else ('amber' if a > 50 else 'green') }}
+            {% set a = states('sensor.airnow_air_quality_index') | float(none) %}
+            {% set limit = states('input_number.aqi_limit') | float(100) %}
+            {{ 'disabled' if a is none else ('red' if a > limit else ('amber' if a > 50 else 'green')) }}
     - type: custom:mushroom-template-card
       entity: sensor.free_cooling_status
       primary: "Free cooling: {{ states('sensor.free_cooling_status') }}"
@@ -209,7 +210,7 @@ cards:
       entity: switch.floor_fan
       primary: Floor Fan
       secondary: >-
-        {{ 'Paused for print' if is_state('input_boolean.floor_fan_paused_for_print', 'on')
+        {{ 'Paused for print' if is_state('input_boolean.floor_fan_paused_for_print', 'on') and is_state('switch.floor_fan', 'off')
            else ('On' if is_state('switch.floor_fan', 'on') else 'Off') }}
       icon: mdi:fan
       icon_color: "{{ 'blue' if is_state('switch.floor_fan', 'on') else 'disabled' }}"

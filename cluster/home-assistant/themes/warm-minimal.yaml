@@ -12,7 +12,10 @@ Warm Minimal:
   # card-mod theme rules (card-mod v4 tags each card with a `type-<card>` class).
   # Light tiles: 18px corners and a transparent icon shape (was the per-card
   # &lighttile block on 13 cards); Home room tiles and room-page heroes opt in
-  # with `card_mod: {class: roomtile|roomhero}` (were &roomtile / &roomhero).
+  # with `card_mod: {class: roomtile|roomhero}` (were &roomtile / &roomhero). Mushroom v5
+  # template cards are tile-style (ha-tile-icon / ha-tile-info): mushroom-shape-icon,
+  # --mush-icon-size and mushroom-state-info don't exist in them, and `$` is not valid in a
+  # theme string -- so only the card-level rules (background, radius, hover) apply there.
   card-mod-theme: Warm Minimal
   card-mod-card: |
     :host(.type-custom-mushroom-light-card) ha-card,
@@ -31,17 +34,13 @@ Warm Minimal:
       transform: translateY(-2px);
       box-shadow: 0 8px 20px rgba(0,0,0,0.28);
     }
-    :host(.roomtile) mushroom-shape-icon, ha-card.roomtile mushroom-shape-icon { --shape-color: transparent; }
     /* Room page heroes (card_mod: {class: roomhero}). */
     :host(.roomhero) ha-card, ha-card.roomhero {
       background:
         radial-gradient(130% 200% at 10% -20%, rgba(221,161,94,0.16), transparent 60%),
         var(--card-background-color);
       border-radius: 24px;
-      --mush-icon-size: 44px;
     }
-    :host(.roomhero) mushroom-shape-icon, ha-card.roomhero mushroom-shape-icon { --shape-color: transparent; }
-    :host(.roomhero) mushroom-state-info $ .primary, ha-card.roomhero mushroom-state-info $ .primary { font-size: 20px; font-weight: 700; }
 
   modes:
     # =========================== DARK (hero) ===========================

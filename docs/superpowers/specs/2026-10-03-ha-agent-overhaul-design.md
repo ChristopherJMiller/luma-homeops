@@ -633,7 +633,12 @@ whole feature can be paused from the dashboard.
   their `type-custom-mushroom-light-card` class; Home room tiles and room
   heroes (template cards like many others, so no type selector fits) opt in
   with a one-line `card_mod: {class: roomtile|roomhero}`. Each move was shown
-  pixel-identical against a same-time production shot before it shipped.
+  pixel-identical against a same-time production shot before it shipped. The final
+  review found that the template-card parts (transparent icon shape, icon size,
+  title size via `$`) had never applied: mushroom v5 template cards are tile-style
+  and `$` is invalid in a theme string. Those dead lines were removed (pixel-identical);
+  restyling the tile icon/title would need HA's tile variables and is a visual change
+  left for Chris.
 - The climate strip lives in the Living Room's existing "Climate" column (it
   already held the AC and fans) rather than a new grid area; it adds Climate
   Auto / insert / AQI chips, the free-cooling verdict with its tunables, "Paused
