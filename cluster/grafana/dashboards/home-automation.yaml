@@ -1166,7 +1166,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "HA sensors measured in kWh (utility bill usage/forecast).",
+          "description": "HA sensors measured in kWh (Seattle City Light bill usage/forecast, via opower). Empty for a while after an HA restart: HA exports a sensor only once its state changes, and opower updates a few times a day, so check-dashboards may report this panel DEAD then.",
           "gridPos": {
             "h": 4,
             "w": 12,
