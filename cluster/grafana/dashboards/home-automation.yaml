@@ -22,7 +22,7 @@ data:
           }
         ]
       },
-      "description": "MQTT panels are live. The Home Assistant panels are intentionally empty: HA's prometheus integration is enabled in the repo (cluster/home-assistant/packages/prometheus.yaml) but not yet active, because /api/prometheus needs a long-lived access token that can only be minted from the HA UI. Deferred 2026-09-23. To finish: mint the token, seal it, add a ScrapeConfig with bearer auth against ha-home-assistant:8123/api/prometheus, restart HA, then rename these panels from home_assistant_* to homeassistant_* (one word) -- which is what the integration actually exports.",
+      "description": "Home Assistant (homeassistant_* series from its prometheus integration, scraped via cluster/prometheus-stack/ha-scrapeconfig.yaml) and the Mosquitto broker (broker_* via its exporter sidecar).",
       "editable": true,
       "gnetId": null,
       "graphTooltip": 1,
@@ -31,33 +31,7 @@ data:
       "panels": [
         {
           "datasource": "Prometheus",
-          "description": "Home Assistant system health overview NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "yellow",
-                    "value": 70
-                  },
-                  {
-                    "color": "red",
-                    "value": 90
-                  }
-                ]
-              },
-              "unit": "short"
-            }
-          },
+          "description": "HA's own process. Home Assistant's prometheus integration (packages/prometheus.yaml), scraped every 60s (cluster/prometheus-stack/ha-scrapeconfig.yaml).",
           "gridPos": {
             "h": 4,
             "w": 12,
@@ -65,66 +39,50 @@ data:
             "y": 0
           },
           "id": 1,
-          "options": {
-            "colorMode": "background",
-            "graphMode": "none",
-            "justifyMode": "center",
-            "orientation": "horizontal",
-            "reduceOptions": {
-              "values": false,
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "text": {},
-            "textMode": "value_and_name"
-          },
-          "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "home_assistant_info",
-              "legendFormat": "HA Version",
-              "refId": "A"
+              "expr": "up{job=\"home-assistant\"}",
+              "refId": "A",
+              "legendFormat": "scrape"
             },
             {
               "expr": "time() - process_start_time_seconds{job=\"home-assistant\"}",
-              "legendFormat": "Uptime",
-              "refId": "B"
+              "refId": "B",
+              "legendFormat": "uptime"
             },
             {
-              "expr": "home_assistant_database_size_bytes / 1024 / 1024 / 1024",
-              "legendFormat": "DB Size (GB)",
-              "refId": "C"
+              "expr": "process_resident_memory_bytes{job=\"home-assistant\"}",
+              "refId": "C",
+              "legendFormat": "memory"
             },
             {
-              "expr": "100 - (avg(rate(node_cpu_seconds_total{job=\"home-assistant\",mode=\"idle\"}[5m])) * 100)",
-              "legendFormat": "CPU %",
-              "refId": "D"
-            },
-            {
-              "expr": "(1 - (node_memory_MemAvailable_bytes{job=\"home-assistant\"} / node_memory_MemTotal_bytes{job=\"home-assistant\"})) * 100",
-              "legendFormat": "Memory %",
-              "refId": "E"
-            },
-            {
-              "expr": "sum(home_assistant_component_loaded)",
-              "legendFormat": "Components",
-              "refId": "F"
+              "expr": "rate(process_cpu_seconds_total{job=\"home-assistant\"}[5m]) * 100",
+              "refId": "D",
+              "legendFormat": "cpu"
             }
           ],
           "title": "System Health",
-          "type": "stat"
-        },
-        {
-          "datasource": "Prometheus",
-          "description": "Home Assistant entity counts by domain NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
+          "type": "stat",
           "fieldConfig": {
             "defaults": {
               "color": {
-                "mode": "palette-classic"
+                "mode": "thresholds"
               },
-              "mappings": [],
+              "mappings": [
+                {
+                  "type": "value",
+                  "options": {
+                    "0": {
+                      "text": "DOWN",
+                      "color": "red"
+                    },
+                    "1": {
+                      "text": "UP",
+                      "color": "green"
+                    }
+                  }
+                }
+              ],
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
@@ -135,332 +93,50 @@ data:
                 ]
               },
               "unit": "short"
-            }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "B"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "dtdurations"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "C"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byFrameRefID",
+                  "options": "D"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percent"
+                  }
+                ]
+              }
+            ]
           },
-          "gridPos": {
-            "h": 4,
-            "w": 12,
-            "x": 12,
-            "y": 0
-          },
-          "id": 2,
           "options": {
             "colorMode": "value",
             "graphMode": "none",
             "justifyMode": "center",
-            "orientation": "horizontal",
-            "reduceOptions": {
-              "values": false,
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "text": {},
-            "textMode": "value_and_name"
-          },
-          "pluginVersion": "8.0.0",
-          "targets": [
-            {
-              "expr": "home_assistant_entity_count{domain=\"sensor\"}",
-              "legendFormat": "Sensors",
-              "refId": "A"
-            },
-            {
-              "expr": "home_assistant_entity_count{domain=\"switch\"}",
-              "legendFormat": "Switches",
-              "refId": "B"
-            },
-            {
-              "expr": "home_assistant_entity_count{domain=\"light\"}",
-              "legendFormat": "Lights",
-              "refId": "C"
-            },
-            {
-              "expr": "home_assistant_entity_count{domain=\"binary_sensor\"}",
-              "legendFormat": "Binary Sensors",
-              "refId": "D"
-            },
-            {
-              "expr": "home_assistant_entity_count{domain=\"automation\"}",
-              "legendFormat": "Automations",
-              "refId": "E"
-            },
-            {
-              "expr": "home_assistant_entity_count{domain=\"script\"}",
-              "legendFormat": "Scripts",
-              "refId": "F"
-            }
-          ],
-          "title": "Entity Summary",
-          "type": "stat"
-        },
-        {
-          "datasource": "Prometheus",
-          "description": "Entity state changes rate by domain NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 30,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "tooltip": false,
-                  "viz": false,
-                  "legend": false
-                },
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "normal"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "ops"
-            }
-          },
-          "gridPos": {
-            "h": 6,
-            "w": 12,
-            "x": 0,
-            "y": 4
-          },
-          "id": 3,
-          "options": {
-            "tooltip": {
-              "mode": "multi"
-            },
-            "legend": {
-              "calcs": [],
-              "displayMode": "table",
-              "placement": "right"
-            }
-          },
-          "pluginVersion": "8.0.0",
-          "targets": [
-            {
-              "expr": "rate(home_assistant_state_changes_total[5m])",
-              "legendFormat": "{{domain}}",
-              "refId": "A"
-            }
-          ],
-          "title": "Entity State Changes",
-          "type": "timeseries"
-        },
-        {
-          "datasource": "Prometheus",
-          "description": "Home Assistant automation performance metrics NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "custom": {
-                "align": "auto",
-                "displayMode": "auto"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "red",
-                    "value": 1
-                  }
-                ]
-              }
-            }
-          },
-          "gridPos": {
-            "h": 6,
-            "w": 12,
-            "x": 12,
-            "y": 4
-          },
-          "id": 4,
-          "options": {
-            "showHeader": true,
-            "sortBy": [
-              {
-                "desc": true,
-                "displayName": "Triggers (24h)"
-              }
-            ]
-          },
-          "pluginVersion": "8.0.0",
-          "targets": [
-            {
-              "expr": "topk(10, increase(home_assistant_automation_triggered_total[24h]))",
-              "format": "table",
-              "instant": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Automation Performance",
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true
-                },
-                "indexByName": {},
-                "renameByName": {
-                  "automation": "Automation Name",
-                  "Value": "Triggers (24h)"
-                }
-              }
-            }
-          ],
-          "type": "table"
-        },
-        {
-          "datasource": "Prometheus",
-          "description": "Component health status NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "custom": {
-                "align": "auto",
-                "displayMode": "color-background"
-              },
-              "mappings": [
-                {
-                  "options": {
-                    "1": {
-                      "text": "Loaded",
-                      "color": "green"
-                    },
-                    "0": {
-                      "text": "Failed",
-                      "color": "red"
-                    }
-                  },
-                  "type": "value"
-                }
-              ],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "red",
-                    "value": null
-                  },
-                  {
-                    "color": "green",
-                    "value": 1
-                  }
-                ]
-              }
-            }
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 12,
-            "x": 0,
-            "y": 10
-          },
-          "id": 5,
-          "options": {
-            "showHeader": true
-          },
-          "pluginVersion": "8.0.0",
-          "targets": [
-            {
-              "expr": "home_assistant_component_loaded",
-              "format": "table",
-              "instant": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Component Health",
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true
-                },
-                "indexByName": {},
-                "renameByName": {
-                  "component": "Component Name",
-                  "Value": "Status"
-                }
-              }
-            }
-          ],
-          "type": "table"
-        },
-        {
-          "datasource": "Prometheus",
-          "description": "Home Assistant database performance NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "mappings": [],
-              "max": 10737418240,
-              "min": 0,
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "yellow",
-                    "value": 1073741824
-                  },
-                  {
-                    "color": "red",
-                    "value": 5368709120
-                  }
-                ]
-              },
-              "unit": "bytes"
-            }
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 12,
-            "y": 10
-          },
-          "id": 6,
-          "options": {
             "orientation": "auto",
             "reduceOptions": {
               "values": false,
@@ -469,23 +145,313 @@ data:
               ],
               "fields": ""
             },
-            "showThresholdLabels": true,
-            "showThresholdMarkers": true,
-            "text": {}
-          },
-          "pluginVersion": "8.0.0",
-          "targets": [
-            {
-              "expr": "home_assistant_database_size_bytes",
-              "refId": "A"
-            }
-          ],
-          "title": "Database Performance",
-          "type": "gauge"
+            "textMode": "auto"
+          }
         },
         {
           "datasource": "Prometheus",
-          "description": "Integration status overview",
+          "description": "Entities per domain (homeassistant_entity_available is exported for every entity).",
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 12,
+            "y": 0
+          },
+          "id": 2,
+          "targets": [
+            {
+              "expr": "count by (domain) (homeassistant_entity_available{domain=~\"sensor|binary_sensor|light|switch|fan|cover|climate|automation\"})",
+              "refId": "A",
+              "legendFormat": "{{domain}}",
+              "instant": true
+            }
+          ],
+          "title": "Entity Summary",
+          "type": "stat",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            },
+            "textMode": "auto"
+          }
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "State changes per minute by domain. A domain that jumps here is usually a flapping device (hactl history --flaps finds it).",
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 0,
+            "y": 4
+          },
+          "id": 3,
+          "targets": [
+            {
+              "expr": "sum by (domain) (rate(homeassistant_state_change_total[5m])) * 60",
+              "refId": "A",
+              "legendFormat": "{{domain}}"
+            }
+          ],
+          "title": "Entity State Changes",
+          "type": "timeseries",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "cpm"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          }
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Seconds since each automation entity last changed: its last_triggered attribute moves on every run (or an on/off toggle).",
+          "gridPos": {
+            "h": 6,
+            "w": 12,
+            "x": 12,
+            "y": 4
+          },
+          "id": 4,
+          "targets": [
+            {
+              "expr": "sort(time() - homeassistant_last_updated_time_seconds{domain=\"automation\"})",
+              "refId": "A",
+              "legendFormat": "",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "title": "Automations: Time Since Last Run",
+          "type": "table",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "dtdurations"
+            },
+            "overrides": []
+          },
+          "options": {},
+          "transformations": [
+            {
+              "id": "labelsToFields",
+              "options": {}
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "domain": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "entity": "Automation",
+                  "friendly_name": "Name",
+                  "Value": "Since"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Entities HA reports unavailable right now. Empty means everything is reachable.",
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 0,
+            "y": 10
+          },
+          "id": 5,
+          "targets": [
+            {
+              "expr": "homeassistant_entity_available == 0",
+              "refId": "A",
+              "legendFormat": "",
+              "instant": true,
+              "format": "table"
+            }
+          ],
+          "title": "Unavailable Entities",
+          "type": "table",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {},
+          "transformations": [
+            {
+              "id": "labelsToFields",
+              "options": {}
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "domain": true,
+                  "job": true,
+                  "instance": true
+                },
+                "renameByName": {
+                  "entity": "Entity",
+                  "friendly_name": "Name",
+                  "Value": "Available"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Resident memory of the HA process (the database size and per-component memory are not exported).",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 12,
+            "y": 10
+          },
+          "id": 6,
+          "targets": [
+            {
+              "expr": "process_resident_memory_bytes{job=\"home-assistant\"}",
+              "refId": "A",
+              "legendFormat": "resident"
+            }
+          ],
+          "title": "HA Memory",
+          "type": "timeseries",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "bytes"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          }
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Prometheus targets behind this dashboard. (The old zigbee/zwave/wifi rows queried jobs that never existed.)",
+          "gridPos": {
+            "h": 4,
+            "w": 6,
+            "x": 18,
+            "y": 10
+          },
+          "id": 7,
+          "targets": [
+            {
+              "expr": "up{job=\"home-assistant\"}",
+              "refId": "A",
+              "legendFormat": "home assistant"
+            },
+            {
+              "expr": "up{job=\"mosquitto\"}",
+              "refId": "B",
+              "legendFormat": "mosquitto"
+            }
+          ],
+          "title": "Scrape Targets",
+          "type": "stat",
           "fieldConfig": {
             "defaults": {
               "color": {
@@ -493,17 +459,17 @@ data:
               },
               "mappings": [
                 {
+                  "type": "value",
                   "options": {
-                    "1": {
-                      "text": "Connected",
-                      "color": "green"
-                    },
                     "0": {
-                      "text": "Disconnected",
+                      "text": "DOWN",
                       "color": "red"
+                    },
+                    "1": {
+                      "text": "UP",
+                      "color": "green"
                     }
-                  },
-                  "type": "value"
+                  }
                 }
               ],
               "thresholds": {
@@ -518,21 +484,16 @@ data:
                     "value": 1
                   }
                 ]
-              }
-            }
+              },
+              "unit": "short"
+            },
+            "overrides": []
           },
-          "gridPos": {
-            "h": 4,
-            "w": 6,
-            "x": 18,
-            "y": 10
-          },
-          "id": 7,
           "options": {
-            "colorMode": "background",
+            "colorMode": "value",
             "graphMode": "none",
             "justifyMode": "center",
-            "orientation": "horizontal",
+            "orientation": "auto",
             "reduceOptions": {
               "values": false,
               "calcs": [
@@ -540,39 +501,8 @@ data:
               ],
               "fields": ""
             },
-            "text": {},
-            "textMode": "name"
-          },
-          "pluginVersion": "8.0.0",
-          "targets": [
-            {
-              "expr": "up{job=\"zigbee2mqtt\"} OR on() vector(0)",
-              "legendFormat": "Zigbee",
-              "refId": "A"
-            },
-            {
-              "expr": "up{job=\"zwave\"} OR on() vector(0)",
-              "legendFormat": "Z-Wave",
-              "refId": "B"
-            },
-            {
-              "expr": "up{job=\"wifi-devices\"} OR on() vector(0)",
-              "legendFormat": "WiFi",
-              "refId": "C"
-            },
-            {
-              "expr": "up{job=\"bluetooth\"} OR on() vector(0)",
-              "legendFormat": "Bluetooth",
-              "refId": "D"
-            },
-            {
-              "expr": "up{job=\"cloud-integrations\"} OR on() vector(0)",
-              "legendFormat": "Cloud",
-              "refId": "E"
-            }
-          ],
-          "title": "Integration Status",
-          "type": "stat"
+            "textMode": "auto"
+          }
         },
         {
           "datasource": "Prometheus",
@@ -1070,25 +1000,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Most triggered automations in last 24 hours NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  }
-                ]
-              },
-              "unit": "short"
-            }
-          },
+          "description": "Automation runs in the last 24h.",
           "gridPos": {
             "h": 6,
             "w": 12,
@@ -1096,46 +1008,51 @@ data:
             "y": 24
           },
           "id": 15,
+          "targets": [
+            {
+              "expr": "topk(10, increase(homeassistant_automation_triggered_count_total[24h]))",
+              "refId": "A",
+              "legendFormat": "{{friendly_name}}",
+              "instant": true
+            }
+          ],
+          "title": "Most Triggered Automations (24h)",
+          "type": "bargauge",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
           "options": {
             "displayMode": "gradient",
             "orientation": "horizontal",
+            "showUnfilled": true,
             "reduceOptions": {
               "values": false,
               "calcs": [
                 "lastNotNull"
               ],
               "fields": ""
-            },
-            "showUnfilled": false
-          },
-          "pluginVersion": "8.0.0",
-          "targets": [
-            {
-              "expr": "topk(10, increase(home_assistant_automation_triggered_total[24h]))",
-              "legendFormat": "{{automation}}",
-              "refId": "A"
             }
-          ],
-          "title": "Most Triggered Automations",
-          "type": "bargauge"
+          }
         },
         {
           "datasource": "Prometheus",
-          "description": "Sensor activity heatmap by hour NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "hideFrom": {
-                  "tooltip": false,
-                  "viz": false,
-                  "legend": false
-                },
-                "scaleDistribution": {
-                  "type": "linear"
-                }
-              }
-            }
-          },
+          "description": "Entities with the most state changes in the last hour: where recorder churn and flapping show up.",
           "gridPos": {
             "h": 6,
             "w": 12,
@@ -1143,91 +1060,51 @@ data:
             "y": 24
           },
           "id": 16,
-          "options": {
-            "calculate": false,
-            "cellGap": 1,
-            "cellValues": {
-              "unit": "short"
-            },
-            "color": {
-              "exponent": 0.5,
-              "fill": "dark-orange",
-              "mode": "scheme",
-              "reverse": false,
-              "scale": "exponential",
-              "scheme": "Oranges",
-              "steps": 64
-            },
-            "exemplars": {
-              "color": "rgba(255,0,255,0.7)"
-            },
-            "filterValues": {
-              "le": 1E-9
-            },
-            "legend": {
-              "show": true
-            },
-            "rowsFrame": {
-              "layout": "auto"
-            },
-            "tooltip": {
-              "show": true,
-              "yHistogram": false
-            },
-            "yAxis": {
-              "axisPlacement": "left",
-              "reverse": false
-            }
-          },
-          "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "sum by (entity, hour(time())) (increase(home_assistant_state_changes_total{domain=\"sensor\"}[1h]))",
-              "format": "heatmap",
-              "refId": "A"
+              "expr": "topk(10, increase(homeassistant_state_change_total[1h]))",
+              "refId": "A",
+              "legendFormat": "{{friendly_name}}",
+              "instant": true
             }
           ],
-          "title": "Sensor Activity Heatmap",
-          "type": "heatmap"
-        },
-        {
-          "datasource": "Prometheus",
-          "description": "Device availability status NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
+          "title": "Chattiest Entities (1h)",
+          "type": "bargauge",
           "fieldConfig": {
             "defaults": {
               "color": {
                 "mode": "thresholds"
               },
-              "mappings": [
-                {
-                  "options": {
-                    "1": {
-                      "text": "Online",
-                      "color": "green"
-                    },
-                    "0": {
-                      "text": "Offline",
-                      "color": "red"
-                    }
-                  },
-                  "type": "value"
-                }
-              ],
+              "mappings": [],
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "red",
-                    "value": null
-                  },
-                  {
                     "color": "green",
-                    "value": 1
+                    "value": null
                   }
                 ]
-              }
-            }
+              },
+              "unit": "short"
+            },
+            "overrides": []
           },
+          "options": {
+            "displayMode": "gradient",
+            "orientation": "horizontal",
+            "showUnfilled": true,
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            }
+          }
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Share of each domain's entities that are available.",
           "gridPos": {
             "h": 4,
             "w": 12,
@@ -1235,81 +1112,61 @@ data:
             "y": 30
           },
           "id": 17,
-          "options": {
-            "colorMode": "background",
-            "graphMode": "none",
-            "justifyMode": "center",
-            "orientation": "horizontal",
-            "reduceOptions": {
-              "values": false,
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": ""
-            },
-            "text": {},
-            "textMode": "name"
-          },
-          "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "home_assistant_device_availability",
-              "legendFormat": "{{device_name}}",
-              "refId": "A"
+              "expr": "100 * sum by (domain) (homeassistant_entity_available) / count by (domain) (homeassistant_entity_available)",
+              "refId": "A",
+              "legendFormat": "{{domain}}",
+              "instant": true
             }
           ],
-          "title": "Device Availability",
-          "type": "stat"
-        },
-        {
-          "datasource": "Prometheus",
-          "description": "Energy monitoring metrics NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
+          "title": "Availability by Domain",
+          "type": "bargauge",
           "fieldConfig": {
             "defaults": {
               "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 20,
-                "gradientMode": "opacity",
-                "hideFrom": {
-                  "tooltip": false,
-                  "viz": false,
-                  "legend": false
-                },
-                "lineInterpolation": "smooth",
-                "lineWidth": 2,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
+                "mode": "thresholds"
               },
               "mappings": [],
               "thresholds": {
                 "mode": "absolute",
                 "steps": [
                   {
-                    "color": "green",
+                    "color": "red",
                     "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 80
+                  },
+                  {
+                    "color": "green",
+                    "value": 95
                   }
                 ]
               },
-              "unit": "watt"
-            }
+              "unit": "percent",
+              "min": 0,
+              "max": 100
+            },
+            "overrides": []
           },
+          "options": {
+            "displayMode": "gradient",
+            "orientation": "horizontal",
+            "showUnfilled": true,
+            "reduceOptions": {
+              "values": false,
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": ""
+            }
+          }
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "HA sensors measured in kWh (utility bill usage/forecast).",
           "gridPos": {
             "h": 4,
             "w": 12,
@@ -1317,80 +1174,19 @@ data:
             "y": 30
           },
           "id": 18,
-          "options": {
-            "tooltip": {
-              "mode": "multi"
-            },
-            "legend": {
-              "calcs": [
-                "mean",
-                "max"
-              ],
-              "displayMode": "list",
-              "placement": "bottom"
-            }
-          },
-          "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "home_assistant_energy_consumption_watts",
-              "legendFormat": "{{device}}",
-              "refId": "A"
-            },
-            {
-              "expr": "home_assistant_solar_production_watts",
-              "legendFormat": "Solar Production",
-              "refId": "B"
-            },
-            {
-              "expr": "home_assistant_grid_import_watts",
-              "legendFormat": "Grid Import",
-              "refId": "C"
-            },
-            {
-              "expr": "home_assistant_grid_export_watts",
-              "legendFormat": "Grid Export",
-              "refId": "D"
+              "expr": "homeassistant_sensor_energy_kwh",
+              "refId": "A",
+              "legendFormat": "{{friendly_name}}"
             }
           ],
-          "title": "Energy Monitoring",
-          "type": "timeseries"
-        },
-        {
-          "datasource": "Prometheus",
-          "description": "Event loop processing lag NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
+          "title": "Energy",
+          "type": "timeseries",
           "fieldConfig": {
             "defaults": {
               "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "barAlignment": 0,
-                "drawStyle": "line",
-                "fillOpacity": 10,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "tooltip": false,
-                  "viz": false,
-                  "legend": false
-                },
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "never",
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "none"
-                },
-                "thresholdsStyle": {
-                  "mode": "line"
-                }
+                "mode": "thresholds"
               },
               "mappings": [],
               "thresholds": {
@@ -1399,20 +1195,26 @@ data:
                   {
                     "color": "green",
                     "value": null
-                  },
-                  {
-                    "color": "yellow",
-                    "value": 1
-                  },
-                  {
-                    "color": "red",
-                    "value": 5
                   }
                 ]
               },
-              "unit": "s"
-            }
+              "unit": "kwatth"
+            },
+            "overrides": []
           },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          }
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Temperature sensors, converted to °F (HA exports Celsius).",
           "gridPos": {
             "h": 4,
             "w": 8,
@@ -1420,49 +1222,47 @@ data:
             "y": 34
           },
           "id": 19,
-          "options": {
-            "tooltip": {
-              "mode": "single"
-            },
-            "legend": {
-              "calcs": [
-                "mean",
-                "max"
-              ],
-              "displayMode": "list",
-              "placement": "bottom"
-            }
-          },
-          "pluginVersion": "8.0.0",
           "targets": [
             {
-              "expr": "home_assistant_event_loop_lag_seconds",
-              "legendFormat": "Event Loop Lag",
-              "refId": "A"
+              "expr": "homeassistant_sensor_temperature_celsius * 9 / 5 + 32",
+              "refId": "A",
+              "legendFormat": "{{friendly_name}}"
             }
           ],
-          "title": "Event Loop Performance",
-          "type": "timeseries"
-        },
-        {
-          "datasource": "Prometheus",
-          "description": "Memory usage breakdown by component NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
+          "title": "Temperatures",
+          "type": "timeseries",
           "fieldConfig": {
             "defaults": {
               "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "hideFrom": {
-                  "tooltip": false,
-                  "viz": false,
-                  "legend": false
-                }
+                "mode": "thresholds"
               },
               "mappings": [],
-              "unit": "bytes"
-            }
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "fahrenheit"
+            },
+            "overrides": []
           },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          }
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Humidity sensors.",
           "gridPos": {
             "h": 4,
             "w": 8,
@@ -1470,23 +1270,97 @@ data:
             "y": 34
           },
           "id": 20,
+          "targets": [
+            {
+              "expr": "homeassistant_sensor_humidity_percent",
+              "refId": "A",
+              "legendFormat": "{{friendly_name}}"
+            }
+          ],
+          "title": "Humidity",
+          "type": "timeseries",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
           "options": {
             "legend": {
-              "displayMode": "table",
-              "placement": "right",
-              "values": [
-                "value",
-                "percent"
-              ]
+              "displayMode": "list",
+              "placement": "bottom"
             },
-            "pieType": "pie",
             "tooltip": {
-              "mode": "single"
+              "mode": "multi"
+            }
+          }
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Battery sensors, lowest first.",
+          "gridPos": {
+            "h": 4,
+            "w": 8,
+            "x": 16,
+            "y": 34
+          },
+          "id": 21,
+          "targets": [
+            {
+              "expr": "sort(homeassistant_sensor_battery_percent)",
+              "refId": "A",
+              "legendFormat": "{{friendly_name}}",
+              "instant": true
+            }
+          ],
+          "title": "Battery Levels",
+          "type": "bargauge",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "red",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 20
+                  },
+                  {
+                    "color": "green",
+                    "value": 40
+                  }
+                ]
+              },
+              "unit": "percent",
+              "min": 0,
+              "max": 100
             },
-            "displayLabels": [
-              "name",
-              "percent"
-            ],
+            "overrides": []
+          },
+          "options": {
+            "displayMode": "gradient",
+            "orientation": "horizontal",
+            "showUnfilled": true,
             "reduceOptions": {
               "values": false,
               "calcs": [
@@ -1494,35 +1368,85 @@ data:
               ],
               "fields": ""
             }
-          },
-          "pluginVersion": "8.0.0",
-          "targets": [
-            {
-              "expr": "home_assistant_component_memory_usage_bytes",
-              "legendFormat": "{{component}}",
-              "refId": "A"
-            }
-          ],
-          "title": "Memory Usage Breakdown",
-          "type": "piechart"
+          }
         },
         {
           "datasource": "Prometheus",
-          "description": "API response time distribution NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
+          "description": "How many lights and switches are on (`> bool` keeps a 0 instead of no data when everything is off).",
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 0,
+            "y": 38
+          },
+          "id": 22,
+          "targets": [
+            {
+              "expr": "sum(homeassistant_light_brightness_percent > bool 0)",
+              "refId": "A",
+              "legendFormat": "lights on"
+            },
+            {
+              "expr": "sum(homeassistant_switch_state == bool 1)",
+              "refId": "B",
+              "legendFormat": "switches on"
+            }
+          ],
+          "title": "Lights & Switches On",
+          "type": "timeseries",
           "fieldConfig": {
             "defaults": {
               "color": {
                 "mode": "thresholds"
               },
-              "custom": {
-                "fillOpacity": 80,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "tooltip": false,
-                  "viz": false,
-                  "legend": false
-                },
-                "lineWidth": 1
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "options": {
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            },
+            "tooltip": {
+              "mode": "multi"
+            }
+          }
+        },
+        {
+          "datasource": "Prometheus",
+          "description": "Update entities reporting a newer version. Core and the custom components are pinned in git (cluster/applications/home-assistant-release.yaml, Renovate), so act on these there, not in the HA UI.",
+          "gridPos": {
+            "h": 4,
+            "w": 12,
+            "x": 12,
+            "y": 38
+          },
+          "id": 23,
+          "targets": [
+            {
+              "expr": "sum(homeassistant_update_state)",
+              "refId": "A",
+              "legendFormat": "updates",
+              "instant": true
+            }
+          ],
+          "title": "Updates Available",
+          "type": "stat",
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
               },
               "mappings": [],
               "thresholds": {
@@ -1533,197 +1457,29 @@ data:
                     "value": null
                   },
                   {
-                    "color": "yellow",
-                    "value": 100
-                  },
-                  {
-                    "color": "red",
-                    "value": 500
+                    "color": "orange",
+                    "value": 1
                   }
                 ]
               },
-              "unit": "ms"
-            }
+              "unit": "short"
+            },
+            "overrides": []
           },
-          "gridPos": {
-            "h": 4,
-            "w": 8,
-            "x": 16,
-            "y": 34
-          },
-          "id": 21,
           "options": {
-            "bucketDataBound": "auto",
-            "legend": {
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "orientation": "auto",
+            "reduceOptions": {
+              "values": false,
               "calcs": [
-                "mean"
+                "lastNotNull"
               ],
-              "displayMode": "list",
-              "placement": "bottom"
-            }
-          },
-          "pluginVersion": "8.0.0",
-          "targets": [
-            {
-              "expr": "histogram_quantile(0.5, rate(home_assistant_api_response_time_seconds_bucket[5m])) * 1000",
-              "legendFormat": "P50",
-              "refId": "A"
+              "fields": ""
             },
-            {
-              "expr": "histogram_quantile(0.95, rate(home_assistant_api_response_time_seconds_bucket[5m])) * 1000",
-              "legendFormat": "P95",
-              "refId": "B"
-            },
-            {
-              "expr": "histogram_quantile(0.99, rate(home_assistant_api_response_time_seconds_bucket[5m])) * 1000",
-              "legendFormat": "P99",
-              "refId": "C"
-            }
-          ],
-          "title": "API Response Times",
-          "type": "histogram"
-        },
-        {
-          "datasource": "Prometheus",
-          "description": "Recent errors from Home Assistant NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "custom": {
-                "align": "auto",
-                "displayMode": "auto"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "red",
-                    "value": null
-                  }
-                ]
-              }
-            }
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 12,
-            "x": 0,
-            "y": 38
-          },
-          "id": 22,
-          "options": {
-            "showHeader": true,
-            "sortBy": [
-              {
-                "desc": true,
-                "displayName": "Time"
-              }
-            ]
-          },
-          "pluginVersion": "8.0.0",
-          "targets": [
-            {
-              "expr": "home_assistant_errors",
-              "format": "table",
-              "instant": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Recent Errors",
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {},
-                "indexByName": {},
-                "renameByName": {
-                  "Time": "Timestamp",
-                  "component": "Component",
-                  "error": "Error Message",
-                  "count": "Count"
-                }
-              }
-            },
-            {
-              "id": "limit",
-              "options": {
-                "limitField": 20
-              }
-            }
-          ],
-          "type": "table"
-        },
-        {
-          "datasource": "Prometheus",
-          "description": "Failed automation executions NOT WIRED UP: needs an HA long-lived access token; see the dashboard description. The metric name is also wrong -- the integration exports homeassistant_*, one word.",
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "custom": {
-                "align": "auto",
-                "displayMode": "color-background"
-              },
-              "mappings": [],
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "red",
-                    "value": null
-                  }
-                ]
-              }
-            }
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 12,
-            "x": 12,
-            "y": 38
-          },
-          "id": 23,
-          "options": {
-            "showHeader": true,
-            "sortBy": [
-              {
-                "desc": true,
-                "displayName": "Failure Time"
-              }
-            ]
-          },
-          "pluginVersion": "8.0.0",
-          "targets": [
-            {
-              "expr": "home_assistant_automation_failed_total",
-              "format": "table",
-              "instant": true,
-              "refId": "A"
-            }
-          ],
-          "title": "Automation Failures",
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true
-                },
-                "indexByName": {},
-                "renameByName": {
-                  "automation": "Automation Name",
-                  "failure_time": "Failure Time",
-                  "error_reason": "Error Reason",
-                  "retry_count": "Retry Count"
-                }
-              }
-            }
-          ],
-          "type": "table"
+            "textMode": "auto"
+          }
         }
       ],
       "refresh": "10s",
@@ -1738,157 +1494,7 @@ data:
         "automation"
       ],
       "templating": {
-        "list": [
-          {
-            "current": {
-              "selected": false,
-              "text": "All",
-              "value": "$__all"
-            },
-            "datasource": "Prometheus",
-            "definition": "label_values(home_assistant_entity_count, domain)",
-            "hide": 0,
-            "includeAll": true,
-            "label": "Entity Domain",
-            "multi": true,
-            "name": "entity_domain",
-            "options": [],
-            "query": {
-              "query": "label_values(home_assistant_entity_count, domain)",
-              "refId": "Prometheus-entity_domain-Variable-Query"
-            },
-            "refresh": 1,
-            "regex": "",
-            "skipUrlSync": false,
-            "sort": 1,
-            "tagValuesQuery": "",
-            "tags": [],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
-          },
-          {
-            "current": {
-              "selected": false,
-              "text": "All",
-              "value": "$__all"
-            },
-            "datasource": "Prometheus",
-            "definition": "label_values(home_assistant_component_loaded, component)",
-            "hide": 0,
-            "includeAll": true,
-            "label": "Integration",
-            "multi": true,
-            "name": "integration",
-            "options": [],
-            "query": {
-              "query": "label_values(home_assistant_component_loaded, component)",
-              "refId": "Prometheus-integration-Variable-Query"
-            },
-            "refresh": 1,
-            "regex": "",
-            "skipUrlSync": false,
-            "sort": 1,
-            "tagValuesQuery": "",
-            "tags": [],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
-          },
-          {
-            "current": {
-              "selected": false,
-              "text": "",
-              "value": ""
-            },
-            "datasource": "Prometheus",
-            "definition": "label_values(home_assistant_automation_triggered_total, automation)",
-            "hide": 0,
-            "includeAll": false,
-            "label": "Automation",
-            "multi": false,
-            "name": "automation",
-            "options": [],
-            "query": {
-              "query": "label_values(home_assistant_automation_triggered_total, automation)",
-              "refId": "Prometheus-automation-Variable-Query"
-            },
-            "refresh": 1,
-            "regex": "",
-            "skipUrlSync": false,
-            "sort": 1,
-            "tagValuesQuery": "",
-            "tags": [],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
-          },
-          {
-            "current": {
-              "selected": false,
-              "text": "24h",
-              "value": "24h"
-            },
-            "hide": 0,
-            "includeAll": false,
-            "label": "Time Range",
-            "multi": false,
-            "name": "time_range",
-            "options": [
-              {
-                "selected": false,
-                "text": "1h",
-                "value": "1h"
-              },
-              {
-                "selected": false,
-                "text": "6h",
-                "value": "6h"
-              },
-              {
-                "selected": true,
-                "text": "24h",
-                "value": "24h"
-              },
-              {
-                "selected": false,
-                "text": "7d",
-                "value": "7d"
-              }
-            ],
-            "query": "1h,6h,24h,7d",
-            "skipUrlSync": false,
-            "type": "custom"
-          },
-          {
-            "current": {
-              "selected": false,
-              "text": "All",
-              "value": "$__all"
-            },
-            "datasource": "Prometheus",
-            "definition": "label_values(home_assistant_device_availability, device_name)",
-            "hide": 0,
-            "includeAll": true,
-            "label": "Device",
-            "multi": true,
-            "name": "device",
-            "options": [],
-            "query": {
-              "query": "label_values(home_assistant_device_availability, device_name)",
-              "refId": "Prometheus-device-Variable-Query"
-            },
-            "refresh": 1,
-            "regex": "",
-            "skipUrlSync": false,
-            "sort": 1,
-            "tagValuesQuery": "",
-            "tags": [],
-            "tagsQuery": "",
-            "type": "query",
-            "useTags": false
-          }
-        ]
+        "list": []
       },
       "time": {
         "from": "now-24h",
@@ -1898,5 +1504,5 @@ data:
       "timezone": "",
       "title": "Home Automation",
       "uid": "home-automation",
-      "version": 1
+      "version": 2
     }
