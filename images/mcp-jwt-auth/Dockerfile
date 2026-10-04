@@ -3,7 +3,7 @@
 # Two stages so the shipped image carries no toolchain and no shell: this sits in
 # the request path for family data, so its attack surface should be one static
 # binary and nothing else.
-FROM golang:1.25-alpine AS build
+FROM golang:1.27-alpine@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS build
 WORKDIR /src
 # Dependencies first, so edits to main.go do not refetch them.
 COPY go.mod go.sum ./
