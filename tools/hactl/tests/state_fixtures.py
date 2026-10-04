@@ -95,13 +95,15 @@ class FakeHA:
         if t == "config/device_registry/list":
             return [dict(x) for x in self.devices]
         if t == "config/device_registry/update":
-            x = next(d for d in self.devices if d["id"] == args.pop("device_id"))
+            device_id = args.pop("device_id")  # pop once: inside the generator it would pop per device
+            x = next(d for d in self.devices if d["id"] == device_id)
             x.update(args)
             return dict(x)
         if t == "config/entity_registry/list":
             return [dict(x) for x in self.entities]
         if t == "config/entity_registry/update":
-            x = next(e for e in self.entities if e["entity_id"] == args.pop("entity_id"))
+            entity_id = args.pop("entity_id")
+            x = next(e for e in self.entities if e["entity_id"] == entity_id)
             new_id = args.pop("new_entity_id", None)
             x.update(args)
             if new_id:
@@ -119,7 +121,8 @@ class FakeHA:
             self.dashboards.append(x)
             return dict(x)
         if t == "lovelace/dashboards/update":
-            x = next(d for d in self.dashboards if d.get("id") == args.pop("dashboard_id"))
+            dashboard_id = args.pop("dashboard_id")
+            x = next(d for d in self.dashboards if d.get("id") == dashboard_id)
             x.update(args)
             return dict(x)
         if t == "lovelace/dashboards/delete":
