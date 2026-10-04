@@ -82,12 +82,14 @@
       "matchDatasources": ["github-tags"],
       "matchFileNames": ["cluster/applications/home-assistant-release.yaml"],
       "automerge": false,
-      "description": "HA custom integrations/cards. A card bump must also move its ?v= resource in cluster/home-assistant/state/dashboards.yaml (hactl lint fails until it does); then hactl deploy + hactl apply."
+      "groupName": "home-assistant components",
+      "description": "HA custom integrations/cards, in their own PR (in group:allNonMajor their automerge:false would block the whole bundle). A card bump must also move its ?v= resource in cluster/home-assistant/state/dashboards.yaml (hactl lint fails until it does); then hactl deploy + hactl apply."
     },
     {
       "matchPackageNames": ["homeassistant/home-assistant"],
       "automerge": false,
-      "description": "HA core: read the breaking-changes section, pg_dumpall first, hactl lint in the new image (see docs/ha.md)."
+      "groupName": "home-assistant core",
+      "description": "HA core, in its own PR: read the breaking-changes section, pg_dumpall first, hactl lint in the new image (see docs/ha.md)."
     }
   ],
   "customManagers": [

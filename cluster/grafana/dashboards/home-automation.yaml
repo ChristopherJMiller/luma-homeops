@@ -252,7 +252,7 @@ data:
         },
         {
           "datasource": "Prometheus",
-          "description": "Seconds since each automation entity last changed: its last_triggered attribute moves on every run (or an on/off toggle).",
+          "description": "Time since each automation entity last changed: a run (last_triggered moves), an on/off toggle, or HA restarting or reloading automations, which resets it. For actual runs see Most Triggered Automations.",
           "gridPos": {
             "h": 6,
             "w": 12,
@@ -269,7 +269,7 @@ data:
               "format": "table"
             }
           ],
-          "title": "Automations: Time Since Last Run",
+          "title": "Automations: Time Since Last Change",
           "type": "table",
           "fieldConfig": {
             "defaults": {

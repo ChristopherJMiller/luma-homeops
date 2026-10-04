@@ -34,7 +34,9 @@ def run_change(client, c) -> str:
         return ""
     if c.kind == "person":
         if c.action == "create":
-            client.ws({"type": "person/create", **_without_empty({k: v for k, v in c.data.items() if k != "id"})})
+            got = client.ws({"type": "person/create", **_without_empty({k: v for k, v in c.data.items() if k != "id"})})[0]["id"]
+            if got != c.data["id"]:
+                raise HactlError(f"HA created person id {got!r}, the manifest says {c.data['id']!r}: set id: {got} in people.yaml")
         else:
             client.ws({"type": "person/update", **c.data})
         return ""

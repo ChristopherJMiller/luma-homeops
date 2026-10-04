@@ -77,22 +77,37 @@ ZONE_DEFAULTS = {"radius": 100, "icon": None, "passive": False}
 PERSON_FIELDS = ("name", "user_id", "device_trackers", "picture")
 
 
+def _twin(d, live, declared_ids):
+    """An undeclared live object with the declared name: HA chose its id (a slug of the name), so the
+    manifest's id never matches and every apply would create another copy."""
+    return next((x for x in live if x["id"] not in declared_ids
+                 and str(x.get("name", "")).casefold() == str(d["name"]).casefold()), None)
+
+
+def _twin_change(kind, d, twin) -> Change:
+    return Change("manual", kind, d["id"], f"{d['name']!r} exists in HA as id {twin['id']!r}: set id: {twin['id']} in people.yaml")
+
+
 def diff_zones(declared, live) -> list:
     """Fully managed: undeclared zones are prunable."""
     by_id = {z["id"]: z for z in live}
-    out = []
+    declared_ids = {d["id"] for d in declared}
+    out, twins = [], set()
     for d in declared:
         want = {f: d.get(f, ZONE_DEFAULTS.get(f)) for f in ZONE_FIELDS}
         cur = by_id.get(d["id"])
+        if cur is None and (twin := _twin(d, live, declared_ids)):
+            out.append(_twin_change("zone", d, twin))
+            twins.add(twin["id"])
+            continue
         if cur is None:
             out.append(Change("create", "zone", d["id"], repr(d["name"]), data={"id": d["id"], **want}))
             continue
         delta = {f: v for f, v in want.items() if not same(v, cur.get(f))}
         if delta:
             out.append(Change("update", "zone", d["id"], _describe(delta, cur), data={"zone_id": d["id"], **delta}))
-    declared_ids = {d["id"] for d in declared}
     out += [Change("delete", "zone", z["id"], f"{z.get('name')!r} is not declared", data={"zone_id": z["id"]}, prune=True)
-            for z in live if z["id"] not in declared_ids]
+            for z in live if z["id"] not in declared_ids and z["id"] not in twins]
     return out
 
 
@@ -103,9 +118,14 @@ def _person_value(d, f):
 def diff_persons(declared, live) -> list:
     """Persons are never deleted by hactl: an undeclared one is manual."""
     by_id = {p["id"]: p for p in live}
-    out = []
+    declared_ids = {d["id"] for d in declared}
+    out, twins = [], set()
     for d in declared:
         cur = by_id.get(d["id"])
+        if cur is None and (twin := _twin(d, live, declared_ids)):
+            out.append(_twin_change("person", d, twin))
+            twins.add(twin["id"])
+            continue
         if cur is None:
             out.append(Change("create", "person", d["id"], repr(d["name"]),
                               data={"id": d["id"], **{f: _person_value(d, f) for f in PERSON_FIELDS}}))
@@ -113,9 +133,8 @@ def diff_persons(declared, live) -> list:
         delta = {f: _person_value(d, f) for f in PERSON_FIELDS if not same(_person_value(d, f), cur.get(f))}
         if delta:
             out.append(Change("update", "person", d["id"], _describe(delta, cur), data={"person_id": d["id"], **delta}))
-    declared_ids = {d["id"] for d in declared}
     out += [Change("manual", "person", p["id"], "is not declared in people.yaml (declare it; hactl never deletes a person)")
-            for p in live if p["id"] not in declared_ids]
+            for p in live if p["id"] not in declared_ids and p["id"] not in twins]
     return out
 
 

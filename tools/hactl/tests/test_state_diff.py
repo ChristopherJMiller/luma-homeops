@@ -157,7 +157,7 @@ def test_resources():
 
 
 def test_plan_orders_kinds_and_lists_wanted_options():
-    m = model.Manifest(zones=[{"id": "work", "name": "Work", "latitude": 47.64, "longitude": -122.13, "radius": 606, "icon": "mdi:microsoft-office"}],
+    m = model.Manifest(zones=[{"id": "work", "name": "Work", "latitude": 10.5, "longitude": 20.25, "radius": 300, "icon": "mdi:briefcase"}],
                        persons=[{"id": "chris_m", "name": "Chris", "user_id": "u1",
                                                 "device_trackers": ["device_tracker.pixel_6_pro", "device_tracker.pixel_9_pro_xl"]}],
                        areas=[{"id": "office", "name": "Office"}], helpers=[GROUP],

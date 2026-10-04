@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://github.com/ChristopherJMiller/ha-helm.git
     path: ./
-    targetRevision: v0.5.3
+    targetRevision: v0.5.4
     helm:
       releaseName: ha
       valuesObject:

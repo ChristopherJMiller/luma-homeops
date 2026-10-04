@@ -46,7 +46,7 @@ from state_fixtures import FakeHA, snapshot
 
 from hactl.state import apply, diff, importer, live, model
 
-WORK = {"id": "work", "name": "Work", "latitude": 47.64, "longitude": -122.13, "radius": 606, "icon": "mdi:microsoft-office"}
+WORK = {"id": "work", "name": "Work", "latitude": 10.5, "longitude": 20.25, "radius": 300, "icon": "mdi:briefcase"}
 CHRIS = {"id": "chris_m", "name": "Chris", "user_id": "u1", "device_trackers": ["device_tracker.pixel_9_pro_xl"]}
 
 
@@ -97,8 +97,8 @@ def test_people_validation(tmp_path):
 Extend `state_fixtures.snapshot()` with:
 
 ```python
-        zones=[{"id": "work", "name": "Work", "latitude": 47.64, "longitude": -122.13, "radius": 606.0,
-                "icon": "mdi:microsoft-office", "passive": False}],
+        zones=[{"id": "work", "name": "Work", "latitude": 10.5, "longitude": 20.25, "radius": 300.0,
+                "icon": "mdi:briefcase", "passive": False}],
         persons=[{"id": "chris_m", "name": "Chris", "user_id": "u1", "picture": None,
                   "device_trackers": ["device_tracker.pixel_6_pro", "device_tracker.pixel_9_pro_xl"]}],
         storage_helpers=[],

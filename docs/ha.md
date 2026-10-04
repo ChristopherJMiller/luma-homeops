@@ -81,17 +81,21 @@ The pre-2026-07 Overview (`lovelace`) is retired: it shows a pointer to Home, wh
 
 ## Custom integrations and cards (pinned)
 
-They live in the release, `cluster/applications/home-assistant-release.yaml` → `valuesObject.components`, at exact versions. The chart's `install-components` init container fetches them from GitHub before `check-config` runs and reinstalls one only when its version or source changes. A version that does not exist fails the pod start (HA stays down until reverted), so `HACTL_LIVE=1 pytest tests/test_components_live.py` checks every URL resolves.
+They live in the release, `cluster/applications/home-assistant-release.yaml` → `valuesObject.components`, at exact versions. The chart's `install-components` init container fetches them from GitHub before `check-config` runs and reinstalls one only when its version or source changes. A version or asset that cannot be downloaded fails the pod start (the installed copy stays on the volume, but HA is down until the release is fixed or reverted), so `cd tools/hactl && HACTL_LIVE=1 nix develop ../.. --command python -m pytest tests/test_components_live.py` checks every URL resolves before you push.
 
 - **Integration**: `{name: <dir under custom_components>, repo: owner/name, version: <tag>}`. Add `url:` (the release zip, `{version}` substituted) for repos that HACS installs as `zip_release`: their CI stamps the version into the zip, and the source tree says `0.0.0-dev`.
 - **Card**: `{name: <dir under www/community>, repo, version, url}`, and a Lovelace resource in `state/dashboards.yaml`: `/local/community/<name>/<file>?v=<version>` (type `module`). `hactl lint` fails until every card has exactly that resource, so a bump moves both lines. Reinstalling a card empties its directory: aiohttp serves a stale `<file>.gz` in preference to a new `<file>`.
-- **Bumps**: Renovate opens PRs for every component and the HA image (never automerged). Merge, `hactl deploy`, then `hactl apply` for the resource line if it moved.
+- **Bumps**: Renovate opens one PR for HA core and one for the components (groups `home-assistant core` / `home-assistant components`, never automerged, kept out of the repo-wide non-major bundle). A card bump fails CI lint until its `?v=` resource line moves too: edit the PR. Merge, `hactl deploy`, then `hactl apply` for the resource line.
 
 HACS is still installed (Chris kept it) but installs and updates nothing: never install or update through its UI. An update made there is overwritten on the next pinned bump, and any `/hacsfiles` resource it adds shows up as plan drift. Its "update available" entities just echo upstream releases.
 
 ## HA upgrades
 
-Renovate bumps `image.tag` in the release. Before merging: read the release's breaking changes, `pg_dumpall` the `acid-ha` cluster to a local file, and run `hactl lint --offline` with the new tag (`check_config` runs in that image with the pinned integrations). After: `hactl deploy --shot`, `hactl health`, compare shots. 2026.9 moved the `http:` config into storage (see `system.yaml`); the chart no longer emits an `http:` block.
+Renovate bumps `image.tag` in the release. Before merging: read the release's breaking changes, `pg_dumpall` the `acid-ha` cluster to a local file, and run `hactl lint --offline` with the new tag (`check_config` runs in that image with the pinned integrations). After: `hactl deploy --shot`, `hactl health`, compare shots.
+
+**Rollback** (only if HA is broken on the new version): revert the tag commit and push; HA restarts on the old image. The recorder migrates its schema forward on upgrade, so if the old version then refuses to start the recorder, restore the pre-upgrade dump into a recreated database — ask Chris first. From the local dump: `psql -U postgres -f <dump>` inside `acid-ha-0`; from the operator's nightly B2 dump: `docs/backups/pg-restore.sh home-assistant acid-ha acid-ha`. Delete the local dump once the upgrade has soaked (it holds the full recorder history, location trackers included).
+
+2026.9 moved the `http:` config into storage (see `system.yaml`); the chart no longer emits an `http:` block.
 
 ## Metrics
 
