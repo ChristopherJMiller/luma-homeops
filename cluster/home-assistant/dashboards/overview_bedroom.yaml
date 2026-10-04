@@ -96,41 +96,59 @@ cards:
           entity: light.nightstand_lamp
           show_brightness_control: true
           use_light_color: true
+    # Room modes: Auto = adaptive lighting; a scene holds until Auto (lighting.yaml).
     - type: custom:mushroom-chips-card
       alignment: start
       chips:
         - type: template
+          content: Auto
+          icon: mdi:sun-clock
+          icon_color: "{{ 'amber' if is_state('input_select.bedroom_light_mode', 'Auto') else 'disabled' }}"
+          tap_action:
+            action: perform-action
+            perform_action: script.room_auto
+            data:
+              room: bedroom
+        - type: template
           content: Bright
           icon: mdi:brightness-7
+          icon_color: "{{ 'amber' if is_state('input_select.bedroom_light_mode', 'Bright') else 'disabled' }}"
           tap_action:
-            action: call-service
-            service: scene.turn_on
-            target:
-              entity_id: scene.bedroom_bright
+            action: perform-action
+            perform_action: script.room_scene
+            data:
+              room: bedroom
+              scene: Bright
         - type: template
           content: Relax
-          icon: mdi:bed
+          icon: mdi:sofa-single
+          icon_color: "{{ 'amber' if is_state('input_select.bedroom_light_mode', 'Relax') else 'disabled' }}"
           tap_action:
-            action: call-service
-            service: scene.turn_on
-            target:
-              entity_id: scene.bedroom_relax
+            action: perform-action
+            perform_action: script.room_scene
+            data:
+              room: bedroom
+              scene: Relax
+        - type: template
+          content: Read
+          icon: mdi:book-open-variant
+          icon_color: "{{ 'amber' if is_state('input_select.bedroom_light_mode', 'Read') else 'disabled' }}"
+          tap_action:
+            action: perform-action
+            perform_action: script.room_scene
+            data:
+              room: bedroom
+              scene: Read
         - type: template
           content: Night
           icon: mdi:weather-night
+          icon_color: "{{ 'amber' if is_state('input_select.bedroom_light_mode', 'Night') else 'disabled' }}"
           tap_action:
-            action: call-service
-            service: scene.turn_on
-            target:
-              entity_id: scene.bedroom_nightlight
-        - type: template
-          content: Sunset
-          icon: mdi:weather-sunset
-          tap_action:
-            action: call-service
-            service: scene.turn_on
-            target:
-              entity_id: scene.bedroom_sundown
+            action: perform-action
+            perform_action: script.room_scene
+            data:
+              room: bedroom
+              scene: Night
 - type: vertical-stack
   view_layout:
     grid-area: side

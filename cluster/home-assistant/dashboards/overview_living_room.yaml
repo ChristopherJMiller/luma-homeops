@@ -100,41 +100,59 @@ cards:
           entity: light.desk_underlight
           show_brightness_control: true
           use_light_color: true
+    # Room modes: Auto = adaptive lighting; a scene holds until Auto (lighting.yaml).
     - type: custom:mushroom-chips-card
       alignment: start
       chips:
         - type: template
+          content: Auto
+          icon: mdi:sun-clock
+          icon_color: "{{ 'amber' if is_state('input_select.living_room_light_mode', 'Auto') else 'disabled' }}"
+          tap_action:
+            action: perform-action
+            perform_action: script.room_auto
+            data:
+              room: living_room
+        - type: template
           content: Bright
           icon: mdi:brightness-7
+          icon_color: "{{ 'amber' if is_state('input_select.living_room_light_mode', 'Bright') else 'disabled' }}"
           tap_action:
-            action: call-service
-            service: scene.turn_on
-            target:
-              entity_id: scene.living_room_bright
+            action: perform-action
+            perform_action: script.room_scene
+            data:
+              room: living_room
+              scene: Bright
         - type: template
           content: Relax
-          icon: mdi:sofa
+          icon: mdi:sofa-single
+          icon_color: "{{ 'amber' if is_state('input_select.living_room_light_mode', 'Relax') else 'disabled' }}"
           tap_action:
-            action: call-service
-            service: scene.turn_on
-            target:
-              entity_id: scene.living_room_relax
+            action: perform-action
+            perform_action: script.room_scene
+            data:
+              room: living_room
+              scene: Relax
         - type: template
           content: Movie
-          icon: mdi:movie
+          icon: mdi:movie-open
+          icon_color: "{{ 'amber' if is_state('input_select.living_room_light_mode', 'Movie') else 'disabled' }}"
           tap_action:
-            action: call-service
-            service: scene.turn_on
-            target:
-              entity_id: scene.living_room_dimmed
+            action: perform-action
+            perform_action: script.room_scene
+            data:
+              room: living_room
+              scene: Movie
         - type: template
           content: Read
           icon: mdi:book-open-variant
+          icon_color: "{{ 'amber' if is_state('input_select.living_room_light_mode', 'Read') else 'disabled' }}"
           tap_action:
-            action: call-service
-            service: scene.turn_on
-            target:
-              entity_id: scene.living_room_read
+            action: perform-action
+            perform_action: script.room_scene
+            data:
+              room: living_room
+              scene: Read
 - type: vertical-stack
   view_layout:
     grid-area: side
@@ -178,47 +196,11 @@ cards:
   cards:
     - type: custom:mushroom-title-card
       title: Entertainment
-    - type: grid
-      columns: 2
-      square: false
-      cards:
-        - type: custom:mushroom-light-card
-          entity: light.tv
-          show_brightness_control: true
-          use_light_color: true
-          icon: mdi:television
-        - type: custom:mushroom-light-card
-          entity: light.tv_accent
-          show_brightness_control: true
-          use_light_color: true
-          icon: mdi:television-ambient-light
-    - type: custom:mushroom-chips-card
-      alignment: start
-      chips:
-        - type: template
-          content: TV Bright
-          icon: mdi:brightness-7
-          tap_action:
-            action: call-service
-            service: scene.turn_on
-            target:
-              entity_id: scene.tv_bright
-        - type: template
-          content: TV Movie
-          icon: mdi:movie
-          tap_action:
-            action: call-service
-            service: scene.turn_on
-            target:
-              entity_id: scene.tv_dimmed
-        - type: template
-          content: Ambient
-          icon: mdi:lava-lamp
-          tap_action:
-            action: call-service
-            service: scene.turn_on
-            target:
-              entity_id: scene.tv_cozy_dani
+    - type: custom:mushroom-light-card
+      entity: light.tv_accent
+      show_brightness_control: true
+      use_light_color: true
+      icon: mdi:television-ambient-light
     - type: custom:mushroom-entity-card
       entity: sensor.plex_chrismiller_xyz
       name: Plex Server

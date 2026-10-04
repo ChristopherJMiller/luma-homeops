@@ -44,6 +44,39 @@ cards:
             service: switch.toggle
             target:
               entity_id: switch.kitchen_underlight_do_not_disturb
+    # Room modes: Auto = adaptive lighting; a scene holds until Auto (lighting.yaml).
+    - type: custom:mushroom-chips-card
+      alignment: start
+      chips:
+        - type: template
+          content: Auto
+          icon: mdi:sun-clock
+          icon_color: "{{ 'amber' if is_state('input_select.kitchen_light_mode', 'Auto') else 'disabled' }}"
+          tap_action:
+            action: perform-action
+            perform_action: script.room_auto
+            data:
+              room: kitchen
+        - type: template
+          content: Bright
+          icon: mdi:brightness-7
+          icon_color: "{{ 'amber' if is_state('input_select.kitchen_light_mode', 'Bright') else 'disabled' }}"
+          tap_action:
+            action: perform-action
+            perform_action: script.room_scene
+            data:
+              room: kitchen
+              scene: Bright
+        - type: template
+          content: Night
+          icon: mdi:weather-night
+          icon_color: "{{ 'amber' if is_state('input_select.kitchen_light_mode', 'Night') else 'disabled' }}"
+          tap_action:
+            action: perform-action
+            perform_action: script.room_scene
+            data:
+              room: kitchen
+              scene: Night
 - type: vertical-stack
   view_layout:
     grid-area: lights
