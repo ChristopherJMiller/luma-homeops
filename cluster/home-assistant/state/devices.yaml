@@ -99,6 +99,7 @@ devices:
         - 01K0G7CWPDJDAX9K4Y3AJJTDNW
     about: imap.fastmail.com · IMAP E-Mail
     name: hello@chrismiller.xyz
+    area: network
   - match:
       identifiers:
         - id
@@ -183,3 +184,51 @@ devices:
         - '676403'
     about: Water Heater - Leak Sensor · SmartRent LeakSensor
     area: kitchen
+  - match:
+      identifiers:
+        - hue
+        - '001788fffe465e9e'
+    about: Hue Bridge · Signify
+    area: living_room
+  - match:
+      identifiers:
+        - switchbot_cloud
+        - 'E22222AC9E2C'
+    about: Plant Blinds · SwitchBot Blind Tilt
+    area: living_room
+  - match:
+      identifiers:
+        - switchbot_cloud
+        - 'CA5878E1D55E'
+    about: Window Left · SwitchBot Blind Tilt
+    area: living_room
+  - match:
+      identifiers:
+        - switchbot_cloud
+        - 'D0A2385DDEED'
+    about: Window Right · SwitchBot Blind Tilt
+    area: living_room
+  - match:
+      identifiers:
+        - octoprint
+        - '459db5d3-d88e-4c42-9758-62069d7521ec'
+    about: OctoPrint (printer by the floor fan)
+    area: living_room
+  - match:
+      identifiers:
+        - mqtt
+        - 'zigbee2mqtt_bridge_0x00124b0024c20fc3'
+    about: Zigbee2MQTT Bridge (runs on the router)
+    area: network
+  - match:
+      identifiers:
+        - mobile_app
+        - '9144f86ba4a4fb04'
+    about: Pixel 9 Pro XL · Google
+    area: network
+  - match:
+      identifiers:
+        - plex
+        - '027505b1179bfbaff75d499a4be92dfb7540dddc'
+    about: Plex Media Server
+    area: network
