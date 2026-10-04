@@ -1,0 +1,27 @@
+---
+# Home Assistant's own metrics (packages/prometheus.yaml enables /api/prometheus,
+# names prefixed homeassistant_). The endpoint needs a bearer token: a long-lived
+# HA access token, sealed in ha-metrics-token.yaml. Lives here, not in
+# cluster/home-assistant, because that kustomization forces namespace home-assistant
+# and the ScrapeConfig + its Secret must sit beside Prometheus.
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: ScrapeConfig
+metadata:
+  name: home-assistant
+  namespace: prometheus
+  labels:
+    release: prometheus
+spec:
+  metricsPath: /api/prometheus
+  scrapeInterval: 60s
+  scrapeTimeout: 30s
+  authorization:
+    type: Bearer
+    credentials:
+      name: ha-metrics-token
+      key: token
+  staticConfigs:
+    - targets:
+        - ha-home-assistant.home-assistant.svc:8123
+      labels:
+        job: home-assistant
