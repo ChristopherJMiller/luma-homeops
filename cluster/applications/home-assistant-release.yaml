@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://github.com/ChristopherJMiller/ha-helm.git
     path: ./
-    targetRevision: v0.5.2
+    targetRevision: v0.5.3
     helm:
       releaseName: ha
       valuesObject:
@@ -96,9 +96,7 @@ spec:
               unit_time: h  # degrees per hour
               time_window: 00:30:00    # 30 minute window
 
-          # http moved to HA storage in 2026.9 (declared in cluster/home-assistant/state/system.yaml);
-          # Empty (= null) on purpose: drops the chart default block, which HA would flag as ignored YAML.
-          http:
+          # No http: here — since 2026.9 HA keeps it in storage; declared in cluster/home-assistant/state/system.yaml.
         ingress:
           enabled: true
           className: traefik
