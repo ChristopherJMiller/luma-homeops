@@ -159,13 +159,44 @@ cards:
   cards:
     - type: custom:mushroom-title-card
       title: Climate
+    # The climate brain (packages/climate.yaml): pause it, see what it thinks, and why.
+    - type: custom:mushroom-chips-card
+      alignment: start
+      chips:
+        - type: template
+          entity: input_boolean.climate_auto
+          content: "{{ 'Climate Auto' if is_state('input_boolean.climate_auto', 'on') else 'Climate paused' }}"
+          icon: mdi:thermostat-auto
+          icon_color: "{{ 'amber' if is_state('input_boolean.climate_auto', 'on') else 'disabled' }}"
+          tap_action:
+            action: toggle
+        - type: template
+          entity: binary_sensor.window_insert_installed
+          content: "Insert {{ 'in' if is_state('binary_sensor.window_insert_installed', 'on') else 'out' }}"
+          icon: mdi:window-shutter-open
+          icon_color: "{{ 'amber' if is_state('binary_sensor.window_insert_installed', 'on') else 'disabled' }}"
+        - type: template
+          entity: sensor.airnow_air_quality_index
+          content: "AQI {{ states('sensor.airnow_air_quality_index') }}"
+          icon: mdi:air-filter
+          icon_color: >-
+            {% set a = states('sensor.airnow_air_quality_index') | float(0) %}
+            {{ 'red' if a > 100 else ('amber' if a > 50 else 'green') }}
+    - type: custom:mushroom-template-card
+      entity: sensor.free_cooling_status
+      primary: "Free cooling: {{ states('sensor.free_cooling_status') }}"
+      secondary: >-
+        Δ {{ states('input_number.free_cooling_delta') | float(0) | round(1) }}° · floor {{ states('input_number.free_cooling_floor') | float(0) | round(1) }}°
+        · AQI ≤ {{ states('input_number.aqi_limit') | int(0) }} · AC at {{ states('input_number.ac_cool_threshold') | float(0) | round(1) }}°
+      icon: "{% set s = states('sensor.free_cooling_status') %}{{ {'running': 'mdi:fan', 'smoke': 'mdi:smoke', 'insert out': 'mdi:window-closed-variant', 'paused': 'mdi:pause-circle-outline'}.get(s, 'mdi:fan-off') }}"
+      icon_color: "{{ 'amber' if is_state('sensor.free_cooling_status', 'running') else ('red' if is_state('sensor.free_cooling_status', 'smoke') else 'disabled') }}"
     - type: custom:mushroom-climate-card
       entity: climate.living_room
       show_temperature_control: true
       collapsible_controls: true
     - type: custom:mushroom-climate-card
       entity: climate.air_conditioner
-      name: A/C
+      name: A/C (IR · state assumed)
       icon: mdi:air-conditioner
       collapsible_controls: true
     - type: custom:mushroom-entity-card
@@ -174,10 +205,14 @@ cards:
       icon: mdi:fan
       tap_action:
         action: toggle
-    - type: custom:mushroom-entity-card
+    - type: custom:mushroom-template-card
       entity: switch.floor_fan
-      name: Floor Fan
+      primary: Floor Fan
+      secondary: >-
+        {{ 'Paused for print' if is_state('input_boolean.floor_fan_paused_for_print', 'on')
+           else ('On' if is_state('switch.floor_fan', 'on') else 'Off') }}
       icon: mdi:fan
+      icon_color: "{{ 'blue' if is_state('switch.floor_fan', 'on') else 'disabled' }}"
       tap_action:
         action: toggle
     - type: custom:mushroom-entity-card

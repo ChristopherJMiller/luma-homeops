@@ -37,41 +37,87 @@ cards:
 # ---------- HERO: outfit verdict + weather + sun times (one tight band;
 #            horizon-card is too tall at grid width — times live in the
 #            secondary line instead) ----------
-- type: custom:mushroom-template-card
+- type: vertical-stack
   view_layout:
     grid-area: hero
-  primary: "{{ states('sensor.outfit_advice') }}"
-  secondary: >-
-    {{ states('sensor.current_city') }}  ·  {{ states('sensor.active_temperature') }}°
-    {%- set w = states('weather.forecast_home') %}
-    {%- set labels = {'clear-night': 'Clear night', 'cloudy': 'Cloudy', 'exceptional': 'Exceptional', 'fog': 'Fog',
-      'hail': 'Hail', 'lightning': 'Lightning', 'lightning-rainy': 'Thunderstorms', 'partlycloudy': 'Partly cloudy',
-      'pouring': 'Pouring', 'rainy': 'Rainy', 'snowy': 'Snowy', 'snowy-rainy': 'Sleet', 'sunny': 'Sunny',
-      'windy': 'Windy', 'windy-variant': 'Windy'} %}
-    {{ labels.get(w, w | replace('-', ' ') | capitalize) }}
-    ·  ↑ {{ as_timestamp(state_attr('sun.sun','next_rising')) | timestamp_custom('%-I:%M %p') }}
-    ·  ↓ {{ as_timestamp(state_attr('sun.sun','next_setting')) | timestamp_custom('%-I:%M %p') }}
-  icon: >-
-    {% set c = states('weather.forecast_home') %}
-    {% set m = {'sunny':'mdi:weather-sunny','clear-night':'mdi:weather-night',
-    'cloudy':'mdi:weather-cloudy','partlycloudy':'mdi:weather-partly-cloudy',
-    'rainy':'mdi:weather-rainy','pouring':'mdi:weather-pouring',
-    'snowy':'mdi:weather-snowy','fog':'mdi:weather-fog','windy':'mdi:weather-windy'} %}
-    {{ m.get(c, 'mdi:weather-partly-cloudy') }}
-  icon_color: amber
-  card_mod:
-    style: |
-      ha-card {
-        background:
-          radial-gradient(130% 200% at 10% -20%, rgba(221,161,94,0.22), transparent 60%),
-          var(--card-background-color);
-        border-radius: 24px;
-        --mush-icon-size: 52px;
-      }
-      mushroom-shape-icon { --shape-color: transparent; }
-      mushroom-state-info $ .primary { font-size: 22px; font-weight: 700; }
-      mushroom-state-info $ .secondary { font-size: 14px; }
-# ---------- TODAY: transit (work days only) + mail ----------
+  cards:
+    - type: custom:mushroom-template-card
+      primary: "{{ states('sensor.outfit_advice') }}"
+      secondary: >-
+        {{ states('sensor.current_city') }}  ·  {{ states('sensor.active_temperature') }}°
+        {%- set w = states('weather.forecast_home') %}
+        {%- set labels = {'clear-night': 'Clear night', 'cloudy': 'Cloudy', 'exceptional': 'Exceptional', 'fog': 'Fog',
+          'hail': 'Hail', 'lightning': 'Lightning', 'lightning-rainy': 'Thunderstorms', 'partlycloudy': 'Partly cloudy',
+          'pouring': 'Pouring', 'rainy': 'Rainy', 'snowy': 'Snowy', 'snowy-rainy': 'Sleet', 'sunny': 'Sunny',
+          'windy': 'Windy', 'windy-variant': 'Windy'} %}
+        {{ labels.get(w, w | replace('-', ' ') | capitalize) }}
+        ·  ↑ {{ as_timestamp(state_attr('sun.sun','next_rising')) | timestamp_custom('%-I:%M %p') }}
+        ·  ↓ {{ as_timestamp(state_attr('sun.sun','next_setting')) | timestamp_custom('%-I:%M %p') }}
+      icon: >-
+        {% set c = states('weather.forecast_home') %}
+        {% set m = {'sunny':'mdi:weather-sunny','clear-night':'mdi:weather-night',
+        'cloudy':'mdi:weather-cloudy','partlycloudy':'mdi:weather-partly-cloudy',
+        'rainy':'mdi:weather-rainy','pouring':'mdi:weather-pouring',
+        'snowy':'mdi:weather-snowy','fog':'mdi:weather-fog','windy':'mdi:weather-windy'} %}
+        {{ m.get(c, 'mdi:weather-partly-cloudy') }}
+      icon_color: amber
+      card_mod:
+        style: |
+          ha-card {
+            background:
+              radial-gradient(130% 200% at 10% -20%, rgba(221,161,94,0.22), transparent 60%),
+              var(--card-background-color);
+            border-radius: 24px;
+            --mush-icon-size: 52px;
+          }
+          mushroom-shape-icon { --shape-color: transparent; }
+          mushroom-state-info $ .primary { font-size: 22px; font-weight: 700; }
+          mushroom-state-info $ .secondary { font-size: 14px; }
+    # ---------- TODAY: transit (work days only) + mail ----------
+    # Household chips: guest mode, the climate brain's verdict, air quality.
+    - type: custom:mushroom-chips-card
+      alignment: start
+      chips:
+        - type: template
+          entity: input_boolean.guest_mode
+          content: "{{ 'Guests' if is_state('input_boolean.guest_mode', 'on') else 'No guests' }}"
+          icon: mdi:account-multiple
+          icon_color: "{{ 'amber' if is_state('input_boolean.guest_mode', 'on') else 'disabled' }}"
+          tap_action:
+            action: toggle
+        - type: template
+          entity: sensor.free_cooling_status
+          content: "Climate · {{ states('sensor.free_cooling_status') }}"
+          icon: "{% set s = states('sensor.free_cooling_status') %}{{ {'running': 'mdi:fan', 'smoke': 'mdi:smoke', 'insert out': 'mdi:window-closed-variant', 'paused': 'mdi:pause-circle-outline'}.get(s, 'mdi:fan-off') }}"
+          icon_color: "{{ 'amber' if is_state('sensor.free_cooling_status', 'running') else ('red' if is_state('sensor.free_cooling_status', 'smoke') else 'disabled') }}"
+          tap_action:
+            action: navigate
+            navigation_path: /home-ops/1
+        - type: template
+          entity: sensor.airnow_air_quality_index
+          content: "AQI {{ states('sensor.airnow_air_quality_index') }}"
+          icon: mdi:air-filter
+          icon_color: >-
+            {% set a = states('sensor.airnow_air_quality_index') | float(0) %}
+            {{ 'red' if a > 100 else ('amber' if a > 50 else 'green') }}
+    # Only while printing.
+    - type: conditional
+      conditions:
+        - condition: state
+          entity: binary_sensor.octoprint_printing
+          state: "on"
+      card:
+        type: custom:mushroom-template-card
+        primary: "Printing · {{ states('sensor.octoprint_job_percentage') | int(0) }}%"
+        secondary: >-
+          {{ states('sensor.octoprint_current_file') }}
+          {% set t = states('sensor.octoprint_estimated_finish_time') %}
+          {% if t not in ['unknown', 'unavailable'] %}· done {{ as_timestamp(t) | timestamp_custom('%-I:%M %p') }}{% endif %}
+        icon: mdi:printer-3d-nozzle
+        icon_color: amber
+        tap_action:
+          action: more-info
+          entity: binary_sensor.octoprint_printing
 - type: vertical-stack
   view_layout:
     grid-area: today
