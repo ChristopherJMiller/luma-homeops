@@ -39,7 +39,7 @@ spec:
             - {name: lovelace-mushroom, repo: piitaya/lovelace-mushroom, version: v5.1.1, url: "https://github.com/piitaya/lovelace-mushroom/releases/download/{version}/mushroom.js"}
             - {name: lovelace-horizon-card, repo: rejuvenate/lovelace-horizon-card, version: v1.5.3, url: "https://github.com/rejuvenate/lovelace-horizon-card/releases/download/{version}/lovelace-horizon-card.js"}
             - {name: calendar-card-pro, repo: alexpfau/calendar-card-pro, version: v3.2.0, url: "https://github.com/alexpfau/calendar-card-pro/releases/download/{version}/calendar-card-pro.js"}
-            - {name: lovelace-card-mod, repo: thomasloven/lovelace-card-mod, version: v4.2.1, url: "https://raw.githubusercontent.com/thomasloven/lovelace-card-mod/{version}/card-mod.js"}
+            - {name: lovelace-card-mod, repo: thomasloven/lovelace-card-mod, version: 14, url: "https://raw.githubusercontent.com/thomasloven/lovelace-card-mod/{version}/card-mod.js"}
             - {name: Bubble-Card, repo: Clooos/Bubble-Card, version: v3.2.5, url: "https://raw.githubusercontent.com/Clooos/Bubble-Card/{version}/dist/bubble-card.js"}
             - {name: lovelace-layout-card, repo: thomasloven/lovelace-layout-card, version: v2.4.7, url: "https://raw.githubusercontent.com/thomasloven/lovelace-layout-card/{version}/layout-card.js"}
             - {name: Ultra-Card, repo: WJDDesigns/Ultra-Card, version: v3.5.0, url: "https://github.com/WJDDesigns/Ultra-Card/releases/download/{version}/ultra-card.js"}
