@@ -116,3 +116,47 @@ def test_state_manifest_problems_are_lint_findings(tmp_path):
     (ha / "state" / "areas.yaml").write_text("areas:\n  - {id: x, name: X, floor: nowhere}\n")
     found = lint.check_state(ha)
     assert [f.rule for f in found] == ["state"] and "floor 'nowhere' is not declared" in found[0].message
+
+
+def test_custom_components_come_from_release_values(tmp_path):
+    f = tmp_path / "release.yaml"
+    f.write_text("spec:\n  source:\n    helm:\n      valuesObject:\n        components:\n          integrations:\n"
+                 "            - {name: adaptive_lighting, repo: basnijholt/adaptive-lighting, version: v1.31.0}\n")
+    assert lint.custom_components(f) == [("adaptive_lighting", "basnijholt/adaptive-lighting", "v1.31.0")]
+
+
+def test_no_components_block_means_none(tmp_path):
+    f = tmp_path / "release.yaml"
+    f.write_text("spec:\n  source:\n    helm:\n      valuesObject:\n        hacs: true\n")
+    assert lint.custom_components(f) == []
+
+
+def test_components_are_cloned_at_their_pinned_tag(tmp_path):
+    assert lint.clone_command("basnijholt/adaptive-lighting", "v1.31.0", tmp_path / "src") == [
+        "git", "-c", "advice.detachedHead=false", "clone", "-q", "--depth", "1", "--branch", "v1.31.0",
+        "https://github.com/basnijholt/adaptive-lighting", str(tmp_path / "src")]
+
+
+RELEASE_WITH_CARD = ("spec:\n  source:\n    helm:\n      valuesObject:\n        components:\n          cards:\n"
+                     '            - {name: lovelace-mushroom, repo: piitaya/lovelace-mushroom, version: v5.1.1,'
+                     ' url: "https://github.com/piitaya/lovelace-mushroom/releases/download/{version}/mushroom.js"}\n')
+
+
+def test_card_resource_matches_pinned_version(tmp_path):
+    rel = tmp_path / "release.yaml"
+    rel.write_text(RELEASE_WITH_CARD)
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "dashboards.yaml").write_text(
+        "resources:\n  - url: /local/community/lovelace-mushroom/mushroom.js?v=v5.1.1\n    type: module\n")
+    assert lint.check_card_resources(tmp_path, rel) == []
+
+
+def test_card_bumped_without_its_resource_is_a_finding(tmp_path):
+    rel = tmp_path / "release.yaml"
+    rel.write_text(RELEASE_WITH_CARD.replace("v5.1.1", "v5.2.0"))
+    (tmp_path / "state").mkdir()
+    (tmp_path / "state" / "dashboards.yaml").write_text(
+        "resources:\n  - url: /local/community/lovelace-mushroom/mushroom.js?v=v5.1.1\n    type: module\n")
+    msgs = [f.message for f in lint.check_card_resources(tmp_path, rel)]
+    assert any("/local/community/lovelace-mushroom/mushroom.js?v=v5.2.0" in m for m in msgs)  # the resource to declare
+    assert any("?v=v5.1.1" in m for m in msgs)  # the stale one

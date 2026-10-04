@@ -77,6 +77,37 @@
       "matchPackageNames": ["ghcr.io/christopherjmiller/grampsweb"],
       "automerge": false,
       "description": "Our own Gramps Web (images/grampsweb): upstream plus the patch that creates a listed family address as an editor on first login. That patch decides who gets into the family tree with no human in the loop, so a bump is an auth change — read the diff and confirm the workflow's fail-closed smoke test passed. Renovate bumps the upstream FROM in the Dockerfile; the sha- tag here is pinned by hand after the workflow publishes it."
+    },
+    {
+      "matchDatasources": ["github-tags"],
+      "matchFileNames": ["cluster/applications/home-assistant-release.yaml"],
+      "automerge": false,
+      "description": "HA custom integrations/cards. A card bump must also move its ?v= resource in cluster/home-assistant/state/dashboards.yaml (hactl lint fails until it does); then hactl deploy + hactl apply."
+    },
+    {
+      "matchPackageNames": ["homeassistant/home-assistant"],
+      "automerge": false,
+      "description": "HA core: read the breaking-changes section, pg_dumpall first, hactl lint in the new image (see docs/ha.md)."
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "HA image tag in the Argo release (the chart takes it as image.tag, which no built-in manager sees)",
+      "managerFilePatterns": ["/^cluster/applications/home-assistant-release\\.yaml$/"],
+      "matchStrings": ["image:\\s*\\n\\s*tag: (?<currentValue>\\d{4}\\.\\d+\\.\\d+)"],
+      "depNameTemplate": "homeassistant/home-assistant",
+      "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Pinned HA custom integrations/cards (ha-helm components)",
+      "managerFilePatterns": ["/^cluster/applications/home-assistant-release\\.yaml$/"],
+      "matchStrings": [
+        "repo: (?<depName>[\\w.-]+/[\\w.-]+), version: (?<currentValue>\\S+?)[,}]",
+        "repo: (?<depName>[\\w.-]+/[\\w.-]+)\\n\\s+version: (?<currentValue>\\S+)"
+      ],
+      "datasourceTemplate": "github-tags"
     }
   ],
   "argocd": {

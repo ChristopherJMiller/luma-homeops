@@ -24,19 +24,19 @@ dashboards:
     require_admin: false
     show_in_sidebar: true
 resources:
-  - url: /hacsfiles/lovelace-mushroom/mushroom.js?hacstag=444350375511
+  - url: /local/community/lovelace-mushroom/mushroom.js?v=v5.1.1
     type: module
-  - url: /hacsfiles/lovelace-horizon-card/lovelace-horizon-card.js?hacstag=614083491153
+  - url: /local/community/lovelace-horizon-card/lovelace-horizon-card.js?v=v1.5.3
     type: module
-  - url: /hacsfiles/calendar-card-pro/calendar-card-pro.js?hacstag=939311749320
+  - url: /local/community/calendar-card-pro/calendar-card-pro.js?v=v3.2.0
     type: module
-  - url: /hacsfiles/lovelace-card-mod/card-mod.js?hacstag=190927524421
+  - url: /local/community/lovelace-card-mod/card-mod.js?v=v4.2.1
     type: module
-  - url: /hacsfiles/Bubble-Card/bubble-card.js?hacstag=680112919325
+  - url: /local/community/Bubble-Card/bubble-card.js?v=v3.2.5
     type: module
-  - url: /hacsfiles/lovelace-layout-card/layout-card.js?hacstag=156434866247
+  - url: /local/community/lovelace-layout-card/layout-card.js?v=v2.4.7
     type: module
-  - url: /hacsfiles/Ultra-Card/ultra-card.js?hacstag=1018230174350
+  - url: /local/community/Ultra-Card/ultra-card.js?v=v3.5.0
     type: module
-  - url: /hacsfiles/weather_alerts_card/weather-alerts-card.js?hacstag=1158790951320
+  - url: /local/community/weather_alerts_card/weather-alerts-card.js?v=v3.2.0
     type: module

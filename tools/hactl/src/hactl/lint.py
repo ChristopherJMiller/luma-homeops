@@ -23,8 +23,6 @@ _CHECK_MARKERS = re.compile(
     re.I,
 )
 _SECRET = re.compile(r"!secret\s+([A-Za-z0-9_]+)")
-# Custom integrations the packages configure; check_config needs their code.
-CUSTOM_COMPONENTS = {"adaptive_lighting": "https://github.com/basnijholt/adaptive-lighting"}
 
 
 @dataclass
@@ -92,6 +90,41 @@ def _docker_ok() -> bool:
     return bool(shutil.which("docker")) and subprocess.run(["docker", "info"], capture_output=True).returncode == 0
 
 
+def _components(release_file: Path) -> dict:
+    values = (((yaml.safe_load(release_file.read_text()) or {}).get("spec") or {}).get("source") or {}) \
+        .get("helm", {}).get("valuesObject") or {}
+    return values.get("components") or {}
+
+
+def custom_components(release_file: Path = paths.RELEASE_FILE) -> list:
+    """(name, repo, version) of each custom integration the chart installs (components.integrations)."""
+    return [(c["name"], c["repo"], str(c["version"])) for c in _components(release_file).get("integrations") or []]
+
+
+def card_resource_url(card: dict) -> str:
+    """Where the chart serves a pinned card, with the version as cache-buster."""
+    version = str(card["version"])
+    file = card["url"].replace("{version}", version).rsplit("/", 1)[-1]
+    return f"/local/community/{card['name']}/{file}?v={version}"
+
+
+def check_card_resources(ha_dir: Path, release_file: Path = paths.RELEASE_FILE) -> list:
+    """Each pinned card has exactly its versioned Lovelace resource: a Renovate bump edits only
+    the release values, and a stale ?v= would keep browsers on the cached old card."""
+    want = {card_resource_url(c) for c in _components(release_file).get("cards") or []}
+    dash = ha_dir / "state" / "dashboards.yaml"
+    have = {r.get("url") for r in ((yaml.safe_load(dash.read_text()) if dash.exists() else None) or {}).get("resources") or []}
+    have = {u for u in have if u and u.startswith("/local/community/")}
+    where = paths.rel(dash)
+    return ([Finding("card-resource", where, None, f"pinned card has no resource: declare {u}") for u in sorted(want - have)]
+            + [Finding("card-resource", where, None, f"resource {u} matches no pinned card version in {paths.rel(release_file)}")
+               for u in sorted(have - want)])
+
+
+def clone_command(repo: str, version: str, dest: Path) -> list:
+    return ["git", "-c", "advice.detachedHead=false", "clone", "-q", "--depth", "1", "--branch", version, f"https://github.com/{repo}", str(dest)]
+
+
 def check_config_command(cfg: Path, tag: str) -> list:
     """docker run for check_config. Afterwards, hand every file back to whoever
     owns /config *inside* the container: that is the host user under rootless
@@ -116,9 +149,9 @@ def check_config(ha_dir: Path, tag: str) -> list:
         (cfg / "secrets.yaml").write_text("".join(f'{n}: "lint-dummy"\n' for n in names))
         components = cfg / "custom_components"
         components.mkdir()
-        for name, repo in CUSTOM_COMPONENTS.items():
+        for name, repo, version in custom_components():  # the versions the chart installs
             src = Path(tmp) / f"{name}-src"
-            subprocess.run(["git", "clone", "-q", "--depth", "1", repo, str(src)], check=True)
+            subprocess.run(clone_command(repo, version, src), check=True)
             shutil.copytree(src / "custom_components" / name, components / name)
         r = subprocess.run(check_config_command(cfg, tag), capture_output=True, text=True)
         text = _ANSI.sub("", r.stdout + r.stderr)
@@ -137,7 +170,7 @@ def check_state(ha_dir: Path) -> list:
 
 def offline(ha_dir: Path = paths.HA_DIR, run_check_config: bool = True) -> list:
     findings = (check_filenames(ha_dir) + check_kustomization(ha_dir) + check_quoting(ha_dir)
-                + check_revision(ha_dir) + check_state(ha_dir))
+                + check_revision(ha_dir) + check_state(ha_dir) + check_card_resources(ha_dir))
     if run_check_config:
         findings += check_config(ha_dir, deployed_tag())
     return findings
