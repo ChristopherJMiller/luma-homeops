@@ -50,6 +50,7 @@ def test_failed_screenshots_keep_the_health_report(monkeypatch, capsys):
 
     monkeypatch.setattr(deploy, "_git", lambda *a: HEAD if a[0] == "rev-parse" else "origin/main")
     monkeypatch.setattr(deploy, "wait_for_rollout", lambda head, timeout: None)
+    monkeypatch.setattr(deploy.state_cli, "converge", lambda client, prune=False, log=None: (["state: in sync"], True))
     monkeypatch.setattr(deploy.health, "collect", lambda client: {"marker": True})
     monkeypatch.setattr(deploy.health, "render", lambda report: (["health: ok"], False))
 
@@ -110,3 +111,18 @@ def test_rollout_wait_does_not_need_the_chart_repo_to_match_head():
     }
     deploy.wait_for_rollout(HEAD, timeout=30, status=lambda app: apps[app], deployment=lambda: dep(),
                             ha_running=lambda: True, clock=lambda: 0.0, sleep=lambda s: None, log=lambda m: None)
+
+
+def test_deploy_converges_state_and_fails_on_leftovers(monkeypatch, capsys):
+    import argparse
+
+    monkeypatch.setattr(deploy, "_git", lambda *a: HEAD if a[0] == "rev-parse" else "origin/main")
+    monkeypatch.setattr(deploy, "wait_for_rollout", lambda head, timeout: None)
+    monkeypatch.setattr(deploy.state_cli, "converge",
+                        lambda client, prune=False, log=None: (["state: applied 0, failed 1", "  error: boom"], False))
+    monkeypatch.setattr(deploy.health, "collect", lambda client: {})
+    monkeypatch.setattr(deploy.health, "render", lambda report: (["health: ok"], False))
+    monkeypatch.setattr("hactl.client.Client", lambda: object())
+    rc = deploy._run(argparse.Namespace(timeout=10, shot=False, json=False))
+    out = capsys.readouterr().out
+    assert rc == 1 and "error: boom" in out and "health: ok" in out

@@ -56,3 +56,19 @@ def test_aborted_with_an_error_is_failing():
     traces = [t("blinds", "1", "aborted", "2026-10-03T10:00")]
     detail = {"trace": {"action/0": [{"path": "action/0", "error": "UndefinedError: 'x' is undefined"}]}}
     assert [f["item_id"] for f in health.failing_automations(traces, get_trace=lambda item, run: detail)] == ["blinds"]
+
+
+def test_state_drift_is_a_problem_not_loaded_is_a_warning():
+    base = {"drift": [], "hook": "succeeded", "failing": [], "repairs": [], "log_errors": [], "unavailable": [],
+            "state": [], "not_loaded": ["plex/Plex: setup_retry (timeout)"]}
+    lines, problem = health.render(base)
+    assert not problem and any("plex/Plex" in line for line in lines)
+    lines, problem = health.render(dict(base, state=["+ area office: 'Office'"]))
+    assert problem and any("+ area office" in line for line in lines)
+
+
+def test_not_loaded_entries():
+    entries = [{"domain": "plex", "title": "Plex", "state": "setup_retry", "reason": "timeout", "disabled_by": None},
+               {"domain": "hue", "title": "Hue", "state": "loaded", "reason": None, "disabled_by": None},
+               {"domain": "x", "title": "Off", "state": "not_loaded", "reason": None, "disabled_by": "user"}]
+    assert health.not_loaded(entries) == ["plex/Plex: setup_retry (timeout)"]

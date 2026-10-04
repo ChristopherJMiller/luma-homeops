@@ -3,6 +3,8 @@ import json
 import subprocess
 
 from hactl import output, paths, query, refs, revision, yamlload
+from hactl.errors import HactlError
+from hactl.state import cli as state_cli
 
 ERROR_EXECUTIONS = frozenset({"error", "unhandled_error"})
 # "aborted" is also what HA records when an action-sequence condition is false
@@ -55,6 +57,12 @@ def drift(repo_rev, loaded_rev, declared, components) -> list:
     return out
 
 
+def not_loaded(entries) -> list:
+    """Config entries that should be running but aren't (disabled ones are intentional)."""
+    return [f"{e['domain']}/{e['title']}: {e['state']}" + (f" ({e['reason']})" if e.get("reason") else "")
+            for e in entries if e.get("state") != "loaded" and not e.get("disabled_by")]
+
+
 def hook_status():
     """ha-reload Job outcome via kubectl (read-only). None when unknown."""
     try:
@@ -77,6 +85,11 @@ def collect(client, ha_dir=paths.HA_DIR) -> dict:
     for sub in ("packages", "dashboards"):
         for f in sorted((ha_dir / sub).glob("*.yaml")):
             used |= refs.extract_refs(yamlload.load(f))
+    try:
+        _, snap, changes = state_cli.compute(client, ha_dir / "state")
+        state, entries = [str(c) for c in changes], snap.entries
+    except HactlError as e:
+        state, entries = [f"could not plan: {e}"], client.ws({"type": "config_entries/get"})[0]
     return {
         "drift": drift(revision.compute(ha_dir), states.get("sensor.ha_config_revision"),
                        declared_domains(yamlload.load_dir(ha_dir / "packages")), components),
@@ -87,11 +100,13 @@ def collect(client, ha_dir=paths.HA_DIR) -> dict:
                     for i in repairs["issues"] if not i.get("ignored")],
         "log_errors": sorted(query.format_log(log, errors_only=True), key=lambda e: -e["count"])[:10],
         "unavailable": sorted(r for r in used if states.get(r) in ("unavailable", "unknown")),
+        "state": state,
+        "not_loaded": not_loaded(entries),
     }
 
 
 def render(r: dict) -> tuple:
-    problem = bool(r["drift"] or r["failing"] or r["hook"] == "failed")
+    problem = bool(r["drift"] or r["failing"] or r["hook"] == "failed" or r.get("state"))
     lines = [f"health: {'PROBLEMS' if problem else 'ok'}"]
 
     def section(title, items, fmt=str):
@@ -99,6 +114,8 @@ def render(r: dict) -> tuple:
         lines.extend(f"  - {fmt(i)}" for i in items)
 
     section("drift", r["drift"])
+    section("state plan (hactl plan; hactl apply converges)", r.get("state", []))
+    section("integrations not loaded (warning)", r.get("not_loaded", []))
     lines.append(f"ha-reload hook: {r['hook'] or 'unknown (no KUBECONFIG, or no run yet)'}")
     section("failing automations", r["failing"], lambda f: f"{f['item_id']} ({f['execution']} at {f['start']}): hactl trace {f['item_id']}")
     section("repairs", r["repairs"], lambda i: f"{i['domain']}/{i['issue_id']} [{i['severity']}]")

@@ -16,6 +16,7 @@ import time
 
 from hactl import health, output, paths, shot
 from hactl.errors import HactlError
+from hactl.state import cli as state_cli
 
 DEFAULT_VIEWS = ["/home-ops/0", "/home-ops/1", "/home-ops/2", "/home-ops/3"]
 CONFIG_APP, ROOT_APP, RELEASE_APP = "home-assistant", "applications", "home-assistant-release"
@@ -123,8 +124,11 @@ def _run(args) -> int:
         raise HactlError("HEAD is not pushed yet: git push first")
     wait_for_rollout(head, args.timeout)
     client = Client()
+    state_lines, state_ok = state_cli.converge(client, prune=False, log=lambda m: None)
     report = health.collect(client)
     lines, problem = health.render(report)
+    lines = state_lines + lines
+    problem = problem or not state_ok
     bad = False
     if args.shot:
         try:
