@@ -3,9 +3,8 @@
 # One id per line; say why, and what will make it exist (or remove it).
 
 # overview_brain.yaml's Toronto branch (used while the "not in Seattle"
-# calendar is on). Both integrations are still "ADD via UI": the ops-fixes
-# plan of the HA overhaul adds them as declared integrations, or drops the
-# Toronto branch.
+# phone is in America/Toronto). Neither integration exists yet: Toronto weather
+# and commute are to be added (or the Toronto branch dropped) when Chris decides.
 weather.toronto
 sensor.toronto_work_commute
 sensor.seattle_work_commute  # Seattle commute source; Waze removed 2026-10-03 (403s), no replacement yet, so sensor.active_commute is unavailable in Seattle by design

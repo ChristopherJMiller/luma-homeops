@@ -562,6 +562,35 @@ whole feature can be paused from the dashboard.
   when Chris leaves. Automation sets `climate.air_conditioner` to `cool` /
   `off`. IR is one-way, so HA's state is assumed; the dashboard says so.
 
+**As built (plan 4, 2026-10-03)** — where the result differs from §7:
+
+- Home Wi-Fi is "the phone's SSID contains a fragment" (case-insensitive; Chris has
+  two access points), sealed in `ha-secrets` as `home_wifi_match`; the phone's
+  sensor is `sensor.pixel_9_pro_xl_wi_fi_connection`. The `ha-secrets` mount is
+  ha-helm v0.6.0 `secretsFile`.
+- Scenes are `scene.<scene>_<room>` (the Hue scenes own `scene.<room>_<scene>`);
+  Night (Bedroom) uses brightness 1 (Hue's 1% reads back as 0, which would mean
+  off). `script.room_scene` marks the lights manual *before* turning the scene on:
+  adaptive lighting's turn-on intercept otherwise replaces the scene's values on
+  lights that were off. Adaptive lighting reads its YAML only at startup, so its
+  light list change took one HA restart (Chris approved).
+- The morning routine's "start your day" is `script.start_your_day`, called by the
+  bedroom switch automation when armed: both had triggered on the same flip and
+  raced (seen live). One automation owns the switch.
+- `free_cooling_status` also reports `starting` (conditions met, hysteresis
+  pending) and `no data`. `input_boolean.climate_auto` has no `initial:`, so a pause
+  survives restarts; the insert/free-cooling sensors start `unknown` after every
+  reload, so climate acts only on later transitions. Removing the insert stands
+  the vent fan and AC down (no command).
+- §7.1 is a lint rule (`automation-shape`, `notify-outside-alerts`); the Zigbee
+  pairing alert moved into `home_alerts.yaml`.
+- `hactl deploy` now waits until HA runs the committed config revision (without a
+  pod restart Argo finished ~1 min before the hook's reload). `hactl health
+  --registry` judges "long unavailable" on recorded history (~10 days, not 30) and
+  ignores `unknown` (stateless entities sit there).
+- Every device is in an area; a `Network` area holds the Zigbee bridge, phone,
+  IMAP mailbox and Plex server.
+
 ## 8. Phase 4 — dashboard
 
 - Keep mushroom, layout-card, card-mod and the warm-minimal look.
