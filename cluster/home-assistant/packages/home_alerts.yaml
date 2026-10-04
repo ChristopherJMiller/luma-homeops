@@ -1,6 +1,7 @@
 ---
 # Home safety/hygiene alerts — leak, fridge/freezer ajar, door unlocked,
-# low-battery digest. Notify-only (no actuation) by design.
+# low-battery digest, Zigbee pairing window. The ONLY package that notifies the
+# phone (spec §7.1; `hactl lint` enforces it).
 #
 # GitOps source of truth (see bedroom.yaml header for the mount mechanism).
 
@@ -30,6 +31,7 @@ automation:
   # Fridge/freezer door ajar 5 min → push.
   - id: alert_fridge_freezer_ajar
     alias: Alert - Fridge/Freezer Door Ajar
+    description: Fridge or freezer door open for 5 minutes.
     triggers:
       - trigger: state
         entity_id:
@@ -51,6 +53,7 @@ automation:
   # Notify-only — no auto-lock.
   - id: alert_front_door_unlocked
     alias: Alert - Front Door Unlocked
+    description: Front door unlocked for 10 minutes late at night or while Chris is away (notify only, no auto-lock).
     triggers:
       - trigger: state
         entity_id: lock.front_door_lock
@@ -80,6 +83,7 @@ automation:
   # Saturday 10:00 low-battery digest (<30%, phones excluded).
   - id: alert_low_battery_digest
     alias: Alert - Weekly Low Battery Digest
+    description: Saturday 10:00 list of batteries under 30% (phones excluded).
     triggers:
       - trigger: time
         at: "10:00:00"
@@ -105,4 +109,23 @@ automation:
         data:
           title: 🔋 Low batteries
           message: "{{ low_batteries | join(', ') }}"
+    mode: single
+
+  # Zigbee pairing window: never leave permit_join on (any nearby device could join the mesh).
+  - id: zigbee_permit_join_auto_off
+    alias: Zigbee - Auto-disable Permit Join
+    description: Turn pairing mode off 15 minutes after it was enabled.
+    triggers:
+      - trigger: state
+        entity_id: switch.zigbee2mqtt_bridge_permit_join
+        to: "on"
+        for: "00:15:00"
+    actions:
+      - action: switch.turn_off
+        target:
+          entity_id: switch.zigbee2mqtt_bridge_permit_join
+      - action: notify.mobile_app_pixel_9_pro_xl
+        data:
+          title: 📡 Zigbee pairing closed
+          message: permit_join was on for 15 minutes — auto-disabled.
     mode: single

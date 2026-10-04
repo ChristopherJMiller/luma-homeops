@@ -160,3 +160,22 @@ def test_card_bumped_without_its_resource_is_a_finding(tmp_path):
     msgs = [f.message for f in lint.check_card_resources(tmp_path, rel)]
     assert any("/local/community/lovelace-mushroom/mushroom.js?v=v5.2.0" in m for m in msgs)  # the resource to declare
     assert any("?v=v5.1.1" in m for m in msgs)  # the stale one
+
+
+def test_automation_shape_and_notify_rules(tmp_path):
+    ha = make_ha(tmp_path, {
+        "packages/good.yaml": "automation:\n  - id: a\n    alias: A\n    description: d\n    mode: single\n    actions: []\n",
+        "packages/bad.yaml": "automation:\n  - id: b\n    alias: B\n    actions:\n      - action: notify.mobile_app_x\n",
+        "packages/home_alerts.yaml": "automation:\n  - id: c\n    alias: C\n    description: d\n    mode: single\n"
+                                     "    actions:\n      - action: notify.mobile_app_x\n",
+    })
+    msgs = sorted((f.rule, f.message) for f in lint.check_automations(ha))
+    assert msgs == [("automation-shape", "B: missing description, mode"),
+                    ("notify-outside-alerts", "B: notify.mobile_app_x (only home_alerts.yaml notifies the phone)")]
+
+
+def test_notify_found_inside_choose_branches(tmp_path):
+    ha = make_ha(tmp_path, {"packages/x.yaml": (
+        "automation:\n  - id: x\n    alias: X\n    description: d\n    mode: single\n    actions:\n"
+        "      - choose:\n          - conditions: []\n            sequence:\n              - action: notify.notify\n")})
+    assert [f.rule for f in lint.check_automations(ha)] == ["notify-outside-alerts"]

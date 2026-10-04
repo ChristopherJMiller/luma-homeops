@@ -168,9 +168,40 @@ def check_state(ha_dir: Path) -> list:
     return []
 
 
+def _actions(node):
+    """Every `action:` value anywhere under an automation's actions (choose/if/sequence nest)."""
+    if isinstance(node, dict):
+        if isinstance(node.get("action"), str):
+            yield node["action"]
+        for v in node.values():
+            yield from _actions(v)
+    elif isinstance(node, list):
+        for v in node:
+            yield from _actions(v)
+
+
+def check_automations(ha_dir: Path) -> list:
+    """Spec §7.1: every automation has id/alias/description/mode; only home_alerts notifies the phone."""
+    out = []
+    for f in sorted((ha_dir / "packages").glob("*.yaml")):
+        body = (yamlload.load(f) or {}).get("automation")
+        for a in body if isinstance(body, list) else []:
+            if not isinstance(a, dict):
+                continue
+            name = a.get("alias") or a.get("id") or "?"
+            if missing := [k for k in ("id", "alias", "description", "mode") if not a.get(k)]:
+                out.append(Finding("automation-shape", paths.rel(f), None, f"{name}: missing {', '.join(missing)}"))
+            if f.name != "home_alerts.yaml":
+                out += [Finding("notify-outside-alerts", paths.rel(f), None,
+                                f"{name}: {act} (only home_alerts.yaml notifies the phone)")
+                        for act in _actions(a.get("actions")) if act.startswith("notify.")]
+    return out
+
+
 def offline(ha_dir: Path = paths.HA_DIR, run_check_config: bool = True) -> list:
     findings = (check_filenames(ha_dir) + check_kustomization(ha_dir) + check_quoting(ha_dir)
-                + check_revision(ha_dir) + check_state(ha_dir) + check_card_resources(ha_dir))
+                + check_revision(ha_dir) + check_state(ha_dir) + check_card_resources(ha_dir)
+                + check_automations(ha_dir))
     if run_check_config:
         findings += check_config(ha_dir, deployed_tag())
     return findings
