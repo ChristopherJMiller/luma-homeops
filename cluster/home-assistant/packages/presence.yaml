@@ -19,12 +19,9 @@ automation:
       - action: light.turn_off
         target:
           entity_id:
-            - light.living_room
-            - light.tv
-            - light.sidetable_lamp
-            - light.desk_underlight
-            - light.bedroom
-            - light.kitchen_underlight
+            - light.living_room_all
+            - light.bedroom_all
+            - light.kitchen_all
     mode: single
 
   - id: presence_arrival_evening_lights
@@ -39,7 +36,8 @@ automation:
         entity_id: sun.sun
         state: below_horizon
     actions:
-      - action: light.turn_on
-        target:
-          entity_id: light.living_room
+      - action: script.room_auto
+        data:
+          room: living_room
+          turn_on: true
     mode: single

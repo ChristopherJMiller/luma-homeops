@@ -1,0 +1,203 @@
+---
+# Curated scenes (spec §7.3): the looks a room can hold until Auto is chosen again
+# (script.room_scene / input_select.<room>_light_mode in lighting.yaml). Hue lamps were
+# captured 2026-10-03 from the Hue scene named in each `from:` line with
+# `hactl scene capture`; the non-Hue lights (sidetable, desk underlight, camp lamp,
+# kitchen underlight) are set by hand. Chris trims/renames these in the plan-5 dashboard
+# review. Entity ids are scene.<scene>_<room>: the Hue scenes own scene.<room>_<scene>.
+#
+# GitOps source of truth (see bedroom.yaml header for the mount mechanism). Never edit in the UI.
+scene:
+  - id: bright_living_room
+    name: Bright (Living Room)
+    # from: scene.living_room_bright
+    entities:
+      light.floor_lamp_a:
+        state: 'on'
+        brightness: 255
+        xy_color: [0.4577, 0.41]
+      light.floor_lamp_b:
+        state: 'on'
+        brightness: 255
+        xy_color: [0.4577, 0.41]
+      light.ground_spot:
+        state: 'on'
+        brightness: 255
+        color_temp_kelvin: 2732
+      light.tv_accent:
+        state: 'on'
+        brightness: 255
+        color_temp_kelvin: 2732
+      light.sidetable_lamp:
+        state: 'on'
+        brightness: 255
+      light.desk_underlight:
+        state: 'on'
+        brightness: 255
+        xy_color: [0.4596, 0.4105]
+      light.camp_lamp:
+        state: 'on'
+  - id: relax_living_room
+    name: Relax (Living Room)
+    # from: scene.living_room_relax
+    entities:
+      light.floor_lamp_a:
+        state: 'on'
+        brightness: 144
+        color_temp_kelvin: 2257
+      light.floor_lamp_b:
+        state: 'on'
+        brightness: 144
+        color_temp_kelvin: 2237
+      light.ground_spot:
+        state: 'on'
+        brightness: 144
+        color_temp_kelvin: 2242
+      light.tv_accent:
+        state: 'on'
+        brightness: 144
+        color_temp_kelvin: 2237
+      light.sidetable_lamp:
+        state: 'on'
+        brightness: 128
+      light.desk_underlight:
+        state: 'on'
+        brightness: 77
+        xy_color: [0.5612, 0.4042]
+      light.camp_lamp:
+        state: 'on'
+  - id: movie_living_room
+    name: Movie (Living Room)
+    # from: scene.living_room_dimmed
+    entities:
+      light.floor_lamp_a:
+        state: 'on'
+        brightness: 77
+        color_temp_kelvin: 2724
+      light.floor_lamp_b:
+        state: 'on'
+        brightness: 77
+        color_temp_kelvin: 2724
+      light.ground_spot:
+        state: 'on'
+        brightness: 77
+        color_temp_kelvin: 2732
+      light.tv_accent:
+        state: 'on'
+        brightness: 77
+        color_temp_kelvin: 2732
+      light.sidetable_lamp:
+        state: 'off'
+      light.desk_underlight:
+        state: 'on'
+        brightness: 26
+        xy_color: [0.5612, 0.4042]
+      light.camp_lamp:
+        state: 'off'
+  - id: read_living_room
+    name: Read (Living Room)
+    # from: scene.living_room_read
+    entities:
+      light.floor_lamp_a:
+        state: 'on'
+        brightness: 255
+        color_temp_kelvin: 2890
+      light.floor_lamp_b:
+        state: 'on'
+        brightness: 255
+        color_temp_kelvin: 2890
+      light.ground_spot:
+        state: 'on'
+        brightness: 255
+        color_temp_kelvin: 2890
+      light.tv_accent:
+        state: 'on'
+        brightness: 255
+        color_temp_kelvin: 2890
+      light.sidetable_lamp:
+        state: 'on'
+        brightness: 255
+      light.desk_underlight:
+        state: 'off'
+      light.camp_lamp:
+        state: 'on'
+  - id: bright_bedroom
+    name: Bright (Bedroom)
+    # from: scene.bedroom_bright
+    entities:
+      light.nightstand_lamp:
+        state: 'on'
+        brightness: 255
+        xy_color: [0.4577, 0.41]
+      light.dresser_lamp:
+        state: 'on'
+        brightness: 175
+        color_temp_kelvin: 2202
+      light.floor_lamp:
+        state: 'on'
+        brightness: 255
+        xy_color: [0.4577, 0.41]
+  - id: relax_bedroom
+    name: Relax (Bedroom)
+    # from: scene.bedroom_relax
+    entities:
+      light.nightstand_lamp:
+        state: 'on'
+        brightness: 144
+        color_temp_kelvin: 2237
+      light.dresser_lamp:
+        state: 'on'
+        brightness: 144
+        color_temp_kelvin: 2237
+      light.floor_lamp:
+        state: 'on'
+        brightness: 144
+        color_temp_kelvin: 2257
+  - id: read_bedroom
+    name: Read (Bedroom)
+    # from: scene.bedroom_read
+    entities:
+      light.nightstand_lamp:
+        state: 'on'
+        brightness: 255
+        color_temp_kelvin: 2890
+      light.dresser_lamp:
+        state: 'on'
+        brightness: 255
+        color_temp_kelvin: 2890
+      light.floor_lamp:
+        state: 'on'
+        brightness: 255
+        color_temp_kelvin: 2890
+  - id: night_bedroom
+    name: Night (Bedroom)
+    # from: scene.bedroom_nightlight
+    entities:
+      light.nightstand_lamp:
+        state: 'on'
+        brightness: 1
+        xy_color: [0.561, 0.4042]
+      light.dresser_lamp:
+        state: 'on'
+        brightness: 1
+        xy_color: [0.561, 0.4042]
+      light.floor_lamp:
+        state: 'on'
+        brightness: 1
+        xy_color: [0.561, 0.4042]
+  - id: bright_kitchen
+    name: Bright (Kitchen)
+    # from: defined by hand
+    entities:
+      light.kitchen_underlight:
+        state: 'on'
+        brightness: 255
+        xy_color: [0.4596, 0.4105]
+  - id: night_kitchen
+    name: Night (Kitchen)
+    # from: defined by hand
+    entities:
+      light.kitchen_underlight:
+        state: 'on'
+        brightness: 13
+        xy_color: [0.5612, 0.4042]

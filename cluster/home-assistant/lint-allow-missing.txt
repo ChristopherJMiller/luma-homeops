@@ -8,3 +8,4 @@
 # Toronto branch.
 weather.toronto
 sensor.toronto_work_commute
+sensor.seattle_work_commute  # Seattle commute source; Waze removed 2026-10-03 (403s), no replacement yet, so sensor.active_commute is unavailable in Seattle by design

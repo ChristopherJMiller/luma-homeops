@@ -1,26 +1,162 @@
-# Adaptive Lighting — replaces the abandoned circadian_lighting custom component
-# (which hard-fails on HA 2026.7.2: cannot import ATTR_COLOR_TEMP).
+---
+# Lighting model (spec §7.3). HA owns grouping: automations and the dashboard
+# target only the three room groups below, never Hue rooms/zones (those stay
+# for the Hue app). Adaptive lighting runs every dimmable light. A room is in
+# Auto (adaptive) or holds one of its scenes (scenes.yaml) until Auto is chosen
+# again or the room goes fully off.
 #
 # GitOps source of truth (see bedroom.yaml header for the mount mechanism).
-# Requires the `adaptive_lighting` HACS integration code to be installed on the
-# volume (HACS -> Adaptive Lighting -> download). This YAML replaces the old
-# `switch: platform: circadian_lighting` + `circadian_lighting:` blocks that used
-# to live in the release valuesObject haconfig.
-#
-# Creates switch.adaptive_lighting_circadian (main enable), which the morning
-# routine toggles off (Phase 1) and on (Phase 2).
+
+light:
+  - platform: group
+    name: Living Room All
+    unique_id: living_room_all
+    entities:
+      - light.floor_lamp_a
+      - light.floor_lamp_b
+      - light.ground_spot
+      - light.tv_accent
+      - light.sidetable_lamp
+      - light.desk_underlight
+      - light.camp_lamp
+  - platform: group
+    name: Bedroom All
+    unique_id: bedroom_all
+    entities:
+      - light.nightstand_lamp
+      - light.dresser_lamp
+      - light.floor_lamp
+  - platform: group
+    name: Kitchen All
+    unique_id: kitchen_all
+    entities:
+      - light.kitchen_underlight
+
+# Creates switch.circadian_adaptive_lighting_circadian (main) and
+# switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian
+# (night_routine.yaml drives sleep mode). Replaced the abandoned
+# circadian_lighting component. Camp Lamp is on/off only, so it is not adapted.
 adaptive_lighting:
   - name: circadian
     lights:
+      - light.desk_underlight
       - light.dresser_lamp
       - light.floor_lamp
       - light.floor_lamp_a
       - light.floor_lamp_b
       - light.ground_spot
+      - light.kitchen_underlight
       - light.nightstand_lamp
+      - light.sidetable_lamp
       - light.tv_accent
     min_color_temp: 2200
     max_color_temp: 5500
     transition: 45
     take_over_control: true       # respect manual changes (e.g. the morning warm dim)
     detect_non_ha_changes: false
+
+input_select:
+  living_room_light_mode:
+    name: Living Room Light Mode
+    icon: mdi:sofa
+    options: [Auto, Bright, Relax, Movie, Read]
+  bedroom_light_mode:
+    name: Bedroom Light Mode
+    icon: mdi:bed
+    options: [Auto, Bright, Relax, Read, Night]
+  kitchen_light_mode:
+    name: Kitchen Light Mode
+    icon: mdi:countertop
+    options: [Auto, Bright, Night]
+
+script:
+  room_scene:
+    alias: Room Scene
+    description: Put a room in one of its scenes and hold it there (adaptive lighting paused for its lights) until Auto.
+    mode: queued
+    fields:
+      room:
+        description: living_room, bedroom or kitchen
+        required: true
+        selector:
+          select:
+            options: [living_room, bedroom, kitchen]
+      scene:
+        description: One of the room's mode options, e.g. Relax
+        required: true
+        selector:
+          text:
+    variables: &room_lights
+      al_lights: >-
+        {{ {'living_room': ['light.floor_lamp_a', 'light.floor_lamp_b', 'light.ground_spot', 'light.tv_accent',
+                            'light.sidetable_lamp', 'light.desk_underlight'],
+            'bedroom': ['light.nightstand_lamp', 'light.dresser_lamp', 'light.floor_lamp'],
+            'kitchen': ['light.kitchen_underlight']}[room] }}
+    sequence:
+      - action: scene.turn_on
+        target:
+          entity_id: "scene.{{ scene | lower }}_{{ room }}"
+      - action: adaptive_lighting.set_manual_control
+        data:
+          entity_id: switch.circadian_adaptive_lighting_circadian
+          lights: "{{ al_lights }}"
+          manual_control: true
+      - action: input_select.select_option
+        target:
+          entity_id: "input_select.{{ room }}_light_mode"
+        data:
+          option: "{{ scene }}"
+
+  room_auto:
+    alias: Room Auto
+    description: Hand a room back to adaptive lighting; with turn_on, also switch its lights on.
+    mode: queued
+    fields:
+      room:
+        description: living_room, bedroom or kitchen
+        required: true
+        selector:
+          select:
+            options: [living_room, bedroom, kitchen]
+      turn_on:
+        description: Also turn the room's adaptive lights on
+        default: false
+        selector:
+          boolean:
+    variables: *room_lights
+    sequence:
+      - action: adaptive_lighting.set_manual_control
+        data:
+          entity_id: switch.circadian_adaptive_lighting_circadian
+          lights: "{{ al_lights }}"
+          manual_control: false
+      - action: adaptive_lighting.apply
+        data:
+          entity_id: switch.circadian_adaptive_lighting_circadian
+          lights: "{{ al_lights }}"
+          turn_on_lights: "{{ turn_on | default(false) | bool }}"
+      - action: input_select.select_option
+        target:
+          entity_id: "input_select.{{ room }}_light_mode"
+        data:
+          option: Auto
+
+automation:
+  - id: lighting_mode_reset_when_off
+    alias: Lighting - Mode Back to Auto When Room Off
+    description: A room whose lights are all off forgets its scene (adaptive lighting already cleared manual control).
+    triggers:
+      - trigger: state
+        entity_id:
+          - light.living_room_all
+          - light.bedroom_all
+          - light.kitchen_all
+        from: "on"
+        to: "off"
+    actions:
+      - action: input_select.select_option
+        target:
+          entity_id: "input_select.{{ trigger.entity_id.split('.')[1] | replace('_all', '') }}_light_mode"
+        data:
+          option: Auto
+    mode: queued
