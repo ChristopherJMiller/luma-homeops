@@ -6,6 +6,14 @@ integrations:
   - domain: adaptive_lighting
     title: circadian
     manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> adaptive_lighting'
+  # Air quality (AQI chip on Home). Key from airnow.gov in credentials.yaml; lat/lon default to
+  # HA's home location. HA titles it "AirNow Sensor at <lat>, <lon>" -- hactl renames it to
+  # this title on create, keeping coordinates out of this public repo.
+  - domain: airnow
+    title: AirNow
+    create:
+      answers: {}
+    credentials: airnow
   - domain: analytics
     title: Analytics
     manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> analytics'
