@@ -405,6 +405,45 @@ after Argo syncs.
    `state/entities.yaml`; area assignments go into `state/devices.yaml`.
    Every device ends up in an area.
 
+**As built (plan 3, 2026-10-03)** — where the result differs from the text above:
+
+- Components live in the release's `valuesObject.components`, not a separate
+  `components.yaml` ConfigMap; the chart's `install-components` init
+  container installs them. ha-helm reached v0.5.3: 0.5.1 empties a card's
+  directory on reinstall (aiohttp serves a stale `<file>.gz` before
+  `<file>`), 0.5.2 installs integrations from their release zip when the
+  repo is a HACS `zip_release` (Mail and Packages' source says
+  `0.0.0-dev`), 0.5.3 drops the chart's default `http:` block. Renovate
+  tracks the HA image and every component (github-tags), no automerge;
+  `hactl lint` fails when a card's `?v=` resource drifts from its pinned
+  version. `hacs: false`, but HACS itself stays installed (Chris's choice):
+  it installs nothing.
+- The generated `configuration.yaml` is a memory `emptyDir`, never on the
+  PVC. The password had been in it, echoed into the create-db init log, and
+  in its args; now the recorder reads `!env_var HA_DB_URL`, which Kubernetes
+  assembles from the Secret, and create-db uses `PGPASSWORD`.
+- 2026.9 moved the `http:` config (proxies) out of YAML into HA storage. It
+  is declared in `state/system.yaml`; `plan` reports drift as a manual
+  change (applying restarts HA into an auto-reverting trial).
+- The ScrapeConfig and its sealed token live in `cluster/prometheus-stack`
+  (the home-assistant kustomization forces its own namespace). The Grafana
+  HA panels were rebuilt on exported series, not renamed: most of the old
+  ones queried metrics HA never exports.
+- AirNow has no options flow or radius in 2026.9, and no air-quality
+  template existed to rewire: the AQI display is part of §8. Plex is
+  declared and created through its manual-setup flow on the Service name
+  (plex.tv sign-in stores the pod IP). OctoPrint was added by Chris. Chris
+  removed Waze (403s), so Seattle has no commute source.
+- The city signal is the phone sensor's `time_zone_id` attribute (its state
+  is a display name such as "Pacific Daylight Time").
+- Registry: "restored-only" (no integration provides it) was the dead
+  signal; 15 entries and the Pixel 6 Pro integration were removed.
+  Entity matching became domain-aware (a template sensor and
+  binary_sensor shared a unique_id).
+- **Carried to plan 4:** the `ha-secrets` mount (§5.4; its first user is
+  the presence SSID, §7.2), and `hactl health --registry` with "every device
+  in an area" (§5.8).
+
 ## 6. Hardware follow-ups (Chris, outside this spec)
 
 - Plant blinds: solar has never charged (0% for 120 days).

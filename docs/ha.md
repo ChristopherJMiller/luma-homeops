@@ -32,7 +32,7 @@ All three are long-lived tokens on Chris's own HA account (his choice; HA has no
 |---|---|---|
 | hactl | `tools/hactl/agent.secret.yaml` (git-crypt) | `hactl` (or `$HA_TOKEN`) |
 | gitops-reload | `cluster/home-assistant/ha-reload-token.secret.yaml` (git-crypt) → sealed `ha-reload-token.yaml` | the `ha-reload` hook |
-| prometheus-scrape | (ops-fixes plan) | Prometheus |
+| prometheus-scrape | `cluster/prometheus-stack/ha-metrics-token.secret.yaml` (git-crypt) → sealed `ha-metrics-token.yaml` (namespace `prometheus`) | Prometheus (`ha-scrapeconfig.yaml`) |
 
 Rotate: mint a new token in HA and save it to a mode-600 file (never paste it into a terminal or chat). For the sealed one, regenerate the `.secret.yaml` straight to disk (never let it print; don't `cat` it afterwards):
 
@@ -40,7 +40,7 @@ Rotate: mint a new token in HA and save it to a mode-600 file (never paste it in
 ( umask 077 && kubectl create secret generic ha-reload-token -n home-assistant --from-file=token="$HOME/.config/galaxy/reload-token" --dry-run=client -o yaml > cluster/home-assistant/ha-reload-token.secret.yaml )
 ```
 
-Then delete the old `ha-reload-token.yaml`, run `./sign.sh`, commit, push, and revoke the old token. Symptom of a dead hactl token: `HA rejected the token (401)`, or `shot` failing with "HA showed its login page".
+Then delete the old `ha-reload-token.yaml`, run `./sign.sh`, commit, push, and revoke the old token. For the Prometheus token, strip the file's trailing newline first (`tr -d '\n' < prom-token > tmp`, then `--from-file=token=tmp`, then delete tmp): `--from-file` keeps it, and Prometheus refuses the header (`invalid header field value for "Authorization"`). Symptom of a dead hactl token: `HA rejected the token (401)`, or `shot` failing with "HA showed its login page".
 
 ## How a change reaches HA
 
@@ -63,12 +63,36 @@ HA's `.storage` parts are described in git and converged with `hactl apply` (ter
 |---|---|---|---|
 | `areas.yaml` | floors, labels, areas | id (HA's slug of the name at creation) | fully; deletes need `--prune` |
 | `devices.yaml` | area, name, labels, disabled | one `identifiers`/`connections` pair (compared as strings) | listed devices and fields only |
-| `entities.yaml` | entity_id, name, icon, area, labels, hidden, disabled; `remove:` list | platform + unique_id | listed entities and fields only |
+| `entities.yaml` | entity_id, name, icon, area, labels, hidden, disabled; `remove:` list | platform + unique_id, plus `domain` when two domains share them (e.g. a template sensor and binary_sensor); an ambiguous match is a manual change | listed entities and fields only |
 | `helpers.yaml` | config-entry helpers: `create` (menu + answers), `options` | domain + title | fully; deletes need `--prune` |
 | `integrations.yaml` | integrations that must exist; `create`, `options`, `credentials`, `manual` | domain + title | presence + options; never deleted |
-| `dashboards.yaml` | storage dashboards, Lovelace resources | url_path / url | fully; deletes need `--prune` |
+| `dashboards.yaml` | storage dashboards, Lovelace resources; `default:` (the dashboard `/` opens: `home-ops`); a dashboard's `config:` names a file in `dashboard_configs/` with its contents | url_path / url | fully; deletes need `--prune` |
+| `people.yaml` | zones, persons (git-crypt: zone coordinates; the repo is public) | id | zones fully (deletes need `--prune`); persons never deleted |
+| `system.yaml` | `http:` — HA's HTTP server config (`use_x_forwarded_for`, `trusted_proxies`), in HA storage since 2026.9 | — | drift only: `plan` shows a manual change; set it in Settings → System → Network (HA restarts into a trial that reverts unless promoted) |
 | `credentials.yaml` | secrets for config flows (git-crypt; never print it) | key named by `credentials:` | — |
 
 To change any of it: edit the manifest, `hactl plan`, then commit and push (deploy applies), or `hactl apply` directly. Never change these things in the HA UI or with ad-hoc API calls; the next plan flags them and apply reverts them. yamlfmt formats these files on commit; that is expected.
 
-Cannot be declared: users and long-lived tokens; the human step of interactive integrations (Hue link button, Plex sign-in, phone app registration: `plan` shows their `manual:` text until done); runtime state (history, restore-state).
+While a manifest is still git-crypt encrypted (CI, a fresh clone), `plan`/`apply` refuse to run: read as empty, its objects would look undeclared and `--prune` would delete them. `git-crypt unlock` first.
+
+Cannot be declared: users and long-lived tokens; the human step of interactive integrations (Hue link button, OctoPrint app-key approval, phone app registration: `plan` shows their `manual:` text until done); runtime state (history, restore-state). Plex *is* declared: hactl creates it through its manual-setup flow on `mm-plex.media.svc.cluster.local:32400` (plex.tv sign-in would store the pod IP, which dies when the pod moves).
+
+The pre-2026-07 Overview (`lovelace`) is retired: it shows a pointer to Home, which is the default dashboard; its old contents are in the restic `.storage` backup.
+
+## Custom integrations and cards (pinned)
+
+They live in the release, `cluster/applications/home-assistant-release.yaml` → `valuesObject.components`, at exact versions. The chart's `install-components` init container fetches them from GitHub before `check-config` runs and reinstalls one only when its version or source changes. A version that does not exist fails the pod start (HA stays down until reverted), so `HACTL_LIVE=1 pytest tests/test_components_live.py` checks every URL resolves.
+
+- **Integration**: `{name: <dir under custom_components>, repo: owner/name, version: <tag>}`. Add `url:` (the release zip, `{version}` substituted) for repos that HACS installs as `zip_release`: their CI stamps the version into the zip, and the source tree says `0.0.0-dev`.
+- **Card**: `{name: <dir under www/community>, repo, version, url}`, and a Lovelace resource in `state/dashboards.yaml`: `/local/community/<name>/<file>?v=<version>` (type `module`). `hactl lint` fails until every card has exactly that resource, so a bump moves both lines. Reinstalling a card empties its directory: aiohttp serves a stale `<file>.gz` in preference to a new `<file>`.
+- **Bumps**: Renovate opens PRs for every component and the HA image (never automerged). Merge, `hactl deploy`, then `hactl apply` for the resource line if it moved.
+
+HACS is still installed (Chris kept it) but installs and updates nothing: never install or update through its UI. An update made there is overwritten on the next pinned bump, and any `/hacsfiles` resource it adds shows up as plan drift. Its "update available" entities just echo upstream releases.
+
+## HA upgrades
+
+Renovate bumps `image.tag` in the release. Before merging: read the release's breaking changes, `pg_dumpall` the `acid-ha` cluster to a local file, and run `hactl lint --offline` with the new tag (`check_config` runs in that image with the pinned integrations). After: `hactl deploy --shot`, `hactl health`, compare shots. 2026.9 moved the `http:` config into storage (see `system.yaml`); the chart no longer emits an `http:` block.
+
+## Metrics
+
+`packages/prometheus.yaml` exports `homeassistant_*` at `/api/prometheus`; Prometheus scrapes it every 60 s (`cluster/prometheus-stack/ha-scrapeconfig.yaml`, job `home-assistant`). The Grafana *Home Automation* dashboard reads those series; after changing a panel run `scripts/check-dashboards.sh home-automation`.
