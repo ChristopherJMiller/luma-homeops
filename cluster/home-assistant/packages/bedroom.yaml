@@ -11,7 +11,7 @@
 automation:
   - id: bedroom_switch_master
     alias: Bedroom - Wall Switch Drives the Lamps
-    description: Switch on = bedroom lamps on in Auto; switch off = lamps off. Never the other way round.
+    description: Switch on = bedroom lamps on in Auto (or "start your day" while the morning routine is armed); switch off = lamps off. Never the other way round.
     triggers:
       - trigger: state
         entity_id: switch.bedroom_bedroom_light_switch
@@ -25,13 +25,18 @@ automation:
         id: "off"
     actions:
       - choose:
+          # Armed by the morning routine: this flip is "start your day".
           - conditions:
               - condition: trigger
                 id: "on"
-              # While armed, "start your day" (morning_routine.yaml) owns this flip.
               - condition: state
                 entity_id: input_boolean.wake_up_pending
-                state: "off"
+                state: "on"
+            sequence:
+              - action: script.start_your_day
+          - conditions:
+              - condition: trigger
+                id: "on"
             sequence:
               - action: script.room_auto
                 data:

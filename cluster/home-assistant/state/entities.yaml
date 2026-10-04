@@ -60,3 +60,6 @@ remove:
   - about: automation.sync_bedroom_switch_and_lights (the old two-way sync, replaced by bedroom_switch_master 2026-10-03)
     platform: automation
     unique_id: '1741747401508'
+  - about: automation.morning_start_your_day (became script.start_your_day, called by bedroom_switch_master, 2026-10-03)
+    platform: automation
+    unique_id: morning_start_your_day

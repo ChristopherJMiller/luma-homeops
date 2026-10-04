@@ -7,8 +7,9 @@
 # bedroom switch never triggers "start your day":
 #   Phase 1 (Gentle)  — 1 min before the phone alarm: disable circadian, ease the
 #                       bedroom into a warm dim glow, and ARM the routine.
-#   Phase 2 (Start)   — flipping the bedroom light switch WHILE ARMED re-enables
-#                       circadian and turns on the living room, then disarms.
+#   Phase 2 (Start)   — flipping the bedroom light switch WHILE ARMED runs
+#                       script.start_your_day (via bedroom.yaml), which re-enables
+#                       circadian and turns the rooms on, then disarms.
 # A timeout auto-disarms if the switch flip never happens.
 
 input_boolean:
@@ -30,6 +31,36 @@ template:
         state: >-
           {{ (as_datetime(states('sensor.pixel_9_pro_xl_next_alarm'))
              - timedelta(minutes=1)).isoformat() }}
+
+# Phase 2 — "start your day". Called by bedroom.yaml's wall-switch automation when
+# the switch goes on while wake_up_pending is armed: one automation owns the switch,
+# so the two can't race on the same flip.
+script:
+  start_your_day:
+    alias: Start Your Day
+    description: Re-enable circadian lighting and put the bedroom and living room on in Auto; disarm the routine.
+    mode: single
+    sequence:
+      - action: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.wake_up_pending
+      # clear bedtime sleep mode (night_routine.yaml) before re-enabling
+      # adaptation, or the day would start at 1% / 1000K
+      - action: switch.turn_off
+        target:
+          entity_id: switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian
+      - action: switch.turn_on
+        target:
+          entity_id: switch.circadian_adaptive_lighting_circadian
+      # bedroom back to Auto (Phase 1's warm dim was manual), then the living room on in Auto
+      - action: script.room_auto
+        data:
+          room: bedroom
+          turn_on: true
+      - action: script.room_auto
+        data:
+          room: living_room
+          turn_on: true
 
 automation:
   # Phase 1 — gentle pre-alarm wake light
@@ -61,46 +92,6 @@ automation:
           entity_id: input_boolean.wake_up_pending
     mode: single
 
-  # Phase 2 — flipping the bedroom switch while armed = "start your day"
-  - id: morning_start_your_day
-    alias: Morning - Start Your Day
-    description: >-
-      When the bedroom light switch is turned on while the routine is armed,
-      re-enable circadian lighting and turn on the living room.
-    triggers:
-      - trigger: state
-        # z2m entity is bedroom_bedroom_* — the short id never existed,
-        # so this phase had never been able to fire
-        entity_id: switch.bedroom_bedroom_light_switch
-        from: "off"
-        to: "on"
-    conditions:
-      - condition: state
-        entity_id: input_boolean.wake_up_pending
-        state: "on"
-    actions:
-      - action: input_boolean.turn_off
-        target:
-          entity_id: input_boolean.wake_up_pending
-      # clear bedtime sleep mode (night_routine.yaml) before re-enabling
-      # adaptation, or the day would start at 1% / 1000K
-      - action: switch.turn_off
-        target:
-          entity_id: switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian
-      - action: switch.turn_on
-        target:
-          entity_id: switch.circadian_adaptive_lighting_circadian
-      # bedroom back to Auto (Phase 1's warm dim was manual), then the living room on in Auto;
-      # bedroom.yaml's switch automation stands aside while wake_up_pending was on
-      - action: script.room_auto
-        data:
-          room: bedroom
-          turn_on: true
-      - action: script.room_auto
-        data:
-          room: living_room
-          turn_on: true
-    mode: single
 
   # Safety — auto-disarm if the switch flip never happens (e.g. slept in / away)
   - id: morning_disarm_timeout
