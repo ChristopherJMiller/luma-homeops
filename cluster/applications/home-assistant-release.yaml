@@ -14,7 +14,7 @@ spec:
       releaseName: ha
       valuesObject:
         image:
-          tag: 2026.7.2
+          tag: 2026.9.4
         hacs: false
         # Custom integrations and cards, installed at these exact versions by the
         # chart's install-components init container (replaces HACS; Renovate bumps
