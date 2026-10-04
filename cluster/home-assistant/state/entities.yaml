@@ -2,5 +2,11 @@
 # Entity overrides, matched by platform + unique_id (survives entity_id renames).
 # Unlisted entities are untouched. `remove:` deletes registry entries (dead entities).
 # Written by `hactl import`, then edited by hand; converge with `hactl apply`.
-entities: []
+entities:
+  # switch_as_x names its light after the area + name; the lighting design uses light.camp_lamp.
+  - match:
+      platform: switch_as_x
+      unique_id: 01M425PWDJPKY0NAJ4EC54F8ZC
+    about: Camp Lamp (switch_as_x of switch.camp_lamp)
+    entity_id: light.camp_lamp
 remove: []

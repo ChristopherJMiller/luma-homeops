@@ -116,3 +116,10 @@ def test_credentials_syntax_error_never_echoes_the_secret(tmp_path):
     with pytest.raises(HactlError) as e:
         model.load(tmp_path)
     assert "SECRETVALUE" not in str(e.value) and "not valid YAML" in str(e.value)
+
+
+def test_encrypted_manifest_is_skipped_and_flagged(tmp_path):
+    write(tmp_path, GOOD)
+    (tmp_path / "people.yaml").write_bytes(b"\x00GITCRYPT\x00ciphertext")
+    m = model.load(tmp_path)
+    assert m.locked_files == ["people.yaml"] and m.zones == [] and m.persons == []

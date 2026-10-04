@@ -1,5 +1,6 @@
 """hactl import / plan / apply: declarative HA state (spec §4.11)."""
 from hactl import output, paths
+from hactl.errors import HactlError
 from hactl.state import apply as applier
 from hactl.state import diff, importer, live, model
 
@@ -11,6 +12,8 @@ def _client():
 
 def compute(client, state_dir=None):
     m = model.load(state_dir or model.STATE_DIR)  # raises before any API call if the manifests are wrong
+    if m.locked_files:  # read as empty they'd look undeclared, and --prune would delete what they declare
+        raise HactlError(f"{', '.join(m.locked_files)} encrypted: git-crypt unlock before plan/apply")
     snap = live.fetch(client, want_options=diff.options_wanted(m), want_configs=list(m.dashboard_configs))
     return m, snap, diff.plan(m, snap)
 

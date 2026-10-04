@@ -15,3 +15,9 @@ helpers:
         - cover.window_left
         - cover.window_right
       hide_members: false
+  - domain: switch_as_x
+    title: Camp Lamp
+    create:
+      answers:
+        entity_id: switch.camp_lamp
+        target_domain: light

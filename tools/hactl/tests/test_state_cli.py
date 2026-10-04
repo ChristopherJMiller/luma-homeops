@@ -54,3 +54,14 @@ def test_plan_json_hides_answers(tmp_path, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert rc == 2 and "super-secret" not in out
     assert json.loads(out)[0]["key"] == "airnow/AirNow"
+
+
+def test_plan_refuses_while_a_manifest_is_encrypted(tmp_path):
+    # Read as empty, zones would look undeclared and `apply --prune` would delete them.
+    snap = snapshot()
+    fake = FakeHA(snap)
+    state = imported(tmp_path, snap)
+    (state / "people.yaml").write_bytes(b"\x00GITCRYPT\x00ciphertext")
+    with pytest.raises(HactlError, match="git-crypt unlock"):
+        cli.compute(fake, state)
+    assert fake.calls == []

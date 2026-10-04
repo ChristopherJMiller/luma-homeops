@@ -2,6 +2,8 @@
 # Storage-mode dashboards (YAML ones are the chart's lovelace.dashboards) and Lovelace
 # resources. Fully managed; deleting needs --prune. lovelace and map are HA built-ins.
 # Written by `hactl import`, then edited by hand; converge with `hactl apply`.
+# `default:` is the dashboard HA opens first (phone app included).
+default: home-ops
 dashboards:
   - url_path: claude-preview
     title: Claude Preview
@@ -13,6 +15,9 @@ dashboards:
     icon: mdi:view-dashboard
     require_admin: false
     show_in_sidebar: true
+    # Retired 2026-10-03: a stale pre-July copy of Home. Built-in, so it can't be
+    # deleted; its contents just point at Home.
+    config: overview_retired.yaml
   - url_path: map
     title: Map
     icon: mdi:map

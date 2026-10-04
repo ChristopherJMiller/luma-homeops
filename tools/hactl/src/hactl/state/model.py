@@ -65,6 +65,7 @@ class Manifest:
     credentials_locked: bool = False
     default_dashboard: str | None = None  # dashboards.yaml top-level `default:`
     dashboard_configs: dict = field(default_factory=dict)  # url_path -> Lovelace config from dashboard_configs/<file>
+    locked_files: list = field(default_factory=list)  # git-crypt-encrypted manifests (read as empty)
 
 
 def _load_credentials(path: Path, problems: list):
@@ -115,11 +116,13 @@ def _load_dashboard_configs(state_dir: Path, dashboards: list, problems: list) -
 
 
 def load(state_dir: Path = STATE_DIR) -> Manifest:
-    sections, problems, scalars = {}, [], {}
+    sections, problems, scalars, locked = {}, [], {}, []
     for name, file_sections in SCHEMA.items():
         path = state_dir / f"{name}.yaml"
         data = {}
-        if path.exists():
+        if path.exists() and path.read_bytes().startswith(b"\x00GITCRYPT"):
+            locked.append(path.name)  # CI / fresh clone: validate what we can, never plan against it
+        elif path.exists():
             try:
                 data = yaml.safe_load(path.read_text()) or {}
             except yaml.YAMLError as e:
@@ -149,9 +152,10 @@ def load(state_dir: Path = STATE_DIR) -> Manifest:
                     problems.append(f"{where}: unknown key(s) {', '.join(unknown)}")
                 good.append(item)
             sections[section] = good
-    creds, locked = _load_credentials(state_dir / CREDENTIALS, problems)
-    m = Manifest(**sections, credentials=creds, credentials_locked=locked, default_dashboard=scalars.get("default"),
-                 dashboard_configs=_load_dashboard_configs(state_dir, sections.get("dashboards", []), problems))
+    creds, creds_locked = _load_credentials(state_dir / CREDENTIALS, problems)
+    m = Manifest(**sections, credentials=creds, credentials_locked=creds_locked, default_dashboard=scalars.get("default"),
+                 dashboard_configs=_load_dashboard_configs(state_dir, sections.get("dashboards", []), problems),
+                 locked_files=locked)
     type_problems = check_types(m)
     problems += type_problems or check(m)  # cross-checks assume the types are right
     if problems:

@@ -1,0 +1,12 @@
+---
+# The pre-2026-07 Overview, retired 2026-10-03 (its contents were a stale copy of
+# Home with dead entities). The built-in can't be deleted, so it points at Home.
+# The old contents are in the restic .storage backup (lovelace.lovelace).
+views:
+  - title: Moved
+    path: moved
+    cards:
+      - type: markdown
+        content: |
+          ## This dashboard moved
+          Everything lives on **[Home](/home-ops/0)** now.
