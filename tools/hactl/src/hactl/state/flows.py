@@ -78,7 +78,7 @@ def _drive(client, base, step, answers, menu, keep_current) -> dict:
             payload = next_payload(step, answers, menu, keep_current)
             step = client.post(f"{base}/{flow_id}", payload)
         raise HactlError(f"flow did not finish within {MAX_STEPS} steps")
-    except HactlError:
+    except Exception:  # anything (bad answer types included) must not leave the flow half-open
         _abort(client, base, flow_id)
         raise
 

@@ -78,8 +78,33 @@ def test_helper_create_runs_its_config_flow(monkeypatch):
     assert calls == [("switch_as_x", {"entity_id": "switch.camp_lamp"}, [])] and result["notes"] == []
 
 
-def test_created_title_mismatch_is_a_note(monkeypatch):
-    monkeypatch.setattr(apply.flows, "run_config_flow", lambda *a: {"title": "Camp Lamp (light)"})
+def test_created_title_mismatch_is_set_to_the_declared_title(monkeypatch):
+    # switch_as_x titles itself after the wrapped entity; without this every deploy would create another.
+    fake = FakeHA(snapshot())
+    fake.entries.append({"entry_id": "e9", "domain": "switch_as_x", "title": "Camp Lamp (light)", "state": "loaded"})
+    monkeypatch.setattr(apply.flows, "run_config_flow", lambda *a: {"title": "Camp Lamp (light)", "result": {"entry_id": "e9"}})
     c = diff.Change("create", "helper", "switch_as_x/Camp Lamp",
-                    data={"domain": "switch_as_x", "title": "Camp Lamp", "answers": {}, "menu": []})
-    assert "Camp Lamp (light)" in apply.execute(FakeHA(snapshot()), [c], log=lambda s: None)["notes"][0]
+                    data={"domain": "switch_as_x", "title": "Camp Lamp", "answers": {}, "menu": [], "manual": None})
+    result = apply.execute(fake, [c], log=lambda s: None)
+    assert result["errors"] == [] and next(e for e in fake.entries if e["entry_id"] == "e9")["title"] == "Camp Lamp"
+
+
+def test_unexpected_exception_is_recorded_and_the_rest_run(monkeypatch):
+    def boom(*a):
+        raise ValueError("unexpected")
+    monkeypatch.setattr(apply.flows, "run_config_flow", boom)
+    fake = FakeHA(snapshot())
+    changes = [diff.Change("create", "helper", "x/y", data={"domain": "x", "title": "y", "answers": {}, "menu": [], "manual": None}),
+               diff.Change("update", "area", "bedroom", data={"area_id": "bedroom", "icon": "mdi:bed-king"})]
+    result = apply.execute(fake, changes, log=lambda s: None)
+    assert len(result["errors"]) == 1 and "unexpected" in result["errors"][0] and len(result["applied"]) == 1
+
+
+def test_interactive_step_shows_the_declared_manual_text(monkeypatch):
+    def needs_person(*a):
+        raise apply.flows.FlowManual("flow step 'link' needs a person")
+    monkeypatch.setattr(apply.flows, "run_config_flow", needs_person)
+    c = diff.Change("create", "integration", "hue/Hue", data={"domain": "hue", "title": "Hue", "answers": {}, "menu": [],
+                                                             "manual": "press the link button on the bridge"})
+    result = apply.execute(FakeHA(snapshot()), [c], log=lambda s: None)
+    assert result["errors"] == [] and "press the link button" in result["manual"][0]

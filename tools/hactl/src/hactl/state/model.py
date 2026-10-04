@@ -1,4 +1,5 @@
 """Load and validate the state manifests in cluster/home-assistant/state/."""
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -67,7 +68,9 @@ def _load_credentials(path: Path, problems: list):
     try:
         data = yaml.safe_load(raw) or {}
     except yaml.YAMLError as e:
-        problems.append(f"{CREDENTIALS}: {e}")
+        # Never include PyYAML's message: it quotes the offending line, i.e. the secret.
+        mark = getattr(e, "problem_mark", None)
+        problems.append(f"{CREDENTIALS}: not valid YAML" + (f" (line {mark.line + 1})" if mark else ""))
         return {}, False
     if not isinstance(data, dict) or not all(isinstance(v, dict) for v in data.values()):
         problems.append(f"{CREDENTIALS}: expected a mapping of name -> mapping of flow answers")
@@ -110,10 +113,49 @@ def load(state_dir: Path = STATE_DIR) -> Manifest:
             sections[section] = good
     creds, locked = _load_credentials(state_dir / CREDENTIALS, problems)
     m = Manifest(**sections, credentials=creds, credentials_locked=locked)
-    problems += check(m)
+    type_problems = check_types(m)
+    problems += type_problems or check(m)  # cross-checks assume the types are right
     if problems:
         raise HactlError("state manifests have problems:\n  " + "\n  ".join(problems))
     return m
+
+
+# section -> (singular, fields that must be strings when present)
+STRING_FIELDS = {
+    "floors": ("floor", ("id", "name", "icon")),
+    "labels": ("label", ("id", "name", "color", "icon", "description")),
+    "areas": ("area", ("id", "name", "floor", "icon")),
+    "devices": ("device", ("about", "name", "area")),
+    "entities": ("entity", ("about", "entity_id", "name", "icon", "area")),
+    "remove": ("remove", ("platform", "unique_id", "about")),
+    "helpers": ("helper", ("domain", "title", "credentials")),
+    "integrations": ("integration", ("domain", "title", "credentials", "manual")),
+    "dashboards": ("dashboard", ("url_path", "title", "icon")),
+    "resources": ("resource", ("url", "type")),
+}
+
+
+def check_types(m: Manifest) -> list:
+    p = []
+    for section, (kind, fields) in STRING_FIELDS.items():
+        for x in getattr(m, section):
+            who = str(x.get("id") or x.get("url_path") or x.get("url") or x.get("title") or x.get("about") or "")
+            for f in fields:
+                if f in x and x[f] is not None and not isinstance(x[f], str):
+                    p.append(f"{kind} {who}: {f} must be a string, not {type(x[f]).__name__} (quote it)")
+    for x in m.floors:
+        if x.get("level") is not None and not isinstance(x["level"], int):
+            p.append(f"floor {x.get('id')}: level must be a whole number")
+    for kind, items in (("helper", m.helpers), ("integration", m.integrations)):
+        for x in items:
+            create = x.get("create") if isinstance(x.get("create"), dict) else {}
+            for what, value in (("options", x.get("options")), ("create.answers", create.get("answers"))):
+                try:
+                    json.dumps(value)
+                except (TypeError, ValueError):
+                    p.append(f"{kind} {x.get('domain')}/{x.get('title')}: {what} holds a value HA can't receive "
+                             "(an unquoted date or time?): quote it")
+    return p
 
 
 def _dupes(values) -> list:

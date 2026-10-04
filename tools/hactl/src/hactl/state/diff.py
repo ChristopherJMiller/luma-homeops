@@ -49,13 +49,16 @@ REGISTRY = {
 }
 
 
+LIST_FIELDS = frozenset({"labels", "aliases"})  # HA's schema wants [] for these, never None
+
+
 def diff_registry(kind, declared, live) -> list:
     """Fully managed: declared fields enforced (omitted = empty); undeclared live ones are prunable."""
     id_key, fields = REGISTRY[kind]
     by_id = {x[id_key]: x for x in live}
     out = []
     for d in declared:
-        want = {lf: d.get(mf) for mf, lf in fields.items()}
+        want = {lf: (d.get(mf) or []) if mf in LIST_FIELDS else d.get(mf) for mf, lf in fields.items()}
         cur = by_id.get(d["id"])
         if cur is None:
             out.append(Change("create", kind, d["id"], repr(d["name"]), data={"id": d["id"], **want}))
@@ -135,12 +138,19 @@ def diff_config_entries(kind, declared, entries, options, credentials, credentia
     for e in entries:
         if (e["domain"] in HELPER_DOMAINS) == helper:
             by_key.setdefault((e["domain"], e["title"]), []).append(e)
+    declared_keys = {(d["domain"], d["title"]) for d in declared}
     out = []
     for d in declared:
         key, name = (d["domain"], d["title"]), f"{d['domain']}/{d['title']}"
         found = by_key.get(key, [])
         if len(found) > 1:
             out.append(Change("manual", kind, name, f"{len(found)} entries share this domain and title; rename one in HA"))
+            continue
+        strays = sorted(t for (dom, t) in by_key if dom == d["domain"] and (dom, t) not in declared_keys)
+        if not found and helper and strays:
+            out.append(Change("manual", kind, name, f"not found, but undeclared {d['domain']} helper(s) exist "
+                              f"({', '.join(strays)}): if one is this helper renamed in HA, set title: to its name; "
+                              "otherwise remove the stray with --prune"))
             continue
         if not found:
             if d.get("create") is None:
@@ -151,7 +161,7 @@ def diff_config_entries(kind, declared, entries, options, credentials, credentia
                 answers = {**d.get("options", {}), **credentials.get(d.get("credentials"), {}), **d["create"].get("answers", {})}
                 out.append(Change("create", kind, name, "via its config flow",
                                   data={"domain": d["domain"], "title": d["title"], "answers": answers,
-                                        "menu": d["create"].get("menu", [])}))
+                                        "menu": d["create"].get("menu", []), "manual": d.get("manual")}))
             continue
         if "options" in d:
             cur = options.get(key)
@@ -162,7 +172,6 @@ def diff_config_entries(kind, declared, entries, options, credentials, credentia
             if delta:
                 out.append(Change("update", kind, name, _describe(delta, cur["values"]),
                                   data={"entry_id": found[0]["entry_id"], "options": d["options"]}))
-    declared_keys = {(d["domain"], d["title"]) for d in declared}
     for (domain, title), found in sorted(by_key.items()):
         if (domain, title) in declared_keys:
             continue

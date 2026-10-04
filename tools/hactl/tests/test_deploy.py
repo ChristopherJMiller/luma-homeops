@@ -48,7 +48,7 @@ def test_timeout():
 def test_failed_screenshots_keep_the_health_report(monkeypatch, capsys):
     import argparse
 
-    monkeypatch.setattr(deploy, "_git", lambda *a: HEAD if a[0] == "rev-parse" else "origin/main")
+    monkeypatch.setattr(deploy, "_git", lambda *a: {"rev-parse": HEAD, "branch": "origin/main"}.get(a[0], ""))
     monkeypatch.setattr(deploy, "wait_for_rollout", lambda head, timeout: None)
     monkeypatch.setattr(deploy.state_cli, "converge", lambda client, prune=False, log=None: (["state: in sync"], True))
     monkeypatch.setattr(deploy.health, "collect", lambda client: {"marker": True})
@@ -116,7 +116,7 @@ def test_rollout_wait_does_not_need_the_chart_repo_to_match_head():
 def test_deploy_converges_state_and_fails_on_leftovers(monkeypatch, capsys):
     import argparse
 
-    monkeypatch.setattr(deploy, "_git", lambda *a: HEAD if a[0] == "rev-parse" else "origin/main")
+    monkeypatch.setattr(deploy, "_git", lambda *a: {"rev-parse": HEAD, "branch": "origin/main"}.get(a[0], ""))
     monkeypatch.setattr(deploy, "wait_for_rollout", lambda head, timeout: None)
     monkeypatch.setattr(deploy.state_cli, "converge",
                         lambda client, prune=False, log=None: (["state: applied 0, failed 1", "  error: boom"], False))
@@ -126,3 +126,12 @@ def test_deploy_converges_state_and_fails_on_leftovers(monkeypatch, capsys):
     rc = deploy._run(argparse.Namespace(timeout=10, shot=False, json=False))
     out = capsys.readouterr().out
     assert rc == 1 and "error: boom" in out and "health: ok" in out
+
+
+def test_deploy_refuses_uncommitted_state_edits(monkeypatch):
+    import argparse
+
+    answers = {"rev-parse": HEAD, "branch": "origin/main", "status": " M cluster/home-assistant/state/areas.yaml"}
+    monkeypatch.setattr(deploy, "_git", lambda *a: answers.get(a[0], ""))
+    with pytest.raises(HactlError, match="commit"):
+        deploy._run(argparse.Namespace(timeout=10, shot=False, json=False))

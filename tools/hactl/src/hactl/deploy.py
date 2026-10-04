@@ -1,7 +1,7 @@
-"""After a push: wait for Argo, the ha-reload hook and the HA rollout, then verify.
+"""After a push: wait for Argo, the ha-reload hook and the HA rollout, apply state/, then verify.
 
-Read-only on the cluster: Argo applies, the hook reloads/restarts; this waits
-and checks:
+Read-only on the cluster (Argo applies, the hook reloads/restarts). It writes to
+HA only through `hactl apply` of the committed state/ manifests. It waits and checks:
   1. `home-assistant` (config ConfigMaps + the hook) has synced HEAD;
   2. the app-of-apps root `applications` has synced HEAD, and if that changed
      an Application (e.g. home-assistant-release.yaml: image tag, chart
@@ -122,6 +122,9 @@ def _run(args) -> int:
     head = _git("rev-parse", "HEAD")
     if not _git("branch", "-r", "--contains", head):
         raise HactlError("HEAD is not pushed yet: git push first")
+    if _git("status", "--porcelain", "--", "cluster/home-assistant/state"):
+        raise HactlError("cluster/home-assistant/state has uncommitted changes: commit and push them first "
+                         "(deploy applies the manifests; git is the source of truth)")
     wait_for_rollout(head, args.timeout)
     client = Client()
     state_lines, state_ok = state_cli.converge(client, prune=False, log=lambda m: None)
@@ -142,7 +145,7 @@ def _run(args) -> int:
 
 
 def register(sub) -> None:
-    p = sub.add_parser("deploy", parents=[output.COMMON], help="after a push: wait for Argo + ha-reload, then health (+ shots)")
+    p = sub.add_parser("deploy", parents=[output.COMMON], help="after a push: wait for Argo + ha-reload + rollout, apply state/, then health (+ shots)")
     p.add_argument("--timeout", type=int, default=900)
     p.add_argument("--shot", action="store_true", help="also screenshot the home-ops views")
     p.set_defaults(func=_run)

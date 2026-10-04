@@ -96,3 +96,10 @@ def test_read_options_aborts_and_tolerates_no_options_flow():
     assert flows.read_options(fake, "e1") == {"step_id": "cover", "values": {"entities": ["cover.a", "cover.b"], "hide_members": False}}
     assert fake.deleted == [f"{flows.OPTIONS_FLOW}/o1"]
     assert flows.read_options(FakeFlow([HactlError("HTTP 400")]), "e2") is None
+
+
+def test_unexpected_error_still_aborts():
+    fake = FakeFlow([GROUP_MENU, TypeError("Object of type date is not JSON serializable")])
+    with pytest.raises(TypeError):
+        flows.run_config_flow(fake, "group", {}, ["cover"])
+    assert fake.deleted == [f"{flows.CONFIG_FLOW}/f1"]

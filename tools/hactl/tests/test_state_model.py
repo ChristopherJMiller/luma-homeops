@@ -89,3 +89,30 @@ def test_locked_credentials_skip_reference_checks(tmp_path):
     (tmp_path / "credentials.yaml").write_bytes(b"\x00GITCRYPT\x00ciphertext")
     m = model.load(tmp_path)
     assert m.credentials_locked and m.credentials == {}
+
+
+def test_type_mistakes_are_problems_not_tracebacks(tmp_path):
+    bad = dict(GOOD)
+    bad["areas.yaml"] = "floors: []\nlabels: []\nareas:\n  - {id: bedroom, name: Bedroom, floor: [x]}\n"
+    bad["dashboards.yaml"] = "dashboards:\n  - {url_path: a-b, title: {a: b}}\nresources:\n  - {url: /x.js, type: [module]}\n"
+    bad["integrations.yaml"] = "integrations:\n  - {domain: hue, title: Hue, credentials: {k: v}}\n"
+    with pytest.raises(HactlError) as e:
+        model.load(write(tmp_path, bad))
+    msg = str(e.value)
+    for needle in ["floor must be a string", "title must be a string", "type must be a string", "credentials must be a string"]:
+        assert needle in msg, needle
+
+
+def test_unquoted_dates_in_answers_are_problems(tmp_path):
+    bad = dict(GOOD)
+    bad["integrations.yaml"] = "integrations:\n  - domain: workday\n    title: W\n    create: {answers: {add_holidays: [2026-12-24]}}\n"
+    with pytest.raises(HactlError, match="quote it"):
+        model.load(write(tmp_path, bad))
+
+
+def test_credentials_syntax_error_never_echoes_the_secret(tmp_path):
+    write(tmp_path, {k: v for k, v in GOOD.items() if k != "credentials.yaml"})
+    (tmp_path / "credentials.yaml").write_text("airnow:\n  api_key: SECRETVALUE: oops\n")
+    with pytest.raises(HactlError) as e:
+        model.load(tmp_path)
+    assert "SECRETVALUE" not in str(e.value) and "not valid YAML" in str(e.value)

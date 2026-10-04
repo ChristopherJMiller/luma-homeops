@@ -14,7 +14,7 @@ HA on galaxy: `https://home.chrismiller.xyz`, namespace `home-assistant`, Argo a
 | `lint [--offline]` | Config rules + `check_config`; live adds entity-id and dashboard-template checks |
 | `health` | Drift, hook status, failing automations, repairs, top log errors |
 | `call DOMAIN.SERVICE` | Actions; locks/notify/tts/restart need `--confirmed` |
-| `deploy [--shot]` | After a push: wait for Argo + hook, then health (+ shots) |
+| `deploy [--shot]` | After a push: wait for Argo + hook + rollout, apply the committed `state/` manifests, then health (+ shots); refuses uncommitted `state/` edits |
 | `revision`, `selftest` | Config revision hash; read-only end-to-end check |
 | `import [--force]` | Write `state/` manifests from live HA (bootstrap; refuses to overwrite) |
 | `plan` | Diff `state/` manifests against live HA; exit 2 when there are changes |

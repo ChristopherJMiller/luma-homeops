@@ -33,8 +33,14 @@ def run_change(client, c) -> str:
         return ""
     if c.kind in ("helper", "integration"):
         if c.action == "create":
-            title = flows.run_config_flow(client, c.data["domain"], c.data["answers"], c.data["menu"]).get("title")
-            return f"created with title {title!r}: set title: to that in the manifest" if title and title != c.data["title"] else ""
+            result = flows.run_config_flow(client, c.data["domain"], c.data["answers"], c.data["menu"])
+            title, entry_id = result.get("title"), (result.get("result") or {}).get("entry_id")
+            if title and title != c.data["title"]:
+                if not entry_id:
+                    return f"created with title {title!r}: set title: to that in the manifest"
+                # Titles are the identity hactl matches on; make HA's match the manifest's.
+                client.ws({"type": "config_entries/update", "entry_id": entry_id, "title": c.data["title"]})
+            return ""
         if c.action == "update":
             flows.run_options_flow(client, c.data["entry_id"], c.data["options"])
             return ""
@@ -62,8 +68,13 @@ def execute(client, changes, prune=False, log=print) -> dict:
     for c in forward + deletes:
         try:
             note = run_change(client, c)
-        except (HactlError, StopIteration, KeyError) as e:  # StopIteration/KeyError: object vanished mid-apply
-            result["errors"].append(f"{c}: {e}")
+        except flows.FlowManual as e:
+            text = (c.data or {}).get("manual") or str(e)
+            result["manual"].append(f"{c}: {text}")
+            log(f"MANUAL   {c}: {text}")
+            continue
+        except Exception as e:  # record it against this change; the rest still run
+            result["errors"].append(f"{c}: {type(e).__name__}: {e}" if not isinstance(e, HactlError) else f"{c}: {e}")
             log(f"FAILED   {c}: {e}")
             continue
         result["applied"].append(str(c))

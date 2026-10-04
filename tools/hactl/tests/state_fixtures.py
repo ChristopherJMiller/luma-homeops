@@ -114,6 +114,11 @@ class FakeHA:
             return None
         if t == "config_entries/get":
             return [dict(x) for x in self.entries]
+        if t == "config_entries/update":
+            entry_id = args.pop("entry_id")
+            x = next(e for e in self.entries if e["entry_id"] == entry_id)
+            x.update(args)
+            return {"config_entry": dict(x)}
         if t == "lovelace/dashboards/list":
             return [dict(x) for x in self.dashboards]
         if t == "lovelace/dashboards/create":

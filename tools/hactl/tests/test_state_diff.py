@@ -98,7 +98,7 @@ def test_missing_helper_is_created_with_merged_answers_and_undeclared_is_prunabl
     changes = entries("helper", [new])
     assert [(c.action, c.key, c.prune) for c in changes] == [
         ("create", "switch_as_x/Camp Lamp", False), ("delete", "group/Bedroom Blinds", True)]
-    assert changes[0].data == {"domain": "switch_as_x", "title": "Camp Lamp", "menu": [],
+    assert changes[0].data == {"domain": "switch_as_x", "title": "Camp Lamp", "menu": [], "manual": None,
                                "answers": {"entity_id": "switch.camp_lamp", "target_domain": "light"}}
 
 
@@ -166,3 +166,20 @@ def test_plan_orders_kinds_and_lists_wanted_options():
     kinds = [c.kind for c in diff.plan(m, snapshot())]
     assert kinds == ["area", "area", "area"]  # create office, delete bedroom + kitchen
     assert diff.options_wanted(m) == {("group", "Bedroom Blinds")}
+
+
+def test_emptying_list_fields_sends_empty_lists():
+    snap = snapshot()
+    snap.areas[0]["labels"] = ["lighting"]
+    snap.areas[0]["aliases"] = ["master"]
+    [c] = diff.diff_registry("area", [{"id": "bedroom", "name": "Bedroom", "icon": "mdi:bed"},
+                                      {"id": "kitchen", "name": "Kitchen", "icon": "mdi:fridge"}], snap.areas)
+    assert c.data == {"area_id": "bedroom", "labels": [], "aliases": []}  # HA rejects None for list fields
+
+
+def test_missing_helper_next_to_an_undeclared_one_of_its_domain_is_manual():
+    # A UI rename looks like "declared one missing + undeclared one present": don't create a duplicate.
+    renamed = dict(GROUP, title="Blinds")
+    changes = entries("helper", [renamed])
+    assert [(c.action, c.key) for c in changes] == [("manual", "group/Blinds"), ("delete", "group/Bedroom Blinds")]
+    assert "renamed" in changes[0].detail
