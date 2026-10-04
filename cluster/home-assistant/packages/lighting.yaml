@@ -93,14 +93,16 @@ script:
             'bedroom': ['light.nightstand_lamp', 'light.dresser_lamp', 'light.floor_lamp'],
             'kitchen': ['light.kitchen_underlight']}[room] }}
     sequence:
-      - action: scene.turn_on
-        target:
-          entity_id: "scene.{{ scene | lower }}_{{ room }}"
+      # Manual first: adaptive lighting intercepts turn_on of an off light and would
+      # replace the scene's values with its own unless the light is already manual.
       - action: adaptive_lighting.set_manual_control
         data:
           entity_id: switch.circadian_adaptive_lighting_circadian
           lights: "{{ al_lights }}"
           manual_control: true
+      - action: scene.turn_on
+        target:
+          entity_id: "scene.{{ scene | lower }}_{{ room }}"
       - action: input_select.select_option
         target:
           entity_id: "input_select.{{ room }}_light_mode"
