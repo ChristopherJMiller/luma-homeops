@@ -9,7 +9,7 @@ spec:
   source:
     repoURL: https://github.com/ChristopherJMiller/ha-helm.git
     path: ./
-    targetRevision: v0.5.1
+    targetRevision: v0.5.2
     helm:
       releaseName: ha
       valuesObject:
@@ -29,9 +29,12 @@ spec:
             - name: mail_and_packages
               repo: moralmunky/Home-Assistant-Mail-And-Packages
               version: 0.5.16
+              # zip_release repos: CI stamps the version into the asset (source says 0.0.0-dev)
+              url: "https://github.com/moralmunky/Home-Assistant-Mail-And-Packages/releases/download/{version}/mail_and_packages.zip"
             - name: smartrent
               repo: ZacheryThomas/homeassistant-smartrent
               version: v0.5.5
+              url: "https://github.com/ZacheryThomas/homeassistant-smartrent/releases/download/{version}/smartrent.zip"
           cards:
             - {name: lovelace-mushroom, repo: piitaya/lovelace-mushroom, version: v5.1.1, url: "https://github.com/piitaya/lovelace-mushroom/releases/download/{version}/mushroom.js"}
             - {name: lovelace-horizon-card, repo: rejuvenate/lovelace-horizon-card, version: v1.5.3, url: "https://github.com/rejuvenate/lovelace-horizon-card/releases/download/{version}/lovelace-horizon-card.js"}
