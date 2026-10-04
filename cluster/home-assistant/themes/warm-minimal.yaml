@@ -10,14 +10,37 @@ Warm Minimal:
   mush-card-primary-font-weight: "600"
 
   # card-mod theme rules (card-mod v4 tags each card with a `type-<card>` class).
-  # Light tiles: 18px corners and a transparent icon shape (replaces the per-card
-  # &lighttile block on 13 cards).
+  # Light tiles: 18px corners and a transparent icon shape (was the per-card
+  # &lighttile block on 13 cards); room tiles and heroes opt in with a class.
   card-mod-theme: Warm Minimal
   card-mod-card: |
     :host(.type-custom-mushroom-light-card) ha-card,
     ha-card.type-custom-mushroom-light-card { border-radius: 18px; }
     :host(.type-custom-mushroom-light-card) mushroom-shape-icon,
     ha-card.type-custom-mushroom-light-card mushroom-shape-icon { --shape-color: transparent; }
+    /* Home room tiles (card_mod: {class: roomtile}): warm glow, lift on hover. */
+    :host(.roomtile) ha-card, ha-card.roomtile {
+      background:
+        radial-gradient(120% 130% at 20% 0%, rgba(221,161,94,0.13), transparent 62%),
+        var(--card-background-color);
+      border-radius: 22px;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+    :host(.roomtile) ha-card:hover, ha-card.roomtile:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.28);
+    }
+    :host(.roomtile) mushroom-shape-icon, ha-card.roomtile mushroom-shape-icon { --shape-color: transparent; }
+    /* Room page heroes (card_mod: {class: roomhero}). */
+    :host(.roomhero) ha-card, ha-card.roomhero {
+      background:
+        radial-gradient(130% 200% at 10% -20%, rgba(221,161,94,0.16), transparent 60%),
+        var(--card-background-color);
+      border-radius: 24px;
+      --mush-icon-size: 44px;
+    }
+    :host(.roomhero) mushroom-shape-icon, ha-card.roomhero mushroom-shape-icon { --shape-color: transparent; }
+    :host(.roomhero) mushroom-state-info $ .primary, ha-card.roomhero mushroom-state-info $ .primary { font-size: 20px; font-weight: 700; }
 
   modes:
     # =========================== DARK (hero) ===========================
