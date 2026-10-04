@@ -25,6 +25,12 @@ automation:
       - condition: time
         after: "07:00:00"
         before: "19:00:00"
+      # Skip while the blind can't act: unreachable, or its battery is flat (the solar
+      # panel has not been charging it) -- otherwise every 15 min is a failed command.
+      - condition: template
+        value_template: >-
+          {{ states('cover.plant_blinds') not in ['unavailable','unknown']
+             and states('sensor.plant_blinds_battery') | int(0) > 0 }}
     actions:
       - choose:
           # Close (tilt 0) if temp is rising fast or already hot AND it's sunny
@@ -33,8 +39,8 @@ automation:
                 value_template: |-
                   {% set temp_now = states('sensor.living_room_temperature') | float(0) %}
                   {% set temp_rate = states('sensor.living_room_temperature_rate') | float(0) %}
-                  {% set outdoor_temp = state_attr('weather.forecast_home', 'temperature') | float(0) %}
-                  {% set forecast_condition = state_attr('weather.forecast_home', 'forecast')[0].condition if state_attr('weather.forecast_home', 'forecast') else 'unknown' %}
+                  {# The current condition: weather entities lost the `forecast` attribute in 2024 #}
+                  {% set forecast_condition = states('weather.forecast_home') %}
                   {% set is_sunny = forecast_condition in ['sunny', 'clear-day', 'partlycloudy'] %}
                   {# Close if: (temp rising >2°F/hour OR indoor >78°F) AND sunny forecast #}
                   {{ (temp_rate > 2 or temp_now > 78) and is_sunny }}
@@ -50,8 +56,8 @@ automation:
                 value_template: |-
                   {% set temp_now = states('sensor.living_room_temperature') | float(0) %}
                   {% set temp_rate = states('sensor.living_room_temperature_rate') | float(0) %}
-                  {% set outdoor_temp = state_attr('weather.forecast_home', 'temperature') | float(0) %}
-                  {% set forecast_condition = state_attr('weather.forecast_home', 'forecast')[0].condition if state_attr('weather.forecast_home', 'forecast') else 'unknown' %}
+                  {# The current condition: weather entities lost the `forecast` attribute in 2024 #}
+                  {% set forecast_condition = states('weather.forecast_home') %}
                   {% set is_cloudy = forecast_condition in ['cloudy', 'overcast', 'fog', 'rainy', 'pouring'] %}
                   {% set current_position = state_attr('cover.plant_blinds', 'current_position') | int(0) %}
                   {# Open if: (cloudy weather OR (temp <77°F AND not rising fast)) AND blinds closed #}
@@ -64,3 +70,4 @@ automation:
                   tilt_position: 100
         default: []
     mode: single
+    max_exceeded: silent

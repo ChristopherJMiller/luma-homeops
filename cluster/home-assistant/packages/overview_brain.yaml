@@ -10,7 +10,8 @@
 #   weather.toronto               Toronto / Yonge+Eglinton (Met.no)   — ADD via UI
 #   sensor.seattle_work_commute   Capitol Hill -> Redmond Bldg 25     — exists (Waze)
 #   sensor.toronto_work_commute   Yonge+Eg -> CIBC Square (transit)   — ADD (google_travel_time)
-#   calendar.chris_is_not_in_seattle_calendar   Toronto-presence tell — exists
+#   sensor.pixel_9_pro_xl_current_time_zone     which city (time_zone_id) — exists (mobile app)
+#   calendar.chris_is_not_in_seattle_calendar   fallback Toronto tell     — exists
 
 # Workday is config-flow-only in HA 2026.x (no YAML). Added via the UI:
 #   binary_sensor.workday_sensor_us_wa   United States / Washington (Seattle)
@@ -19,24 +20,42 @@
 template:
   # ---- Location: which city, and which entities are "active" ----
   - sensor:
+      # The phone's time zone is the signal (time_zone_id, an IANA id; the state is a display
+      # name like "Pacific Daylight Time"): America/Toronto -> Toronto, any other zone -> Seattle.
+      # Only when the phone has not reported does the Toronto calendar decide. Every template
+      # repeats the same two-line decision so state, icon and attributes always agree.
       - name: Current City
         unique_id: current_city
         state: >-
-          {% if is_state('calendar.chris_is_not_in_seattle_calendar', 'on') %}Toronto{% else %}Seattle{% endif %}
+          {% set tz = state_attr('sensor.pixel_9_pro_xl_current_time_zone', 'time_zone_id') %}
+          {% set city = 'Toronto' if tz == 'America/Toronto' else 'Seattle' if tz else 'Toronto' if is_state('calendar.chris_is_not_in_seattle_calendar', 'on') else 'Seattle' %}
+          {{ city }}
         icon: >-
-          {% if is_state('calendar.chris_is_not_in_seattle_calendar', 'on') %}mdi:tower-fire{% else %}mdi:space-needle{% endif %}
+          {% set tz = state_attr('sensor.pixel_9_pro_xl_current_time_zone', 'time_zone_id') %}
+          {% set city = 'Toronto' if tz == 'America/Toronto' else 'Seattle' if tz else 'Toronto' if is_state('calendar.chris_is_not_in_seattle_calendar', 'on') else 'Seattle' %}
+          {{ 'mdi:tower-fire' if city == 'Toronto' else 'mdi:space-needle' }}
         attributes:
           weather_entity: >-
-            {% if is_state('calendar.chris_is_not_in_seattle_calendar','on') %}weather.toronto{% else %}weather.forecast_home{% endif %}
+            {% set tz = state_attr('sensor.pixel_9_pro_xl_current_time_zone', 'time_zone_id') %}
+            {% set city = 'Toronto' if tz == 'America/Toronto' else 'Seattle' if tz else 'Toronto' if is_state('calendar.chris_is_not_in_seattle_calendar', 'on') else 'Seattle' %}
+            {{ 'weather.toronto' if city == 'Toronto' else 'weather.forecast_home' }}
           commute_entity: >-
-            {% if is_state('calendar.chris_is_not_in_seattle_calendar','on') %}sensor.toronto_work_commute{% else %}sensor.seattle_work_commute{% endif %}
+            {% set tz = state_attr('sensor.pixel_9_pro_xl_current_time_zone', 'time_zone_id') %}
+            {% set city = 'Toronto' if tz == 'America/Toronto' else 'Seattle' if tz else 'Toronto' if is_state('calendar.chris_is_not_in_seattle_calendar', 'on') else 'Seattle' %}
+            {{ 'sensor.toronto_work_commute' if city == 'Toronto' else 'sensor.seattle_work_commute' }}
           workday_entity: >-
-            {% if is_state('calendar.chris_is_not_in_seattle_calendar','on') %}binary_sensor.workday_sensor_ca_on{% else %}binary_sensor.workday_sensor_us_wa{% endif %}
+            {% set tz = state_attr('sensor.pixel_9_pro_xl_current_time_zone', 'time_zone_id') %}
+            {% set city = 'Toronto' if tz == 'America/Toronto' else 'Seattle' if tz else 'Toronto' if is_state('calendar.chris_is_not_in_seattle_calendar', 'on') else 'Seattle' %}
+            {{ 'binary_sensor.workday_sensor_ca_on' if city == 'Toronto' else 'binary_sensor.workday_sensor_us_wa' }}
 
       - name: Active Temperature
         unique_id: active_temperature
         unit_of_measurement: "°F"
         device_class: temperature
+        # Unavailable (not an empty, invalid number) while the city's weather entity is missing.
+        availability: >-
+          {% set w = state_attr('sensor.current_city','weather_entity') %}
+          {{ w is not none and states(w) not in ['unknown','unavailable'] }}
         state: >-
           {% set w = state_attr('sensor.current_city','weather_entity') %}
           {% if w and states(w) not in ['unknown','unavailable','none'] %}{{ state_attr(w,'temperature') | round(0) }}{% endif %}
@@ -45,6 +64,9 @@ template:
         unique_id: active_commute
         unit_of_measurement: min
         icon: mdi:car-clock
+        availability: >-
+          {% set c = state_attr('sensor.current_city','commute_entity') %}
+          {{ c is not none and states(c) not in ['unknown','unavailable'] }}
         state: >-
           {% set c = state_attr('sensor.current_city','commute_entity') %}
           {% if c and states(c) not in ['unknown','unavailable','none'] %}{{ states(c) | round(0) }}{% endif %}
