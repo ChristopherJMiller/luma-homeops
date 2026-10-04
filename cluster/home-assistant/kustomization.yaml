@@ -28,6 +28,7 @@ configMapGenerator:
       - packages/lighting.yaml
       - packages/scenes.yaml
       - packages/kitchen.yaml
+      - packages/climate.yaml
       - packages/overview_brain.yaml
       - packages/home_alerts.yaml
       - packages/presence.yaml
