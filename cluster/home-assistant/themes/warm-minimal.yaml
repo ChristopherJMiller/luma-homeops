@@ -11,7 +11,8 @@ Warm Minimal:
 
   # card-mod theme rules (card-mod v4 tags each card with a `type-<card>` class).
   # Light tiles: 18px corners and a transparent icon shape (was the per-card
-  # &lighttile block on 13 cards); room tiles and heroes opt in with a class.
+  # &lighttile block on 13 cards); Home room tiles and room-page heroes opt in
+  # with `card_mod: {class: roomtile|roomhero}` (were &roomtile / &roomhero).
   card-mod-theme: Warm Minimal
   card-mod-card: |
     :host(.type-custom-mushroom-light-card) ha-card,

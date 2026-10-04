@@ -199,20 +199,7 @@ views:
     tap_action:
       action: navigate
       navigation_path: /home-ops/1
-    card_mod: &roomtile
-      style: |
-        ha-card {
-          background:
-            radial-gradient(120% 130% at 20% 0%, rgba(221,161,94,0.13), transparent 62%),
-            var(--card-background-color);
-          border-radius: 22px;
-          transition: transform .18s ease, box-shadow .18s ease;
-        }
-        ha-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 20px rgba(0,0,0,0.28);
-        }
-        mushroom-shape-icon { --shape-color: transparent; }
+    card_mod: {class: roomtile}
   - type: custom:mushroom-template-card
     view_layout:
       grid-area: room-br
@@ -223,7 +210,7 @@ views:
     tap_action:
       action: navigate
       navigation_path: /home-ops/2
-    card_mod: *roomtile
+    card_mod: {class: roomtile}
   - type: custom:mushroom-template-card
     view_layout:
       grid-area: room-kt
@@ -234,7 +221,7 @@ views:
     tap_action:
       action: navigate
       navigation_path: /home-ops/3
-    card_mod: *roomtile
+    card_mod: {class: roomtile}
 # =====================================================================
 # ROOM PAGES — same grid grammar as Home: gutter-centered named areas,
 # hero band + chips, lights column (4 tracks) + side column (2 tracks),
@@ -273,17 +260,7 @@ views:
                | selectattr('state','eq','on') | list | count }} lights on
         icon: mdi:sofa
         icon_color: amber
-        card_mod: &roomhero
-          style: |
-            ha-card {
-              background:
-                radial-gradient(130% 200% at 10% -20%, rgba(221,161,94,0.16), transparent 60%),
-                var(--card-background-color);
-              border-radius: 24px;
-              --mush-icon-size: 44px;
-            }
-            mushroom-shape-icon { --shape-color: transparent; }
-            mushroom-state-info $ .primary { font-size: 20px; font-weight: 700; }
+        card_mod: {class: roomhero}
       - type: custom:mushroom-chips-card
         alignment: start
         chips:
@@ -332,10 +309,6 @@ views:
         name: All Hue
         show_brightness_control: true
         use_light_color: true
-        card_mod: &lighttile
-          style: |
-            ha-card { border-radius: 18px; }
-            mushroom-shape-icon { --shape-color: transparent; }
       - type: grid
         columns: 2
         square: false
@@ -344,26 +317,21 @@ views:
             entity: light.floor_lamp_a
             show_brightness_control: true
             use_light_color: true
-            card_mod: *lighttile
           - type: custom:mushroom-light-card
             entity: light.floor_lamp_b
             show_brightness_control: true
             use_light_color: true
-            card_mod: *lighttile
           - type: custom:mushroom-light-card
             entity: light.ground_spot
             show_brightness_control: true
             use_light_color: true
-            card_mod: *lighttile
           - type: custom:mushroom-light-card
             entity: light.sidetable_lamp
             show_brightness_control: true
-            card_mod: *lighttile
           - type: custom:mushroom-light-card
             entity: light.desk_underlight
             show_brightness_control: true
             use_light_color: true
-            card_mod: *lighttile
       - type: custom:mushroom-chips-card
         alignment: start
         chips:
@@ -451,13 +419,11 @@ views:
             show_brightness_control: true
             use_light_color: true
             icon: mdi:television
-            card_mod: *lighttile
           - type: custom:mushroom-light-card
             entity: light.tv_accent
             show_brightness_control: true
             use_light_color: true
             icon: mdi:television-ambient-light
-            card_mod: *lighttile
       - type: custom:mushroom-chips-card
         alignment: start
         chips:
@@ -519,7 +485,7 @@ views:
           · {{ expand('light.bedroom') | selectattr('state','eq','on') | list | count }} lights on
         icon: mdi:bed
         icon_color: amber
-        card_mod: *roomhero
+        card_mod: {class: roomhero}
       - type: custom:mushroom-chips-card
         alignment: start
         chips:
@@ -571,7 +537,6 @@ views:
         name: All Lights
         show_brightness_control: true
         use_light_color: true
-        card_mod: *lighttile
       - type: grid
         columns: 2
         square: false
@@ -580,17 +545,14 @@ views:
             entity: light.dresser_lamp
             show_brightness_control: true
             use_light_color: true
-            card_mod: *lighttile
           - type: custom:mushroom-light-card
             entity: light.floor_lamp
             show_brightness_control: true
             use_light_color: true
-            card_mod: *lighttile
           - type: custom:mushroom-light-card
             entity: light.nightstand_lamp
             show_brightness_control: true
             use_light_color: true
-            card_mod: *lighttile
       - type: custom:mushroom-chips-card
         alignment: start
         chips:
@@ -680,7 +642,7 @@ views:
           · {{ 'Freezer open' if z == 'on' else 'Freezer closed' if z == 'off' else 'Freezer —' }}
         icon: mdi:silverware-fork-knife
         icon_color: amber
-        card_mod: *roomhero
+        card_mod: {class: roomhero}
       - type: custom:mushroom-chips-card
         alignment: start
         chips:
@@ -705,7 +667,6 @@ views:
         show_brightness_control: true
         show_color_control: true
         use_light_color: true
-        card_mod: *lighttile
   - type: vertical-stack
     view_layout:
       grid-area: side
