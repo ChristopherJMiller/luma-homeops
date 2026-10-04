@@ -1,0 +1,46 @@
+---
+# Kitchen underlight (spec §7.5): on after sunset while someone is home, off
+# at sunrise or when the house empties. A bare turn_on: adaptive lighting sets
+# level and warmth, and in sleep mode that makes it the night light. A manual
+# off sticks until the next sunset or arrival.
+#
+# GitOps source of truth (see bedroom.yaml header for the mount mechanism).
+automation:
+  - id: kitchen_underlight_on
+    alias: Kitchen - Underlight On After Sunset
+    description: Below the horizon with the house occupied, the underlight is on.
+    triggers:
+      - trigger: sun
+        event: sunset
+      - trigger: state
+        entity_id: binary_sensor.house_occupied
+        from: "off"
+        to: "on"
+    conditions:
+      - condition: state
+        entity_id: sun.sun
+        state: below_horizon
+      - condition: state
+        entity_id: binary_sensor.house_occupied
+        state: "on"
+    actions:
+      - action: light.turn_on
+        target:
+          entity_id: light.kitchen_all
+    mode: single
+
+  - id: kitchen_underlight_off
+    alias: Kitchen - Underlight Off at Sunrise or When Away
+    description: Off when the sun is up or nobody is home.
+    triggers:
+      - trigger: sun
+        event: sunrise
+      - trigger: state
+        entity_id: binary_sensor.house_occupied
+        from: "on"
+        to: "off"
+    actions:
+      - action: light.turn_off
+        target:
+          entity_id: light.kitchen_all
+    mode: single
