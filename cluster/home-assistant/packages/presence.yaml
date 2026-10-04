@@ -1,20 +1,48 @@
 ---
-# Presence — lights off when leaving, warm light on evening arrival.
-# Arrival does a BARE light.turn_on: adaptive lighting (intercept: true)
-# adapts brightness/color for the time of day on its own, so no scene is
-# needed and manual-control pause is not triggered.
+# Presence (spec §7.2). chris_home = the GPS zone OR the phone on a home access
+# point (fast and indoor-reliable), held 5 min on the way out. house_occupied
+# adds guest mode; every away behaviour keys off house_occupied, so guests keep
+# their lights. A home access point is one whose SSID contains the lower-case
+# fragment sealed in ha-secrets (Chris: two access points) -- never in git.
 #
 # GitOps source of truth (see bedroom.yaml header for the mount mechanism).
+
+template:
+  - sensor:
+      - name: Home Wifi Match
+        unique_id: home_wifi_match
+        icon: mdi:wifi-lock
+        state: !secret home_wifi_match
+  - binary_sensor:
+      - name: Chris Home
+        unique_id: chris_home
+        device_class: presence
+        delay_off: "00:05:00"
+        state: >-
+          {% set match = states('sensor.home_wifi_match') | lower %}
+          {{ is_state('person.chris_m', 'home')
+             or (match not in ['unknown', 'unavailable', '']
+                 and match in states('sensor.pixel_9_pro_xl_wi_fi_connection') | lower) }}
+      - name: House Occupied
+        unique_id: house_occupied
+        device_class: occupancy
+        state: >-
+          {{ is_state('binary_sensor.chris_home', 'on') or is_state('input_boolean.guest_mode', 'on') }}
+
+input_boolean:
+  guest_mode:
+    name: Guest Mode
+    icon: mdi:account-multiple
 
 automation:
   - id: presence_away_lights_off
     alias: Presence - Lights Off When Away
-    description: Everything off 5 minutes after Chris leaves home.
+    description: Every room off once nobody is home (chris_home already waits 5 min; guest mode keeps the house occupied).
     triggers:
       - trigger: state
-        entity_id: person.chris_m
-        from: home
-        for: "00:05:00"
+        entity_id: binary_sensor.house_occupied
+        from: "on"
+        to: "off"
     actions:
       - action: light.turn_off
         target:
@@ -26,11 +54,12 @@ automation:
 
   - id: presence_arrival_evening_lights
     alias: Presence - Evening Arrival Lights
-    description: Arriving after sunset turns the living room on (adaptive lighting sets the warmth).
+    description: Chris arriving after sunset turns the living room on in Auto (adaptive lighting sets the warmth).
     triggers:
       - trigger: state
-        entity_id: person.chris_m
-        to: home
+        entity_id: binary_sensor.chris_home
+        from: "off"
+        to: "on"
     conditions:
       - condition: state
         entity_id: sun.sun
