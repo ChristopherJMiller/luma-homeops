@@ -57,3 +57,6 @@ remove:
   - about: switch.smart_plug (SmartRent no longer reports it; removal approved by Chris 2026-10-03)
     platform: smartrent
     unique_id: '676391'
+  - about: automation.sync_bedroom_switch_and_lights (the old two-way sync, replaced by bedroom_switch_master 2026-10-03)
+    platform: automation
+    unique_id: '1741747401508'
