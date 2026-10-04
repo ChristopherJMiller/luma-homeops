@@ -11,6 +11,7 @@ resources:
   - mosquitto-servicemonitor.yaml
   - ha-reload.yaml
   - ha-reload-token.yaml
+  - ha-secrets.yaml
 
 # HA config packages (git-tracked source of truth). Rendered into a ConfigMap
 # that the ha-helm chart mounts at /config/packages via extraConfigMounts.

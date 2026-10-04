@@ -4,7 +4,7 @@
 
 **Goal:** Make the house behave: HA-owned light groups with adaptive lighting everywhere and scenes that hold until Auto, a one-way bedroom wall switch, kitchen underlight, presence with guest mode, and a climate brain (free cooling, print-aware floor fan, AC #1), all as git packages verified live.
 
-**Architecture:** Feature packages in `cluster/home-assistant/packages/` (one per feature), two `hactl` additions (`scene capture`, `health --registry`), one chart feature (`ha-helm` v0.6.0: `secrets.yaml` from a Secret) for the home SSID, and the state engine for device areas. Every behaviour is exercised live with reversible actions and read back with `hactl trace`.
+**Architecture:** Feature packages in `cluster/home-assistant/packages/` (one per feature), two `hactl` additions (`scene capture`, `health --registry`), one chart feature (`ha-helm` v0.6.0: `secrets.yaml` from a Secret) for the home Wi-Fi match, and the state engine for device areas. Every behaviour is exercised live with reversible actions and read back with `hactl trace`.
 
 **Tech Stack:** Home Assistant 2026.9.4 YAML packages (template, light group, adaptive_lighting 1.31.0, input_*, script, scene, automation), Python 3.13 (hactl, pytest), Helm + helm-unittest (`~/Repos/ha-helm`), Sealed Secrets, Argo CD.
 
@@ -26,7 +26,7 @@
 1. **Bedroom switch vs morning routine both fire on the same `off→on`** → while `input_boolean.wake_up_pending` is on, only the morning routine acts; otherwise only the bedroom automation acts. Test: Task 7 Step 4 exercises both states and reads both traces.
 2. **A scene that never lets go** (manual control not cleared, mode stuck off `Auto`) → turning a room fully off resets its mode to Auto and adaptive lighting takes the lights back on the next on. Test: Task 5 Step 7.
 3. **Climate flapping or acting on stale/unavailable inputs** (weather/AQI/OctoPrint/AC unavailable, insert just removed) → no command sent; hysteresis holds. Test: Task 9 what-if cases + Step 6 trigger checks.
-4. **The home SSID leaking into the public repo or logs** → only the sealed Secret and the git-crypt'd `.secret.yaml` hold it. Test: Task 2 Step 5 grep of the committed tree + GITCRYPT check.
+4. **The home Wi-Fi match string leaking into the public repo or logs** → only the sealed Secret and the git-crypt'd `.secret.yaml` hold it. Test: Task 2 Step 5 grep of the committed tree + GITCRYPT check.
 5. **Away turns off lights a guest is using** → `house_occupied` stays on while guest mode is on; away keys off `house_occupied`, not `person`. Test: Task 6 Step 5.
 
 ---
@@ -127,42 +127,38 @@ README: a "### Secrets for `!secret`" section with that snippet. `Chart.yaml`: `
 - [ ] **Step 4:** `nix-shell --run 'helm unittest . && helm lint .'` → all pass.
 - [ ] **Step 5:** Commit `0.6.0: secrets.yaml from a Secret (secretsFile)`, tag `v0.6.0`, push `main` and the tag; `gh run list -L 1` green.
 
-### Task 2: `ha-secrets` with the home SSID; release on v0.6.0
+### Task 2: `ha-secrets` with the home Wi-Fi match; release on v0.6.0
 
 **Files:** `cluster/home-assistant/ha-secrets.secret.yaml` (git-crypt) + sealed `cluster/home-assistant/ha-secrets.yaml`, `cluster/home-assistant/kustomization.yaml`, `cluster/applications/home-assistant-release.yaml`.
 
 **Interfaces:**
 - Consumes: Task 1 `secretsFile`.
-- Produces: `!secret home_wifi_ssid` resolvable in packages (live and in `check-config`; `hactl lint --offline` already writes a dummy for every `!secret` name).
+- Produces: `!secret home_wifi_match` resolvable in packages (live and in `check-config`; `hactl lint --offline` already writes a dummy for every `!secret` name). Chris, 2026-10-03: home = the phone's SSID **contains** this string, case-insensitively (he has two access points); the string is still a secret because the repo is public.
 
-- [ ] **Step 1: Confirm the source.** `AskUserQuestion`: "Presence uses your phone's Wi-Fi SSID. Is the network your phone is on right now your home Wi-Fi (I'll copy it from the phone's sensor without printing it)?" Options: Yes / No, I'll provide it (then Chris writes it to `~/.config/galaxy/home-ssid`, mode 600).
-- [ ] **Step 2: Write the Secret without printing the SSID** (Yes case; the No case reads `~/.config/galaxy/home-ssid` instead of the sensor):
+- [ ] **Step 1: The match string.** Chris gave it (2026-10-03): a lower-case fragment contained in every home access point's SSID. It is kept in `~/.config/galaxy/home-wifi-match` (mode 600, no newline) and never written into git, the plan, the ledger or chat summaries.
+- [ ] **Step 2: Write the Secret from that file** (nothing printed):
 
 ```bash
 cd /home/chris/Repos/luma-homeops
 ( umask 077
-  nix develop --command env PYTHONPATH=tools/hactl/src python3 -c '
-from hactl.client import Client
-print(Client().get("/api/states/sensor.pixel_9_pro_xl_wi_fi_connection")["state"], end="")' > "$SCRATCH/.ssid"
   nix develop --command python3 -c '
-import json, sys
-ssid = open(sys.argv[1]).read()
-assert ssid and ssid not in ("unknown", "unavailable", "<not connected>"), "phone not on Wi-Fi"
+import json, pathlib
+m = (pathlib.Path.home() / ".config/galaxy/home-wifi-match").read_text().strip().lower()
+assert m, "empty match"
 print(json.dumps({"apiVersion": "v1", "kind": "Secret",
                   "metadata": {"name": "ha-secrets", "namespace": "home-assistant"},
                   "type": "Opaque",
-                  "stringData": {"secrets.yaml": "home_wifi_ssid: " + json.dumps(ssid) + "\n"}}))
-' "$SCRATCH/.ssid" > cluster/home-assistant/ha-secrets.secret.yaml
-  rm -f "$SCRATCH/.ssid" )
+                  "stringData": {"secrets.yaml": "home_wifi_match: " + json.dumps(m) + "\n"}}))
+' > cluster/home-assistant/ha-secrets.secret.yaml )
 nix develop --command ./sign.sh
 grep -c '^kind: SealedSecret' cluster/home-assistant/ha-secrets.yaml   # expect 1
 ```
 
-(`$SCRATCH` = the session scratchpad. JSON is valid YAML; yamlfmt may reformat it on commit.)
+(JSON is valid YAML; yamlfmt may reformat it on commit.)
 - [ ] **Step 3:** Add `- ha-secrets.yaml` to `resources:` in `cluster/home-assistant/kustomization.yaml`. In the release: `targetRevision: v0.6.0` and
 
 ```yaml
-        # /config/secrets.yaml for `!secret` in packages (home SSID), sealed in
+        # /config/secrets.yaml for `!secret` in packages (home Wi-Fi match), sealed in
         # cluster/home-assistant/ha-secrets.yaml.
         secretsFile:
           enabled: true
@@ -170,8 +166,8 @@ grep -c '^kind: SealedSecret' cluster/home-assistant/ha-secrets.yaml   # expect 
           key: secrets.yaml
 ```
 
-- [ ] **Step 4:** `hactl lint --offline` clean (nothing uses `!secret` yet; this proves the release still renders). Commit `home-assistant: ha-secrets (home SSID, sealed) mounted as secrets.yaml (ha-helm v0.6.0)`, push, `hactl deploy` (pod restarts: chart change). Verify: `kubectl -n home-assistant exec deploy/ha-home-assistant -c home-assistant -- sh -c 'test -s /config/secrets.yaml && echo present'` → `present` (never cat it).
-- [ ] **Step 5: Leak check.** `git show HEAD:cluster/home-assistant/ha-secrets.secret.yaml | head -c 9 | od -c` shows GITCRYPT. And the SSID appears nowhere else in the tree: `git grep -l -F -f <(nix develop --command env PYTHONPATH=tools/hactl/src python3 -c 'from hactl.client import Client; print(Client().get("/api/states/sensor.pixel_9_pro_xl_wi_fi_connection")["state"])') -- . ':!*.secret.yaml' ':!cluster/home-assistant/ha-secrets.yaml'` → no output, exit 1.
+- [ ] **Step 4:** `hactl lint --offline` clean (nothing uses `!secret` yet; this proves the release still renders). Commit `home-assistant: ha-secrets (home Wi-Fi match, sealed) mounted as secrets.yaml (ha-helm v0.6.0)`, push, `hactl deploy` (pod restarts: chart change). Verify: `kubectl -n home-assistant exec deploy/ha-home-assistant -c home-assistant -- sh -c 'test -s /config/secrets.yaml && echo present'` → `present` (never cat it).
+- [ ] **Step 5: Leak check.** `git show HEAD:cluster/home-assistant/ha-secrets.secret.yaml | head -c 9 | od -c` shows GITCRYPT. And the match string appears in no SSID-related line of the cleartext tree: `git grep -l -i -F -f ~/.config/galaxy/home-wifi-match -- cluster docs tools .claude ':!*.secret.yaml' ':!cluster/home-assistant/ha-secrets.yaml'` — read the file list (names only); a hit is acceptable only where the fragment occurs as an unrelated ordinary word, never in a Wi-Fi/SSID context.
 
 ### Task 3: `hactl scene capture`
 
@@ -631,8 +627,8 @@ automation:
 **Files:** Rewrite `cluster/home-assistant/packages/presence.yaml`.
 
 **Interfaces:**
-- Consumes: Task 2 `!secret home_wifi_ssid`; Task 5 groups and `script.room_auto`.
-- Produces: `sensor.home_wifi_ssid`, `binary_sensor.chris_home`, `input_boolean.guest_mode`, `binary_sensor.house_occupied`; automations `presence_away_lights_off`, `presence_arrival_evening_lights`.
+- Consumes: Task 2 `!secret home_wifi_match`; Task 5 groups and `script.room_auto`.
+- Produces: `sensor.home_wifi_match`, `binary_sensor.chris_home`, `input_boolean.guest_mode`, `binary_sensor.house_occupied`; automations `presence_away_lights_off`, `presence_arrival_evening_lights`.
 
 - [ ] **Step 1: Check the inputs live** (`hactl template`, never printing the SSID):
 `{{ is_state('person.chris_m', 'home') }} / {{ states('sensor.pixel_9_pro_xl_wi_fi_connection') not in ['unknown', 'unavailable', '<not connected>'] }}` → `True / True`.
@@ -649,20 +645,21 @@ automation:
 
 template:
   - sensor:
-      - name: Home Wifi SSID
-        unique_id: home_wifi_ssid
+      # Lower-case fragment every home access point's SSID contains (sealed in ha-secrets).
+      - name: Home Wifi Match
+        unique_id: home_wifi_match
         icon: mdi:wifi-lock
-        state: !secret home_wifi_ssid
+        state: !secret home_wifi_match
   - binary_sensor:
       - name: Chris Home
         unique_id: chris_home
         device_class: presence
         delay_off: "00:05:00"
         state: >-
-          {% set ssid = states('sensor.home_wifi_ssid') %}
+          {% set match = states('sensor.home_wifi_match') | lower %}
           {{ is_state('person.chris_m', 'home')
-             or (ssid not in ['unknown', 'unavailable', '']
-                 and states('sensor.pixel_9_pro_xl_wi_fi_connection') == ssid) }}
+             or (match not in ['unknown', 'unavailable', '']
+                 and match in states('sensor.pixel_9_pro_xl_wi_fi_connection') | lower) }}
       - name: House Occupied
         unique_id: house_occupied
         device_class: occupancy
@@ -713,7 +710,7 @@ automation:
 ```
 
 - [ ] **Step 3:** `hactl lint` clean; commit `home-assistant: presence = zone or home Wi-Fi, guest mode, house_occupied`; push; `hactl deploy`.
-- [ ] **Step 4:** `hactl state binary_sensor.chris_home` and `hactl state binary_sensor.house_occupied` → both `on`; `hactl state sensor.home_wifi_ssid` → state is not `unknown` (compare with `hactl template "{{ states('sensor.home_wifi_ssid') == states('sensor.pixel_9_pro_xl_wi_fi_connection') }}"` → `True`; never print the SSID).
+- [ ] **Step 4:** `hactl state binary_sensor.chris_home` and `hactl state binary_sensor.house_occupied` → both `on`; `hactl template "{{ states('sensor.home_wifi_match') | lower in states('sensor.pixel_9_pro_xl_wi_fi_connection') | lower }}"` → `True` (never print either value).
 - [ ] **Step 5: Guest mode (Review Focus 5):** `hactl template` with the house_occupied expression where chris_home is forced off — `{{ false or is_state('input_boolean.guest_mode','on') }}` — after `hactl call input_boolean.turn_on --entity input_boolean.guest_mode` → `True`; turn guest mode off again. (The away automation itself is exercised only by real departures; its trace is checked in Task 10's health pass.)
 
 ### Task 7: Bedroom wall switch is the master (one-way)
@@ -1144,7 +1141,7 @@ Add `+ check_automations(ha_dir)` to `offline()`.
 
 **Files:** `cluster/home-assistant/state/devices.yaml` (and `areas.yaml` if a new area is created).
 
-- [ ] **Step 1:** `hactl health --registry` → the "devices without an area" list (2026-10-03: Pixel 9 Pro XL, hello@chrismiller.xyz (IMAP), OctoPrint, plex.chrismiller.xyz, BrightMoney (Hue Bridge), Plant Blinds, Window Left, Window Right, Zigbee2MQTT Bridge).
+- [ ] **Step 1:** `hactl health --registry` → the "devices without an area" list (2026-10-03: Pixel 9 Pro XL, hello@chrismiller.xyz (IMAP), OctoPrint, plex.chrismiller.xyz, the Hue Bridge, Plant Blinds, Window Left, Window Right, Zigbee2MQTT Bridge).
 - [ ] **Step 2:** `AskUserQuestion` (multiSelect off, one question per kind if more than 4 options are needed): physical devices — proposed areas: Plant Blinds, Window Left, Window Right → Living Room; OctoPrint → Living Room (next to the floor fan); Hue Bridge → Living Room; Zigbee2MQTT Bridge (runs on the router) → a new `Network` area; virtual ones (phone, IMAP, Plex) → `Network` too, or exempt them. Options: "As proposed (Recommended)", "Exempt virtual devices", "I'll list areas".
 - [ ] **Step 3:** For each device add a `devices.yaml` entry (`match` by one identifier, read from `config/device_registry/list`; `about:` with name and model), `area:` per Chris's answer; a new area goes into `areas.yaml` `areas:` (`id: network`, `name: Network`, `icon: mdi:lan`). Exempted devices (if Chris chooses that) are listed in docs/ha.md as intentionally area-less, and remain in the report.
 - [ ] **Step 4:** `hactl plan` lists only the area assignments (and the new area); `hactl apply`; `hactl health --registry` → `devices without an area: none` (or only the exempted ones). Commit `home-assistant: every device in an area`, push, `hactl deploy`.

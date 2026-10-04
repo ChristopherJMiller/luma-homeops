@@ -9,13 +9,19 @@ spec:
   source:
     repoURL: https://github.com/ChristopherJMiller/ha-helm.git
     path: ./
-    targetRevision: v0.5.4
+    targetRevision: v0.6.0
     helm:
       releaseName: ha
       valuesObject:
         image:
           tag: 2026.9.4
         hacs: false
+        # /config/secrets.yaml for `!secret` in packages (home Wi-Fi match), sealed in
+        # cluster/home-assistant/ha-secrets.yaml.
+        secretsFile:
+          enabled: true
+          secretName: ha-secrets
+          key: secrets.yaml
         # Custom integrations and cards, installed at these exact versions by the
         # chart's install-components init container (replaces HACS; Renovate bumps
         # them). Cards are served at /local/community/<name>/<file> and registered
