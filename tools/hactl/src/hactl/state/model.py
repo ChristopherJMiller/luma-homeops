@@ -44,7 +44,12 @@ SCHEMA = {
         "zones": ({"id", "name", "latitude", "longitude"}, {"radius", "icon", "passive"}),
         "persons": ({"id", "name"}, {"user_id", "device_trackers", "picture"}),
     },
+    "system": {},  # only the `http:` scalar
 }
+# HA's HTTP server config (http/config, HA 2026.9+): the keys system.yaml `http:` may declare.
+HTTP_KEYS = frozenset({"server_host", "server_port", "ssl_certificate", "ssl_peer_certificate", "ssl_key", "ssl_profile",
+                       "cors_allowed_origins", "use_x_forwarded_for", "use_x_frame_options", "trusted_proxies",
+                       "login_attempts_threshold", "ip_ban_enabled"})
 
 
 @dataclass
@@ -66,6 +71,7 @@ class Manifest:
     default_dashboard: str | None = None  # dashboards.yaml top-level `default:`
     dashboard_configs: dict = field(default_factory=dict)  # url_path -> Lovelace config from dashboard_configs/<file>
     locked_files: list = field(default_factory=list)  # git-crypt-encrypted manifests (read as empty)
+    http: dict | None = None  # system.yaml `http:`; None = unmanaged
 
 
 def _load_credentials(path: Path, problems: list):
@@ -87,7 +93,7 @@ def _load_credentials(path: Path, problems: list):
     return data, False
 
 
-SCALARS = {"dashboards": {"default"}}  # top-level non-list keys a file may carry
+SCALARS = {"dashboards": {"default"}, "system": {"http"}}  # top-level non-list keys a file may carry
 
 
 def _load_dashboard_configs(state_dir: Path, dashboards: list, problems: list) -> dict:
@@ -134,7 +140,7 @@ def load(state_dir: Path = STATE_DIR) -> Manifest:
             scalars[key] = data.get(key)
         for key in data:
             if key not in file_sections and key not in SCALARS.get(name, ()):
-                problems.append(f"{name}.yaml: unknown section {key!r} (expected: {', '.join(file_sections)})")
+                problems.append(f"{name}.yaml: unknown section {key!r} (expected: {', '.join([*file_sections, *SCALARS.get(name, ())])})")
         for section, (required, optional) in file_sections.items():
             items = data.get(section) or []
             if not isinstance(items, list):
@@ -152,10 +158,16 @@ def load(state_dir: Path = STATE_DIR) -> Manifest:
                     problems.append(f"{where}: unknown key(s) {', '.join(unknown)}")
                 good.append(item)
             sections[section] = good
+    http = scalars.get("http")
+    if http is not None and not isinstance(http, dict):
+        problems.append("system.yaml: http must be a mapping of HTTP settings")
+        http = None
+    elif http and (unknown := sorted(http.keys() - HTTP_KEYS)):
+        problems.append(f"system.yaml http: unknown key(s) {', '.join(unknown)}")
     creds, creds_locked = _load_credentials(state_dir / CREDENTIALS, problems)
     m = Manifest(**sections, credentials=creds, credentials_locked=creds_locked, default_dashboard=scalars.get("default"),
                  dashboard_configs=_load_dashboard_configs(state_dir, sections.get("dashboards", []), problems),
-                 locked_files=locked)
+                 locked_files=locked, http=http)
     type_problems = check_types(m)
     problems += type_problems or check(m)  # cross-checks assume the types are right
     if problems:

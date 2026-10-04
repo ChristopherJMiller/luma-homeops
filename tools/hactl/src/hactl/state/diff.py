@@ -289,6 +289,20 @@ def diff_dashboard_configs(declared, live) -> list:
             for u, cfg in sorted(declared.items()) if live.get(u) != cfg]
 
 
+def diff_http(declared, live) -> list:
+    """HA's HTTP server config lives in storage since 2026.9 (Settings -> System -> Network). Changing it
+    restarts HA into a trial that auto-reverts unless promoted, so hactl reports drift and a person applies it."""
+    if declared is None:
+        return []
+    if not live:
+        return [Change("manual", "http", "http", "could not read HA's HTTP config (http/config needs HA 2026.9+)")]
+    delta = {k: v for k, v in declared.items() if not same(v, live.get(k))}
+    if not delta:
+        return []
+    return [Change("manual", "http", "http",
+                   f"{_describe(delta, live)}: set it in Settings -> System -> Network (HA restarts to apply)")]
+
+
 def plan(m, snap) -> list:
     """Every change needed to make HA match the manifests, in apply order."""
     return (diff_registry("floor", m.floors, snap.floors)
@@ -304,7 +318,8 @@ def plan(m, snap) -> list:
             + diff_dashboards(m.dashboards, snap.dashboards)
             + diff_resources(m.resources, snap.resources)
             + diff_default_dashboard(m.default_dashboard, snap.system_core)
-            + diff_dashboard_configs(m.dashboard_configs, snap.dashboard_configs))
+            + diff_dashboard_configs(m.dashboard_configs, snap.dashboard_configs)
+            + diff_http(m.http, snap.http))
 
 
 def options_wanted(m) -> set:

@@ -77,6 +77,7 @@ class FakeHA:
                      "zones", "persons"):
             setattr(self, name, [dict(x) for x in getattr(snap, name)])
         self.system_core = dict(snap.system_core)
+        self.http = dict(snap.http)
         self.lovelace_configs = {}
         self.calls = []
 
@@ -102,6 +103,8 @@ class FakeHA:
             if t == f"{base}/delete":
                 items[:] = [i for i in items if i[idk] != args[idk]]
                 return None
+        if t == "http/config":
+            return {"stable": self.http, "pending": None}
         if t == "frontend/get_system_data":
             return {"value": dict(self.system_core)}
         if t == "frontend/set_system_data":

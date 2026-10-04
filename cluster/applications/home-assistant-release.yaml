@@ -96,10 +96,7 @@ spec:
               unit_time: h  # degrees per hour
               time_window: 00:30:00    # 30 minute window
 
-          http:
-            use_x_forwarded_for: true
-            trusted_proxies:
-              - 10.0.0.0/8
+          # http: moved to HA storage in 2026.9; declared in cluster/home-assistant/state/system.yaml
         ingress:
           enabled: true
           className: traefik

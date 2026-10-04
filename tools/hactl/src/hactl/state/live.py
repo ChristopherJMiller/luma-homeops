@@ -23,6 +23,7 @@ class Snapshot:
     storage_helpers: list = field(default_factory=list)  # (domain, id, name) of UI-made helpers
     system_core: dict = field(default_factory=dict)  # frontend system data "core" (default_panel, ...)
     dashboard_configs: dict = field(default_factory=dict)  # url_path -> Lovelace config (only wanted ones)
+    http: dict = field(default_factory=dict)  # http/config "stable" (HA 2026.9+); {} if unreadable
 
 
 def _dashboard_config(client, url_path):
@@ -32,6 +33,15 @@ def _dashboard_config(client, url_path):
         return client.ws({"type": "lovelace/config", "url_path": None if url_path == "lovelace" else url_path})[0]
     except HactlError:
         return {}  # not created yet, or empty
+
+
+def _http_config(client) -> dict:
+    from hactl.errors import HactlError
+
+    try:
+        return (client.ws({"type": "http/config"})[0] or {}).get("stable") or {}
+    except HactlError:
+        return {}  # HA before 2026.9 has no http/config
 
 
 def fetch(client, want_options=frozenset(), want_configs=()) -> Snapshot:
@@ -54,4 +64,4 @@ def fetch(client, want_options=frozenset(), want_configs=()) -> Snapshot:
     return Snapshot(floors, labels, areas, devices, entities, entries, dashboards, resources, options,
                     zones, (persons or {}).get("storage", []), storage_helpers,
                     (system_data or {}).get("value") or {},
-                    {u: _dashboard_config(client, u) for u in want_configs})
+                    {u: _dashboard_config(client, u) for u in want_configs}, _http_config(client))

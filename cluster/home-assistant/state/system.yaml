@@ -1,0 +1,9 @@
+---
+# HA's HTTP server config. Since 2026.9 it lives in HA storage (Settings -> System -> Network), not
+# configuration.yaml: `hactl plan` reports drift from what is declared here; a person applies it in the UI
+# (HA restarts into a trial that auto-reverts unless promoted). Undeclared keys keep HA's defaults.
+http:
+  # Traefik (pod network) terminates TLS and forwards; without these HA rejects proxied requests with 400.
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 10.0.0.0/8
