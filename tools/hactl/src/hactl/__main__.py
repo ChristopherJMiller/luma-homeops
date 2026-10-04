@@ -6,7 +6,7 @@ import sys
 from hactl.errors import HactlError
 
 # Each module exposes register(subparsers); commands set `func` via set_defaults.
-MODULES: list[str] = ["revision", "lint", "query", "shot", "preview", "health", "act", "deploy", "selftest", "state.cli"]
+MODULES: list[str] = ["revision", "lint", "query", "shot", "preview", "health", "act", "deploy", "selftest", "scene", "state.cli"]
 
 
 def build_parser() -> argparse.ArgumentParser:
