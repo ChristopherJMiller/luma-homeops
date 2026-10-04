@@ -91,6 +91,14 @@ One package per feature; every automation has an `id`, `alias`, `description` an
 
 `hactl health --registry` adds area-less devices, registry entries no integration provides (restored-only: add them to `entities.yaml` `remove:`), and entities unavailable for all recorded history. Every device has an area; bridges, servers and accounts are in `Network`.
 
+## Dashboard (`home-ops`)
+
+YAML mode, declared in the release's `lovelace.dashboards`. `dashboards/overview.yaml` is a root of `!include`s, one file per view (`overview_home.yaml`, `overview_living_room.yaml`, `overview_bedroom.yaml`, `overview_kitchen.yaml`, `overview_calendar.yaml`, `overview_energy.yaml`); flat names because ConfigMaps have no subdirectories, and each must be listed in `kustomization.yaml` (`ha-dashboards`; lint checks). A new view = a new file + a root line + a kustomization line.
+
+Shared tile styling lives in the Warm Minimal theme as card-mod rules (`card-mod-card`): light tiles by their type, Home room tiles and room-page heroes by a one-line `card_mod: {class: roomtile|roomhero}`. Per-card `card_mod` is for one-offs only. Any change to shared styling: deploy the theme rule first, then `hactl preview` the dashboard without the per-card block and pixel-compare it (`compare -metric AE -fuzz 8%`) with a same-time production `hactl shot`.
+
+Room mode chips: one template chip per `input_select.<room>_light_mode` option, amber when active, tapping `script.room_auto` (Auto) or `script.room_scene` (a scene). Adding a mode = a `scenes.yaml` entry `scene.<mode>_<room>`, the option in the room's `input_select`, and a chip. Conditional tiles (printer, commute) are checked by previewing a copy with the condition inverted.
+
 ## Custom integrations and cards (pinned)
 
 They live in the release, `cluster/applications/home-assistant-release.yaml` → `valuesObject.components`, at exact versions. The chart's `install-components` init container fetches them from GitHub before `check-config` runs and reinstalls one only when its version or source changes. A version or asset that cannot be downloaded fails the pod start (the installed copy stays on the volume, but HA is down until the release is fixed or reverted), so `cd tools/hactl && HACTL_LIVE=1 nix develop ../.. --command python -m pytest tests/test_components_live.py` checks every URL resolves before you push.

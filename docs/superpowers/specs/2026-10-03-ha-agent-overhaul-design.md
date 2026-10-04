@@ -627,6 +627,27 @@ whole feature can be paused from the dashboard.
   - Now Playing works once Plex is back.
 - Process: iterate with `hactl preview`; acceptance with `hactl shot`.
 
+**As built (plan 5, 2026-10-03)** — where the result differs from §8:
+
+- Shared styling moved into the theme as card-mod v4 rules: light tiles by
+  their `type-custom-mushroom-light-card` class; Home room tiles and room
+  heroes (template cards like many others, so no type selector fits) opt in
+  with a one-line `card_mod: {class: roomtile|roomhero}`. Each move was shown
+  pixel-identical against a same-time production shot before it shipped.
+- The climate strip lives in the Living Room's existing "Climate" column (it
+  already held the AC and fans) rather than a new grid area; it adds Climate
+  Auto / insert / AQI chips, the free-cooling verdict with its tunables, "Paused
+  for print" on the floor fan, and marks the AC as assumed state. Home's hero
+  band gained Guests / Climate / AQI chips and the printer tile.
+- Chris dropped the Hue "TV" zone tile and its TV scene chips (Movie mode covers
+  it); the TV Accent lamp keeps its tile. The bedroom's Hue "Sunset" chip went
+  with the Hue scene chips (not a git scene); Chris was offered it back and
+  accepted the set as is.
+- Now Playing needed no change: it already handles Plex's per-client players.
+- Acceptance: final set (6 views × 412/1440 × dark + light) has zero error cards;
+  the only "Unavailable" is the offline Fridge Door (§6). Chris reviewed the
+  before/after page and approved.
+
 ## 9. Acceptance
 
 | Phase | Done when |

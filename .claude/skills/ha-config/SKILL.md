@@ -26,6 +26,8 @@ push → Argo syncs the `home-assistant` app (ConfigMaps) → the **`ha-reload` 
 
 ## Dashboards (YAML mode)
 
+One file per view behind `dashboards/overview.yaml`'s `!include`s (docs/ha.md "Dashboard"); shared tile styling lives in the Warm Minimal theme (card-mod rules; tiles opt in with `card_mod: {class: …}`), never copied per card; room mode chips call `script.room_scene` / `script.room_auto`. Prove a styling refactor with a pixel diff of preview vs same-time production shots.
+
 YAML dashboards live in `cluster/home-assistant/dashboards/` and are declared in the chart's `lovelace.dashboards` value (`urlPath` must contain a hyphen). **Never flip global `lovelace: mode: yaml`** — it disables the UI resource registry and breaks every add-on card. `check_config` validates the `lovelace:` schema, not dashboard contents — that is what `hactl lint` (templates, entity ids) and `hactl preview`/`shot` (error cards, rendering) are for.
 
 ## Hard rules / gotchas
