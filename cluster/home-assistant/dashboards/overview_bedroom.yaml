@@ -25,7 +25,7 @@ cards:
       primary: Bedroom
       secondary: >-
         {{ states('sensor.bedroom_temperature') }}° · {{ states('sensor.bedroom_humidity') }}%
-        · {{ expand('light.bedroom') | selectattr('state','eq','on') | list | count }} lights on
+        · {{ expand('light.bedroom_all') | selectattr('state','eq','on') | list | count }} lights on
       icon: mdi:bed
       icon_color: amber
       card_mod: {class: roomhero}
@@ -39,7 +39,7 @@ cards:
             action: call-service
             service: light.turn_on
             target:
-              entity_id: light.bedroom
+              entity_id: light.bedroom_all
         - type: template
           content: All off
           icon: mdi:lightbulb-group-off
@@ -47,7 +47,7 @@ cards:
             action: call-service
             service: light.turn_off
             target:
-              entity_id: light.bedroom
+              entity_id: light.bedroom_all
         - type: template
           entity: switch.circadian_adaptive_lighting_circadian
           content: Adaptive
@@ -76,7 +76,7 @@ cards:
     - type: custom:mushroom-title-card
       title: Lights
     - type: custom:mushroom-light-card
-      entity: light.bedroom
+      entity: light.bedroom_all
       name: All Lights
       show_brightness_control: true
       use_light_color: true

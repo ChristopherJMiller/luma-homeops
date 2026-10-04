@@ -43,7 +43,12 @@ cards:
   primary: "{{ states('sensor.outfit_advice') }}"
   secondary: >-
     {{ states('sensor.current_city') }}  ·  {{ states('sensor.active_temperature') }}°
-    {{ states('weather.forecast_home') | replace('-', ' ') | title }}
+    {%- set w = states('weather.forecast_home') %}
+    {%- set labels = {'clear-night': 'Clear night', 'cloudy': 'Cloudy', 'exceptional': 'Exceptional', 'fog': 'Fog',
+      'hail': 'Hail', 'lightning': 'Lightning', 'lightning-rainy': 'Thunderstorms', 'partlycloudy': 'Partly cloudy',
+      'pouring': 'Pouring', 'rainy': 'Rainy', 'snowy': 'Snowy', 'snowy-rainy': 'Sleet', 'sunny': 'Sunny',
+      'windy': 'Windy', 'windy-variant': 'Windy'} %}
+    {{ labels.get(w, w | replace('-', ' ') | capitalize) }}
     ·  ↑ {{ as_timestamp(state_attr('sun.sun','next_rising')) | timestamp_custom('%-I:%M %p') }}
     ·  ↓ {{ as_timestamp(state_attr('sun.sun','next_setting')) | timestamp_custom('%-I:%M %p') }}
   icon: >-
@@ -214,9 +219,15 @@ cards:
   view_layout:
     grid-area: room-kt
   primary: Kitchen
-  secondary: Tap to open
+  secondary: >-
+    Underlight {{ 'on' if is_state('light.kitchen_all', 'on') else 'off' }}
+    · {{ 'Leak!' if is_state('binary_sensor.kitchen_sink_leak_sensor', 'on')
+          or is_state('binary_sensor.water_heater_leak_sensor', 'on') else 'Dry' }}
   icon: mdi:silverware-fork-knife
-  icon_color: amber
+  icon_color: >-
+    {{ 'red' if is_state('binary_sensor.kitchen_sink_leak_sensor', 'on')
+              or is_state('binary_sensor.water_heater_leak_sensor', 'on')
+       else ('amber' if is_state('light.kitchen_all', 'on') else 'disabled') }}
   tap_action:
     action: navigate
     navigation_path: /home-ops/3

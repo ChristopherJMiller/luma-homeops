@@ -32,8 +32,7 @@ cards:
       primary: Living Room
       secondary: >-
         {{ states('sensor.living_room_temperature') }}° · {{ states('sensor.living_room_humidity') }}%
-        · {{ expand('light.living_room', 'light.sidetable_lamp', 'light.desk_underlight')
-             | selectattr('state','eq','on') | list | count }} lights on
+        · {{ expand('light.living_room_all') | selectattr('state','eq','on') | list | count }} lights on
       icon: mdi:sofa
       icon_color: amber
       card_mod: {class: roomhero}
@@ -47,10 +46,7 @@ cards:
             action: call-service
             service: light.turn_on
             target:
-              entity_id:
-                - light.living_room
-                - light.sidetable_lamp
-                - light.desk_underlight
+              entity_id: light.living_room_all
         - type: template
           content: All off
           icon: mdi:lightbulb-group-off
@@ -58,11 +54,7 @@ cards:
             action: call-service
             service: light.turn_off
             target:
-              entity_id:
-                - light.living_room
-                - light.tv
-                - light.sidetable_lamp
-                - light.desk_underlight
+              entity_id: light.living_room_all
         # whole-home adaptive lighting master (amber when adapting)
         - type: template
           entity: switch.circadian_adaptive_lighting_circadian
@@ -81,8 +73,8 @@ cards:
     - type: custom:mushroom-title-card
       title: Lights
     - type: custom:mushroom-light-card
-      entity: light.living_room
-      name: All Hue
+      entity: light.living_room_all
+      name: All Lights
       show_brightness_control: true
       use_light_color: true
     - type: grid
