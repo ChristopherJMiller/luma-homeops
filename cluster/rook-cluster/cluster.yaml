@@ -294,14 +294,23 @@ spec:
         devices:
           - name: /dev/disk/by-id/ata-ST8000DM004-2U9188_ZR15WYG5
           - name: /dev/disk/by-id/ata-ST8000DM004-2U9188_ZR15WBG1
+          - name: /dev/disk/by-id/ata-INTEL_SSDSC2KB240G8_BTYF939002ZW240AGN-part2
+            config:
+              deviceClass: ssd
       - name: middle
         devices:
           - name: /dev/disk/by-id/ata-ST8000DM004-2U9188_ZR15X13V
           - name: /dev/disk/by-id/ata-ST8000DM004-2U9188_ZR166HF3
+          - name: /dev/disk/by-id/ata-INTEL_SSDSC2KB240G8_BTYF937607LA240AGN-part2
+            config:
+              deviceClass: ssd
       - name: bottom
         devices:
           - name: /dev/disk/by-id/ata-ST8000DM004-2U9188_ZR15WZVR
           - name: /dev/disk/by-id/ata-ST8000DM004-2U9188_ZR15WBHQ
+          - name: /dev/disk/by-id/ata-INTEL_SSDSC2KB240G8_BTYF937603ND240AGN-part2
+            config:
+              deviceClass: ssd
     config:
       # crushRoot: "custom-root" # specify a non-default root label for the CRUSH map
       # metadataDevice: "md0" # specify a non-rotational storage so ceph-volume will use it as block db device of bluestore.
