@@ -7,15 +7,9 @@ metadata:
 spec:
   project: default
   source:
-    # TEMPORARY (2026-10-05): GitHub Pages deploys are stuck behind a GitHub
-    # Actions incident, so realliance.github.io still serves the 0.11.1 index.
-    # The gh-pages branch already has 0.13.0 and its tarball URLs point at the
-    # GitHub Release, so read the index straight from the branch. Revert to
-    # https://realliance.github.io/helm-mega-media once Pages publishes again
-    # — the rendered manifests are identical either way.
-    repoURL: https://raw.githubusercontent.com/realliance/helm-mega-media/gh-pages
+    repoURL: https://realliance.github.io/helm-mega-media
     chart: mega-media
-    targetRevision: 0.13.0
+    targetRevision: 0.14.0
     helm:
       releaseName: mm
       valuesObject:
@@ -41,7 +35,16 @@ spec:
           # advance the pin to a metrics-serving build. Pinning (vs :latest) still
           # forces the kubelet to pull instead of reusing a cached `:latest`.
           mode: deployment
-          tag: 0d0a5e1
+          # c541948 (chart 0.14.0): per-*arr SAB field names, Plex Connect,
+          # mediaManagement.
+          tag: c541948
+          # Sonarr/Radarr tell Plex to rescan the touched folder on import,
+          # upgrade, rename and delete. Same Plex token Ombi uses.
+          plexNotify:
+            enabled: true
+            tokenFromSecretKeyRef:
+              name: ombi-bootstrap
+              key: plex-token
         arrs:
           config:
             storageClassName: rook-ceph-block-ssd # #2665
@@ -56,6 +59,10 @@ spec:
             apiKey:
               name: api-keys
               key: sonarr
+            # Import subtitle sidecars that ship with a release (TRaSH).
+            mediaManagement:
+              importExtraFiles: true
+              extraFileExtensions: srt,ass,ssa,sub,idx
             # Requests stay where they were (middle's memory *requests* sit ~89%);
             # only the ceiling rises. A metadata refresh downloads full-size
             # TMDB/TVDB artwork and resizes it in-process — Radarr OOMKilled at
@@ -72,6 +79,9 @@ spec:
             apiKey:
               name: api-keys
               key: radarr
+            mediaManagement:
+              importExtraFiles: true
+              extraFileExtensions: srt,ass,ssa,sub,idx
             resources:
               requests:
                 memory: 300Mi
@@ -146,6 +156,12 @@ spec:
               readOnly: true
         sabnzbd:
           tag: release-28cfd5e
+          # New episodes/movies (aired in the last 14 days) jump the queue at
+          # High; backlog keeps the category default. Faster time-to-watch
+          # without touching bandwidth.
+          downloadClient:
+            recentPriority: 1
+            olderPriority: -100
           livenessProbe:
             periodSeconds: 30
             timeoutSeconds: 10
@@ -211,7 +227,7 @@ spec:
             config_lock = 0
             fixed_ports = 1
             notified_new_skin = 0
-            direct_unpack_tested = 0
+            direct_unpack_tested = 1
             sorters_converted = 1
             check_new_rel = 1
             auto_browser = 0
@@ -251,7 +267,7 @@ spec:
             sfv_check = 1
             script_can_fail = 0
             enable_recursive = 1
-            flat_unpack = 0
+            flat_unpack = 1
             par_option = ""
             pre_check = 0
             nice = ""
@@ -263,14 +279,14 @@ spec:
             pre_script = None
             end_queue_script = None
             no_dupes = 0
-            no_series_dupes = 4
-            no_smart_dupes = 0
+            no_series_dupes = 0
+            no_smart_dupes = 4
             dupes_propercheck = 1
             pause_on_pwrar = 1
             ignore_samples = 0
             deobfuscate_final_filenames = 1
             auto_sort = ""
-            direct_unpack = 0
+            direct_unpack = 1
             propagation_delay = 0
             folder_rename = 1
             replace_spaces = 0
@@ -281,7 +297,7 @@ spec:
             enable_all_par = 0
             sanitize_safe = 0
             cleanup_list = ,
-            unwanted_extensions = exe, bat, cmd, com, msi, scr, vbs, jar, ps1,
+            unwanted_extensions = ade, adp, app, application, appref-ms, asp, aspx, asx, bas, bat, bgi, cab, cer, chm, cmd, cnt, com, cpl, crt, csh, der, diagcab, exe, fxp, gadget, grp, hlp, hpj, hta, htc, inf, ins, iso, isp, its, jar, jnlp, js, jse, ksh, lnk, mad, maf, mag, mam, maq, mar, mas, mat, mau, mav, maw, mcf, mda, mdb, mde, mdt, mdw, mdz, msc, msh, msh1, msh2, mshxml, msh1xml, msh2xml, msi, msp, mst, msu, ops, osd, pcd, pif, pl, plg, prf, prg, printerexport, ps1, ps1xml, ps2, ps2xml, psc1, psc2, psd1, psdm1, pst, py, pyc, pyo, pyw, pyz, pyzw, reg, scf, scr, sct, shb, shs, sln, theme, tmp, url, vb, vbe, vbp, vbs, vcxproj, vhd, vhdx, vsmacros, vsw, webpnp, website, ws, wsc, wsf, wsh, xbap, xll, xnk
             action_on_unwanted_extensions = 2
             unwanted_extensions_mode = 0
             new_nzb_on_failure = 0
@@ -604,6 +620,109 @@ spec:
               cpu: 100m
             limits:
               memory: 768Mi
+        # TRaSH-Guides profiles / custom formats / sizes / naming, synced on
+        # every Argo sync (PostSync hook). Validated with `recyclarr sync
+        # --preview` against the live *arrs 2026-10-05. Deviations from stock
+        # TRaSH are deliberate: media lives on SMR HDDs (#2665 — bulk writes
+        # hurt) and Plex has no hardware transcode.
+        recyclarr:
+          enabled: true
+          tag: 8.7.2
+          settings: |
+            resource_providers:
+              # Pinned: TRaSH changes land as a reviewed bump of this sha.
+              - name: trash-guides-pinned
+                type: trash-guides
+                clone_url: https://github.com/TRaSH-Guides/Guides.git
+                reference: e7c97a676743d7430fc1c5808701c48252a2ac63
+                replace_default: true
+          config: |
+            sonarr:
+              sonarr:
+                base_url: http://mm-sonarr.media.svc.cluster.local:8989
+                api_key: !env_var SONARR_API_KEY
+                delete_old_custom_formats: true
+                media_management:
+                  propers_and_repacks: do_not_prefer   # Repack/Proper CFs score these instead
+                media_naming:
+                  series: plex-tvdb
+                  season: default
+                  episodes:
+                    rename: true
+                    standard: default
+                    daily: default
+                    anime: default
+                quality_definition:
+                  type: series
+                  # TRaSH ships max 1000 / preferred 995 MB/min ("take the
+                  # biggest"); cap 1080p so episodes stay ~1.5-3 GB on SMR.
+                  qualities:
+                    - { name: HDTV-1080p,   max: 125, preferred: 95 }
+                    - { name: WEBRip-1080p, max: 130, preferred: 95 }
+                    - { name: WEBDL-1080p,  max: 130, preferred: 95 }
+                    - { name: Bluray-1080p, max: 155, preferred: 95 }
+                quality_profiles:
+                  # TRaSH WEB-1080p under the name Ombi's bootstrap resolves.
+                  - trash_id: 72dae194fc92bf828f32cde7744e51a1
+                    name: HD-1080p
+                    upgrade:
+                      allowed: true
+                      until_quality: WEB 1080p
+                      until_score: 1700   # TRaSH: 10000; stop at Tier 01/02 to limit SMR rewrite churn
+                  # TRaSH [Anime] Remux-1080p minus Remux, for Usenet.
+                  - trash_id: 20e0fc959f1f1704bed501f23bdae76f
+                    name: Anime-1080p
+                    min_format_score: 0   # TRaSH's 100 assumes fansub/BD tier CFs Usenet WEB posts rarely match
+                    upgrade:
+                      allowed: true
+                      until_quality: Bluray-1080p
+                      until_score: 1700
+                    qualities:
+                      - name: Bluray-1080p   # guide groups this with Bluray-1080p Remux; Remux dropped
+                      - name: WEB 1080p
+                        qualities: [WEBDL-1080p, WEBRip-1080p, HDTV-1080p]
+                      - name: Bluray-720p
+                      - name: WEB 720p
+                        qualities: [WEBDL-720p, WEBRip-720p, HDTV-720p]
+                      - name: Bluray-480p
+                      - name: WEB 480p
+                        qualities: [WEBDL-480p, WEBRip-480p]
+                      - name: DVD
+                      - name: SDTV
+            radarr:
+              radarr:
+                base_url: http://mm-radarr.media.svc.cluster.local:7878
+                api_key: !env_var RADARR_API_KEY
+                delete_old_custom_formats: true
+                media_management:
+                  propers_and_repacks: do_not_prefer
+                media_naming:
+                  folder: plex-tmdb
+                  movie:
+                    rename: true
+                    standard: plex-tmdb
+                quality_definition:
+                  type: movie
+                  qualities:
+                    - { name: WEBDL-1080p,  max: 100, preferred: 80 }
+                    - { name: WEBRip-1080p, max: 100, preferred: 80 }
+                    - { name: Bluray-1080p, max: 130, preferred: 95 }
+                quality_profiles:
+                  # TRaSH HD Bluray + WEB (no Remux, no BR-DISK), under Ombi's name.
+                  - trash_id: d1d67249d3890e49bc12e275d989a7e9
+                    name: HD-1080p
+                    upgrade:
+                      allowed: true
+                      until_quality: Bluray-1080p
+                      until_score: 1700
+        # Rule-based cleanup (e.g. Love is Blind: keep only the airing season).
+        # API-only, any node; UI is behind the oauth2 admin tier
+        # (cluster/media/maintainerr-ingress.yaml) — it has no auth of its own.
+        maintainerr:
+          enabled: true
+          config:
+            storageClassName: rook-ceph-block-ssd # #2665
+            size: 1Gi
         media:
           storageClassName: rook-ceph-block
           size: 3000Gi

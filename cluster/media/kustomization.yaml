@@ -20,4 +20,5 @@ resources:
   - api-keys.yaml
   - ombi-bootstrap.yaml
   - ombi-ingress.yaml
+  - maintainerr-ingress.yaml
   - webdav.yaml
