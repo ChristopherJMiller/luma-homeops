@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: rook
 resources:
   - block-pool.yaml
+  - block-pool-ssd.yaml
   - cluster.yaml
   - fs-pool.yaml
   - ceph-nfs.yaml

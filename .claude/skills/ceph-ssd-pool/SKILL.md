@@ -37,9 +37,24 @@ Reject if: `Power_Loss_Cap_Test` failing (PLP caps dead — the whole reason for
 
 ## Step 1 — pin every existing pool to `deviceClass: hdd` (before any SSD exists)
 
-Today every pool uses `replicated_rule` on root `default` with **no device class**. The moment an `ssd` OSD joins, CRUSH spreads HDD-pool data onto it by weight. Pinning while only HDDs exist changes the rule but not a single PG mapping.
+**Done 2026-10-04** (CRUSH epoch 667 + 22fbd34b) — kept here for the method.
 
-Rook-managed pools (git):
+Without a device class, the moment an `ssd` OSD joins CRUSH spreads HDD-pool data onto it by weight, so every pool must take `default~hdd` first.
+
+**Do NOT just add `deviceClass: hdd` (or `create-replicated … hdd` rules) on a live cluster.** A class rule takes the shadow tree `default~hdd`, whose host buckets have *different IDs* from the plain ones, and CRUSH hashes on bucket IDs: an offline test on 2026-10-04 showed **108 of 113 PGs** would remap — a near-total reshuffle on SMR. Convert the live map with `crushtool --reclassify`, which gives the shadow buckets the original IDs (0 PGs move) and rewrites every `take default` rule — including `replicated_rule` used by `.mgr`/`.nfs` — to `take default class hdd`:
+
+```bash
+cd /tmp; ceph osd getcrushmap -o orig; ceph osd getmap -o om
+crushtool -i orig --reclassify --reclassify-root default hdd -o reclass
+# prove it: map every PG through both (crushtool --compare crashes in 19.2.x; osdmaptool works)
+cp om om.a; cp om om.b; osdmaptool om.b --import-crush reclass
+for f in a b; do for p in $(ceph osd pool ls detail -f json | jq -r '.[].pool_id'); do
+  osdmaptool om.$f --test-map-pgs-dump --pool $p | grep -E '^[0-9]+\.[0-9a-f]+\s'; done | sort > m.$f; done
+diff m.a m.b | grep -c '^>'            # must be 0
+ceph osd setcrushmap -i reclass         # S7: show Chris; keep `orig` for rollback
+```
+
+Then the CRs, so Rook agrees (it keeps the existing rules — their bodies already match — so nothing moves):
 
 ```yaml
 # cluster/rook-cluster/block-pool.yaml — CephBlockPool block-pool
@@ -54,24 +69,17 @@ spec:
   dataPools:    [ { deviceClass: hdd, replicated: { size: 3 } } ]
 ```
 
-Ceph-owned pools (`.mgr`, `.nfs`) have no CR — after the Rook rules exist, one Ceph write each (S7: show Chris, get a yes):
-
-```bash
-ceph osd crush rule create-replicated replicated_hdd default host hdd
-ceph osd pool set .mgr crush_rule replicated_hdd
-ceph osd pool set .nfs crush_rule replicated_hdd
-```
+`.mgr`/`.nfs` need nothing more: reclassify already moved `replicated_rule` to `default~hdd`.
 
 **Verify (must all hold before step 2):**
 
 ```bash
 ceph osd pool ls detail | grep -E 'crush_rule'          # every pool on an hdd-class rule
 ceph osd crush rule dump | jq -r '.[] | "\(.rule_name): \(.steps[]|select(.op=="take")|.item_name)"'   # take default~hdd
-ceph -s | grep -E 'misplaced|remapped'                    # nothing — zero data movement
-ceph pg dump pgs_brief 2>/dev/null | grep -vc 'active+clean'   # 0
+ceph pg dump pgs_brief -f json | jq -r '.pg_stats[]|"\(.pgid) \(.up)"' | sort   # snapshot before + after: identical
 ```
 
-If PGs remap here, stop: something differed from the assumption that only HDD OSDs exist.
+Compare PG up-sets before/after rather than waiting for `active+clean` — a balancer backfill in flight is fine. If any up-set changes, `ceph osd setcrushmap -i orig` and stop.
 
 ## Step 2 — storage config: explicit devices by-id (before plugging in)
 
@@ -126,23 +134,25 @@ One-shot privileged pod on the node (`kubectl -n kube-system run … --overrides
 
 ```bash
 DEV=/dev/sdc; smartctl -i $DEV | grep -E 'Model|Serial'      # must be one of the S4510 serials
-lsblk -o NAME,SIZE,MODEL,SERIAL $DEV                         # ~447G, INTEL SSDSC2KB480G8
+lsblk -o NAME,SIZE,MODEL,SERIAL $DEV                         # ~223.6G, INTEL SSDSC2KB240G8 (the drives that arrived are 240 GB)
 ```
 
 Then:
 
 ```bash
 sgdisk --zap-all $DEV && blkdiscard $DEV
-sgdisk -n1:0:+64G -t1:8300 -c1:ceph-db-reserved \
-       -n2:0:0    -t2:8300 -c2:ceph-osd $DEV
+# Partition NAMES must not contain "ceph": ceph-volume treats any such PARTLABEL as a
+# legacy ceph-disk member and refuses it ("Used by ceph-disk") — hit 2026-10-04.
+sgdisk -n1:0:+64G -t1:8300 -c1:db-reserved \
+       -n2:0:0    -t2:8300 -c2:osd-ssd $DEV
 partprobe $DEV; lsblk $DEV
-ls -l /dev/disk/by-id/ | grep INTEL_SSDSC2KB480G8_<serial>   # note the -part2 id
+ls -l /dev/disk/by-id/ | grep INTEL_SSDSC2KB240G8_<serial>   # note the -part2 id
 ```
 
 Add `p2` to that node's device list (git):
 
 ```yaml
-          - name: /dev/disk/by-id/ata-INTEL_SSDSC2KB480G8_<serial>-part2
+          - name: /dev/disk/by-id/ata-INTEL_SSDSC2KB240G8_<serial>-part2
             config:
               deviceClass: ssd     # Rook auto-detects from rotational=0; make it explicit
 ```
@@ -150,11 +160,11 @@ Add `p2` to that node's device list (git):
 Commit, push. Rook's prepare job creates the OSD (raw mode on the partition). **Verify:**
 
 ```bash
-ceph osd tree                       # new osd on this host, class ssd, CRUSH weight ~0.4
+ceph osd tree                       # new osd on this host, class ssd, CRUSH weight ~0.16
 ceph osd df tree | grep ssd
 ceph -s                             # still zero misplaced — step 1 is doing its job
 kubectl -n rook get pod -l ceph-osd-id=<new> -o jsonpath='{.items[0].spec.containers[0].resources}'   # the osd-ssd numbers
-ceph config show osd.<new> osd_memory_target                  # Rook sets it equal to the 2Gi memory limit
+ceph config show osd.<new> osd_memory_target                  # Rook set 1.5 GiB (= the 1536Mi request) on 2026-10-04
 ```
 
 If `ceph -s` shows misplaced objects after an SSD OSD joins, a pool escaped step 1 — `ceph osd pool ls detail` finds it; fix its rule before the next node. Repeat step 4 per node.
@@ -189,13 +199,14 @@ parameters:                        # identical to rook-ceph-block except pool:
   csi.storage.k8s.io/node-stage-secret-name: rook-csi-rbd-node
   csi.storage.k8s.io/node-stage-secret-namespace: rook
   csi.storage.k8s.io/fstype: ext4
+mountOptions: [discard]          # without it deletes never reach Ceph: acid-media held 149 GB for 0.8 GB live
 reclaimPolicy: Retain
 allowVolumeExpansion: true
 ```
 
 Add to `cluster/rook-cluster/kustomization.yaml`. **Verify:** `ceph osd pool ls detail | grep block-pool-ssd` → rule takes `default~ssd`; a throwaway 1 Gi PVC on the new class binds and `rbd -p block-pool-ssd ls` lists its image; delete the PVC + purge the PV (Retain).
 
-Capacity: 3 × ~410 GB replicated ×3 ≈ **400 GB usable**. Keep the pool under 75 % — `ceph df` — it's the only place these workloads can live.
+Capacity: 3 × ~159.6 GiB (part2 of 240 GB drives) replicated ×3 ≈ **~155 GiB usable**; candidates held ~15–25 GB live on 2026-10-04. Keep the pool under 75 % — `ceph df` — it's the only place these workloads can live.
 
 ## Step 6 — migrate PVCs, app by app
 

@@ -1,0 +1,40 @@
+---
+# SSD tier (#2665): one ssd-class OSD per node on the Intel D3-S4510 part2.
+# For small, latency-sensitive volumes (Postgres, app config/metadata) that
+# suffer on the SMR spinners. ~159 GiB raw per OSD, size 3 -> keep the pool
+# under ~75 % (`ceph df`); it is the only place these volumes can live.
+apiVersion: ceph.rook.io/v1
+kind: CephBlockPool
+metadata:
+  name: block-pool-ssd
+  namespace: rook
+spec:
+  failureDomain: host
+  deviceClass: ssd
+  replicated:
+    size: 3
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: rook-ceph-block-ssd # NOT the default class; rook-ceph-block stays default
+provisioner: rook.rbd.csi.ceph.com
+parameters: # identical to rook-ceph-block except pool
+  clusterID: rook
+  pool: block-pool-ssd
+  imageFormat: '2'
+  imageFeatures: layering,fast-diff,object-map,deep-flatten,exclusive-lock
+  csi.storage.k8s.io/provisioner-secret-name: rook-csi-rbd-provisioner
+  csi.storage.k8s.io/provisioner-secret-namespace: rook
+  csi.storage.k8s.io/controller-expand-secret-name: rook-csi-rbd-provisioner
+  csi.storage.k8s.io/controller-expand-secret-namespace: rook
+  csi.storage.k8s.io/node-stage-secret-name: rook-csi-rbd-node
+  csi.storage.k8s.io/node-stage-secret-namespace: rook
+  csi.storage.k8s.io/fstype: ext4
+# Online discard: without it deleted blocks are never returned to Ceph, and a
+# churny database fills the pool with dead extents (acid-media on the HDD
+# pool: 149 GB allocated for 0.8 GB live, 2026-10-04).
+mountOptions:
+  - discard
+reclaimPolicy: Retain
+allowVolumeExpansion: true
