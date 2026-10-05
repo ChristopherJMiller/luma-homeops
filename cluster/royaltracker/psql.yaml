@@ -27,6 +27,7 @@ spec:
       - createdb
   volume:
     size: 5Gi
+    storageClass: rook-ceph-block-ssd # #2665: members rebuilt onto the ssd tier one at a time
   resources:
     requests:
       cpu: 50m
