@@ -20,7 +20,7 @@ spec:
             # this a restart could grab .7, which Traefik needs (#2507).
             metallb.universe.tf/loadBalancerIPs: 192.168.0.8
         persistence:
-          storageClass: rook-ceph-block
+          storageClass: rook-ceph-block-ssd # #2665
           size: 5Gi
         resources:
           limits:
@@ -37,9 +37,10 @@ spec:
     server: https://kubernetes.default.svc
     namespace: home-assistant
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: true
+    # TEMP (#2665): auto-sync off while the mosquitto PVC moves to the ssd tier
+    # automated:
+    #   prune: true
+    #   selfHeal: true
+    #   allowEmpty: true
     syncOptions:
       - PrunePropagationPolicy=foreground
