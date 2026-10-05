@@ -7,9 +7,15 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://realliance.github.io/helm-mega-media
+    # TEMPORARY (2026-10-05): GitHub Pages deploys are stuck behind a GitHub
+    # Actions incident, so realliance.github.io still serves the 0.11.1 index.
+    # The gh-pages branch already has 0.13.0 and its tarball URLs point at the
+    # GitHub Release, so read the index straight from the branch. Revert to
+    # https://realliance.github.io/helm-mega-media once Pages publishes again
+    # — the rendered manifests are identical either way.
+    repoURL: https://raw.githubusercontent.com/realliance/helm-mega-media/gh-pages
     chart: mega-media
-    targetRevision: 0.11.1
+    targetRevision: 0.13.0
     helm:
       releaseName: mm
       valuesObject:
@@ -136,6 +142,14 @@ spec:
             key: sabnzbd
           config:
             storageClassName: rook-ceph-block-ssd # #2665
+          # download_dir scratch (chart 0.12.0): articles, par2 repair and unrar on ssd;
+          # complete_dir stays on mm-media so *arr imports remain same-fs moves.
+          # Bounded on purpose — it can never eat the ssd pool the databases need;
+          # download_free in the ini pauses the queue before it fills.
+          incomplete:
+            enabled: true
+            storageClassName: rook-ceph-block-ssd
+            size: 64Gi
           resources:
             # Decoupled request/limit for the same reason as Plex (see above):
             # SABnzbd idles ~80Mi and only grows toward its 1G article cache +
@@ -192,9 +206,9 @@ spec:
             inet_exposure = 0
             socks5_proxy_url = ""
             permissions = ""
-            download_dir = /media/incomplete
+            download_dir = /incomplete
             complete_dir = /media/complete
-            download_free = ""
+            download_free = 8G
             complete_free = ""
             fulldisk_autoresume = 0
             script_dir = ""
