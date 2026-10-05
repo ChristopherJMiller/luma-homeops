@@ -84,13 +84,31 @@ updates: bump the sha, and first run a one-off Job with
 Connections (Plex, Sonarr, Radarr, Ombi) were set through its API; its config is
 SQLite on `mm-maintainerr-config`, not git.
 
-Rule **"Leaving soon: old seasons"** (TV Shows library, season level): a season
-matches when Sonarr says it is *not* part of the latest aired/airing season
-**and** the show carries the Sonarr tag `current-season-only`. Matches sit in
-that Plex collection for 14 days, then Sonarr unmonitors and deletes their
-episodes. To put a show on this policy, tag it in Sonarr — nothing else. Before
+| Rule | Matches | Action |
+|---|---|---|
+| **Leaving soon: old seasons** (TV, season) | Sonarr status `continuing` AND season is not the latest aired/airing AND season > 0 (specials never) AND show lacks the Sonarr tag `keep-all-seasons` | sits in that Plex collection 14 days, then Sonarr unmonitors + deletes the episodes |
+| **Report: stale movies** (Movies, movie) | added > 365 days ago AND watched by 0 Plex users | **nothing** — action *Do nothing*, no deletion window, Maintainerr-only list (no Plex collection). Review it by hand. |
+
+Policy: an airing show keeps only its latest season, automatically. Opt a show
+out (keep every season) with the Sonarr tag `keep-all-seasons` — Laid-Back Camp
+carries it because only S1 is on disk. Specials are excluded by rule. Before
 changing a rule, test it with `POST /api/rules/test {mediaId, rulegroupId}`
-(evaluate-only); `/api/swagger` lists the API.
+(evaluate-only) against real seasons; `/api/swagger` lists the API, and the
+request bodies are in the Maintainerr source (`apps/server/.../dto's`) — the
+OpenAPI spec omits them. Maintainerr's DB is not backed up; rules can be
+exported as YAML (`/api/rules/yaml/encode`).
+
+## Plex DVR
+
+Recording rules (Live TV): "All Seattle Seahawks Events", "All Florida Events",
+"All Seattle Kraken Events" (team rules, type 15). Team rules carry no
+retention of their own (the API rejects it) — recordings are filed as episodes
+of the league show, so retention lives on the **show** (Plex › show › Edit ›
+Advanced): `NFL Football` and `NHL Hockey` are set to *Keep: 3 latest* and
+*Delete after playing: after a day* (counts the admin's plays only). A raw OTA
+game is ~10 GB, so any new league show needs the same setting. Team rules can't
+be created through the API without Plex Web's playlist step — create them in
+Plex Web (guide › game › Record › "All <team> Events").
 
 ## Gotchas
 
