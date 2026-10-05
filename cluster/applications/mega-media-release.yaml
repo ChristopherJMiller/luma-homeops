@@ -582,11 +582,10 @@ spec:
     server: https://kubernetes.default.svc
     namespace: media
   syncPolicy:
-    # TEMP (#2665): auto-sync off while mm-plex-transcode moves to the ssd tier
-    # automated:
-    #   prune: true
-    #   selfHeal: true
-    #   allowEmpty: true
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
     syncOptions:
       - PrunePropagationPolicy=foreground
       - PruneLast=true
