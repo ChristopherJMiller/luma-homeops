@@ -6,7 +6,7 @@ metadata:
   namespace: rook
 spec:
   metadataPool:
-    deviceClass: hdd
+    deviceClass: ssd # 0.3 GB, latency-bound; moved to the ssd tier 2026-10-04 (#2665)
     replicated:
       size: 3
   dataPools:
