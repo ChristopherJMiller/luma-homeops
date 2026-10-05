@@ -63,3 +63,32 @@ spec:
   resources:
     requests:
       storage: 1Gi
+---
+# ssd tier (#2665): gonic's SQLite DB and playlists, copied from the
+# rook-ceph-block PVCs above on 2026-10-04. The old claims stay until the
+# app has run on these for a day, then get deleted and their PVs purged.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gonic-data-ssd-pvc
+  namespace: music-streaming
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block-ssd
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: gonic-playlists-ssd-pvc
+  namespace: music-streaming
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: rook-ceph-block-ssd
+  resources:
+    requests:
+      storage: 1Gi

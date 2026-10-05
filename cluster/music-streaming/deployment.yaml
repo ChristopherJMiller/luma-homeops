@@ -5,7 +5,7 @@ metadata:
   name: gonic
   namespace: music-streaming
 spec:
-  replicas: 1
+  replicas: 0 # TEMP: #2665 migrating gonic-data + gonic-playlists to the ssd tier
   strategy:
     type: Recreate
   selector:
