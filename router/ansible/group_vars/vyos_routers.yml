@@ -56,6 +56,11 @@ dhcp:
   default_router: 192.168.0.1
   name_server: 192.168.0.1
   static_mappings:
+    # Low band (.2-.4): out-of-band management appliances. .5 is the k8s VIP,
+    # .6-.8 the MetalLB "default" pool.
+    - name: kvm                 # ONE KVM wired to the Mac; reached remotely via
+      mac: 12:35:74:d5:7a:71    # the vyos Tailscale node's 192.168.0.2/32 route
+      ip: 192.168.0.2           # (router/README.md "Tailscale"). Locally-administered MAC.
     - name: top
       mac: 9c:6b:00:70:58:bd
       ip: 192.168.0.240

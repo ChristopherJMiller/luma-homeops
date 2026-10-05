@@ -78,6 +78,33 @@ ansible vyos_routers -m vyos.vyos.vyos_command -a "commands='show firewall'"
 curl http://192.168.0.1:9100/metrics
 ```
 
+## Tailscale (out-of-band, not Ansible-managed)
+
+The router is the `vyos` node on the tailnet: the upstream Debian package
+(`tailscaled.service`, state in `/var/lib/tailscale`), installed by hand. It
+lives on the running image's overlay, not `/config`, so **a VyOS image
+upgrade drops it** — reinstall and `tailscale up` again afterwards. Node key
+expiry is disabled in the admin console.
+
+It is a subnet router for **single hosts only** — today `192.168.0.2/32`, the
+KVM wired to the Mac (`kvm` static mapping in `group_vars/vyos_routers.yml`).
+Not the whole `/24`, on purpose:
+
+- Least privilege: the KVM is physical control of the Mac, and under default
+  ACLs every tailnet device gets every approved route.
+- On Linux, `--accept-routes` puts tailnet routes in table 52, which is
+  consulted before `main` — a LAN host with it on (rowlett) would send all
+  its LAN traffic through the router's tunnel if the `/24` were approved.
+
+To expose another host: give it a static mapping outside the DHCP pool, then
+
+```bash
+ssh chris@192.168.0.1 'sudo tailscale set --advertise-routes=192.168.0.2/32,<ip>/32'
+```
+
+(the list replaces, it doesn't append) and approve the new route in the admin
+console: Machines → `vyos` → Edit route settings.
+
 ## Troubleshooting
 - **SSH issues**: Check `inventory.yml` SSH key path
 - **Permission denied**: Verify SSH key access to router
