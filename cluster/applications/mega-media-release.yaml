@@ -46,8 +46,13 @@ spec:
           config:
             storageClassName: rook-ceph-block-ssd # #2665
             size: 8Gi
+          # Explicit version tags: the chart's floating tags (v4 / release) with
+          # pullPolicy IfNotPresent never re-pulled, so every *arr sat on whatever
+          # image a node first cached (Sonarr was stuck at 4.0.0.748 from Dec 2023).
+          # Bump these deliberately; pg_dump acid-media first.
           sonarr:
             enabled: true
+            tag: release-4.0.20.3014
             apiKey:
               name: api-keys
               key: sonarr
@@ -73,6 +78,7 @@ spec:
                 memory: 1Gi
           lidarr:
             enabled: true
+            tag: release-3.1.0.4875
             apiKey:
               name: api-keys
               key: lidarr
