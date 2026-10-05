@@ -84,7 +84,26 @@ The router is the `vyos` node on the tailnet: the upstream Debian package
 (`tailscaled.service`, state in `/var/lib/tailscale`), installed by hand. It
 lives on the running image's overlay, not `/config`, so **a VyOS image
 upgrade drops it** — reinstall and `tailscale up` again afterwards. Node key
-expiry is disabled in the admin console.
+expiry is disabled in the admin console. `--accept-dns=false`: VyOS owns
+`/etc/resolv.conf`, and MagicDNS fighting it was a standing health warning.
+
+Upgrade in place from the apt repo it came from (refresh only that list):
+
+```bash
+sudo apt-get update -o Dir::Etc::sourcelist=sources.list.d/tailscale.list -o Dir::Etc::sourceparts=-
+sudo apt-get install --only-upgrade --no-install-recommends tailscale
+```
+
+The router has a TPM, and since 1.90 tailscaled seals the node key to it on
+upgrade — an older binary may not read the state back. Before the 1.74.1 →
+1.102.4 hop (2026-10-05) the state and the old .deb were saved to
+`/config/tailscale-backup/` (root-only; the state file holds node keys):
+rollback is stop tailscaled, restore the state, `dpkg -i` the .deb.
+
+Planned: run it as an Ansible-managed VyOS container (like zigbee2mqtt) with
+state on `/config`, done together with the VyOS image upgrade that would
+otherwise delete it. Carry the TPM over (`/dev/tpmrm0`) or the sealed state
+won't open.
 
 It is a subnet router for **single hosts only** — today `192.168.0.2/32`, the
 KVM wired to the Mac (`kvm` static mapping in `group_vars/vyos_routers.yml`).
