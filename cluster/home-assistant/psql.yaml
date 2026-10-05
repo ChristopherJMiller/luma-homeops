@@ -10,7 +10,7 @@ spec:
   enableLogicalBackup: true # nightly pg_dumpall -> B2, docs/backups.md
   databases:
     postgres: postgres
-  numberOfInstances: 1
+  numberOfInstances: 2 # TEMP (#2665): a second member seeds on ssd, then back to 1
   spiloRunAsUser: 101
   spiloRunAsGroup: 103
   spiloFSGroup: 103
@@ -25,6 +25,7 @@ spec:
     postgres: []
   volume:
     size: 10Gi
+    storageClass: rook-ceph-block-ssd # #2665: members rebuilt onto the ssd tier one at a time
   sidecars:
     - name: postgres-exporter
       image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1@sha256:ac5ec343104fae0e2d84a27bb8d69b38430a11910c5382cad85d478d2bab713e

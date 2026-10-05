@@ -13,7 +13,7 @@ spec:
   enableLogicalBackup: true # nightly pg_dumpall -> B2, docs/backups.md
   databases:
     attic: attic
-  numberOfInstances: 1
+  numberOfInstances: 2 # TEMP (#2665): a second member seeds on ssd, then back to 1
   spiloRunAsUser: 101
   spiloRunAsGroup: 103
   spiloFSGroup: 103
@@ -30,6 +30,7 @@ spec:
       - createdb
   volume:
     size: 5Gi
+    storageClass: rook-ceph-block-ssd # #2665: members rebuilt onto the ssd tier one at a time
   resources:
     requests:
       cpu: 50m

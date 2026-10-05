@@ -30,6 +30,7 @@ spec:
     postgres: []
   volume:
     size: 3Gi
+    storageClass: rook-ceph-block-ssd # #2665: members rebuilt onto the ssd tier one at a time
   patroni:
     failsafe_mode: true
     pg_hba:

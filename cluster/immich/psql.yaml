@@ -49,6 +49,7 @@ spec:
     postgres: []
   volume:
     size: 20Gi
+    storageClass: rook-ceph-block-ssd # #2665: members rebuilt onto the ssd tier one at a time
   resources:
     requests:
       cpu: 100m

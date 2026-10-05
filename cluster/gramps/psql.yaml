@@ -51,6 +51,7 @@ spec:
     # The tree itself is megabytes; media lives in B2, not here. Headroom is
     # for the search index, which grows with object count, not with file size.
     size: 10Gi
+    storageClass: rook-ceph-block-ssd # #2665: members rebuilt onto the ssd tier one at a time
   resources:
     requests:
       cpu: 50m
