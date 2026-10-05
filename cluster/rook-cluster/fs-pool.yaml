@@ -6,10 +6,12 @@ metadata:
   namespace: rook
 spec:
   metadataPool:
+    deviceClass: hdd
     replicated:
       size: 3
   dataPools:
     - name: replicated
+      deviceClass: hdd
       replicated:
         size: 3
   preserveFilesystemOnDelete: true
