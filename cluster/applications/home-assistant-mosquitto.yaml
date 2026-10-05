@@ -37,10 +37,9 @@ spec:
     server: https://kubernetes.default.svc
     namespace: home-assistant
   syncPolicy:
-    # TEMP (#2665): auto-sync off while the mosquitto PVC moves to the ssd tier
-    # automated:
-    #   prune: true
-    #   selfHeal: true
-    #   allowEmpty: true
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
     syncOptions:
       - PrunePropagationPolicy=foreground
