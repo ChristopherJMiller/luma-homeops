@@ -208,6 +208,19 @@ Add to `cluster/rook-cluster/kustomization.yaml`. **Verify:** `ceph osd pool ls 
 
 Capacity: 3 × ~159.6 GiB (part2 of 240 GB drives) replicated ×3 ≈ **~155 GiB usable**; candidates held ~15–25 GB live on 2026-10-04. Keep the pool under 75 % — `ceph df` — it's the only place these workloads can live.
 
+### Step 5b — CephFS metadata pool to ssd (done 2026-10-04, CRUSH epoch 678)
+
+`metadataPool.deviceClass: ssd` in `fs-pool.yaml` is **not enough on an existing pool**: this Rook only ensures a rule *named after the pool* exists, so changing `deviceClass` later is a silent no-op ("reconciling … succeeded", rule unchanged). Retarget the existing rule's body instead — same name, so Rook keeps it across reconciles (verified with an operator restart):
+
+```bash
+ceph osd getcrushmap -o o; crushtool -d o -o o.txt
+awk '/^rule fs-pool-metadata \{/{r=1} r&&/step take default class hdd/{sub(/class hdd/,"class ssd")} /^}/{r=0} {print}' o.txt > n.txt
+crushtool -c n.txt -o n   # then osdmaptool per-pool compare: ONLY that pool's PGs may change
+ceph osd setcrushmap -i n
+```
+
+The same applies to any existing pool you ever want to move between classes.
+
 ## Step 6 — migrate PVCs, app by app
 
 Candidates (2026-09-20): all `acid-*` Postgres volumes, `mm-{lidarr,prowlarr,radarr,sonarr,sabnzbd}-config`, `mm-plex-config`, `home-assistant-persist`, `mosquitto`, `gonic-data`, `gonic-playlists`, `filebrowser-data`, `alertmanager-*`, `data-trivy-server-0`. **Stay on HDD:** `mm-media` (3 T), `prometheus-*` (2×200 G), `gonic-music`, `gonic-cache`, `attic`, `registry-cache`.
