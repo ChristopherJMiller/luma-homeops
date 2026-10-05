@@ -38,7 +38,7 @@ spec:
           tag: 0d0a5e1
         arrs:
           config:
-            storageClassName: rook-ceph-block
+            storageClassName: rook-ceph-block-ssd # #2665
             size: 8Gi
           sonarr:
             enabled: true
@@ -97,7 +97,7 @@ spec:
               # on Talos 1.9 kernel 6.12 ("Unable to locate a BIOS ROM") — plex
               # was hard-down with 0 schedulable pods. Restore once GPU works.
           config:
-            storageClassName: rook-ceph-block
+            storageClassName: rook-ceph-block-ssd # #2665
             # Plex metadata + thumbnails + databases + daily DB backups live here.
             # The chart default (1Gi) is far too small — it filled to 81% and
             # starved thumbnail/artwork generation. rook-ceph-block allows online
@@ -140,7 +140,7 @@ spec:
             name: api-keys
             key: sabnzbd
           config:
-            storageClassName: rook-ceph-block
+            storageClassName: rook-ceph-block-ssd # #2665
           resources:
             # Decoupled request/limit for the same reason as Plex (see above):
             # SABnzbd idles ~80Mi and only grows toward its 1G article cache +
@@ -556,7 +556,7 @@ spec:
             name: api-keys
             key: ombi
           config:
-            storageClassName: rook-ceph-block
+            storageClassName: rook-ceph-block-ssd # #2665
             size: 1Gi
           resources:
             # Request/limit decoupled for the same reason as Plex and SABnzbd
@@ -587,10 +587,11 @@ spec:
     server: https://kubernetes.default.svc
     namespace: media
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: true
+    # TEMP (#2665): auto-sync off while the config PVCs move to the ssd tier
+    # automated:
+    #   prune: true
+    #   selfHeal: true
+    #   allowEmpty: true
     syncOptions:
       - PrunePropagationPolicy=foreground
       - PruneLast=true
