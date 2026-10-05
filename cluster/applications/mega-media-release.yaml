@@ -51,21 +51,36 @@ spec:
             apiKey:
               name: api-keys
               key: sonarr
+            # Requests stay where they were (middle's memory *requests* sit ~89%);
+            # only the ceiling rises. A metadata refresh downloads full-size
+            # TMDB/TVDB artwork and resizes it in-process — Radarr OOMKilled at
+            # the 300Mi chart default mid-refresh (2026-10-05), which is why the
+            # poster cache never filled in. Same shape as plex below.
             resources:
               requests:
                 memory: 400Mi
               limits:
-                memory: 400Mi
+                memory: 1Gi
           radarr:
             enabled: true
             apiKey:
               name: api-keys
               key: radarr
+            resources:
+              requests:
+                memory: 300Mi
+              limits:
+                memory: 1Gi
           lidarr:
             enabled: true
             apiKey:
               name: api-keys
               key: lidarr
+            resources:
+              requests:
+                memory: 300Mi
+              limits:
+                memory: 768Mi
           prowlarr:
             enabled: true
             apiKey:
