@@ -60,15 +60,6 @@ spec:
             apiKey:
               name: api-keys
               key: lidarr
-          readarr:
-            # Disabled 2026-07-18: Readarr is EOL upstream (Servarr archived it)
-            # and was broken here (no indexers / no download client). Chart 0.9.0
-            # default-disables it too. Argo will prune the deployment, service,
-            # exportarr sidecar and config PVC (RBD reclaim=Retain keeps the PV).
-            enabled: false
-            apiKey:
-              name: api-keys
-              key: readarr
           prowlarr:
             enabled: true
             apiKey:
@@ -104,7 +95,11 @@ spec:
             # expansion; RBD is thin-provisioned so this reserves nothing upfront.
             size: 30Gi
           transcode:
-            storageClassName: rook-ceph-block
+            # Transcoder scratch (TranscoderTempDirectory=/transcode). ssd: segments are
+            # written and read back immediately; 20Gi holds a few concurrent 4K sessions.
+            # Plex removes a session's files when it ends.
+            storageClassName: rook-ceph-block-ssd # #2665
+            size: 20Gi
           # The family archive (cluster/family/) as a second library source.
           # Read-only on purpose: Plex writes sidecars next to media by default,
           # and this volume is the curated, B2-mirrored source of truth — its
@@ -488,7 +483,7 @@ spec:
             newzbin = ""
             priority = 0
             [[prowlarr]]
-            name = movies
+            name = prowlarr
             order = 1
             pp = ""
             script = Default
@@ -500,7 +495,7 @@ spec:
             order = 1
             pp = ""
             script = Default
-            dir = ""
+            dir = movies
             newzbin = ""
             priority = -100
             [[tv]]
@@ -508,7 +503,7 @@ spec:
             order = 2
             pp = ""
             script = Default
-            dir = ""
+            dir = tv
             newzbin = ""
             priority = -100
             [[audio]]
@@ -527,12 +522,12 @@ spec:
             dir = ""
             newzbin = ""
             priority = -100
-            [[Readarr]]
-            name = Readarr
+            [[music]]
+            name = music
             order = 5
             pp = ""
             script = Default
-            dir = ""
+            dir = music
             newzbin = ""
             priority = -100
 
@@ -587,10 +582,11 @@ spec:
     server: https://kubernetes.default.svc
     namespace: media
   syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: true
+    # TEMP (#2665): auto-sync off while mm-plex-transcode moves to the ssd tier
+    # automated:
+    #   prune: true
+    #   selfHeal: true
+    #   allowEmpty: true
     syncOptions:
       - PrunePropagationPolicy=foreground
       - PruneLast=true
