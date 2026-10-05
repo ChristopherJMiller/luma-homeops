@@ -223,6 +223,15 @@ The same applies to any existing pool you ever want to move between classes.
 
 ## Step 6 — migrate PVCs, app by app
 
+**Done 2026-10-05 — what actually worked** (supersedes 6a/6b below where they differ):
+
+- **Postgres, in place, no renames** (royaltracker rehearsal 24e4ab53, rest 798eb989): set `volume.storageClass: rook-ceph-block-ssd` on the CR. Operator v1.11 replaces the StatefulSet (log: "volumeClaimTemplates … does not match") and leaves running pods and PVCs alone. Then per member: delete `pgdata-<member>` PVC (`--wait=false`) + pod → STS recreates it on ssd → Patroni re-seeds (seconds) → wait streaming lag 0 → switchover → repeat for the old leader. One switchover blip per cluster (6–14 s). Pods are labelled `galaxy=<cluster>` here (not `cluster-name`). Single-instance clusters: `numberOfInstances: 2` temporarily, then switch the leader back to `-0` *before* scaling back to 1 (scale-down removes the highest ordinal; its PVC is retained). Patroni's switchover API often returns `503, status unknown` but completes — poll `patronictl list`.
+- **Chart-owned claims with fixed names** (ha-helm `home-assistant-persist`, mega-media `mm-*-config`, t3n `mosquitto`): storage class is immutable and none of these charts takes `existingClaim`, so recreate the same-named claim: (1) git — comment out the Application's `syncPolicy.automated` + flip the chart's storageClass value; (2) scale the app to 0; (3) copy to `<pvc>-mig` on ssd, per-file md5 verified; (4) delete the PVC (PV is Retain); (5) recreate it on ssd with the saved labels + `argocd.argoproj.io/tracking-id` + `meta.helm.sh/*` annotations; (6) copy back, verified; (7) git — re-enable auto-sync (Argo adopts the claim, restores replicas). Never let Argo create the claim while the app can start — it would boot on an empty config.
+- **Raw manifests** (gonic, 71060c26/086dc3d6): new `-ssd` PVC + `replicas: 0` in one commit, verified copy, switch `claimName` + `replicas: 1` in a second.
+- **Gotcha:** a *Completed* Job pod (e.g. last night's restic backup) still pins its PVC via `pvc-protection` — the delete hangs until you delete that finished Job.
+- **Stay on hdd:** `mm-plex-transcode` (scratch, write-heavy), `mm-media`, Prometheus (6–8 MB/s constant writes — SSD endurance).
+- **Cleanup after a day of clean running:** delete the `-mig`/`ha-persist-tmp` copies and the scaled-down `-1` member PVCs, then purge the Released HDD PVs (patch reclaim → Delete).
+
 Candidates (2026-09-20): all `acid-*` Postgres volumes, `mm-{lidarr,prowlarr,radarr,sonarr,sabnzbd}-config`, `mm-plex-config`, `home-assistant-persist`, `mosquitto`, `gonic-data`, `gonic-playlists`, `filebrowser-data`, `alertmanager-*`, `data-trivy-server-0`. **Stay on HDD:** `mm-media` (3 T), `prometheus-*` (2×200 G), `gonic-music`, `gonic-cache`, `attic`, `registry-cache`.
 
 Rehearse the whole pattern once on something small and low-value (`gonic-playlists`, 1 Gi) before touching a database.
