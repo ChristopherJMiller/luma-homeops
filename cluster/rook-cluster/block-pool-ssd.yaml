@@ -13,6 +13,11 @@ spec:
   deviceClass: ssd
   replicated:
     size: 3
+  parameters:
+    # The autoscaler starts an empty pool at pg_num 1, which serialises every
+    # image's I/O through one PG. With 3 OSDs every PG spans all of them anyway,
+    # so 32 only buys parallelism.
+    pg_num_min: "32"
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
