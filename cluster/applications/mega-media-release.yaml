@@ -68,6 +68,7 @@ spec:
                 memory: 1Gi
           radarr:
             enabled: true
+            tag: release-6.4.4.10685
             apiKey:
               name: api-keys
               key: radarr
@@ -89,6 +90,7 @@ spec:
                 memory: 768Mi
           prowlarr:
             enabled: true
+            tag: release-2.6.5.5623
             apiKey:
               name: api-keys
               key: prowlarr
