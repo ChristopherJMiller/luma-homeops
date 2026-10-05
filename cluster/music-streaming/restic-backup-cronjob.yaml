@@ -88,11 +88,11 @@ spec:
           volumes:
             - name: data
               persistentVolumeClaim:
-                claimName: gonic-data-pvc
+                claimName: gonic-data-ssd-pvc
                 readOnly: true
             - name: playlists
               persistentVolumeClaim:
-                claimName: gonic-playlists-pvc
+                claimName: gonic-playlists-ssd-pvc
                 readOnly: true
             - name: cache
               emptyDir: {}
