@@ -117,11 +117,10 @@ spec:
     server: https://kubernetes.default.svc
     namespace: home-assistant
   syncPolicy:
-    # TEMP (#2665): auto-sync off while home-assistant-persist moves to the ssd tier
-    # automated:
-    #   prune: true
-    #   selfHeal: true
-    #   allowEmpty: true
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
     syncOptions:
       - PrunePropagationPolicy=foreground
       - PruneLast=true
