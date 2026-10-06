@@ -127,3 +127,21 @@
         - set firewall ipv4 input filter rule 70 source group network-group 'NET-VOICE-v4'
       save: false
     tags: [firewall, voice]
+
+  - name: Configure no-internet hosts (NO-WAN may not start flows to WAN)
+    vyos.vyos.vyos_config:
+      lines:
+      # The ONE KVM (`kvm` static mapping, an Angeet/Yeeso ES3) has an
+      # unpatched pre-auth root RCE (CVE-2026-32297/32298, no vendor fix) and
+      # ships frp and ZeroTier clients plus a yee.art updater. It needs
+      # nothing from the internet. LAN and the Tailscale /32 route are
+      # unchanged: this contains it, it does not isolate it. Logged, so a
+      # phone-home attempt shows up in the router's syslog.
+        - set firewall group address-group NO-WAN-v4 address '192.168.0.2'
+        - set firewall ipv4 forward filter rule 120 action 'drop'
+        - set firewall ipv4 forward filter rule 120 description 'No internet for NO-WAN hosts'
+        - set firewall ipv4 forward filter rule 120 log
+        - set firewall ipv4 forward filter rule 120 outbound-interface group 'WAN'
+        - set firewall ipv4 forward filter rule 120 source group address-group 'NO-WAN-v4'
+      save: false
+    tags: [firewall, no-wan]
