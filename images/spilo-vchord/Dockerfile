@@ -13,7 +13,7 @@
 #
 # When bumping the base tag, check VectorChord is still within the range
 # Immich accepts (>=0.3,<2.0) — see docs/immich.md.
-FROM ghcr.io/zalando/spilo-16:3.2-p3@sha256:b59493aaba6e35c017f22954fa09548060616c8669c58ab2b368689f0ee21884
+FROM ghcr.io/zalando/spilo-16:3.3-p3@sha256:0a59aa400727c0a6fac9635f17b09aece9a7ae5e58f0979b1bb0b7e30fb82665
 
 # Checksum-pinned: ADD would otherwise silently accept a re-cut release asset.
 ADD --checksum=sha256:0109f45cc84e91927f1d8782a2fbe3149a25f03ace7697970fd4860944e7199d \
