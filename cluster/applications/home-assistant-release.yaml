@@ -31,10 +31,10 @@ spec:
           integrations:
             - name: adaptive_lighting
               repo: basnijholt/adaptive-lighting
-              version: v1.31.0
+              version: v1.32.0
             - name: mail_and_packages
               repo: moralmunky/Home-Assistant-Mail-And-Packages
-              version: 0.5.16
+              version: 0.6.8
               # zip_release repos: CI stamps the version into the asset (source says 0.0.0-dev)
               url: "https://github.com/moralmunky/Home-Assistant-Mail-And-Packages/releases/download/{version}/mail_and_packages.zip"
             - name: smartrent
@@ -42,14 +42,14 @@ spec:
               version: v0.5.5
               url: "https://github.com/ZacheryThomas/homeassistant-smartrent/releases/download/{version}/smartrent.zip"
           cards:
-            - {name: lovelace-mushroom, repo: piitaya/lovelace-mushroom, version: v5.1.1, url: "https://github.com/piitaya/lovelace-mushroom/releases/download/{version}/mushroom.js"}
+            - {name: lovelace-mushroom, repo: piitaya/lovelace-mushroom, version: v5.2.3, url: "https://github.com/piitaya/lovelace-mushroom/releases/download/{version}/mushroom.js"}
             - {name: lovelace-horizon-card, repo: rejuvenate/lovelace-horizon-card, version: v1.5.3, url: "https://github.com/rejuvenate/lovelace-horizon-card/releases/download/{version}/lovelace-horizon-card.js"}
-            - {name: calendar-card-pro, repo: alexpfau/calendar-card-pro, version: v3.2.0, url: "https://github.com/alexpfau/calendar-card-pro/releases/download/{version}/calendar-card-pro.js"}
+            - {name: calendar-card-pro, repo: alexpfau/calendar-card-pro, version: v3.6.0, url: "https://github.com/alexpfau/calendar-card-pro/releases/download/{version}/calendar-card-pro.js"}
             - {name: lovelace-card-mod, repo: thomasloven/lovelace-card-mod, version: v4.2.1, url: "https://raw.githubusercontent.com/thomasloven/lovelace-card-mod/{version}/card-mod.js"}
-            - {name: Bubble-Card, repo: Clooos/Bubble-Card, version: v3.2.5, url: "https://raw.githubusercontent.com/Clooos/Bubble-Card/{version}/dist/bubble-card.js"}
+            - {name: Bubble-Card, repo: Clooos/Bubble-Card, version: v3.4.1, url: "https://raw.githubusercontent.com/Clooos/Bubble-Card/{version}/dist/bubble-card.js"}
             - {name: lovelace-layout-card, repo: thomasloven/lovelace-layout-card, version: v2.4.7, url: "https://raw.githubusercontent.com/thomasloven/lovelace-layout-card/{version}/layout-card.js"}
-            - {name: Ultra-Card, repo: WJDDesigns/Ultra-Card, version: v3.5.0, url: "https://github.com/WJDDesigns/Ultra-Card/releases/download/{version}/ultra-card.js"}
-            - {name: weather_alerts_card, repo: seevee/weather_alerts_card, version: v3.2.0, url: "https://github.com/seevee/weather_alerts_card/releases/download/{version}/weather-alerts-card.js"}
+            - {name: Ultra-Card, repo: WJDDesigns/Ultra-Card, version: v3.13.3, url: "https://github.com/WJDDesigns/Ultra-Card/releases/download/{version}/ultra-card.js"}
+            - {name: weather_alerts_card, repo: seevee/weather_alerts_card, version: v3.6.0, url: "https://github.com/seevee/weather_alerts_card/releases/download/{version}/weather-alerts-card.js"}
         externalPostgres:
           host: acid-ha
           port: 5432
