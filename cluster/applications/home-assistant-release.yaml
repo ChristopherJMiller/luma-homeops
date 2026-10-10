@@ -14,7 +14,7 @@ spec:
       releaseName: ha
       valuesObject:
         image:
-          tag: 2026.9.4
+          tag: 2026.10.1
         hacs: false
         # /config/secrets.yaml for `!secret` in packages (home Wi-Fi match), sealed in
         # cluster/home-assistant/ha-secrets.yaml.
