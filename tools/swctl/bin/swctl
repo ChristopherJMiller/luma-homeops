@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# swctl — core switch (TRENDnet TEG-30284) as code. See switch/README.md.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec env PYTHONPATH="$here/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m swctl "$@"

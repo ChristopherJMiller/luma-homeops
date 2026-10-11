@@ -1,0 +1,9 @@
+# swctl — core switch as code. Not packaged; run via bin/swctl.
+[project]
+name = "swctl"
+version = "0.1.0"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "tests"]
+testpaths = ["tests"]
