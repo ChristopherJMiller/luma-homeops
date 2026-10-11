@@ -94,19 +94,25 @@ commands and `logout` in a `finally`.
 **Desired state** (`switch/teg-30284.yaml`):
 
 ```yaml
+management: {port: 1, vlan: 1, address: 192.168.10.200}   # the router's path; never changed by swctl
 vlans:                      # every VLAN on the switch; anything else is removed
-  1:  {name: DefaultVLAN}
-  20: {name: VOICE}
+  1: DefaultVLAN
+  20: VOICE
+  99: SWITCH-OOB
 ports:                      # every port 1-28
-  1:  {desc: VyOS eth2 uplink, untagged: 1, tagged: [20]}
-  2:  {desc: router eth3 (switch OOB), untagged: 99, protected: true}
-  10: {desc: HDHomeRun, untagged: 1}
+  1: {untagged: 1, tagged: [20], desc: "VyOS eth2 uplink"}
+  2: {untagged: 99, desc: "router eth3 (switch OOB)"}
+  10: {untagged: 1, desc: "hdhomerun .58"}
 ```
 
 Rules `swctl` enforces: every port has exactly one untagged VLAN and its PVID
-equals it; a port is a member only of the VLANs listed for it; ingress
-filtering stays on; VLANs referenced by ports exist; VLAN 1 is never
-deleted; the protected set is unchanged.
+equals it; a port is a member only of the VLANs listed for it; VLANs
+referenced by ports exist; VLAN 1 is never deleted. The protected set is
+derived from `management:`: the live management port must already have the
+declared VLAN untagged and as PVID (else `swctl` refuses: someone changed it
+by hand), the file must keep it so, and a management VLAN other than 1 may
+be on no other port. Creating VLAN 99 and port 2 ahead of the cut-over is an
+ordinary change; the cut-over itself is the one hand edit of `management:`.
 
 **Commands.**
 
@@ -117,6 +123,8 @@ deleted; the protected set is unchanged.
 | `swctl plan` | Diff desired vs live as the exact SNMP operations, in order. Exit 2 = changes. Refuses invalid desired state or touches to the protected set. |
 | `swctl apply` | See below. |
 | `swctl backup` | Raw dump of the Q-BRIDGE/IF state to `switch/backups/` (git-tracked, not secret). |
+| `swctl disarm` | Stops a dead-man left armed by a crashed `apply` (after checking the switch). |
+| `swctl save` | CLI `save` (running → startup config), with `logout` guaranteed. |
 
 **Apply sequence.**
 
