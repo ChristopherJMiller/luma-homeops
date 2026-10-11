@@ -74,16 +74,27 @@ def desired(mgmt_port=1, mgmt_vlan=1):
 
 
 def test_check_management_accepts_matching_live():
-    check_management(desired(), flat())
+    check_management(desired(), flat(), router_ports=[1])
 
 
 def test_check_management_refuses_hand_changed_live():
     live = flat({1: "DefaultVLAN", 5: "x"}, {1: ({5}, set(), 5)})
     with pytest.raises(SwctlError, match="management port 1") as e:
-        check_management(desired(), live)
+        check_management(desired(), live, router_ports=[1])
     assert e.value.exit_code == 3
 
 
 def test_changed_ports():
     target = flat({1: "DefaultVLAN", 20: "VOICE"}, {1: ({1}, {20}, 1), 9: ({20}, set(), 20)})
     assert changed_ports(flat(), target) == {1: False, 9: True}
+
+
+def test_check_management_refuses_when_the_router_is_on_another_port():
+    with pytest.raises(SwctlError, match="router.*port 2.*not management port 1") as e:
+        check_management(desired(), flat(), router_ports=[2])
+    assert e.value.exit_code == 3
+
+
+def test_check_management_refuses_when_the_router_is_not_seen():
+    with pytest.raises(SwctlError, match="cannot see the router"):
+        check_management(desired(), flat(), router_ports=[])

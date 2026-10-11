@@ -71,3 +71,13 @@ def test_long_name_and_bad_canary():
     with pytest.raises(SwctlError) as e:
         from_doc(doc(vlans={1: "x" * 33}, canaries=["not-an-ip"]))
     assert "longer than 32" in str(e.value) and "canary 'not-an-ip'" in str(e.value)
+
+
+def test_address_must_be_an_ipv4_address():
+    with pytest.raises(SwctlError, match="management.address"):
+        from_doc(doc(management={"port": 1, "vlan": 1, "address": "192.168.99.2; id"}))
+
+
+def test_vlan_names_reject_control_characters():
+    with pytest.raises(SwctlError, match="VLAN 20 name has a control character"):
+        from_doc(doc(vlans={1: "DefaultVLAN", 20: "a\nb"}))

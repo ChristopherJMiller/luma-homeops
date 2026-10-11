@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import ipaddress
+import time
 from pathlib import Path
 
 import yaml
@@ -12,7 +13,7 @@ from swctl.desired import Desired
 from swctl.errors import SwctlError
 from swctl.inventory import FDB_PORT, IF_OPER, IF_SPEED, LEASES_CMD, NEIGH_CMD, device, devices_by_port, fdb, lease_names, neighbours
 from swctl.model import STATE_OIDS, Port, SwitchState, rows, state_from_walk
-from swctl.plan import changed_ports, check_management, diff
+from swctl.plan import changed_ports, check_live_names, check_management, diff
 from swctl.router import Router, load_snmp_conf
 
 REPO = Path(__file__).resolve().parents[4]
@@ -21,6 +22,7 @@ CREDENTIALS = REPO / "switch/credentials.secret.yaml"
 BACKUP = REPO / "switch/backups/teg-30284.snmp"
 # The management path since the 2026-10-11 cut-over: router eth3 <-> port 2, VLAN 99.
 DEFAULT_MANAGEMENT = (2, 99, "192.168.99.2")
+CANARY_RETRY_SECONDS = 5                     # a dozing Wi-Fi client gets one more chance
 BACKUP_OIDS = ["1.3.6.1.2.1.1.1", "1.3.6.1.2.1.31.1.1.1.1", "1.3.6.1.2.1.31.1.1.1.18", "1.3.6.1.2.1.17.7.1.4"]
 
 
@@ -30,6 +32,20 @@ def make_router(address: str) -> Router:
 
 def read_state(r) -> SwitchState:
     return state_from_walk(r.walk(STATE_OIDS))
+
+
+def router_ports(r) -> list[int]:
+    """The switch ports on which the switch learns the router's management MAC."""
+    mac = r.mgmt_mac()
+    return sorted(p for p, macs in fdb(r.walk([FDB_PORT])).items() if mac in macs)
+
+
+def read_checked(r, d: Desired) -> SwitchState:
+    """Live state, after confirming the management path from the switch itself."""
+    live = read_state(r)                     # SNMP traffic: the switch (re)learns the router's MAC
+    check_management(d, live, router_ports(r))
+    check_live_names(live)
+    return live
 
 
 def _devices(r) -> dict:
@@ -91,8 +107,7 @@ def cmd_import(args) -> int:
 def cmd_plan(args) -> int:
     d = desired_mod.load(args.file)
     r = make_router(d.address)
-    live = read_state(r)
-    check_management(d, live)
+    live = read_checked(r, d)
     ops = diff(live, d.state)
     if not ops:
         print("switch: in sync")
@@ -123,7 +138,10 @@ def admin_password() -> str:
 def cmd_save(args) -> int:
     d = desired_mod.load(args.file)
     r = make_router(d.address)
-    if diff(read_state(r), d.state):
+    if r.deadman_armed():
+        raise SwctlError("a dead-man is armed: an apply has not been confirmed, and saving would make its state "
+                         "the boot config. Let it finish or `swctl disarm` first.", exit_code=3)
+    if diff(read_checked(r, d), d.state):
         raise SwctlError("the switch does not match the file; save only a verified state (swctl plan)")
     print(r.cli(["save"], admin_password()))
     return 0
@@ -150,13 +168,15 @@ def canary_ips(r, d: Desired, changed: dict[int, bool]) -> list[str]:
 
 
 def revert_to(r, snapshot: SwitchState) -> None:
-    """Converge back to `snapshot` from wherever the switch really is."""
-    for _ in range(2):
+    """Converge back to `snapshot` from wherever the switch really is: up to two
+    attempts, each judged by a fresh read."""
+    for attempt in range(3):
         ops = diff(read_state(r), snapshot)
         if not ops:
             print("reverted: the switch matches its state before this apply")
             return
-        r.apply(ops, stop_on_error=False)
+        if attempt < 2:
+            r.apply(ops, stop_on_error=False)
     raise SwctlError("REVERT INCOMPLETE: the switch differs from its pre-apply state. The dead-man is still "
                      "armed and will retry; check `swctl plan`.", exit_code=4)
 
@@ -167,8 +187,7 @@ def cmd_apply(args) -> int:
     if r.deadman_armed():
         raise SwctlError("a dead-man is already armed: an earlier apply did not finish. "
                          "Check `swctl status`/`plan`, then `swctl disarm`.", exit_code=3)
-    live = read_state(r)
-    check_management(d, live)
+    live = read_checked(r, d)
     ops = diff(live, d.state)
     if not ops:
         print("switch: in sync")
@@ -178,6 +197,9 @@ def cmd_apply(args) -> int:
     canaries = canary_ips(r, d, changed_ports(live, d.state))
     answering = r.responders(canaries)
     print(f"canaries answering ARP: {', '.join(sorted(answering, key=ipaddress.IPv4Address)) or 'none'}")
+    if d.canaries and not answering:
+        raise SwctlError("no canary answers ARP even before the change, so the canary check is not working; "
+                         "refusing to write without it.", exit_code=3)
     r.arm_deadman(diff(d.state, live), args.deadman)
     print(f"dead-man armed: the router reverts these writes in {args.deadman} min unless this run confirms")
     results = r.apply(ops)
@@ -196,6 +218,9 @@ def cmd_apply(args) -> int:
         if left:
             problems.append("the switch does not match the file: " + "; ".join(op.why for op in left))
         lost = answering - r.responders(sorted(answering, key=ipaddress.IPv4Address))
+        if lost:                                          # Wi-Fi clients doze; one more look
+            time.sleep(CANARY_RETRY_SECONDS)
+            lost -= r.responders(sorted(lost, key=ipaddress.IPv4Address))
         if lost:
             problems.append(f"no longer answering ARP: {', '.join(sorted(lost))}")
     if problems:
@@ -204,6 +229,10 @@ def cmd_apply(args) -> int:
         r.disarm_deadman()
         raise SwctlError("apply reverted; the switch is as it was")
     r.disarm_deadman()
+    left = diff(read_state(r), d.state)                   # the dead-man may have fired just before disarm
+    if left:
+        raise SwctlError("after disarm the switch no longer matches the file (did the dead-man fire?): "
+                         + "; ".join(op.why for op in left), exit_code=5)
     print(f"switch: {len(ops)} writes applied and verified, dead-man disarmed. "
           "Not saved: `swctl save` once it has settled (a reboot returns to the saved config).")
     return 0

@@ -49,6 +49,8 @@ def from_doc(doc, where: str = "desired state") -> Desired:
         name = "" if name is None else str(name)
         if len(name) > 32:
             problems.append(f"VLAN {vid} name longer than 32 characters")
+        if any(ord(ch) < 32 or ord(ch) == 127 for ch in name):
+            problems.append(f"VLAN {vid} name has a control character")
         vlans[vid] = name
     if 1 not in vlans:
         problems.append("VLAN 1 must exist")
@@ -81,8 +83,10 @@ def from_doc(doc, where: str = "desired state") -> Desired:
         problems.append(f"management.port {mp!r} is not a port")
     elif ports[mp].untagged != {mv}:
         problems.append(f"management port {mp} must be untagged in the management VLAN {mv}")
-    if not isinstance(address, str) or not address:
-        problems.append("management.address is missing")
+    try:
+        address = str(ipaddress.IPv4Address(address))
+    except ValueError:
+        problems.append(f"management.address {address!r} is not an IPv4 address")
     if isinstance(mv, int) and mv != 1:
         others = sorted(p for p, port in ports.items() if p != mp and mv in port.untagged | port.tagged)
         if others:

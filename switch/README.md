@@ -32,9 +32,9 @@ ssh -N -L 18081:192.168.99.2:80 chris@192.168.0.1   # then http://localhost:1808
 | Command | Does | Exit |
 |---|---|---|
 | `swctl status` | ports, links, VLANs, devices | 0 |
-| `swctl plan` | diff the file against the switch, as the writes `apply` would make | 0 in sync, 2 changes, 3 management path not as declared |
-| `swctl apply` | converge (see below) | 0 applied, 1 reverted, 3 refused, 4 revert incomplete |
-| `swctl save` | CLI `save` — only when the switch matches the file | |
+| `swctl plan` | diff the file against the switch, as the writes `apply` would make | 0 in sync, 2 changes, 3 refused (management path not as declared) |
+| `swctl apply` | converge (see below) | 0 applied, 1 reverted, 3 refused, 4 revert incomplete, 5 the dead-man fired first |
+| `swctl save` | CLI `save` — only when the switch matches the file and no dead-man is armed | 3 refused |
 | `swctl backup` | raw SNMP dump to `switch/backups/teg-30284.snmp` (commit it) | |
 | `swctl disarm` | stop a dead-man left armed by a crashed apply | |
 | `swctl import` | regenerate the file from the switch (bootstrap; keeps `desc`s) | |
@@ -44,21 +44,27 @@ A change: edit `switch/teg-30284.yaml`, `swctl plan`, `swctl apply`, check
 
 ### What `apply` does
 
-1. Reads the switch; refuses if the management port isn't as declared.
+1. Reads the switch; refuses unless the switch itself learns the router's
+   management MAC on the declared `management:` port, untagged in its VLAN —
+   so editing the file can't redirect the management path.
 2. Notes which **canaries** (the file's list plus devices on changed ports
-   that should stay put) answer ARP.
+   that should stay put) answer ARP; refuses if none answer (a broken check
+   must not pass silently).
 3. Arms a **dead-man** on the router: a `systemd-run` timer (default 5 min)
    that replays the reverse writes. If this session, the workstation or the
    tailnet dies mid-change, the router puts the switch back by itself.
 4. Writes, ordered so no port is ever without an untagged VLAN.
 5. Verifies: the switch must equal the file, and every canary that answered
-   must still answer. Pass → disarm. Fail → revert now from the switch's
-   *actual* state, then disarm.
+   must still answer (a lost one gets a second look after 5 s — Wi-Fi clients
+   doze). Pass → disarm, then re-read once more (exit 5 if the dead-man beat
+   us to it). Fail → revert now from the switch's *actual* state, then disarm.
 6. Never saves. Unsaved changes vanish on a reboot or power cycle — the last
    line of rollback.
 
 Rehearsed 2026-10-11 on unused port 28: apply + revert, and a simulated
-session loss where the router's dead-man reverted on its own after 1 min.
+session loss where the router's dead-man reverted on its own after 1 min
+(`save` refused while it was armed). The dead-man script is shipped to the
+router base64-encoded and writes `/tmp/swctl-deadman-fired` first.
 
 ## Rules
 

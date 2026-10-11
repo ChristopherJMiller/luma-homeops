@@ -56,10 +56,19 @@ def diff(current: SwitchState, target: SwitchState) -> list[Op]:
     return ops
 
 
-def check_management(d, live: SwitchState) -> None:
-    """The live management path must be exactly what the file declares; the
-    file itself is validated to keep it (desired.from_doc)."""
+def check_management(d, live: SwitchState, router_ports: list[int]) -> None:
+    """The management path is taken from the switch, not trusted from the file:
+    the switch must learn the router (the MAC it reaches the switch from) on the
+    declared port, and that port must be untagged in the declared VLAN. The file
+    itself is validated to keep it (desired.from_doc)."""
     mp, mv = d.management_port, d.management_vlan
+    if not router_ports:
+        raise SwctlError("cannot see the router in the switch's MAC table, so the management port can't be "
+                         "confirmed; refusing to write.", exit_code=3)
+    if router_ports != [mp]:
+        raise SwctlError(f"the switch learns the router on port {','.join(map(str, router_ports))}, "
+                         f"not management port {mp} as the file says. The management path changes only by "
+                         "hand (switch/README.md); refusing to write.", exit_code=3)
     port = live.ports.get(mp)
     if mv in live.vlans and port is not None and port.untagged == {mv} and port.pvid == mv:
         return
@@ -77,3 +86,11 @@ def changed_ports(current: SwitchState, target: SwitchState) -> dict[int, bool]:
         if (c.untagged, c.tagged, c.pvid) != (t.untagged, t.tagged, t.pvid):
             out[p] = c.untagged != t.untagged
     return out
+
+
+def check_live_names(live: SwitchState) -> None:
+    """Live VLAN names travel into scripts that run on the router; refuse odd ones."""
+    bad = sorted(vid for vid, name in live.vlans.items() if any(ord(ch) < 32 or ord(ch) == 127 for ch in name))
+    if bad:
+        raise SwctlError(f"VLAN name on the switch has a control character (VLAN {', '.join(map(str, bad))}); "
+                         "rename it in the web UI first.", exit_code=3)

@@ -11,14 +11,24 @@ VLANS = {1: "DefaultVLAN", 99: "SWITCH-OOB"}
 BASE = flat(VLANS, {2: ({99}, set(), 99)})
 
 
+ROUTER_OOB_MAC = "20:7c:14:f2:f4:fc"
+# The switch learns the router's eth3 on port 2 (dot1qTpFdbPort, fdbId 99).
+FDB_ROUTER_ON_2 = ".1.3.6.1.2.1.17.7.1.2.2.1.2.99.32.124.20.242.244.252 2\n"
+
+
 class FakeRouter:
     """Router stand-in: SNMP reads/writes go to a FakeSwitch."""
 
-    def __init__(self, state, fdb_text="", neigh="", responding=(), fail_at=None, lose_after_writes=()):
+    def __init__(self, state, fdb_text=FDB_ROUTER_ON_2, neigh="", responding=(), fail_at=None,
+                 lose_after_writes=(), doze_once=(), on_disarm=None):
         self.switch = FakeSwitch(state)
         self.fdb_text, self.neigh = fdb_text, neigh
         self.responding, self.lose_after_writes = set(responding), set(lose_after_writes)
+        self.doze_once, self.on_disarm = set(doze_once), on_disarm
         self.fail_at, self.armed, self.revert_ops, self.writes = fail_at, False, None, 0
+
+    def mgmt_mac(self):
+        return ROUTER_OOB_MAC
 
     def walk_text(self, oids):
         from swctl.inventory import FDB_PORT
@@ -54,9 +64,14 @@ class FakeRouter:
         self.armed, self.revert_ops = True, revert_ops
 
     def disarm_deadman(self):
+        if self.on_disarm:
+            self.on_disarm(self)
         self.armed = False
 
     def responders(self, ips):
+        if self.writes and self.doze_once:                       # a Wi-Fi client asleep for one check
+            dozing, self.doze_once = self.doze_once, set()
+            return (set(ips) & self.responding) - dozing
         return set(ips) & self.responding
 
 
@@ -136,6 +151,7 @@ def test_apply_reverts_partial_failure(tmp_path, monkeypatch):
 def test_apply_reverts_when_a_canary_stops_answering(tmp_path, monkeypatch):
     fr = FakeRouter(BASE, responding={"192.168.0.240"}, lose_after_writes={"192.168.0.240"})
     monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    monkeypatch.setattr(commands, "CANARY_RETRY_SECONDS", 0)
     f = write_desired(tmp_path, VOICE, canaries=["192.168.0.240"])
     with pytest.raises(SwctlError, match="reverted"):
         commands.main_for_tests(["apply", "--file", str(f)])
@@ -176,3 +192,94 @@ def test_save_runs_only_save(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(commands, "admin_password", lambda: "pw")
     assert commands.main_for_tests(["save", "--file", str(write_desired(tmp_path, BASE))]) == 0
     assert seen == [["save"]]
+
+
+# --- final-review fixes -------------------------------------------------------
+
+def test_apply_refuses_a_file_that_moves_management_off_the_routers_port(tmp_path, monkeypatch):
+    # The reviewer's repro: the file says management is port 5 / VLAN 1, puts port 2
+    # in VLAN 1 and drops VLAN 99. The router is still learned on port 2.
+    fr = FakeRouter(BASE)
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    f = write_desired(tmp_path, flat({1: "DefaultVLAN"}), mgmt=(5, 1))
+    with pytest.raises(SwctlError, match="router.*port 2") as e:
+        commands.main_for_tests(["apply", "--file", str(f)])
+    assert e.value.exit_code == 3 and fr.writes == 0 and fr.armed is False
+
+
+def test_plan_refuses_when_the_router_is_not_seen_on_the_switch(tmp_path, monkeypatch):
+    fr = FakeRouter(BASE, fdb_text="")
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    with pytest.raises(SwctlError, match="cannot see the router") as e:
+        commands.main_for_tests(["plan", "--file", str(write_desired(tmp_path, BASE))])
+    assert e.value.exit_code == 3
+
+
+def test_save_refuses_while_a_deadman_is_armed(tmp_path, monkeypatch):
+    fr = FakeRouter(BASE)
+    fr.armed = True
+    fr.cli = lambda commands, password: pytest.fail("must not reach the CLI")
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    with pytest.raises(SwctlError, match="dead-man is armed") as e:
+        commands.main_for_tests(["save", "--file", str(write_desired(tmp_path, BASE))])
+    assert e.value.exit_code == 3
+
+
+def test_apply_reports_a_deadman_that_fired_before_disarm(tmp_path, monkeypatch):
+    def fired(fr):
+        raise SwctlError("the dead-man already fired: the router reverted the switch", exit_code=5)
+    fr = FakeRouter(BASE, on_disarm=fired)
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    with pytest.raises(SwctlError, match="already fired") as e:
+        commands.main_for_tests(["apply", "--file", str(write_desired(tmp_path, VOICE))])
+    assert e.value.exit_code == 5
+
+
+def test_apply_rechecks_the_switch_after_disarm(tmp_path, monkeypatch, capsys):
+    def fired_silently(fr):                                      # the revert ran, no marker seen
+        for op in fr.revert_ops:
+            fr.switch.write(op)
+    fr = FakeRouter(BASE, on_disarm=fired_silently)
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    with pytest.raises(SwctlError, match="after disarm"):
+        commands.main_for_tests(["apply", "--file", str(write_desired(tmp_path, VOICE))])
+    assert "applied and verified" not in capsys.readouterr().out
+
+
+def test_apply_refuses_when_no_canary_answers_before(tmp_path, monkeypatch):
+    fr = FakeRouter(BASE, responding=())
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    f = write_desired(tmp_path, VOICE, canaries=["192.168.0.240", "192.168.0.241"])
+    with pytest.raises(SwctlError, match="no canary answers") as e:
+        commands.main_for_tests(["apply", "--file", str(f)])
+    assert e.value.exit_code == 3 and fr.writes == 0 and fr.armed is False
+
+
+def test_apply_retries_a_dozing_canary(tmp_path, monkeypatch):
+    fr = FakeRouter(BASE, responding={"192.168.0.240", "192.168.0.15"}, doze_once={"192.168.0.15"})
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    monkeypatch.setattr(commands, "CANARY_RETRY_SECONDS", 0)
+    f = write_desired(tmp_path, VOICE, canaries=["192.168.0.240", "192.168.0.15"])
+    assert commands.main_for_tests(["apply", "--file", str(f)]) == 0
+    assert fr.switch.state() == VOICE
+
+
+def test_apply_refuses_control_characters_in_live_vlan_names(tmp_path, monkeypatch):
+    live = flat({**VLANS, 20: "x\nSWCTL_REVERT\ntouch /tmp/PWNED"}, {2: ({99}, set(), 99)})
+    fr = FakeRouter(live)
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    with pytest.raises(SwctlError, match="control character") as e:
+        commands.main_for_tests(["apply", "--file", str(write_desired(tmp_path, VOICE))])
+    assert e.value.exit_code == 3 and fr.writes == 0
+
+
+def test_revert_that_succeeds_on_its_second_attempt_is_reported_as_reverted(tmp_path, monkeypatch, capsys):
+    # The forward change is 7 writes; a lost canary forces a revert, whose second
+    # write fails once (fail_at=8). The second attempt fixes it.
+    fr = FakeRouter(BASE, responding={"192.168.0.240"}, lose_after_writes={"192.168.0.240"}, fail_at=8)
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    monkeypatch.setattr(commands, "CANARY_RETRY_SECONDS", 0)
+    f = write_desired(tmp_path, VOICE, canaries=["192.168.0.240"])
+    with pytest.raises(SwctlError, match="apply reverted") as e:
+        commands.main_for_tests(["apply", "--file", str(f)])
+    assert e.value.exit_code == 1 and fr.switch.state() == BASE and fr.armed is False
