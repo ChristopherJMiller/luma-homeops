@@ -44,8 +44,12 @@ spec:
           # Any failed run: nightly backups, weekly maintenance, monthly
           # canaries. Failed Jobs stick around (failedJobsHistoryLimit) so
           # this stays raised until someone looks.
+          # kube_job_failed is the Job's final Failed condition (backoffLimit
+          # exhausted). Not kube_job_status_failed: that counts failed pod
+          # attempts, so a run that succeeds on retry kept this firing until
+          # the Job aged out of history — 3 days for acid-ha on 2026-10-05.
           expr: |
-            kube_job_status_failed{job_name=~"(restic-.*|family-backup|family-canary|immich-backup|logical-backup-.*)-[0-9]+"} > 0
+            kube_job_failed{condition="true",job_name=~"(restic-.*|family-backup|family-canary|immich-backup|logical-backup-.*)-[0-9]+"} == 1
           for: 10m
           labels:
             severity: warning
