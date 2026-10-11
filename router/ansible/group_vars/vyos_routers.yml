@@ -28,15 +28,6 @@ networks:
       hw_id: 20:7c:14:f2:f4:fe
       offload: true
 
-# TEMPORARY (2026-10-11): an address in the TEG-30284 core switch's factory
-# management subnet, so the router can reach the switch at 192.168.10.200 (it
-# ignores ARP from foreign subnets). For the read-only probe and the one-time
-# move of its management IP onto its own link; then set present: false (the
-# task deletes the address) and drop this block once that has deployed.
-switch_factory_mgmt:
-  present: true
-  address: 192.168.10.1/24
-
 # DNS Settings
 dns_servers:
   - 1.0.0.1
