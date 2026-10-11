@@ -113,6 +113,22 @@ def cmd_backup(args) -> int:
     return 0
 
 
+def admin_password() -> str:
+    try:
+        return str(yaml.safe_load(CREDENTIALS.read_bytes())["admin_password"])
+    except (OSError, KeyError, TypeError, UnicodeDecodeError, yaml.YAMLError) as e:
+        raise SwctlError(f"{CREDENTIALS}: cannot read admin_password ({e.__class__.__name__}) — is git-crypt unlocked?")
+
+
+def cmd_save(args) -> int:
+    d = desired_mod.load(args.file)
+    r = make_router(d.address)
+    if diff(read_state(r), d.state):
+        raise SwctlError("the switch does not match the file; save only a verified state (swctl plan)")
+    print(r.cli(["save"], admin_password()))
+    return 0
+
+
 def cmd_disarm(args) -> int:
     r = make_router(_address(args.file))
     if not r.deadman_armed():
@@ -200,7 +216,8 @@ def build_parser() -> argparse.ArgumentParser:
                              ("import", cmd_import, "write the desired-state file from the live switch"),
                              ("plan", cmd_plan, "diff the file against the switch (exit 2 = changes)"),
                              ("backup", cmd_backup, "raw SNMP dump to switch/backups/"),
-                             ("disarm", cmd_disarm, "stop a dead-man left by a crashed apply")]:
+                             ("disarm", cmd_disarm, "stop a dead-man left by a crashed apply"),
+                             ("save", cmd_save, "save the running config (only when it matches the file)")]:
         p = sub.add_parser(name, help=text)
         p.add_argument("--file", type=Path, default=DESIRED, help="desired-state file")
         p.set_defaults(func=func)

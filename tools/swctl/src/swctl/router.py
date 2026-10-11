@@ -106,3 +106,16 @@ class Router:
             body += (f'( dev=$(ip -o route get {ip} | sed -n "s/.* dev \\([^ ]*\\).*/\\1/p"); '
                      f'sudo arping -q -c 2 -w 3 -I "$dev" {ip} && echo {ip} ) &\n')
         return set(self.sh(body + "wait\n").stdout.split()) if body else set()
+
+    def cli(self, commands: list[str], password: str) -> str:
+        """Run whitelisted CLI commands on the switch via the router's python3."""
+        src = Path(__file__).with_name("cli_remote.py").read_text()
+        prelude = f"PASSWORD = {password!r}\nCOMMANDS = {commands!r}\nHOST_OVERRIDE = {self.address!r}\n"
+        try:
+            r = subprocess.run([*SSH, self.host, "python3", "-"], input=prelude + src,
+                               capture_output=True, text=True, timeout=120)
+        except subprocess.TimeoutExpired:
+            raise SwctlError(f"ssh {self.host}: CLI session timed out")
+        if r.returncode != 0:
+            raise SwctlError((r.stderr or r.stdout).strip()[-400:])
+        return r.stdout

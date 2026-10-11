@@ -158,3 +158,21 @@ def test_apply_refuses_hand_changed_management(tmp_path, monkeypatch):
     with pytest.raises(SwctlError, match="management port 2"):
         commands.main_for_tests(["apply", "--file", str(write_desired(tmp_path, VOICE))])
     assert fr.writes == 0 and fr.armed is False
+
+
+def test_save_refuses_when_the_switch_differs_from_the_file(tmp_path, monkeypatch):
+    fr = FakeRouter(BASE)
+    fr.cli = lambda commands, password: pytest.fail("must not reach the CLI")
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    with pytest.raises(SwctlError, match="does not match the file"):
+        commands.main_for_tests(["save", "--file", str(write_desired(tmp_path, VOICE))])
+
+
+def test_save_runs_only_save(tmp_path, monkeypatch, capsys):
+    fr = FakeRouter(BASE)
+    seen = []
+    fr.cli = lambda commands, password: seen.append(commands) or "== save\nTEG-30284>"
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    monkeypatch.setattr(commands, "admin_password", lambda: "pw")
+    assert commands.main_for_tests(["save", "--file", str(write_desired(tmp_path, BASE))]) == 0
+    assert seen == [["save"]]
