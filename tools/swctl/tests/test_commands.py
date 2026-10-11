@@ -104,3 +104,57 @@ def test_backup_writes_lines_without_trailing_whitespace(tmp_path, monkeypatch):
     commands.main_for_tests(["backup", "--file", str(write_desired(tmp_path, BASE))])
     lines = (tmp_path / "b.snmp").read_text().splitlines()
     assert lines and all(l == l.rstrip() for l in lines)
+
+
+VOICE = flat({**VLANS, 20: "VOICE"}, {1: ({1}, {20}, 1), 2: ({99}, set(), 99), 9: ({20}, set(), 20)})
+
+
+def test_apply_converges_and_disarms(tmp_path, monkeypatch):
+    fr = FakeRouter(BASE)
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    assert commands.main_for_tests(["apply", "--file", str(write_desired(tmp_path, VOICE))]) == 0
+    assert fr.switch.state() == VOICE and fr.armed is False
+
+
+def test_apply_refuses_when_deadman_armed(tmp_path, monkeypatch):
+    fr = FakeRouter(BASE)
+    fr.armed = True
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    with pytest.raises(SwctlError, match="already armed") as e:
+        commands.main_for_tests(["apply", "--file", str(write_desired(tmp_path, VOICE))])
+    assert e.value.exit_code == 3 and fr.writes == 0
+
+
+def test_apply_reverts_partial_failure(tmp_path, monkeypatch):
+    fr = FakeRouter(BASE, fail_at=3)
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    with pytest.raises(SwctlError, match="reverted"):
+        commands.main_for_tests(["apply", "--file", str(write_desired(tmp_path, VOICE))])
+    assert fr.switch.state() == BASE and fr.armed is False
+
+
+def test_apply_reverts_when_a_canary_stops_answering(tmp_path, monkeypatch):
+    fr = FakeRouter(BASE, responding={"192.168.0.240"}, lose_after_writes={"192.168.0.240"})
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    f = write_desired(tmp_path, VOICE, canaries=["192.168.0.240"])
+    with pytest.raises(SwctlError, match="reverted"):
+        commands.main_for_tests(["apply", "--file", str(f)])
+    assert fr.switch.state() == BASE
+
+
+def test_simulated_session_loss_leaves_deadman_armed(tmp_path, monkeypatch):
+    fr = FakeRouter(BASE)
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    rc = commands.main_for_tests(["apply", "--file", str(write_desired(tmp_path, VOICE)), "--simulate-session-loss"])
+    assert rc == 1 and fr.armed is True and fr.switch.state() == VOICE
+    for op in fr.revert_ops:                                     # what the router would run
+        fr.switch.write(op)
+    assert fr.switch.state() == BASE
+
+
+def test_apply_refuses_hand_changed_management(tmp_path, monkeypatch):
+    fr = FakeRouter(flat(VLANS))                                 # port 2 put back in VLAN 1 by hand
+    monkeypatch.setattr(commands, "make_router", lambda address: fr)
+    with pytest.raises(SwctlError, match="management port 2"):
+        commands.main_for_tests(["apply", "--file", str(write_desired(tmp_path, VOICE))])
+    assert fr.writes == 0 and fr.armed is False
