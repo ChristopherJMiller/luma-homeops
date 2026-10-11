@@ -1,0 +1,40 @@
+---
+# TRENDnet TEG-30284 core switch: desired VLAN/port state (switch/README.md).
+# `swctl plan` diffs it against the switch; `swctl apply` converges it. Every VLAN
+# and every port 1-28 is listed, and a port is in exactly the VLANs named here.
+# `management` is the router's path to the switch: swctl never changes it.
+# `canaries` must still answer ARP after every apply.
+management: {port: 2, vlan: 99, address: 192.168.99.2}
+canaries: [192.168.0.240, 192.168.0.241, 192.168.0.242, 192.168.0.15, 192.168.0.58]
+vlans:
+  1: "DefaultVLAN"
+  99: "SWITCH-OOB"
+ports:
+  1: {untagged: 1, desc: "VyOS eth2 - LAN uplink"}
+  2: {untagged: 99, desc: "VyOS eth3 - switch management (OOB, VLAN 99 only)"}
+  3: {untagged: 1}
+  4: {untagged: 1}
+  5: {untagged: 1}
+  6: {untagged: 1}
+  7: {untagged: 1}
+  8: {untagged: 1, desc: "ONE KVM .2 (pre-auth RCE; no WAN)"}
+  9: {untagged: 1}
+  10: {untagged: 1, desc: "HDHomeRun .58 (Plex DVR tuner)"}
+  11: {untagged: 1}
+  12: {untagged: 1, desc: "BMC bottom .151"}
+  13: {untagged: 1}
+  14: {untagged: 1, desc: "desk switch: workstation .21, Mac Studio .3"}
+  15: {untagged: 1}
+  16: {untagged: 1, desc: "Archer AXE75 AP .15 + Wi-Fi clients"}
+  17: {untagged: 1}
+  18: {untagged: 1, desc: "Hue bridge .227"}
+  19: {untagged: 1}
+  20: {untagged: 1}
+  21: {untagged: 1}
+  22: {untagged: 1, desc: "BMC middle .117"}
+  23: {untagged: 1}
+  24: {untagged: 1, desc: "BMC top .119"}
+  25: {untagged: 1, desc: "bottom .242 (10G)"}
+  26: {untagged: 1, desc: "middle .241 (10G)"}
+  27: {untagged: 1, desc: "top .240 (10G)"}
+  28: {untagged: 1}

@@ -141,12 +141,12 @@
             # restore drills against the cluster backup repos (see docs/backups.md).
             restic
           ];
-          # hactl: its python first on PATH (another package drags in a bare
+          # hactl + swctl: hactl's python first on PATH (another package drags in a bare
           # python 3.14 that would otherwise win `python3`), the wrapper on
           # PATH, and Playwright pointed at the nix-built browsers (the ones it
           # downloads itself don't run on NixOS).
           shellHook = ''
-            export PATH="${hactlPython}/bin:$(git rev-parse --show-toplevel 2>/dev/null || pwd)/tools/hactl/bin:$PATH"
+            export PATH="${hactlPython}/bin:$(git rev-parse --show-toplevel 2>/dev/null || pwd)/tools/hactl/bin:$(git rev-parse --show-toplevel 2>/dev/null || pwd)/tools/swctl/bin:$PATH"
             export PLAYWRIGHT_BROWSERS_PATH=${pkgs.playwright-driver.browsers}
             export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
           '';
