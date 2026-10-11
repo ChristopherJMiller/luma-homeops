@@ -105,8 +105,11 @@ state on `/config`, done together with the VyOS image upgrade that would
 otherwise delete it. Carry the TPM over (`/dev/tpmrm0`) or the sealed state
 won't open.
 
-It is a subnet router for **single hosts only** — today `192.168.0.2/32`, the
-KVM wired to the Mac (`kvm` static mapping in `group_vars/vyos_routers.yml`).
+It is a subnet router for **single hosts only** — today `192.168.0.2/32` (the
+KVM wired to the Mac Studio) and `192.168.0.3/32` (the Mac Studio itself, for
+Screen Sharing/VNC): the `kvm` and `mac-studio` static mappings in
+`group_vars/vyos_routers.yml`. The NixOS fleet resolves both names via
+`networking.hosts` (`~/nixos` common/configuration.nix).
 Not the whole `/24`, on purpose:
 
 - Least privilege: the KVM is physical control of the Mac, and under default
@@ -118,7 +121,7 @@ Not the whole `/24`, on purpose:
 To expose another host: give it a static mapping outside the DHCP pool, then
 
 ```bash
-ssh chris@192.168.0.1 'sudo tailscale set --advertise-routes=192.168.0.2/32,<ip>/32'
+ssh chris@192.168.0.1 'sudo tailscale set --advertise-routes=192.168.0.2/32,192.168.0.3/32,<ip>/32'
 ```
 
 (the list replaces, it doesn't append) and approve the new route in the admin
