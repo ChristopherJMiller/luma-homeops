@@ -14,9 +14,16 @@ networks:
     address: dhcp
     description: OUTSIDE
     hw_id: 20:7c:14:f2:f4:fd
+  # Dedicated cable to the core switch's port 2, the only member of the
+  # switch's VLAN 99: the router's management path to the switch, which no
+  # switch change can touch (switch/README.md). Out-of-band only, not a second
+  # uplink: bonding it with eth2 would put the rescue path under the same config.
+  switch_oob:
+    interface: eth3
+    hw_id: 20:7c:14:f2:f4:fc
+    address: 192.168.99.1/30
+    description: SWITCH-OOB
   unused_interfaces:
-    - interface: eth3
-      hw_id: 20:7c:14:f2:f4:fc
     - interface: eth4
       hw_id: 20:7c:14:f2:f4:fe
       offload: true

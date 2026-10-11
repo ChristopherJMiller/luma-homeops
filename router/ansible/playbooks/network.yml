@@ -9,8 +9,9 @@
         - name: "{{ networks.wan.interface }}"
           description: "{{ networks.wan.description }}"
           enabled: true
-        - name: eth3
-          enabled: false
+        - name: "{{ networks.switch_oob.interface }}"
+          description: "{{ networks.switch_oob.description }}"
+          enabled: true
         - name: eth4
           enabled: false
         - name: lo
@@ -27,6 +28,9 @@
         - name: "{{ networks.wan.interface }}"
           ipv4:
             - address: "{{ networks.wan.address }}"
+        - name: "{{ networks.switch_oob.interface }}"
+          ipv4:
+            - address: "{{ networks.switch_oob.address }}"
       state: merged
     tags: [network, l3_interfaces]
 
@@ -41,9 +45,12 @@
         - "set interfaces ethernet {{ networks.wan.interface }} offload gso"
         - "set interfaces ethernet {{ networks.wan.interface }} offload sg"
         - "set interfaces ethernet {{ networks.wan.interface }} offload tso"
+      # Switch out-of-band link. No IPv6: there is no IPv6 firewall, and a
+      # link-local address would expose everything listening on :: to the switch.
+        - "set interfaces ethernet {{ networks.switch_oob.interface }} hw-id '{{ networks.switch_oob.hw_id }}'"
+        - "set interfaces ethernet {{ networks.switch_oob.interface }} ipv6 address no-default-link-local"
       # Unused interfaces
-        - "set interfaces ethernet eth3 hw-id '{{ networks.unused_interfaces[0].hw_id }}'"
-        - "set interfaces ethernet eth4 hw-id '{{ networks.unused_interfaces[1].hw_id }}'"
+        - "set interfaces ethernet eth4 hw-id '{{ networks.unused_interfaces[0].hw_id }}'"
         - "set interfaces ethernet eth4 offload gro"
         - "set interfaces ethernet eth4 offload gso"
         - "set interfaces ethernet eth4 offload sg"

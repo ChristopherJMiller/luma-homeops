@@ -145,3 +145,19 @@
         - set firewall ipv4 forward filter rule 120 source group address-group 'NO-WAN-v4'
       save: false
     tags: [firewall, no-wan]
+
+  - name: Isolate the switch management link (SWITCH-OOB belongs to the router)
+    vyos.vyos.vyos_config:
+      lines:
+      # swctl runs on the router itself, so nothing is routed to or from the
+      # core switch's management address: no LAN or tailnet host reaches it,
+      # and the switch (whose firmware has a vendor cloud agent) reaches nothing.
+        - "set firewall group interface-group SWITCH-OOB interface '{{ networks.switch_oob.interface }}'"
+        - set firewall ipv4 forward filter rule 130 action 'drop'
+        - set firewall ipv4 forward filter rule 130 description 'Nothing routed from the switch OOB link'
+        - set firewall ipv4 forward filter rule 130 inbound-interface group 'SWITCH-OOB'
+        - set firewall ipv4 forward filter rule 131 action 'drop'
+        - set firewall ipv4 forward filter rule 131 description 'Nothing routed to the switch OOB link'
+        - set firewall ipv4 forward filter rule 131 outbound-interface group 'SWITCH-OOB'
+      save: false
+    tags: [firewall, switch_oob]
