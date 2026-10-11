@@ -100,6 +100,9 @@ cards:
           entity: light.desk_underlight
           show_brightness_control: true
           use_light_color: true
+        - type: custom:mushroom-light-card
+          entity: light.bookshelf_lamp
+          icon: mdi:bookshelf
     # Room modes: Auto = adaptive lighting; a scene holds until Auto (lighting.yaml).
     - type: custom:mushroom-chips-card
       alignment: start

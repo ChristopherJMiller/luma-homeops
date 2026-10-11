@@ -9,6 +9,22 @@ entities:
       unique_id: 01M425PWDJPKY0NAJ4EC54F8ZC
     about: Camp Lamp (switch_as_x of switch.camp_lamp)
     entity_id: light.camp_lamp
+  - match:
+      platform: switch_as_x
+      unique_id: 01M4P782WKWTXMMDJ28EKJBEQ0
+    about: Bookshelf Lamp (switch_as_x of switch.bookshelf_lamp)
+    entity_id: light.bookshelf_lamp
+  # z2m renames don't move HA's sticky entity_id (joined as 0x00124b0030dd5487).
+  - match:
+      platform: mqtt
+      unique_id: 0x00124b0030dd5487_switch_zigbee2mqtt
+    about: Bookshelf Lamp plug (S40ZBTPB)
+    entity_id: switch.bookshelf_lamp
+  - match:
+      platform: mqtt
+      unique_id: 0x00124b0030dd5487_update_zigbee2mqtt
+    about: Bookshelf Lamp plug firmware
+    entity_id: update.bookshelf_lamp
 # Registry entries no integration provides any more (restored-only), removed 2026-10-03.
 remove:
   - about: automation.wake_up_early (automation no longer in config)

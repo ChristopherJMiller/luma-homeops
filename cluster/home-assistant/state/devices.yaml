@@ -36,6 +36,12 @@ devices:
   - match:
       identifiers:
         - mqtt
+        - zigbee2mqtt_0x00124b0030dd5487
+    about: Bookshelf Lamp · SONOFF 15A Zigbee smart plug (S40ZBTPB)
+    area: living_room
+  - match:
+      identifiers:
+        - mqtt
         - zigbee2mqtt_0x00124b0029135ed7
     about: Camp Lamp · SONOFF Zigbee smart plug (US version) (S31ZB)
     area: living_room

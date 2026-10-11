@@ -1,0 +1,36 @@
+---
+# Bookshelf lamp (an on/off plug): on after sunset while someone is home, the
+# kitchen underlight's pattern. It is in light.living_room_all, so the house
+# emptying, the All off chip and the room scenes switch it off; a manual off
+# sticks until the next sunset or arrival.
+#
+# GitOps source of truth (see bedroom.yaml header for the mount mechanism).
+automation:
+  - id: living_room_bookshelf_lamp_on
+    alias: Living Room - Bookshelf Lamp On After Sunset
+    description: Below the horizon with the house occupied, the bookshelf lamp is on.
+    triggers:
+      - trigger: sun
+        event: sunset
+        id: sunset
+      - trigger: state
+        entity_id: binary_sensor.house_occupied
+        from: "off"
+        to: "on"
+    conditions:
+      # sun.sun may not read below_horizon yet when the sunset trigger itself fires
+      - condition: or
+        conditions:
+          - condition: trigger
+            id: sunset
+          - condition: state
+            entity_id: sun.sun
+            state: below_horizon
+      - condition: state
+        entity_id: binary_sensor.house_occupied
+        state: "on"
+    actions:
+      - action: light.turn_on
+        target:
+          entity_id: light.bookshelf_lamp
+    mode: single

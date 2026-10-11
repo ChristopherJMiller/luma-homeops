@@ -3,7 +3,7 @@
 # (script.room_scene / input_select.<room>_light_mode in lighting.yaml). Hue lamps were
 # captured 2026-10-03 from the Hue scene named in each `from:` line with
 # `hactl scene capture`; the non-Hue lights (sidetable, desk underlight, camp lamp,
-# kitchen underlight) are set by hand. Chris trims/renames these in the plan-5 dashboard
+# bookshelf lamp, kitchen underlight) are set by hand. Chris trims/renames these in the plan-5 dashboard
 # review. Entity ids are scene.<scene>_<room>: the Hue scenes own scene.<room>_<scene>.
 #
 # GitOps source of truth (see bedroom.yaml header for the mount mechanism). Never edit in the UI.
@@ -37,6 +37,8 @@ scene:
         xy_color: [0.4596, 0.4105]
       light.camp_lamp:
         state: 'on'
+      light.bookshelf_lamp:
+        state: 'on'
   - id: relax_living_room
     name: Relax (Living Room)
     # from: scene.living_room_relax
@@ -66,6 +68,8 @@ scene:
         xy_color: [0.5612, 0.4042]
       light.camp_lamp:
         state: 'on'
+      light.bookshelf_lamp:
+        state: 'on'
   - id: movie_living_room
     name: Movie (Living Room)
     # from: scene.living_room_dimmed
@@ -94,6 +98,8 @@ scene:
         xy_color: [0.5612, 0.4042]
       light.camp_lamp:
         state: 'off'
+      light.bookshelf_lamp:
+        state: 'off'
   - id: read_living_room
     name: Read (Living Room)
     # from: scene.living_room_read
@@ -120,6 +126,8 @@ scene:
       light.desk_underlight:
         state: 'off'
       light.camp_lamp:
+        state: 'on'
+      light.bookshelf_lamp:
         state: 'on'
   - id: bright_bedroom
     name: Bright (Bedroom)

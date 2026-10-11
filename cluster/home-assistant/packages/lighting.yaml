@@ -19,6 +19,7 @@ light:
       - light.sidetable_lamp
       - light.desk_underlight
       - light.camp_lamp
+      - light.bookshelf_lamp
   - platform: group
     name: Bedroom All
     unique_id: bedroom_all
@@ -35,7 +36,7 @@ light:
 # Creates switch.circadian_adaptive_lighting_circadian (main) and
 # switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian
 # (night_routine.yaml drives sleep mode). Replaced the abandoned
-# circadian_lighting component. Camp Lamp is on/off only, so it is not adapted.
+# circadian_lighting component. Camp and Bookshelf Lamps are on/off plugs, so they are not adapted.
 adaptive_lighting:
   - name: circadian
     lights:
