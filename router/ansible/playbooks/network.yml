@@ -51,6 +51,16 @@
       save: false
     tags: [network, hardware]
 
+  # switch_factory_mgmt in group_vars. Kea picks a broadcast client's subnet
+  # from eth2's FIRST address; VyOS adds addresses in sorted order, so the LAN
+  # 192.168.0.1/24 stays first.
+  - name: Temporary address in the core switch's factory management subnet
+    vyos.vyos.vyos_config:
+      lines:
+        - "{{ 'set' if switch_factory_mgmt.present else 'delete' }} interfaces ethernet {{ networks.lan.interface }} address '{{ switch_factory_mgmt.address }}'"
+      save: false
+    tags: [network, switch_probe]
+
   - name: Configure DNS forwarding service
     vyos.vyos.vyos_config:
       lines:
