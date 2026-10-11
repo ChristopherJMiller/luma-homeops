@@ -106,9 +106,24 @@ retention of their own (the API rejects it) — recordings are filed as episodes
 of the league show, so retention lives on the **show** (Plex › show › Edit ›
 Advanced): `NFL Football` and `NHL Hockey` are set to *Keep: 3 latest* and
 *Delete after playing: after a day* (counts the admin's plays only). A raw OTA
-game is ~10 GB, so any new league show needs the same setting. Team rules can't
-be created through the API without Plex Web's playlist step — create them in
-Plex Web (guide › game › Record › "All <team> Events").
+game is ~10 GB, so any new league show needs the same setting. Every team rule
+pads **5 min before / 60 min after** the guide slot (overtime); `recordPartials`
+on, comskip off.
+
+Create a team rule the way Plex Web does — a bare `POST /media/subscriptions`
+fails with 400 "No existing library item playlist" because the rule is a smart
+playlist on the EPG provider. Find one of the team's airings
+(`/tv.plex.providers.epg.cloud:2/hubs/search?query=<team>`), fetch
+`GET /media/subscriptions/template?guid=<airing guid>`, take the
+"All <team> Events" template's `parameters` string verbatim, and
+`POST /media/subscriptions?<prefs[...]>&targetLibrarySectionID=2&targetSectionLocationID=2&type=15&<parameters>`
+("All Seattle Kraken Events", rule 16, was made this way 2026-10-11).
+
+A recording is only as long as the guide slot plus padding. The 2026-10-04
+Chargers game stopped cleanly at 15:00 PT after 99 min — stream steady to the
+end, no crash/OOM/tuner conflict/node outage — so the EPG slot for that airing
+was short. Check `GET /media/subscriptions/scheduled` (`beginsAt`/`endsAt`)
+before a game you care about; a 2.5–3 h slot is normal.
 
 ## Gotchas
 
