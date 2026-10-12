@@ -1,0 +1,97 @@
+---
+# Nightly mirror of /archive to B2 (bucket galaxy-archive). Same design as
+# cluster/family/backup-cronjob.yaml (read its comments): files-as-files,
+# current/ = exact mirror, deleted/<date>/ = anything removed or overwritten,
+# plus 90 days of hidden versions; the key cannot delete. Laptops browse
+# current/ read-only (docs/backups.md "Browse from a laptop").
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: archive-backup
+  namespace: media
+  labels:
+    app.kubernetes.io/name: archive-backup
+    backup-tier: archive
+spec:
+  schedule: "0 4 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 72000 # 20h; sync is incremental, so a killed run resumes next night
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: archive-backup
+        spec:
+          restartPolicy: Never # each attempt keeps its pod (and logs); OnFailure deletes them at backoffLimit
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: rclone
+              image: ghcr.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              envFrom:
+                - secretRef:
+                    name: archive-b2
+              env:
+                # An env var rather than a literal so the gate can be exercised
+                # with a one-off Job (docs/backups.md "Personal archive").
+                - name: MIN_FILES
+                  value: "100"
+              command: ["/bin/sh"]
+              args:
+                - -c
+                - |
+                  set -eu
+                  SRC=/archive
+                  DST=b2:galaxy-archive
+
+                  # Sanity gate: an empty or barely-populated source means the
+                  # volume failed to mount or was wiped — never let that become
+                  # "move everything in the bucket to deleted/".
+                  n=$(find "$SRC" -type f | head -n $((MIN_FILES + 1)) | wc -l)
+                  if [ "$n" -le "$MIN_FILES" ]; then
+                    echo "refusing to sync: only $n files under $SRC (min $MIN_FILES)" >&2
+                    exit 2
+                  fi
+
+                  echo "archive-backup start $(date -u +%FT%TZ): $n+ files"
+                  # --links: no symlinks today, but a future one must become a
+                  # .rclonelink object rather than silently vanish from the mirror.
+                  rclone sync "$SRC" "$DST/current" \
+                    --backup-dir "$DST/deleted/$(date -u +%F)" \
+                    --links \
+                    --exclude '.DS_Store' --exclude 'Thumbs.db' --exclude '._*' --exclude '*.partial' \
+                    --transfers 4 --checkers 8 \
+                    --s3-chunk-size 16M --s3-upload-concurrency 4 --buffer-size 16M \
+                    --bwlimit 10M \
+                    --fast-list --stats 5m --stats-one-line --stats-log-level NOTICE \
+                    --log-level INFO
+                  echo "archive-backup done $(date -u +%FT%TZ)"
+              volumeMounts:
+                - name: archive
+                  mountPath: /archive
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 256Mi
+                limits:
+                  cpu: "2"
+                  memory: 1Gi
+          volumes:
+            - name: archive
+              persistentVolumeClaim:
+                claimName: archive
+                readOnly: true

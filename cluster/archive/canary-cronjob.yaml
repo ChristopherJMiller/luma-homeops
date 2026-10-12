@@ -1,0 +1,61 @@
+---
+# Monthly restore check for the archive mirror: fetch one known file straight
+# from B2 and compare its md5 to the value recorded from rowlett's copy before
+# ingest (2026-10-11). Proves the bucket is readable with the cluster key and
+# the bytes are intact. Same pattern as cluster/family/canary-cronjob.yaml.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: archive-canary
+  namespace: media
+  labels:
+    app.kubernetes.io/name: archive-backup
+    backup-tier: archive
+spec:
+  schedule: "45 6 1 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: archive-backup
+        spec:
+          restartPolicy: Never # each attempt keeps its pod (and logs); OnFailure deletes them at backoffLimit
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: rclone
+              image: ghcr.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              envFrom:
+                - secretRef:
+                    name: archive-b2
+              command: ["/bin/sh"]
+              args:
+                - -c
+                - |
+                  set -eu
+                  f='current/School/TSA/EngineeringDesign/20160217_203318.jpg'
+                  want=b82ce6e6947f5294d10bb4da189bbe22
+                  got=$(rclone cat "b2:galaxy-archive/$f" | md5sum | cut -d' ' -f1)
+                  if [ "$got" = "$want" ]; then echo "archive canary OK: $f md5=$got"; else echo "archive canary FAILED: $f md5=$got want=$want" >&2; exit 1; fi
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
