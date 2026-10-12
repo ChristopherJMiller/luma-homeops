@@ -7,6 +7,7 @@ Every off-site copy is readable from a laptop with nothing from the cluster.
 | Tier | What | Tool | Where in B2 | Schedule (UTC) |
 |---|---|---|---|---|
 | Family media | CephFS `/family` (PVC `media/family-media`) | rclone mirror, files-as-files | `galaxy-family/current/…`, deletions → `galaxy-family/deleted/<date>/…` | nightly 03:30 |
+| Personal archive | CephFS `/archive` (PVC `media/archive`) — Chris's cold files, never in Immich | rclone mirror, files-as-files | `galaxy-archive/current/…`, deletions → `galaxy-archive/deleted/<date>/…` | nightly 04:00 |
 | Postgres | all seven `postgresql` clusters | postgres-operator logical backup (`pg_dumpall \| gzip`) | `galaxy-cluster-backups/spilo/<cluster>/<uid>/logical_backups/<ts>.sql.gz` | nightly 00:30 |
 | Config volumes | HA persist, Plex config, gonic data+playlists, CephFS `/satellites` | restic, one repo, host = volume | `galaxy-cluster-backups/restic/config` | nightly 01:00–02:00 |
 | Immich uploads | `immich-uploads` — phone photos | rclone mirror | `galaxy-family/immich/current/…` | nightly 04:30 |
@@ -39,14 +40,18 @@ If any is missing, that is a bigger hole than anything below.
 1. The GitHub repo (and the git-crypt key that unlocks `*.secret.yaml`,
    `nodes/*`, `satellites/.keys/*`).
 2. B2 **master** key — the account itself.
-3. B2 app key `galaxy-operator-laptop` (both buckets, incl. `deleteFiles`
-   and `readBucketInfo`; the only key that can prune for real or read
-   point-in-time versions).
+3. B2 app key `galaxy-operator-laptop` (`galaxy-family` + `galaxy-cluster-backups`
+   — **not** `galaxy-archive` — incl. `deleteFiles` and `readBucketInfo`; the
+   only app key that can prune for real or read point-in-time versions. For the
+   archive bucket that takes the master key until an operator key covers it).
 4. restic repo password for `restic/config`.
+5. Read-only laptop keys `galaxy-family-laptop-ro` and `galaxy-archive-laptop-ro`
+   (`listBuckets,listFiles,readFiles`) — what celebi browses the mirrors with
+   (see "Browse from a laptop"). Losing them costs nothing but re-issuing.
 
-The in-cluster keys (`galaxy-family-cluster`, `galaxy-pg-cluster`,
-`galaxy-restic-cluster`) are also in the sealed secrets, but those only
-decrypt with a live sealed-secrets controller.
+The in-cluster keys (`galaxy-family-cluster`, `galaxy-archive-cluster`,
+`galaxy-pg-cluster`, `galaxy-restic-cluster`) are also in the sealed secrets,
+but those only decrypt with a live sealed-secrets controller.
 
 ## How the buckets are made safe against the cluster itself
 
@@ -58,10 +63,11 @@ rule purges them:
 | Bucket / prefix | Hidden versions purged after | Meaning |
 |---|---|---|
 | `galaxy-family` (all) | 90 days | a hostile `rclone purge` is reversible for 90 days |
+| `galaxy-archive` (all) | 90 days | same as `galaxy-family` |
 | `galaxy-cluster-backups/restic/` | 30 days | restic `prune` is a soft delete for 30 days |
 | `galaxy-cluster-backups/spilo/` | uploaded→hidden 30 days, hidden→purged 1 day | 30 nightly dumps kept, no delete capability needed |
 
-Both buckets have SSE-B2 at rest. Family media is **not** client-side
+All three buckets have SSE-B2 at rest. Family media is **not** client-side
 encrypted — chosen so the archive stays legible without any tooling
 (`toad-backups` has been that way since 2023). `rclone crypt` is the
 one-line switch if that ever changes; its password then joins the list above.
@@ -127,6 +133,69 @@ memory limit on purpose; filebrowser's was raised to 1 Gi for the same reason.
 - Deletions and overwrites go to `deleted/<date>/` **and** stay as hidden
   versions for 90 days.
 - The cluster key cannot purge versions.
+
+## Personal archive
+
+`/archive` is `/family`'s twin for Chris's own cold files — old Minecraft
+servers, school projects, old videos, game ISOs — kept in a separate tree and
+bucket so none of it reaches Immich or the family's shared albums. Built
+2026-10-11/12 (plan: `docs/superpowers/plans/2026-10-11-personal-archive.md`).
+
+- Layout: `Minecraft/`, `School/{TSA,College}/`, `Projects/`, `Games/`,
+  `Music/` (+ `Sheet Music/`), `Videos/{Recordings,Creative,Unsorted}/`,
+  `Backups/foundry-2024/` (with its v11.315 installer — an old Foundry world
+  restores only on its own version), `Documents/`.
+- Pieces: static PV/PVC `media/archive` (`cluster/archive/`), NFS export to
+  rowlett only (`cluster/rook-cluster/archive-export.yaml`, mounted at
+  `/mnt/archive`), CronJob `archive-backup` (04:00) and monthly
+  `archive-canary`, key `galaxy-archive-cluster` in Secret `archive-b2`.
+- Restore: exactly as "Family media" above with `galaxy-archive` in place of
+  `galaxy-family` — but the laptop key that can read old versions is the master
+  key until an operator key covers this bucket (see Cold-start dependencies).
+- The MIN_FILES gate is an env var so it can be exercised without emptying the
+  volume: create a one-off Job from the CronJob with `MIN_FILES` above the real
+  count and `backoffLimit: 0`; it must exit 2 with `refusing to sync` and leave
+  the bucket untouched.
+
+### New CephNFSExport gotchas (both hit bringing `/archive` up)
+- **The export root is created `root:root 0755`** by the operator, so uid 1000
+  can't write. Fix once from rowlett over the `no_root_squash` mount:
+  `sudo chown 1000:1000 /mnt/<path> && sudo chmod 2775 /mnt/<path>` (matches
+  `/family`).
+- **Ganesha can lose its RADOS watch** on `conf-nfs.satellites`, after which a
+  newly applied export sits in RADOS but is never served (mount.nfs: "No such
+  file or directory"). Check `rados -p .nfs -N satellites listwatchers
+  conf-nfs.satellites` from the toolbox — empty means no live watch — and
+  `ShowExports` over dbus in the Ganesha pod (see
+  `operators/ceph-nfs-export-operator/README.md`). Fix:
+  `kubectl -n rook rollout restart deploy/rook-ceph-nfs-satellites-a` (seen
+  2026-10-12; the pod had been up since the 2026-10-05 node work).
+
+## Browse from a laptop
+
+Away from home, laptops read the **B2 mirrors** read-only instead of reaching
+into the house: `~/nixos` `common/galaxy-b2-mounts.nix` runs `rclone mount` as
+user services, `b2family-ro:galaxy-family/current` → `~/Galaxy/family` and
+`b2archive-ro:galaxy-archive/current` → `~/Galaxy/archive`, with a local VFS
+cache. The remotes live by hand in `~/.config/rclone/rclone.conf` (chmod 600)
+from the two `*-laptop-ro` keys, which B2 itself refuses writes from. The
+mirrors trail the cluster by up to a day. Downloads are free up to 3× the
+average stored data per month (~1.1 TB at ~370 GiB stored), so browsing costs
+nothing beyond storage. At home rowlett uses the NFS mounts instead.
+
+## Before deleting a local copy
+
+Prove it is mirrored first, by content rather than by path:
+
+```bash
+docs/backups/verify-local-in-b2.sh fam:galaxy-family/current arc:galaxy-archive/current \
+  -- ~/some/dir ~/another/dir
+```
+
+One rclone remote per bucket (B2 keys are bucket-scoped), configured from env
+or rclone.conf. It prints `MISSING<TAB>bytes<TAB>path` for anything with no
+same-MD5 object and exits 1; zero-byte files and `Thumbs.db`/`.DS_Store` are
+skipped because no mirror carries them.
 
 ## Postgres
 

@@ -57,3 +57,28 @@ published to `ghcr.io/christopherjmiller/ceph-nfs-export-operator`.
 
 In-cluster manifests live under `cluster/ceph-nfs-export-operator/`,
 wired in via `cluster/applications/ceph-nfs-export-operator.yaml`.
+
+## Troubleshooting
+
+**A new export is applied (`status.applied: true`) but clients get "No such
+file or directory".** The operator's `ceph nfs export apply` only writes the
+export to RADOS; Ganesha picks it up through a RADOS watch on
+`conf-nfs.<cluster>`. If Ganesha has lost that watch, the export is never
+served until it restarts. Check both sides:
+
+```bash
+TOOLS=$(kubectl -n rook get pod -l app=rook-ceph-tools -o jsonpath='{.items[0].metadata.name}')
+kubectl -n rook exec "$TOOLS" -- rados -p .nfs -N satellites listwatchers conf-nfs.satellites   # empty = no watch
+NFS=$(kubectl -n rook get pod -l app=rook-ceph-nfs -o jsonpath='{.items[0].metadata.name}')
+kubectl -n rook exec "$NFS" -c nfs-ganesha -- dbus-send --system --print-reply \
+  --dest=org.ganesha.nfsd /org/ganesha/nfsd/ExportMgr org.ganesha.nfsd.exportmgr.ShowExports | grep 'string "/'
+```
+
+Fix: `kubectl -n rook rollout restart deploy/rook-ceph-nfs-satellites-a`
+(confirm first: it's an NFS outage of a minute or two). Seen 2026-10-12, when
+the watch had been gone since node maintenance a week earlier.
+
+**The export root is `root:root 0755`.** `LibCephFS.mkdirs` runs as the
+operator's Ceph client, so a new path isn't writable by uid 1000. Chown it
+once from an NFS client with root (the exports are `no_root_squash`):
+`sudo chown 1000:1000 /mnt/<path> && sudo chmod 2775 /mnt/<path>`.
