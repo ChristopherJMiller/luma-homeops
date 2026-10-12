@@ -1,0 +1,26 @@
+---
+# Personal archive: a static CephFS volume (/archive) plus its nightly B2
+# mirror (bucket galaxy-archive). In the media namespace next to /family so
+# both mirrors share one shape; the LAN NFS export is
+# cluster/rook-cluster/archive-export.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: archive
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/archive
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: media
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

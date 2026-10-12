@@ -1,0 +1,32 @@
+---
+# Static CephFS PV for Chris's personal archive (/archive): cold files such as
+# old Minecraft servers, school projects and old videos. Kept apart from
+# /family so none of it reaches Immich or the family's shared albums.
+# Same shape as cluster/family/pv.yaml — read that file's comments: a plain
+# top-level directory in fs-pool, mkdir'd by the ceph-nfs-export operator
+# (cluster/rook-cluster/archive-export.yaml); everything under it is
+# 1000:1000; never set fsGroup on a pod that mounts it.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: archive
+spec:
+  accessModes:
+    - ReadWriteMany
+  capacity:
+    storage: 1Ti
+  persistentVolumeReclaimPolicy: Retain
+  volumeMode: Filesystem
+  storageClassName: ""
+  csi:
+    driver: rook.cephfs.csi.ceph.com
+    volumeHandle: archive-static
+    nodeStageSecretRef:
+      name: rook-csi-cephfs-node
+      namespace: rook
+    volumeAttributes:
+      clusterID: rook
+      fsName: fs-pool
+      staticVolume: "true"
+      rootPath: /archive
+      kernelMountOptions: ms_mode=prefer-crc

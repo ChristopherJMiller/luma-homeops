@@ -10,4 +10,5 @@ resources:
   - ceph-nfs.yaml
   - satellites-octoprint-export.yaml
   - family-export.yaml
+  - archive-export.yaml
   - rook-ceph-tools.yaml

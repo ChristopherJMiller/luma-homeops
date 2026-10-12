@@ -1,0 +1,15 @@
+---
+# Binds the static PV above (see cluster/family/pvc.yaml).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: archive
+  namespace: media
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: ""
+  volumeName: archive
+  resources:
+    requests:
+      storage: 1Ti

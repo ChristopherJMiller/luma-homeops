@@ -1,0 +1,22 @@
+---
+# LAN NFS export of the personal archive (CephFS /archive, see
+# cluster/archive/). Same rules as family-export.yaml: clients listed one per
+# machine, no_root_squash + uid 1000 on the client. Road access is NOT this
+# export — laptops read the B2 mirror (docs/backups.md "Browse from a laptop").
+#   rowlett: /mnt/archive (automount, ~/nixos hosts/rowlett/configuration.nix)
+apiVersion: nfs.luma-homelab.io/v1alpha1
+kind: CephNFSExport
+metadata:
+  name: archive
+  namespace: rook
+spec:
+  cluster: satellites
+  fs: fs-pool
+  path: /archive
+  pseudo: /archive
+  squash: no_root_squash
+  accessType: NONE
+  clients:
+    - addresses: [192.168.0.21/32] # rowlett (Chris's workstation)
+      accessType: RW
+      squash: no_root_squash

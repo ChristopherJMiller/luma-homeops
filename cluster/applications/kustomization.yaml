@@ -26,6 +26,7 @@ resources:
   - mega-media-release.yaml
   - media-webdav.yaml
   - family.yaml
+  - archive.yaml
   - backups.yaml
   - music-streaming.yaml
   - dex.yaml
