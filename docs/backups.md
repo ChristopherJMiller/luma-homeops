@@ -47,7 +47,9 @@ If any is missing, that is a bigger hole than anything below.
 4. restic repo password for `restic/config`.
 5. Read-only laptop keys `galaxy-family-laptop-ro` and `galaxy-archive-laptop-ro`
    (`listBuckets,listFiles,readFiles`) — what celebi browses the mirrors with
-   (see "Browse from a laptop"). Losing them costs nothing but re-issuing.
+   (see "Browse from a laptop"). Kept git-crypt encrypted in
+   `laptops/celebi/galaxy-b2-ro.secret.conf`, so the git-crypt key covers them;
+   losing them costs nothing but re-issuing.
 
 The in-cluster keys (`galaxy-family-cluster`, `galaxy-archive-cluster`,
 `galaxy-pg-cluster`, `galaxy-restic-cluster`) are also in the sealed secrets,
@@ -177,8 +179,13 @@ Away from home, laptops read the **B2 mirrors** read-only instead of reaching
 into the house: `~/nixos` `common/galaxy-b2-mounts.nix` runs `rclone mount` as
 user services, `b2family-ro:galaxy-family/current` → `~/Galaxy/family` and
 `b2archive-ro:galaxy-archive/current` → `~/Galaxy/archive`, with a local VFS
-cache. The remotes live by hand in `~/.config/rclone/rclone.conf` (chmod 600)
-from the two `*-laptop-ro` keys, which B2 itself refuses writes from. The
+cache. The remotes `b2family-ro` / `b2archive-ro` (the two `*-laptop-ro` keys,
+which B2 itself refuses writes from) live in their own file,
+`~/.config/rclone/galaxy-b2-ro.conf` on the laptop. Source of truth is
+`laptops/celebi/galaxy-b2-ro.secret.conf` here, git-crypt encrypted (this repo
+is public — `*.secret.conf` is in `.gitattributes`). Decrypt on rowlett and
+copy it over with `install -m600`; the laptop never gets the git-crypt key,
+which unlocks every secret in the repo. The
 mirrors trail the cluster by up to a day. Downloads are free up to 3× the
 average stored data per month (~1.1 TB at ~370 GiB stored), so browsing costs
 nothing beyond storage. At home rowlett uses the NFS mounts instead.
