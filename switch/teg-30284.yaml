@@ -8,14 +8,15 @@ management: {port: 2, vlan: 99, address: 192.168.99.2}
 canaries: [192.168.0.240, 192.168.0.241, 192.168.0.242, 192.168.0.15, 192.168.0.58]
 vlans:
   1: "DefaultVLAN"
+  20: "VOICE"
   99: "SWITCH-OOB"
 ports:
-  1: {untagged: 1, desc: "VyOS eth2 - LAN uplink"}
+  1: {untagged: 1, tagged: [20], desc: "VyOS eth2 - LAN uplink (+ eth2.20 voice, tagged)"}
   2: {untagged: 99, desc: "VyOS eth3 - switch management (OOB, VLAN 99 only)"}
   3: {untagged: 1}
   4: {untagged: 1}
   5: {untagged: 1}
-  6: {untagged: 1}
+  6: {untagged: 20, desc: "IP phone SEPD0C78915E8C8 (Cisco, via PoE injector) - voice VLAN"}
   7: {untagged: 1}
   8: {untagged: 1, desc: "ONE KVM .2 (pre-auth RCE; no WAN)"}
   9: {untagged: 1}

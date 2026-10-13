@@ -102,5 +102,5 @@ router base64-encoded and writes `/tmp/swctl-deadman-fired` first.
 
 ## Next phases
 
-Phase 2 voice port (port 1 tagged 20, a free port untagged 20 for the phones'
-PoE switch); phase 3 MGMT (BMCs) + KVM VLANs; phase 4 IoT — see the spec.
+Phase 2 voice: **done 2026-10-13** (VLAN 20 "VOICE"; port 1 tagged 20; port 6 = IP
+phone, untagged 20); phase 3 MGMT (BMCs) + KVM VLANs; phase 4 IoT — see the spec.
