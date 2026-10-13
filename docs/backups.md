@@ -159,7 +159,13 @@ bucket so none of it reaches Immich or the family's shared albums. Built
   count and `backoffLimit: 0`; it must exit 2 with `refusing to sync` and leave
   the bucket untouched.
 
-### New CephNFSExport gotchas (both hit bringing `/archive` up)
+### New CephNFSExport gotchas (hit bringing `/archive` up)
+- **Clients must mount NFSv4.1, not 4.2.** With 4.2 a Linux client
+  (`CONFIG_NFS_V4_2_READ_PLUS=y`) reads via `READ_PLUS`, and every read from
+  this NFS-Ganesha returns EIO while `ls`, `stat` and writes work — so a
+  write-only test passes and nobody notices. Seen 2026-10-13 on rowlett
+  (`/proc/self/mountstats`: 217 `READ_PLUS`, 0 `READ`, 0 RPC errors). rowlett
+  pins `nfsvers=4.1` (~/nixos `hosts/rowlett/configuration.nix`).
 - **The export root is created `root:root 0755`** by the operator, so uid 1000
   can't write. Fix once from rowlett over the `no_root_squash` mount:
   `sudo chown 1000:1000 /mnt/<path> && sudo chmod 2775 /mnt/<path>` (matches

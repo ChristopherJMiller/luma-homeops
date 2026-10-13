@@ -82,3 +82,8 @@ the watch had been gone since node maintenance a week earlier.
 operator's Ceph client, so a new path isn't writable by uid 1000. Chown it
 once from an NFS client with root (the exports are `no_root_squash`):
 `sudo chown 1000:1000 /mnt/<path> && sudo chmod 2775 /mnt/<path>`.
+
+**Reads return EIO but `ls` and writes work.** The client negotiated NFSv4.2
+and is reading with `READ_PLUS`, which this Ganesha's replies don't survive.
+Check `/proc/self/mountstats` on the client (`READ_PLUS` ops climbing, `READ`
+at 0) and mount with `nfsvers=4.1`. Seen 2026-10-13.
