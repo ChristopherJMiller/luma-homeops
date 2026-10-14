@@ -350,6 +350,7 @@ intended trade.
 | 2026-09-22 | All | first fully scheduled cycle | 6 pg dumps + 4 restic snapshots succeeded on schedule; the cycle before caught the PodSecurity/DAC and OnFailure-log bugs above |
 | 2026-09-22 | Family | first full nightly mirror (8 h at the 10 MB/s cap), then counted both sides and ran the canary against the live bucket | volume 4,943 files / 327.4 GiB = `current/` 4,943 files / 327.44 GiB, `deleted/` empty, canary sha1 OK |
 | 2026-10-12 | Archive | `/archive` ingest (42,063 files, ~34 GiB, rsync over NFS at 6 MB/s; tiny files run ~7/s because each commits to SMR) verified by hash multiset from inside the cluster; MIN_FILES gate test; first full mirror by hand; canary | in-cluster hashes == local; gate refused (exit 2, bucket untouched); mirror complete in 1 h 51 m with one transient `BadDigest` that the retry fixed; `verify-local-in-b2.sh`: every archived file present by MD5; canary md5 OK |
+| 2026-10-13 | Archive + Family | second pass from rowlett: ~/Documents/FinalArchDocuments (→ /archive/Backups/Arch Documents (2023)), ~/Documents/mc (→ /archive/Minecraft/Fabric 1.20.1 Server (2024)), ~/Music/Music (merged into /archive/Music), ~/Pictures/Pictures (family folders → /family + 3 Immich albums; rest → /archive/Pictures); ~204k files over NFS in 15 h, then mirrored | `verify-local-in-b2.sh`: 203,646 checked, only the 33,391 deliberately skipped Unity `Library/` files absent; restore drill 7/7; local copies deleted |
 
 ## History / why it looks like this
 

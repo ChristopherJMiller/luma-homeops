@@ -989,3 +989,20 @@ Expected: ~70 GiB freed on rowlett's root filesystem (58 GiB `~/ForMediaServer` 
 - **HA idea to port** (via the ha-config skill, not as-is): the 2024 `[Bedroom] [WUR] Morning Light Wake Up` automation. When `sensor.minutes_until_next_alarm` (from the phone's next-alarm sensor) drops below 1 and Chris is home with the bedroom off, it sets a dimmed bedroom scene with circadian lighting paused and turns on `input_boolean.bedroom_waking_up_mode`. Turning on the main light ends the mode and resumes circadian. Today's equivalent would pause or resume `adaptive_lighting` instead of the old `circadian_lighting` switch.
 - Tailscale NFS for laptops — superseded by the B2 mounts.
 - **Flagged for separate review:** `mediadav.chrismiller.xyz` (Argo app `media-webdav`) is a public WebDAV with htpasswd basic auth over `media/mm-media` — the public-password-endpoint pattern this design avoids.
+
+---
+
+## Task 8 (added and executed 2026-10-13): rowlett's remaining data folders
+
+Approved by Chris after a read-only survey (`~/Documents/FinalArchDocuments` 76 GB / 180k files — a 2023 Arch machine's Documents incl. a 48 GB nested Windows backup; `~/Documents/mc` 23 GB modded Fabric 1.20.1 server; `~/Music/Music` 29 GB; `~/Pictures/Pictures` 11 GB). Same method as Tasks 4–7: rsync over NFS at 6 MB/s with the Ceph guard, B2 mirror, `verify-local-in-b2.sh`, restore drill, then delete.
+
+| From | To |
+|---|---|
+| `Pictures/Pictures/konachristmas2021`, `WindowsBackups/2017 Prom`, `WindowsBackups/newHome` | `/family/2021 Kona Christmas`, `/family/2017 Prom`, `/family/New Home` → Immich albums shared with the family |
+| `Pictures/Pictures/peru`, `WindowsBackups/Peru` | nothing — all 827 files already in `/family/2015 Peru` by md5 |
+| rest of `Pictures/Pictures` | `/archive/Pictures` |
+| `Music/Music` | merged into `/archive/Music` (`--ignore-existing`; the 107 same-path files were all identical) |
+| `Documents/mc` | `/archive/Minecraft/Fabric 1.20.1 Server (2024)` |
+| `Documents/FinalArchDocuments/Documents` | `/archive/Backups/Arch Documents (2023)` minus 3 Unity `Library/` caches (2.5 GB) |
+
+Found along the way: NFS **reads** from rowlett had never worked (NFSv4.2 `READ_PLUS` vs Ganesha → EIO; fixed with `nfsvers=4.1`, docs/backups.md); Go module caches are read-only by design (`chmod -R u+rwX` before `rm`). Result: 203,646 files verified, 0 unexpected gaps, ~139 GB freed (rowlett 296 GB free).
