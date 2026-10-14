@@ -17,7 +17,9 @@
 # mirror excludes them).
 #
 # Prints MISSING<TAB>bytes<TAB>path per local file with no copy, then a
-# summary line. Exit 0 = nothing missing, 1 = something missing, 2 = usage.
+# summary line. Exit 0 = nothing missing, 1 = something missing, 2 = usage
+# error, a failed remote listing, or an internal count mismatch. Tests:
+# docs/backups/verify-local-in-b2.test.sh (offline, fake rclone).
 set -euo pipefail
 
 remotes=()
@@ -31,23 +33,36 @@ fi
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 
-# || true: an empty bucket means "everything missing", not an abort; a failing
-# rclone still fails the script through pipefail.
 for r in "${remotes[@]}"; do
-  rclone lsf -R --files-only --hash MD5 --format h "$r"
-done | { grep -E '^[0-9a-f]{32}$' || true; } | sort -u > "$work/remote"
+  if ! rclone lsf -R --files-only --hash MD5 --format h "$r" >> "$work/listing"; then
+    echo "remote listing failed: $r" >&2
+    exit 2
+  fi
+done
+# An empty bucket, or objects without an MD5, leave this list empty: that means
+# "everything missing", never an abort and never a pass.
+{ grep -E '^[0-9a-f]{32}$' "$work/listing" || true; } | sort -u > "$work/remote"
 
 # md5sum -z: NUL-terminated records, no backslash-escaping of odd filenames.
-find "$@" -type f -size +0 ! -name Thumbs.db ! -name .DS_Store -print0 |
-  xargs -0 -r md5sum -z > "$work/local"
+find "$@" -type f -size +0 ! -name Thumbs.db ! -name .DS_Store -print0 > "$work/files"
+xargs -0 -r md5sum -z < "$work/files" > "$work/local"
 
-awk 'FNR == NR { have[$0] = 1; next }
+# The remote list is loaded in BEGIN, not as a first input file: with the
+# NR==FNR idiom an empty remote list swallows the local records and reports
+# "0 checked, 0 missing" (found in review 2026-10-13).
+awk -v remote="$work/remote" '
+     BEGIN { while ((getline h < remote) > 0) have[h] = 1; RS = "\0" }
      { n++; h = substr($0, 1, 32); p = substr($0, 35)
        if (!(h in have)) { printf "%s\0", p } }
      END { printf "%d", n > "/dev/stderr" }' \
-  "$work/remote" RS='\0' "$work/local" > "$work/missing" 2> "$work/count"
+  "$work/local" > "$work/missing" 2> "$work/count"
 
 checked=$(cat "$work/count")
+expected=$(tr -cd '\0' < "$work/files" | wc -c)
+if [ "$checked" != "$expected" ]; then
+  echo "internal error: checked $checked files but found $expected — refusing to report" >&2
+  exit 2
+fi
 missing=0 bytes=0
 while IFS= read -r -d '' p; do
   s=$(stat -c %s -- "$p")
