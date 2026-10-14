@@ -27,7 +27,10 @@ in
         options = lib.mkOption {
           type = lib.types.listOf lib.types.str;
           default = [
-            "nfsvers=4.2"
+            # 4.1, not 4.2: with 4.2 the Linux client reads via READ_PLUS and
+            # every read from galaxy's NFS-Ganesha returns EIO (ls, stat and
+            # writes still work). Found 2026-10-13; docs/backups.md.
+            "nfsvers=4.1"
             "sec=sys"
             "hard"
             "noatime"
