@@ -196,6 +196,33 @@ mirrors trail the cluster by up to a day. Downloads are free up to 3× the
 average stored data per month (~1.1 TB at ~370 GiB stored), so browsing costs
 nothing beyond storage. At home rowlett uses the NFS mounts instead.
 
+### If a laptop is lost or stolen
+
+Treat its B2 read access as gone the moment you notice. celebi has **no
+full-disk encryption**: whoever holds it can read
+`~/.config/rclone/galaxy-b2-ro.conf`, up to 20 GB per mount of cached files,
+and through the keys every object in `galaxy-family` (incl. `immich/` and
+`gramps/`) and `galaxy-archive`. They cannot write or delete: B2 refuses that
+for these keys.
+
+1. Revoke both read-only keys (needs the B2 master key in the CLI:
+   `nix shell nixpkgs#backblaze-b2 --command backblaze-b2 account authorize`):
+   ```bash
+   bb() { nix shell nixpkgs#backblaze-b2 --command backblaze-b2 "$@"; }
+   for n in galaxy-family-laptop-ro galaxy-archive-laptop-ro; do
+     id=$(bb key list --long | awk -v n="$n" '$2 == n {print $1}')
+     [ -n "$id" ] && bb key delete "$id" && echo "revoked $n"
+   done
+   ```
+   Nothing else uses these keys; the cluster's backups are unaffected.
+2. Remove the device from the tailnet (Tailscale admin console → Machines).
+3. Re-issue for the replacement laptop: create keys with the same capabilities
+   (`listBuckets,listFiles,readFiles`; consider `--name-prefix current/`, which
+   keeps a future lost laptop out of `immich/`, `gramps/` and `deleted/`), write
+   them into `laptops/<host>/galaxy-b2-ro.secret.conf` without printing them, and
+   install that file on the new machine (`install -m600 …
+   ~/.config/rclone/galaxy-b2-ro.conf`).
+
 ## Before deleting a local copy
 
 Prove it is mirrored first, by content rather than by path:
