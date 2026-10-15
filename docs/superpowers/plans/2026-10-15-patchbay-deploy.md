@@ -1,6 +1,6 @@
 # Deploy patchbay to galaxy (`telephony`)
 
-**Status:** draft for sign-off (CLAUDE.md "Plan, then execute").
+**Status:** approved by Chris and executed 2026-10-15 through §4 step 6 (deployed in 876c3898: patchbay 0.1.0-rc.1; Desk NeedsTrustReset, chris-laptop Issued, chris Ready). Steps 7 (second phone) and 8 (firmware) remain.
 **Spec:** `docs/superpowers/specs/2026-10-14-patchbay-design.md` §6 ("In
 luma-homeops") and §7. **Code:** github.com/ChristopherJMiller/patchbay
 (release A complete: W1–W3 plus a final review; CI green on GitHub).
@@ -18,7 +18,7 @@ this plan does not need.
 | # | Check | State on 2026-10-15 | Needed |
 |---|---|---|---|
 | P1 | Ceph healthy enough to land changes | **HEALTH_ERR**: `pg 1.b` (block-pool) `active+clean+inconsistent`, 1 scrub error. Object `rbd_data.5e2c3a16c18.000000000008473e`: a `read_error` on **osd.4's** shard only (middle, `ST8000DM004 …ZR15X13V`); osd.0 and osd.2 hold clean copies. osd.4's drive: SMART passed, 264 reallocated sectors, **flat since April** (not growing), 0 pending. Also `BLUESTORE_SPURIOUS_READ_ERRORS` on osd.4 (1 retried read) and the usual MDS cache-pressure warning from `rook-satellites`. | **Chris approves `ceph pg repair 1.b`** (S7). It rewrites osd.4's copy from the two good replicas. Then a deep scrub of 1.b (`ceph pg deep-scrub 1.b`) must come back clean, and health returns to its usual HEALTH_WARN. If osd.4's reallocated count starts growing, plan a CMR replacement (sharp edge 1). |
-| P2 | Argo otherwise healthy | Every app Synced/Healthy except `rook`, `rook-cluster` (Degraded = P1) | P1 resolved |
+| P2 | Argo otherwise healthy | Every app Synced/Healthy except `rook` (Degraded since 2026-05-10) and `rook-cluster` (since 2026-10-04): long-standing, not P1 | unchanged baseline |
 | P3 | Host ports free on `top` | Checked (`talosctl netstat -l`): 69, 5060, 5038 (loopback), 6970, 8088, 9440, 10000–10099 all free; `top` has kubelet/etcd/apiserver/Talos, node-exporter 9100, MetalLB 7472/7946, VXLAN 4789 | Re-check on the day |
 | P4 | Namespace `telephony` absent | Absent | Re-check |
 | P5 | patchbay release `v0.1.0-rc.1` published | Not yet (see §1) | §1 done, CI green |
