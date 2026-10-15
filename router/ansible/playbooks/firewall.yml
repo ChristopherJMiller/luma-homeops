@@ -108,6 +108,16 @@
         - set firewall ipv4 name VOICE-OUT rule 40 destination group address-group 'PBX-v4'
         - set firewall ipv4 name VOICE-OUT rule 40 destination port '8088'
         - set firewall ipv4 name VOICE-OUT rule 40 protocol 'tcp'
+      # Cisco 9.x firmware may fetch config over HTTP on 6970 before trying
+      # TFTP; a silent drop would cost a timeout per file. patchbay's file
+      # server serves the same read-only files there as on TFTP 69, and its
+      # fetch log shows whether the phone uses it (patchbay design §6, §8.6;
+      # docs/superpowers/plans/2026-10-15-patchbay-deploy.md §3).
+        - set firewall ipv4 name VOICE-OUT rule 50 action 'accept'
+        - set firewall ipv4 name VOICE-OUT rule 50 description 'Cisco HTTP config (TFTP alternative)'
+        - set firewall ipv4 name VOICE-OUT rule 50 destination group address-group 'PBX-v4'
+        - set firewall ipv4 name VOICE-OUT rule 50 destination port '6970'
+        - set firewall ipv4 name VOICE-OUT rule 50 protocol 'tcp'
       # Forward hooks. There is no forward default-deny, so WAN→VOICE is
       # dropped explicitly.
         - set firewall ipv4 forward filter rule 110 action 'drop'
