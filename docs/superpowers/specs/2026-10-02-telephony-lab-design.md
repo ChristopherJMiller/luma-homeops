@@ -1,6 +1,13 @@
 # Telephony lab — design
 
-**Status:** draft for review · **Date:** 2026-10-02 · **Scope:** lab, internal calls only
+**Status:** stage 1 built (voice VLAN, live since 2026-10-02). **Stages 2–3
+are superseded by `2026-10-14-patchbay-design.md`**: the PBX is now its own
+project, `patchbay`, with a Go operator, CRDs and a Helm chart.
+
+Since the core switch carries VLAN 20 (2026-10-13), §4.1's "interim weakness"
+is resolved, and §7 step 3 is wrong: **leave Admin VLAN ID blank**, because the
+switch port is an untagged VLAN 20 access port. · **Date:** 2026-10-02 ·
+**Scope:** lab, internal calls only
 
 ## 1. Intent
 
