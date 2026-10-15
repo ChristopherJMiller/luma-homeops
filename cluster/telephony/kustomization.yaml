@@ -1,0 +1,13 @@
+---
+# What patchbay serves (design §4). Numbers are quoted strings: 1XX devices,
+# 3XX people, 600 echo, 911 the "cannot call emergency services"
+# announcement. A new phone: plug it into a switch port that is
+# `untagged: 20` (switch/teg-30284.yaml, swctl), find its MAC in
+# `patchbay status` (unknown phones) and add a Phone here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: telephony
+resources:
+  - desk.yaml
+  - chris-laptop.yaml
+  - chris.yaml

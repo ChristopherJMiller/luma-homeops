@@ -1,0 +1,31 @@
+---
+# The phones, softphones and people patchbay serves (cluster/telephony).
+# The chart, its CRDs and the namespace are `telephony-release`; until they
+# exist the first sync of this app fails and retries.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: telephony
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/telephony
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: telephony
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m
+    syncOptions:
+      - SkipDryRunOnMissingResource=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

@@ -31,10 +31,10 @@
     },
     {
       "matchManagers": ["argocd"],
-      "matchPackageNames": ["rook-ceph", "kube-prometheus-stack", "traefik", "cert-manager", "sealed-secrets", "postgres-operator"],
+      "matchPackageNames": ["rook-ceph", "kube-prometheus-stack", "traefik", "cert-manager", "sealed-secrets", "postgres-operator", "patchbay"],
       "matchUpdateTypes": ["minor", "major"],
       "automerge": false,
-      "description": "Operators with upgrade/delete authority over cluster state: patch automerges, minor/major wait for a human (renovate-triage skill). rook-ceph sat 6 patches behind a CVE fix because this manager was off."
+      "description": "Operators with upgrade/delete authority over cluster state: patch automerges, minor/major wait for a human (renovate-triage skill). rook-ceph sat 6 patches behind a CVE fix because this manager was off. patchbay (telephony-release): a chart bump recreates the PBX pod and drops calls in progress."
     },
     {
       "matchManagers": ["dockerfile"],

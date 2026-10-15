@@ -1,0 +1,59 @@
+---
+# patchbay (github.com/ChristopherJMiller/patchbay), the PBX for the voice
+# VLAN: the chart from its Helm repository. The phones, softphones and
+# people it serves are the `telephony` app (cluster/telephony). Plan:
+# docs/superpowers/plans/2026-10-15-patchbay-deploy.md; runbook:
+# docs/telephony.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: telephony-release
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://christopherjmiller.github.io/patchbay
+    chart: patchbay
+    # The chart pins its own image by digest (patchbay's release job), so
+    # this version is the whole deployment. A bump recreates the PBX pod
+    # (host ports) and drops calls: Renovate leaves minor/major to a human.
+    targetRevision: 0.1.0-rc.1
+    helm:
+      releaseName: patchbay
+      valuesObject:
+        pbx:
+          # hostNetwork on top. Phones are provisioned with this address,
+          # and the router's VOICE-OUT chain lets the voice VLAN reach only
+          # it (SIP 5060, RTP 10000-10099, TFTP 69, HTTP 8088 and 6970).
+          nodeName: top
+          address: 192.168.0.240
+        timezone: America/Los_Angeles
+        # The voice VLAN's gateway (router input filter rule 70).
+        ntpServer: 192.168.20.1
+        allowedNetworks:
+          - 192.168.20.0/24 # voice VLAN: the desk phones
+          - 192.168.0.0/24 # LAN: softphones
+        firmware:
+          persistence:
+            # galaxy has no default StorageClass. Cisco firmware lives only
+            # here (never in git); `patchbay firmware load` fills it.
+            storageClassName: rook-ceph-block-ssd
+            size: 1Gi
+        podMonitor:
+          enabled: true # carries release: prometheus
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: telephony
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    # Only this app creates and labels the namespace: the PBX pod uses the
+    # host network and NET_BIND_SERVICE.
+    managedNamespaceMetadata:
+      labels:
+        pod-security.kubernetes.io/enforce: privileged
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

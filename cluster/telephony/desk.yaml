@@ -1,0 +1,11 @@
+---
+# The CP-7945G on switch port 6 (voice VLAN, 192.168.20.100).
+apiVersion: patchbay.chrismiller.xyz/v1alpha1
+kind: Phone
+metadata:
+  name: desk
+spec:
+  model: cisco-7945
+  mac: D0C78915E8C8
+  number: "100"
+  label: Desk
