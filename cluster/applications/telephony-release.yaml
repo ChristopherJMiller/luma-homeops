@@ -17,7 +17,7 @@ spec:
     # The chart pins its own image by digest (patchbay's release job), so
     # this version is the whole deployment. A bump recreates the PBX pod
     # (host ports) and drops calls: Renovate leaves minor/major to a human.
-    targetRevision: 0.1.0-rc.1
+    targetRevision: 0.1.0-rc.2
     helm:
       releaseName: patchbay
       valuesObject:
