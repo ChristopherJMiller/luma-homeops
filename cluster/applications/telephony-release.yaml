@@ -17,7 +17,7 @@ spec:
     # The chart pins its own image by digest (patchbay's release job), so
     # this version is the whole deployment. A bump recreates the PBX pod
     # (host ports) and drops calls: Renovate leaves minor/major to a human.
-    targetRevision: 0.1.0-rc.2
+    targetRevision: 0.1.0-rc.3
     helm:
       releaseName: patchbay
       valuesObject:
@@ -39,6 +39,13 @@ spec:
             # here (never in git); `patchbay firmware load` fills it.
             storageClassName: rook-ceph-block-ssd
             size: 1Gi
+        # Every desk phone's screen goes dark a minute after the last key press
+        # (no scheduled on-window), and lights up when it rings. A Phone's
+        # own spec.display overrides this field by field.
+        phoneDefaults:
+          display:
+            idleTimeout: 1m
+            wakeOnCall: true
         podMonitor:
           enabled: true # carries release: prometheus
   destination:
