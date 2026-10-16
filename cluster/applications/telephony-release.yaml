@@ -17,7 +17,7 @@ spec:
     # The chart pins its own image by digest (patchbay's release job), so
     # this version is the whole deployment. A bump recreates the PBX pod
     # (host ports) and drops calls: Renovate leaves minor/major to a human.
-    targetRevision: 0.1.0-rc.3
+    targetRevision: 0.1.0
     helm:
       releaseName: patchbay
       valuesObject:
@@ -46,6 +46,10 @@ spec:
           display:
             idleTimeout: 1m
             wakeOnCall: true
+        # The spoken prompts (911, "not available"): Piper's ljspeech voice, public
+        # domain (patchbay docs/sounds.md). A change restarts the PBX pod.
+        sounds:
+          voice: ljspeech
         podMonitor:
           enabled: true # carries release: prometheus
   destination:
