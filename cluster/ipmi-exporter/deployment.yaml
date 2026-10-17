@@ -28,7 +28,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ipmi-exporter
-          image: quay.io/prometheuscommunity/ipmi-exporter:v1.10.1
+          image: quay.io/prometheuscommunity/ipmi-exporter:v1.10.1@sha256:0662cadaf268b6718f0f66429047cb23566ab3e4c175f25eaf588416a7b035e8
           args:
             - --config.file=/config/config.yml
           env:
