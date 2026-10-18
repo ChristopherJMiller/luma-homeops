@@ -41,6 +41,22 @@ entities:
       unique_id: 0xe07291fffecca13d_update_zigbee2mqtt
     about: Bedroom Button firmware
     entity_id: update.bedroom_button
+  # Front Door Button (SONOFF SNZB-01P), joined as 0xcc36bbfffe01c345.
+  - match:
+      platform: mqtt
+      unique_id: 0xcc36bbfffe01c345_action_zigbee2mqtt
+    about: Front Door Button action (single / double / long)
+    entity_id: sensor.front_door_button_action
+  - match:
+      platform: mqtt
+      unique_id: 0xcc36bbfffe01c345_battery_zigbee2mqtt
+    about: Front Door Button battery
+    entity_id: sensor.front_door_button_battery
+  - match:
+      platform: mqtt
+      unique_id: 0xcc36bbfffe01c345_update_zigbee2mqtt
+    about: Front Door Button firmware
+    entity_id: update.front_door_button
   # The SwitchBot IR remote for the portable AC, superseded by hisense_ac_plugin
   # (climate.portable_air_conditioner). Disabled, not just unused: its power key is a
   # toggle (on/off both flip it), and its frames carry a Celsius setpoint that switches

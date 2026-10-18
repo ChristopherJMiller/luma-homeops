@@ -1,6 +1,8 @@
 ---
-# Presence (spec §7.2). chris_home = the GPS zone OR the phone on a home access
-# point (fast and indoor-reliable), held 5 min on the way out. house_occupied
+# Presence (spec §7.2). chris_home_detected = the GPS zone OR the phone on a home
+# access point (fast and indoor-reliable), held 5 min on the way out. chris_home =
+# that, unless the Front Door Button set input_select.chris_presence_override to
+# Away/Home (at once; it lasts until the phone agrees or the next press). house_occupied
 # adds guest mode; every away behaviour keys off house_occupied, so guests keep
 # their lights. A home access point is one whose SSID contains the lower-case
 # fragment sealed in ha-secrets (Chris: two access points) -- never in git.
@@ -14,8 +16,9 @@ template:
         icon: mdi:wifi-lock
         state: !secret home_wifi_match
   - binary_sensor:
-      - name: Chris Home
-        unique_id: chris_home
+      # What the phone says: GPS zone or a home access point, held 5 min on the way out.
+      - name: Chris Home Detected
+        unique_id: chris_home_detected
         device_class: presence
         delay_off: "00:05:00"
         state: >-
@@ -23,6 +26,20 @@ template:
           {{ is_state('person.chris_m', 'home')
              or (match not in ['unknown', 'unavailable', '']
                  and match in states('sensor.pixel_9_pro_xl_wi_fi_connection') | lower) }}
+      # What every presence behaviour reads: the phone, unless the Front Door Button
+      # overrode it (input_select.chris_presence_override), which takes effect at once.
+      # Unavailable while the override is unknown, so a reload can't flash a
+      # departure or an arrival (see House Occupied below).
+      - name: Chris Home
+        unique_id: chris_home
+        device_class: presence
+        availability: >-
+          {% set o = states('input_select.chris_presence_override') %}
+          {{ o in ['Away', 'Home']
+             or (o == 'Auto' and states('binary_sensor.chris_home_detected') in ['on', 'off']) }}
+        state: >-
+          {% set o = states('input_select.chris_presence_override') %}
+          {{ o == 'Home' or (o != 'Away' and is_state('binary_sensor.chris_home_detected', 'on')) }}
       # Unavailable (never `off`) while chris_home is unknown: a template reload made
       # chris_home unavailable for an instant, which rendered `off`, and every
       # on -> off away automation ran on each deploy (2026-10-18).
@@ -39,10 +56,18 @@ input_boolean:
     name: Guest Mode
     icon: mdi:account-multiple
 
+input_select:
+  # The Front Door Button's say over chris_home; Auto = the phone. No `initial:`,
+  # so an override survives a restart.
+  chris_presence_override:
+    name: Chris Presence Override
+    icon: mdi:door
+    options: [Auto, Away, Home]
+
 automation:
   - id: presence_away_lights_off
     alias: Presence - Lights Off When Away
-    description: Every room off once nobody is home (chris_home already waits 5 min; guest mode keeps the house occupied).
+    description: Every room off once nobody is home (the phone already waits 5 min, a Front Door Button 'leaving' is immediate; guest mode keeps the house occupied).
     triggers:
       - trigger: state
         entity_id: binary_sensor.house_occupied
@@ -59,19 +84,92 @@ automation:
 
   - id: presence_arrival_evening_lights
     alias: Presence - Evening Arrival Lights
-    description: Chris arriving after sunset turns the living room on in Auto (adaptive lighting sets the warmth).
+    description: >-
+      Chris arriving after sunset, or by the Front Door Button at any hour (Chris,
+      2026-10-18), turns the living room on in Auto (adaptive lighting sets the warmth).
     triggers:
       - trigger: state
         entity_id: binary_sensor.chris_home
         from: "off"
         to: "on"
     conditions:
-      - condition: state
-        entity_id: sun.sun
-        state: below_horizon
+      - condition: or
+        conditions:
+          - condition: state
+            entity_id: sun.sun
+            state: below_horizon
+          - condition: state
+            entity_id: input_select.chris_presence_override
+            state: Home
     actions:
       - action: script.room_auto
         data:
           room: living_room
           turn_on: true
     mode: single
+
+  # The Front Door Button (SONOFF SNZB-01P, kitchen): for when the phone can't tell,
+  # e.g. across the street on home Wi-Fi.
+  - id: presence_front_door_button
+    alias: Presence - Front Door Button
+    description: >-
+      Single press toggles (home -> Away, away -> Home); a long press is always Away.
+      After a Home press the arrival rules see a button arrival; if the phone already
+      says home, the override then goes straight back to Auto.
+    triggers:
+      - trigger: state
+        entity_id: sensor.front_door_button_action
+        to: [single, long]
+    actions:
+      - variables:
+          go: "{{ 'Away' if trigger.to_state.state == 'long' or is_state('binary_sensor.chris_home', 'on') else 'Home' }}"
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.chris_presence_override
+        data:
+          option: "{{ go }}"
+      - if:
+          - condition: template
+            value_template: "{{ go == 'Home' }}"
+        then:
+          - delay: "00:00:05"
+          - if:
+              - condition: state
+                entity_id: binary_sensor.chris_home_detected
+                state: "on"
+            then:
+              - action: input_select.select_option
+                target:
+                  entity_id: input_select.chris_presence_override
+                data:
+                  option: Auto
+    mode: queued
+
+  - id: presence_front_door_override_ends
+    alias: Presence - Front Door Override Ends
+    description: >-
+      The override only covers what the phone misses: Away goes back to Auto once the
+      phone also says away, Home once the phone says home.
+    triggers:
+      - trigger: state
+        entity_id: binary_sensor.chris_home_detected
+        from: "on"
+        to: "off"
+        id: phone_away
+      - trigger: state
+        entity_id: binary_sensor.chris_home_detected
+        from: "off"
+        to: "on"
+        id: phone_home
+    conditions:
+      - condition: template
+        value_template: >-
+          {{ (trigger.id == 'phone_away' and is_state('input_select.chris_presence_override', 'Away'))
+             or (trigger.id == 'phone_home' and is_state('input_select.chris_presence_override', 'Home')) }}
+    actions:
+      - action: input_select.select_option
+        target:
+          entity_id: input_select.chris_presence_override
+        data:
+          option: Auto
+    mode: queued
