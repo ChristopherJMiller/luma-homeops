@@ -34,11 +34,12 @@ spec:
               version: v1.31.0
             # The portable AC, through the ConnectLife cloud (packages/climate.yaml).
             # Our fork of Connectlife-LLC/HomeAssistantPlugin, branch `galaxy`: the
-            # entity follows the unit's °C/°F switch live, and setpoints are sent as
-            # whole degrees. Only -galaxy.N tags (.renovaterc.json).
+            # entity follows the unit's °C/°F switch live, setpoints are sent as whole
+            # degrees, fan modes are HA's names (low/medium/high, not 低风...), and the
+            # switch's state updates don't raise. Only -galaxy.N tags (.renovaterc.json).
             - name: hisense_ac_plugin
               repo: ChristopherJMiller/HomeAssistantPlugin
-              version: v1.0.0-galaxy.1
+              version: v1.0.0-galaxy.2
             - name: mail_and_packages
               repo: moralmunky/Home-Assistant-Mail-And-Packages
               version: 0.5.16
