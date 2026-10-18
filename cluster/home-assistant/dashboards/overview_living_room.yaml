@@ -186,12 +186,23 @@ cards:
             {% set a = states('sensor.airnow_air_quality_index') | float(none) %}
             {% set limit = states('input_number.aqi_limit') | float(100) %}
             {{ 'disabled' if a is none else ('red' if a > limit else ('amber' if a > 50 else 'green')) }}
+        # Climate won't command the AC: unreachable (cloud) or switched to °C.
+        - type: conditional
+          conditions:
+            - entity: binary_sensor.ac_ready
+              state: "off"
+          chip:
+            type: template
+            entity: climate.portable_air_conditioner
+            content: AC not ready
+            icon: mdi:air-conditioner
+            icon_color: red
     - type: custom:mushroom-template-card
       entity: sensor.free_cooling_status
       primary: "Free cooling: {{ states('sensor.free_cooling_status') }}"
       secondary: >-
         Δ {{ states('input_number.free_cooling_delta') | float(0) | round(1) }}° · floor {{ states('input_number.free_cooling_floor') | float(0) | round(1) }}°
-        · AQI ≤ {{ states('input_number.aqi_limit') | int(0) }} · AC at {{ states('input_number.ac_cool_threshold') | float(0) | round(1) }}°
+        · AQI ≤ {{ states('input_number.aqi_limit') | int(0) }} · AC {{ states('input_number.ac_setpoint_offset') | int(0) }}° under ecobee
       icon: "{% set s = states('sensor.free_cooling_status') %}{{ {'running': 'mdi:fan', 'smoke': 'mdi:smoke', 'insert out': 'mdi:window-closed-variant', 'paused': 'mdi:pause-circle-outline'}.get(s, 'mdi:fan-off') }}"
       icon_color: "{{ 'amber' if is_state('sensor.free_cooling_status', 'running') else ('red' if is_state('sensor.free_cooling_status', 'smoke') else 'disabled') }}"
     - type: custom:mushroom-climate-card
@@ -199,8 +210,8 @@ cards:
       show_temperature_control: true
       collapsible_controls: true
     - type: custom:mushroom-climate-card
-      entity: climate.air_conditioner
-      name: A/C (IR · state assumed)
+      entity: climate.portable_air_conditioner
+      name: A/C
       icon: mdi:air-conditioner
       collapsible_controls: true
     - type: custom:mushroom-entity-card

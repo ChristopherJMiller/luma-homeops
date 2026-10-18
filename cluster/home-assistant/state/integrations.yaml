@@ -38,6 +38,9 @@ integrations:
   - domain: hacs
     title: ''
     manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> hacs'
+  - domain: hisense_ac_plugin
+    title: Hisense AC
+    manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> hisense_ac_plugin (ConnectLife account sign-in)'
   - domain: hue
     title: Hue Bridge 001788465e9e
     manual: 're-add it in HA: Settings -> Devices & services -> Add integration -> hue'

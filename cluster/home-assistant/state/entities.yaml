@@ -25,8 +25,27 @@ entities:
       unique_id: 0x00124b0030dd5487_update_zigbee2mqtt
     about: Bookshelf Lamp plug firmware
     entity_id: update.bookshelf_lamp
+  # The SwitchBot IR remote for the portable AC, superseded by hisense_ac_plugin
+  # (climate.portable_air_conditioner). Disabled, not just unused: its power key is a
+  # toggle (on/off both flip it), and its frames carry a Celsius setpoint that switches
+  # the unit to °C, under the Hisense entity's °F label (2026-10-18).
+  - match:
+      platform: switchbot_cloud
+      unique_id: 01-202507281617-44845622
+      domain: climate
+    about: Air Conditioner (SwitchBot IR remote)
+    disabled: true
+  - match:
+      platform: switchbot_cloud
+      unique_id: 01-202507281617-44845622
+      domain: switch
+    about: Air Conditioner power (SwitchBot IR remote)
+    disabled: true
 # Registry entries no integration provides any more (restored-only), removed 2026-10-03.
 remove:
+  - about: input_number.ac_cool_threshold (replaced by the ecobee setpoint + ac_setpoint_offset, 2026-10-18)
+    platform: input_number
+    unique_id: ac_cool_threshold
   - about: automation.wake_up_early (automation no longer in config)
     platform: automation
     unique_id: '1743475639161'

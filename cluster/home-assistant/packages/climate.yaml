@@ -1,13 +1,21 @@
 ---
 # Climate (spec §7.6), all behind input_boolean.climate_auto (Climate Auto on
-# the dashboard). The slider insert carries the vent fan and AC #1, so the
-# slider being open means the insert is in. Tunables are input_numbers whose
+# the dashboard). The slider insert carries the vent fan and the portable AC, so
+# the slider being open means the insert is in. Tunables are input_numbers whose
 # `initial:` makes git the source of truth (edit them here, not in the UI).
+#
+# The living room ecobee is wired to nothing: it is the dial. Its mode (cool /
+# heat_cool) and cool setpoint say what the room should be, and its sensor
+# (sensor.living_room_temperature) says what the room is. The AC
+# (climate.portable_air_conditioner, Hisense via the ConnectLife cloud) is aimed
+# below that setpoint, because its own sensor sits by the insert and would call
+# the room done too early; HA stops it on the ecobee's reading instead.
 #
 # Safety rules (plan-4 review): a decision sensor is `unavailable` while any of
 # its inputs is unknown, so missing data never sends a command; the actuator
-# automations act on the first known value after a reload (so they resync),
-# and AC #1 is only ever turned off from `cool` (a manual fan mode is left alone).
+# automations act on the first known value after a reload (so they resync); the
+# AC is only commanded while binary_sensor.ac_ready (reachable, reading °F), and
+# climate only stops an AC run it started (any cool run when the house empties).
 #
 # GitOps source of truth (see bedroom.yaml header for the mount mechanism).
 
@@ -19,6 +27,10 @@ input_boolean:
   floor_fan_paused_for_print:
     name: Floor Fan Paused for Print
     icon: mdi:fan-off
+  # Set when climate started the AC, so a run started by hand (app, remote) is left alone.
+  ac_started_by_climate:
+    name: AC Started by Climate
+    icon: mdi:air-conditioner
 
 input_number:
   free_cooling_delta:
@@ -44,13 +56,14 @@ input_number:
     step: 5
     initial: 100
     mode: box
-  ac_cool_threshold:
-    name: AC Cool Threshold
-    min: 70
-    max: 90
-    step: 0.5
+  # How far below the ecobee's cool setpoint the AC is aimed (floored at its min_temp).
+  ac_setpoint_offset:
+    name: AC Setpoint Offset
+    min: 0
+    max: 10
+    step: 1
     unit_of_measurement: °F
-    initial: 78
+    initial: 4
     mode: box
 
 template:
@@ -98,27 +111,61 @@ template:
              and indoor >= states('input_number.free_cooling_floor') | float(70)
              and (aqi is none or aqi <= states('input_number.aqi_limit') | float(100)) }}
 
-      # Hysteresis on both edges: the threshold (on at T, off below T - 2) and the
-      # "outside air can't do it" margin (+1°F to start, -1°F to stop); the AC
-      # automation adds 5 min either way, so an IR compressor isn't short-cycled.
+      # The ecobee asks for cooling (cool / heat_cool, setpoint S). Hysteresis on
+      # both edges: the room (start at S + 1, stop at S - 1, so it averages S) and
+      # the "outside air can't do it" margin (+1°F to start, -1°F to stop); the AC
+      # automation adds 5 min either way, so the compressor isn't short-cycled.
       - name: AC Cool Wanted
         unique_id: ac_cool_wanted
         icon: mdi:snowflake
         availability: >-
           {{ states('binary_sensor.window_insert_installed') in ['on', 'off']
              and states('binary_sensor.house_occupied') in ['on', 'off']
+             and states('climate.living_room') not in ['unavailable', 'unknown']
              and states('sensor.living_room_temperature') | is_number
              and state_attr('weather.forecast_home', 'temperature') | is_number }}
         state: >-
+          {% set mode = states('climate.living_room') %}
+          {% set target = state_attr('climate.living_room', 'target_temp_high' if mode == 'heat_cool' else 'temperature') | float(none) %}
           {% set indoor = states('sensor.living_room_temperature') | float %}
           {% set outdoor = state_attr('weather.forecast_home', 'temperature') | float %}
-          {% set threshold = states('input_number.ac_cool_threshold') | float(78) %}
           {% set delta = states('input_number.free_cooling_delta') | float(2) %}
           {% set on = this.state == 'on' %}
-          {{ is_state('binary_sensor.window_insert_installed', 'on')
+          {{ mode in ['cool', 'heat_cool'] and target is not none
+             and is_state('binary_sensor.window_insert_installed', 'on')
              and is_state('binary_sensor.house_occupied', 'on')
-             and indoor >= (threshold - 2 if on else threshold)
+             and ((indoor > target - 1) if on else (indoor >= target + 1))
              and outdoor > indoor - delta + (-1 if on else 1) }}
+
+      # The Hisense entity fixes its unit (°F) when it loads, but the unit itself can
+      # be switched to °C (an IR frame did it, 2026-10-18): then every number it
+      # reports and accepts is Celsius under a °F label. Its reading must sit within
+      # 10°F of the ecobee's before the AC is commanded (no reading: allowed).
+      - name: AC Ready
+        unique_id: ac_ready
+        icon: mdi:air-conditioner
+        availability: "{{ states('sensor.living_room_temperature') | is_number }}"
+        state: >-
+          {% set ac = state_attr('climate.portable_air_conditioner', 'current_temperature') | float(none) %}
+          {{ states('climate.portable_air_conditioner') not in ['unavailable', 'unknown']
+             and (ac is none or (ac - states('sensor.living_room_temperature') | float) | abs <= 10) }}
+
+  - sensor:
+      # What the AC is set to while climate runs it: the ecobee's cool setpoint less
+      # the offset, floored at the AC's minimum. Unavailable unless the ecobee cools.
+      - name: AC Drive Setpoint
+        unique_id: ac_drive_setpoint
+        icon: mdi:thermometer-chevron-down
+        unit_of_measurement: °F
+        availability: >-
+          {% set mode = states('climate.living_room') %}
+          {{ mode in ['cool', 'heat_cool']
+             and state_attr('climate.living_room', 'target_temp_high' if mode == 'heat_cool' else 'temperature') | is_number }}
+        state: >-
+          {% set mode = states('climate.living_room') %}
+          {% set target = state_attr('climate.living_room', 'target_temp_high' if mode == 'heat_cool' else 'temperature') | float %}
+          {% set floor = state_attr('climate.portable_air_conditioner', 'min_temp') | float(61) %}
+          {{ [target - states('input_number.ac_setpoint_offset') | float(4), floor] | max | round(0) | int }}
 
   - sensor:
       - name: Free Cooling Status
@@ -240,10 +287,12 @@ automation:
   - id: climate_ac_follows_cool_wanted
     alias: Climate - AC Follows Cooling Need
     description: >-
-      AC #1 (in the insert, IR through SwitchBot: one-way, so HA's state is
-      assumed) cools while the insert is in, the house is occupied, the room is
-      hot and outside air can't do it. Off when that stops or the house empties,
-      but only from cool: a fan mode set by hand is left alone.
+      The portable AC (Hisense, ConnectLife cloud) cools while the ecobee asks for
+      cooling, the insert is in, the house is occupied, the room is above the
+      ecobee's setpoint and outside air can't do it. It runs at the drive setpoint
+      (ecobee setpoint less the offset) and follows ecobee changes; it is stopped on
+      the ecobee's reading. Only a run climate started is stopped, except that any
+      cool run stops when the house empties. Nothing is sent unless the AC is ready.
     triggers:
       - trigger: state
         entity_id: binary_sensor.ac_cool_wanted
@@ -251,6 +300,8 @@ automation:
         to: ["on", "off"]
         for: "00:05:00"
         id: sync
+      # ... immediate resync on the first known value after a reload, when Climate
+      # Auto returns, and when the AC is reachable (and reading °F) again
       - trigger: state
         entity_id: binary_sensor.ac_cool_wanted
         from: [unavailable, unknown]
@@ -262,36 +313,84 @@ automation:
         to: "on"
         id: sync
       - trigger: state
+        entity_id: binary_sensor.ac_ready
+        to: "on"
+        id: sync
+      - trigger: state
         entity_id: binary_sensor.house_occupied
         from: "on"
         to: "off"
         id: away
+      # the ecobee setpoint (or the offset) moved while the AC runs
+      - trigger: state
+        entity_id: sensor.ac_drive_setpoint
+        not_from: [unavailable, unknown]
+        not_to: [unavailable, unknown]
+        id: setpoint
     conditions:
       - condition: state
         entity_id: input_boolean.climate_auto
         state: "on"
-      - condition: template
-        value_template: "{{ states('climate.air_conditioner') not in ['unavailable', 'unknown'] }}"
+      - condition: state
+        entity_id: binary_sensor.ac_ready
+        state: "on"
     actions:
       - choose:
           - conditions:
               - condition: template
-                value_template: "{{ trigger.id == 'sync' and is_state('binary_sensor.ac_cool_wanted', 'on') }}"
+                value_template: >-
+                  {{ trigger.id == 'sync' and is_state('binary_sensor.ac_cool_wanted', 'on')
+                     and states('sensor.ac_drive_setpoint') | is_number }}
             sequence:
-              - action: climate.set_hvac_mode
+              # Mode first, then the setpoint straight after: the integration only
+              # accepts a setpoint in cool, and reports the new mode at once.
+              - if:
+                  - condition: template
+                    value_template: "{{ not is_state('climate.portable_air_conditioner', 'cool') }}"
+                then:
+                  - action: climate.set_hvac_mode
+                    target:
+                      entity_id: climate.portable_air_conditioner
+                    data:
+                      hvac_mode: cool
+              - action: climate.set_temperature
                 target:
-                  entity_id: climate.air_conditioner
+                  entity_id: climate.portable_air_conditioner
                 data:
-                  hvac_mode: cool
+                  temperature: "{{ states('sensor.ac_drive_setpoint') | int }}"
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.ac_started_by_climate
           - conditions:
               - condition: template
                 value_template: >-
-                  {{ (trigger.id == 'away' or is_state('binary_sensor.ac_cool_wanted', 'off'))
-                     and is_state('climate.air_conditioner', 'cool') }}
+                  {{ trigger.id == 'setpoint' and is_state('input_boolean.ac_started_by_climate', 'on')
+                     and is_state('climate.portable_air_conditioner', 'cool') }}
             sequence:
-              - action: climate.set_hvac_mode
+              - action: climate.set_temperature
                 target:
-                  entity_id: climate.air_conditioner
+                  entity_id: climate.portable_air_conditioner
                 data:
-                  hvac_mode: "off"
+                  temperature: "{{ states('sensor.ac_drive_setpoint') | int }}"
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ (trigger.id == 'away' and is_state('climate.portable_air_conditioner', 'cool'))
+                     or (trigger.id == 'sync' and is_state('binary_sensor.ac_cool_wanted', 'off')
+                         and is_state('input_boolean.ac_started_by_climate', 'on')) }}
+            sequence:
+              # Only from cool: if it was switched to a fan mode by hand, that stays.
+              - if:
+                  - condition: state
+                    entity_id: climate.portable_air_conditioner
+                    state: cool
+                then:
+                  - action: climate.set_hvac_mode
+                    target:
+                      entity_id: climate.portable_air_conditioner
+                    data:
+                      hvac_mode: "off"
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.ac_started_by_climate
     mode: queued
