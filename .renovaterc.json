@@ -86,6 +86,11 @@
       "description": "HA custom integrations/cards, in their own PR (in group:allNonMajor their automerge:false would block the whole bundle). A card bump must also move its ?v= resource in cluster/home-assistant/state/dashboards.yaml (hactl lint fails until it does); then hactl deploy + hactl apply."
     },
     {
+      "matchPackageNames": ["ChristopherJMiller/HomeAssistantPlugin"],
+      "allowedVersions": "/-galaxy\\.\\d+$/",
+      "description": "Our fork of the Hisense AC integration (branch galaxy: live °C/°F unit, whole-degree setpoints). Only our -galaxy.N tags: the fork also carries upstream's tags, which are unpatched (and semver-newer than v1.0.0-galaxy.N). A new upstream release means rebasing the galaxy branch onto it and tagging vX.Y.Z-galaxy.1."
+    },
+    {
       "matchPackageNames": ["homeassistant/home-assistant"],
       "automerge": false,
       "groupName": "home-assistant core",

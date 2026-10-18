@@ -32,10 +32,13 @@ spec:
             - name: adaptive_lighting
               repo: basnijholt/adaptive-lighting
               version: v1.31.0
-            # The portable AC, through the ConnectLife cloud (packages/climate.yaml)
+            # The portable AC, through the ConnectLife cloud (packages/climate.yaml).
+            # Our fork of Connectlife-LLC/HomeAssistantPlugin, branch `galaxy`: the
+            # entity follows the unit's °C/°F switch live, and setpoints are sent as
+            # whole degrees. Only -galaxy.N tags (.renovaterc.json).
             - name: hisense_ac_plugin
-              repo: Connectlife-LLC/HomeAssistantPlugin
-              version: v1.0.0
+              repo: ChristopherJMiller/HomeAssistantPlugin
+              version: v1.0.0-galaxy.1
             - name: mail_and_packages
               repo: moralmunky/Home-Assistant-Mail-And-Packages
               version: 0.5.16

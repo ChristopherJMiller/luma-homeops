@@ -137,10 +137,10 @@ template:
              and ((indoor > target - 1) if on else (indoor >= target + 1))
              and outdoor > indoor - delta + (-1 if on else 1) }}
 
-      # The Hisense entity fixes its unit (°F) when it loads, but the unit itself can
-      # be switched to °C (an IR frame did it, 2026-10-18): then every number it
-      # reports and accepts is Celsius under a °F label. Its reading must sit within
-      # 10°F of the ecobee's before the AC is commanded (no reading: allowed).
+      # Sanity gate. The unit can be switched to °C at any time (an IR frame did it,
+      # 2026-10-18); stock hisense_ac_plugin then read Celsius under a °F label. Our
+      # fork follows the switch live, so HA converts; if a reading still disagrees
+      # with the ecobee by more than 10°F, nothing is sent (no reading: allowed).
       - name: AC Ready
         unique_id: ac_ready
         icon: mdi:air-conditioner
