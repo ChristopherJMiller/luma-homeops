@@ -342,8 +342,10 @@ automation:
                   {{ trigger.id == 'sync' and is_state('binary_sensor.ac_cool_wanted', 'on')
                      and states('sensor.ac_drive_setpoint') | is_number }}
             sequence:
-              # Mode first, then the setpoint straight after: the integration only
-              # accepts a setpoint in cool, and reports the new mode at once.
+              # A setpoint is only accepted in cool, and from off the unit powers up
+              # at its own setpoint (26 °C), dropping one sent meanwhile (tested
+              # 2026-10-18). So: wait until the unit itself reports cool (the
+              # integration's 3 s cache says cool at once), then set and confirm.
               - if:
                   - condition: template
                     value_template: "{{ not is_state('climate.portable_air_conditioner', 'cool') }}"
@@ -353,11 +355,26 @@ automation:
                       entity_id: climate.portable_air_conditioner
                     data:
                       hvac_mode: cool
-              - action: climate.set_temperature
-                target:
-                  entity_id: climate.portable_air_conditioner
-                data:
-                  temperature: "{{ states('sensor.ac_drive_setpoint') | int }}"
+                  - delay: "00:00:05"
+                  - wait_template: "{{ is_state('climate.portable_air_conditioner', 'cool') }}"
+                    timeout: "00:01:00"
+                    continue_on_timeout: false
+                  - delay: "00:00:05"
+              # ±1 °F: a unit switched to °C moves in 1.8 °F steps.
+              - repeat:
+                  sequence:
+                    - action: climate.set_temperature
+                      target:
+                        entity_id: climate.portable_air_conditioner
+                      data:
+                        temperature: "{{ states('sensor.ac_drive_setpoint') | int }}"
+                    - wait_template: >-
+                        {{ (state_attr('climate.portable_air_conditioner', 'temperature') | float(0)
+                            - states('sensor.ac_drive_setpoint') | float(0)) | abs <= 1 }}
+                      timeout: "00:00:30"
+                  until:
+                    - condition: template
+                      value_template: "{{ wait.completed or repeat.index >= 3 }}"
               - action: input_boolean.turn_on
                 target:
                   entity_id: input_boolean.ac_started_by_climate
