@@ -30,6 +30,12 @@ devices:
   - match:
       identifiers:
         - mqtt
+        - zigbee2mqtt_0xe07291fffecca13d
+    about: Bedroom Button · SONOFF SNZB-01P wireless button (paired 2026-10-18)
+    area: bedroom
+  - match:
+      identifiers:
+        - mqtt
         - zigbee2mqtt_0x0022a3000034cd39
     about: Bedroom Light Switch · Leviton Decora smart Zigbee 3.0 certified 15A switch (DG15S-1BW)
     area: bedroom
