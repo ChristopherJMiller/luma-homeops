@@ -23,14 +23,24 @@ input_boolean:
   climate_auto:
     name: Climate Auto
     icon: mdi:thermostat-auto
-  # Set when climate paused the floor fan for a print, so only that pause is undone.
-  floor_fan_paused_for_print:
-    name: Floor Fan Paused for Print
-    icon: mdi:fan-off
+  # What climate last set the floor fan to. A change that doesn't match was made by
+  # hand (the plug is on z2m, whose state reports carry fresh contexts, so a context
+  # check can't tell) and starts timer.floor_fan_manual_hold.
+  floor_fan_commanded:
+    name: Floor Fan Commanded
+    icon: mdi:fan-auto
   # Set when climate started the AC, so a run started by hand (app, remote) is left alone.
   ac_started_by_climate:
     name: AC Started by Climate
     icon: mdi:air-conditioner
+
+timer:
+  # A floor fan switched by hand is left alone this long (Chris, 2026-10-18).
+  floor_fan_manual_hold:
+    name: Floor Fan Manual Hold
+    icon: mdi:hand-back-right
+    duration: "02:00:00"
+    restore: true
 
 input_number:
   free_cooling_delta:
@@ -91,7 +101,46 @@ template:
           {% elif this.state in ['on', 'off'] %}{{ this.state == 'on' }}
           {% else %}{{ is_state('binary_sensor.slider_door_contact', 'on') }}{% endif %}
 
+  # The ecobee's fan (wired to nothing) is the floor fan's schedule, smoothed: on as
+  # soon as it runs, off once it has been off 15 min, so min-runtime cycling (at
+  # 45 min/h: on ~6-9 min every ~15 min) doesn't click the fan. Change it from the
+  # ecobee: fan mode `on` = always, min runtime 0 = only with heating/cooling calls.
+  # Trigger-based, so it keeps its state across reloads.
+  - triggers:
+      - trigger: template
+        value_template: "{{ state_attr('climate.living_room', 'fan') == 'on' }}"
+        id: "on"
+      - trigger: template
+        value_template: "{{ state_attr('climate.living_room', 'fan') == 'off' }}"
+        for: "00:15:00"
+        id: "off"
+      - trigger: homeassistant
+        event: start
+      - trigger: event
+        event_type: event_template_reloaded
+    binary_sensor:
+      - name: Ecobee Fan Circulating
+        unique_id: ecobee_fan_circulating
+        icon: mdi:fan-clock
+        # First value ever (no state yet): circulating if the ecobee asks for any fan time.
+        state: >-
+          {% if trigger.id in ['on', 'off'] %}{{ trigger.id == 'on' }}
+          {% elif this.state in ['on', 'off'] %}{{ this.state == 'on' }}
+          {% else %}{{ state_attr('climate.living_room', 'fan') == 'on'
+                       or state_attr('climate.living_room', 'fan_mode') == 'on'
+                       or state_attr('climate.living_room', 'fan_min_on_time') | int(0) > 0 }}{% endif %}
+
   - binary_sensor:
+      # The floor fan: the ecobee circulating, but never while printing (it sits by
+      # the printer and warps prints). OctoPrint unknown counts as not printing.
+      - name: Floor Fan Wanted
+        unique_id: floor_fan_wanted
+        icon: mdi:fan
+        availability: "{{ states('binary_sensor.ecobee_fan_circulating') in ['on', 'off'] }}"
+        state: >-
+          {{ is_state('binary_sensor.ecobee_fan_circulating', 'on')
+             and not is_state('binary_sensor.octoprint_printing', 'on') }}
+
       # Instant (no delay_on/off): a delayed template restarts as `off` after every reload,
       # which made the vent fan automation switch the fan off on each deploy. The
       # hysteresis delays live on the automation triggers instead (`for:`).
@@ -223,65 +272,76 @@ automation:
           entity_id: switch.vent_fan_switch
     mode: queued
 
-  - id: climate_floor_fan_print_pause
-    alias: Climate - Floor Fan Off While Printing
+  # The floor fan's only owner (the print pause used to be a second one).
+  - id: climate_floor_fan_follows_ecobee
+    alias: Climate - Floor Fan Follows the Ecobee Fan
     description: >-
-      The oscillating fan next to the printer warps prints: paused while printing
-      and resumed afterwards (even if OctoPrint was unavailable when the print ended).
-      Only a pause climate made is undone, so a manual off sticks.
+      The floor fan runs while the ecobee's fan circulates (binary_sensor.floor_fan_wanted)
+      and is off while printing. A flip by hand is left alone for 2 hours
+      (timer.floor_fan_manual_hold), except that a print starting still turns it off.
     triggers:
       - trigger: state
-        entity_id: binary_sensor.octoprint_printing
-        to: "on"
-        id: printing
+        entity_id: binary_sensor.floor_fan_wanted
+        from: ["on", "off"]
+        to: ["on", "off"]
+      # resync on the first known value after a reload, when Climate Auto returns,
+      # and when a hand flip's hold runs out
       - trigger: state
-        entity_id: binary_sensor.octoprint_printing
-        to: "off"
-        id: done
+        entity_id: binary_sensor.floor_fan_wanted
+        from: [unavailable, unknown]
+        to: ["on", "off"]
       - trigger: state
         entity_id: input_boolean.climate_auto
         from: "off"
         to: "on"
-        id: done
+      - trigger: state
+        entity_id: timer.floor_fan_manual_hold
+        from: active
+        to: idle
     conditions:
       - condition: state
         entity_id: input_boolean.climate_auto
         state: "on"
       - condition: template
-        value_template: "{{ states('switch.floor_fan') not in ['unavailable', 'unknown'] }}"
+        value_template: >-
+          {{ states('binary_sensor.floor_fan_wanted') in ['on', 'off']
+             and states('switch.floor_fan') not in ['unavailable', 'unknown'] }}
+      - condition: template
+        value_template: >-
+          {{ not is_state('timer.floor_fan_manual_hold', 'active')
+             or is_state('binary_sensor.octoprint_printing', 'on') }}
     actions:
-      - choose:
-          - conditions:
-              - condition: trigger
-                id: printing
-              - condition: state
-                entity_id: switch.floor_fan
-                state: "on"
-            sequence:
-              - action: switch.turn_off
-                target:
-                  entity_id: switch.floor_fan
-              - action: input_boolean.turn_on
-                target:
-                  entity_id: input_boolean.floor_fan_paused_for_print
-          - conditions:
-              - condition: trigger
-                id: done
-              - condition: state
-                entity_id: input_boolean.floor_fan_paused_for_print
-                state: "on"
-              - condition: not
-                conditions:
-                  - condition: state
-                    entity_id: binary_sensor.octoprint_printing
-                    state: "on"
-            sequence:
-              - action: switch.turn_on
-                target:
-                  entity_id: switch.floor_fan
-              - action: input_boolean.turn_off
-                target:
-                  entity_id: input_boolean.floor_fan_paused_for_print
+      - variables:
+          want: "{{ states('binary_sensor.floor_fan_wanted') }}"
+      # Recorded first, so the plug reporting back isn't taken for a hand flip.
+      - action: "input_boolean.turn_{{ want }}"
+        target:
+          entity_id: input_boolean.floor_fan_commanded
+      - action: "switch.turn_{{ want }}"
+        target:
+          entity_id: switch.floor_fan
+    mode: queued
+
+  - id: climate_floor_fan_manual_hold
+    alias: Climate - Floor Fan Hand Flip Holds 2 Hours
+    description: >-
+      A floor fan change that isn't what climate last commanded was made by hand
+      (dashboard, plug button): climate leaves the fan alone for 2 hours.
+    triggers:
+      - trigger: state
+        entity_id: switch.floor_fan
+        from: ["on", "off"]
+        to: ["on", "off"]
+    conditions:
+      - condition: template
+        value_template: "{{ trigger.to_state.state != states('input_boolean.floor_fan_commanded') }}"
+    actions:
+      - action: "input_boolean.turn_{{ trigger.to_state.state }}"
+        target:
+          entity_id: input_boolean.floor_fan_commanded
+      - action: timer.start
+        target:
+          entity_id: timer.floor_fan_manual_hold
     mode: queued
 
   - id: climate_ac_follows_cool_wanted

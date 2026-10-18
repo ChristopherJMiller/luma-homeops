@@ -224,8 +224,10 @@ cards:
       entity: switch.floor_fan
       primary: Floor Fan
       secondary: >-
-        {{ 'Paused for print' if is_state('input_boolean.floor_fan_paused_for_print', 'on') and is_state('switch.floor_fan', 'off')
-           else ('On' if is_state('switch.floor_fan', 'on') else 'Off') }}
+        {% set onoff = 'On' if is_state('switch.floor_fan', 'on') else 'Off' %}
+        {% if is_state('binary_sensor.octoprint_printing', 'on') and is_state('switch.floor_fan', 'off') %}Paused for print
+        {% elif is_state('timer.floor_fan_manual_hold', 'active') %}{{ onoff }} · by hand until {{ as_timestamp(state_attr('timer.floor_fan_manual_hold', 'finishes_at')) | timestamp_custom('%-I:%M %p') }}
+        {% else %}{{ onoff }} · ecobee schedule{% endif %}
       icon: mdi:fan
       icon_color: "{{ 'blue' if is_state('switch.floor_fan', 'on') else 'disabled' }}"
       tap_action:

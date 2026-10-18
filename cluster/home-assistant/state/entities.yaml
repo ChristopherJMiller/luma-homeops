@@ -59,6 +59,15 @@ entities:
     disabled: true
 # Registry entries no integration provides any more (restored-only), removed 2026-10-03.
 remove:
+  - about: automation.night_sleep_mode_on (the 22:30 sleep-mode switch-on, dropped 2026-10-18)
+    platform: automation
+    unique_id: night_sleep_mode_on
+  - about: automation.climate_floor_fan_off_while_printing (folded into climate_floor_fan_follows_ecobee, 2026-10-18)
+    platform: automation
+    unique_id: climate_floor_fan_print_pause
+  - about: input_boolean.floor_fan_paused_for_print (replaced by floor_fan_commanded + the manual-hold timer, 2026-10-18)
+    platform: input_boolean
+    unique_id: floor_fan_paused_for_print
   - about: input_number.ac_cool_threshold (replaced by the ecobee setpoint + ac_setpoint_offset, 2026-10-18)
     platform: input_number
     unique_id: ac_cool_threshold

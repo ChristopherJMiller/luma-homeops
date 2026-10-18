@@ -165,11 +165,15 @@ automation:
     mode: queued
 
   # Adaptive lighting resets EVERY light when sleep mode or its main switch changes
-  # (22:30, 10:00, the Sleep/Adaptive chips) and on restart; a room holding a scene
-  # gets it back (Chris, 2026-10-03: scenes hold until Auto).
+  # (the Sleep/Adaptive chips, the 10:00 fallback, Start Your Day) and on restart.
+  # Sleep coming on wins: held rooms let go and dim with the rest, never a dip and
+  # snap-back (Chris, 2026-10-18). Any other reset: a room holding a scene gets it
+  # back (Chris, 2026-10-03: scenes hold until Auto).
   - id: lighting_hold_scenes_after_adaptive_reset
     alias: Lighting - Re-apply Held Scenes After Adaptive Resets
-    description: After adaptive lighting's global resets, every room that holds a scene and is on gets its scene back.
+    description: >-
+      After adaptive lighting's global resets, every room that holds a scene and is on
+      gets its scene back; when sleep mode comes on, held rooms return to Auto instead.
     triggers:
       - trigger: state
         entity_id:
@@ -190,8 +194,22 @@ automation:
                     {{ states('input_select.' ~ repeat.item ~ '_light_mode') not in ['Auto', 'unknown', 'unavailable']
                        and is_state('light.' ~ repeat.item ~ '_all', 'on') }}
               then:
-                - action: script.room_scene
-                  data:
-                    room: "{{ repeat.item }}"
-                    scene: "{{ states('input_select.' ~ repeat.item ~ '_light_mode') }}"
+                - if:
+                    - condition: template
+                      value_template: >-
+                        {{ trigger.platform == 'state'
+                           and trigger.entity_id == 'switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian'
+                           and trigger.to_state.state == 'on' }}
+                  then:
+                    # adaptive lighting already cleared manual control and is dimming them
+                    - action: input_select.select_option
+                      target:
+                        entity_id: "input_select.{{ repeat.item }}_light_mode"
+                      data:
+                        option: Auto
+                  else:
+                    - action: script.room_scene
+                      data:
+                        room: "{{ repeat.item }}"
+                        scene: "{{ states('input_select.' ~ repeat.item ~ '_light_mode') }}"
     mode: restart
