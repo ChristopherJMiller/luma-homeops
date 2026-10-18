@@ -23,9 +23,14 @@ template:
           {{ is_state('person.chris_m', 'home')
              or (match not in ['unknown', 'unavailable', '']
                  and match in states('sensor.pixel_9_pro_xl_wi_fi_connection') | lower) }}
+      # Unavailable (never `off`) while chris_home is unknown: a template reload made
+      # chris_home unavailable for an instant, which rendered `off`, and every
+      # on -> off away automation ran on each deploy (2026-10-18).
       - name: House Occupied
         unique_id: house_occupied
         device_class: occupancy
+        availability: >-
+          {{ states('binary_sensor.chris_home') in ['on', 'off'] or is_state('input_boolean.guest_mode', 'on') }}
         state: >-
           {{ is_state('binary_sensor.chris_home', 'on') or is_state('input_boolean.guest_mode', 'on') }}
 
