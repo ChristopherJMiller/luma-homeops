@@ -205,7 +205,7 @@ by the reviews are marked *(rev)*.
 | D37 | The second harness for local models is the **OpenHands agent-server**, with Goose as fallback, settled by a bake-off. | My call |
 | D38 | *(rev)* Each session's tool set is fixed when it is created. Adding a workspace to a conversation means forking it with a summary. | My call |
 | D39 | *(rev)* The PWA authenticates through a **backend-for-frontend in Core**: Core is a confidential Dex client and sets an HttpOnly session cookie. No tokens in the browser. | My call |
-| D40 | Claude agents use the SDK's WebSearch/WebFetch, with per-turn caps. SearXNG is added if search fees pass $15/mo, or with local models. | My call |
+| D40 | Claude agents use the SDK's WebSearch/WebFetch, with per-turn caps. If search fees pass $15/mo, or local models need search, evaluate **SearXNG** (self-hosted) and **Cloudflare's search/browser-rendering offerings** (Chris, already on Cloudflare). Pick by cost per query, result quality and data handling, and expose the winner as an MCP server. | My call + Chris |
 
 ## 4. Architecture
 
@@ -672,7 +672,7 @@ house:   {ha_user_id: luma-house, household: true}   # voice satellites / unknow
 | **Fastmail** (catalog) | 5 | Per-user OAuth in Core's vault. The consent tier is **read + draft**; sending requires approval. | Personal opt-in; the mail agent has **no web tools** |
 | homelab-read (`kubernetes-mcp-server` read-only, `mcp-for-argocd` read-only, `mcp-grafana --disable-write`) | on demand | Each in read-only mode, least-privilege SA, no Secrets, no exec | Admin |
 | homelab-act (ours) | on demand | Its own token plus an approval token. About 6 curated tools mirroring CLAUDE.md S2, a ValidatingAdmissionPolicy-limited SA, no generic apply or patch | Admin |
-| SearXNG | 6 or when search fees pass $15/mo | Internal, behind smokescreen | Research agents, local agents |
+| Search MCP: SearXNG or Cloudflare (D40) | 6, or when search fees pass $15/mo | Internal, behind smokescreen. A Cloudflare API token goes in a SealedSecret, held by the server and never by a pod that runs model code. | Research agents, local agents |
 
 Tool scoping: 5–8 tools per agent, trimmed at the source (`enabled_tools`).
 
