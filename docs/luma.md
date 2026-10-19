@@ -62,8 +62,9 @@ Update this table whenever a phase moves.
     replicas on middle's disks since 10-11, with SMART clean, so RAM, DMA or
     SATA is suspected. Chris runs memtest in a maintenance window (see the
     `known_issues` memory note).
-  - Until then, nothing new is placed on `middle`, and that includes its
-    Polaris GPU.
+  - **Chris decided (2026-10-19) to assume `middle`'s memtest is fine.** No
+    plan gates on it any more, and `middle` (with its Polaris GPU) is usable.
+    The RAM risk is accepted.
 - **NVMe swaps (#2661)** gate phase 4. Sandbox scratch writes would hit the
   worn system disks.
 - **Memory headroom:** requests are at 89–91% per node. The 0b right-sizing
@@ -118,6 +119,28 @@ grouped PR.
 - **Egress:** Discord is denied. Blocking pastebin and file-drop reads is
   accepted.
 - `x-luma-*` headers reach Anthropic with **opaque ids only**.
+
+**Final review round (2026-10-19).**
+- **Execution:** every plan runs **subagent-driven**
+  (`superpowers:subagent-driven-development`).
+- **`middle`:** Chris said to **assume its memtest is fine**. Plans no longer
+  gate on the memtest; NFS may run on `middle`, and placement exclusions are
+  dropped.
+  - *Designer's note, recorded:* the three bad non-primary replicas on
+    middle's disks with SMART clean is a bad-RAM signature, and RAM
+    corruption is silent. Run memtest when convenient.
+- **Router syslog** receives **warnings and above** only.
+- **Azure log export:** migrate from the retired HTTP Data Collector API to
+  the **Logs Ingestion API**, as its own plan, written now.
+- **Phase 1 login:** Luma's login accepts Chris's **Google and Microsoft**
+  identities. The registry pins both.
+- **Patroni REST API (8008):** verify whether it has auth. If it's open,
+  **fix it now** for every `acid-*` cluster, as its own small plan.
+- **`acid-luma` base backups:** if WAL-G cron can't run as uid 101, run
+  Spilo **as root** (the namespace's PSS allows it).
+- **nfs-ganesha:** accept a 5Gi request. An upstream Rook issue asking for a
+  ganesha cache config override is **drafted in the 0b plan, not filed**
+  (Chris: don't file it).
 
 ## How to resume
 

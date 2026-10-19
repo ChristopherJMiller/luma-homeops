@@ -2,19 +2,25 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prepare galaxy for Luma phase 1. Reclaim over-requested memory first, then give the household-critical BestEffort pods real requests, so that `top` and `bottom` each keep at least 4 GiB of free request room. Load the stock and Luma alert rules cluster-wide without flooding Discord. Keep `luma-*` logs inside the house, and make the router's syslog receiver actually store what fluent-bit sends.
+**Goal:** Prepare galaxy for Luma phase 1. Reclaim over-requested memory first, then give the household-critical BestEffort pods real requests, so that at least two nodes keep 4 GiB or more of free request room and no node has less than 2 GiB. Load the stock and Luma alert rules cluster-wide without flooding Discord. Keep `luma-*` logs inside the house, and make the router's syslog receiver actually store the warning-and-above lines fluent-bit sends.
 
 **Architecture:** Every cluster change edits an existing Argo-managed values block or Rook CR in this repo. The router change goes through `router/ansible` under the commit-confirm parachute. Changes land one change set at a time: commit, sync, watch to a definite outcome, then the next one. Four small scripts are the repeatable tests:
 - `scripts/ceph-gate.sh` is the go/no-go gate for every Rook task.
 - `scripts/test-fluent-bit-exclusion.sh` runs the real tail input and grep filter against fixture files.
-- `router/scripts/verify-syslog-receiver.sh` proves the router stores remote syslog in its own file, and nowhere else.
+- `router/scripts/verify-syslog-receiver.sh` proves the router stores remote syslog at warning and above in its own file, drops lower severities, and writes nowhere else.
 - `scripts/check-prometheus-rules.sh` proves every PrometheusRule meant for this Prometheus is selected, loaded and evaluating cleanly.
 
 **Tech Stack:** Argo CD (chart argo-cd 10.9.2, v3.5.3); kube-prometheus-stack 79.12.0 (Prometheus v3.8.0, Alertmanager 0.29.0); Rook v1.19.11 with Ceph 19.2.6 (CSI through the ceph-csi-operator); nfs-ganesha 5.9; fluent-bit 2.2.2 (chart 0.47.10); Traefik v3.7.14; MetalLB 0.15.3; trivy-operator chart 0.25.0; ha-helm v0.6.0; Sealed Secrets; VyOS 1.5-rolling-202409240007 with rsyslog, driven by Ansible `vyos.vyos` over `network_cli`.
 
 **Spec:** `docs/superpowers/specs/2026-10-18-luma-design.md`: §2 (starting state), the §12.4 metrics bullet, §13.3, §14 "0b" and the Capacity table. Chris's 0b decisions are recorded in `docs/luma.md` ("Decisions after spec approval").
 
-**Status:** revised 2026-10-19 after two adversarial reviews (Ceph/Rook; alerting/logs) and Chris's decisions. Measurements are read-only: the first set was taken 01:30–01:57 UTC on 10-19, and the revision re-measured 02:30–02:55 UTC.
+**Status:** revised 2026-10-19 after two adversarial reviews (Ceph/Rook; alerting/logs) and Chris's decisions. Measurements are read-only: the first set was taken 01:30–01:57 UTC on 10-19, and the revision re-measured 02:30–02:55 UTC. Revised again for the final review round (2026-10-19; `docs/luma.md`):
+- the memtest gate is removed and the headroom exit is recomputed over all three nodes;
+- router syslog stores warnings and above only (Task 3);
+- the ganesha request stays at 5Gi, and an upstream Rook issue is drafted but not filed (Appendix A);
+- the Azure retirement points at its own plan.
+
+**memtest not run; Chris accepted the RAM risk 2026-10-19 (see docs/luma.md).**
 
 ## Global Constraints
 
@@ -29,18 +35,20 @@
   - "**OSD requests are left alone** until we know whether `osd_memory_target` follows the request or the limit". We now know; Chris still chose to defer the cut (see "Deferred").
   - "Target: about 8 GiB of net headroom on top of today's, with no node over 85% real use."
   - "These are Rook changes under S4/S7, so Chris approves them in the plan."
-- **Exit metric for headroom (supersedes the cluster-wide total):** free memory requests on each node Luma may use. That is `top` and `bottom`, because `middle` is excluded until its memtest.
-  - Each must have at least **4096 Mi** free: phase 1's ≈3.3 GiB plus about 0.7 GiB of margin.
-  - That also satisfies the phase-1 P3 gate (≥ 2.2 GiB on one node other than `middle`).
+- **Exit metric for headroom (supersedes the cluster-wide total):** free memory requests per node, counting **all three nodes**. Luma may now use `middle`, because the memtest gate is gone.
+  - **At least two nodes** must each have at least **4096 Mi** free. That is phase 1's ≈3.3 GiB on its busiest node, plus about 0.7 GiB of margin. The second node takes the other `acid-luma` member and gateway replica, and it gives the conductor somewhere to reschedule.
+  - **Every node** must have at least **2048 Mi** free (≤ 93.4% requested). That keeps each node clear of `NodeMemoryRequestsHigh`'s 95%, with room for one small Luma pod.
+  - Projected: top 6455, middle 3348 and bottom 6617 Mi, which passes with NFS on `middle`. NFS on `top` or `bottom` leaves that node at about 1.4 GiB, which fails the floor (see the projection).
+  - That also satisfies the phase-1 P3 gate (≥ 2.2 GiB on one node).
   - The cluster-wide net is reported, but it is not the exit.
 - Spec, verbatim: "**fluent-bit excludes every `luma-*` namespace** from the Azure and syslog outputs (an input exclude on the namespace path)". The namespaces are `luma-system`, `luma-sandbox` and `luma-browser`. This plan adds a filter that drops Traefik access lines for Luma routers, because they carry OAuth `code=` query strings.
 - Spec, verbatim: "Rules are PrometheusRule CRDs in namespace `prometheus` with the selector labels, plus a deploy check that they appear in `/api/v1/rules`." Also: "ServiceMonitors need `release=prometheus`."
 - **The Rook-touching tasks are 7, 8, 11 and 12.** Each one needs all of the following:
   - `scripts/ceph-gate.sh` PASS within the 15 minutes before the commit. The gate includes the latency rule (15-minute max OSD commit latency under 1000 ms) and the backup-window rule (no Rook work between 00:30 and 05:00 UTC, that is 17:30–22:00 PDT).
   - Chris's explicit go for that task.
-  - No cordoned node, no drain, no memtest, no NVMe swap and no Talos upgrade in progress (S5).
+  - No cordoned node, no drain, no NVMe swap, no Talos upgrade, and no memtest (if Chris runs one later) in progress (S5).
   - A time-boxed silence `namespace="rook"`, covering the task's expected duration plus 30 minutes, added before the commit and expired afterwards. Ceph's own critical alerts are **never** silenced: if one fires, that is the signal.
-  - **Tasks 11 and 12 also need Chris's memtest PASS on `middle`.** Chris decided that the memtest runs before them.
+  - No memtest verdict is needed. Chris assumes middle's memtest is fine (2026-10-19).
 - **Rook can restart more than you asked for.** None of these tasks should restart an OSD. But if a CephCluster reconcile does update OSD Deployments, Rook updates them in host-sized batches (`ceph osd ok-to-stop --max`), so every OSD on a host can go down at once.
   - If any `rook-ceph-osd-*` pod restarts during a Rook task, do not interrupt it (S3).
   - Watch the PGs return to `active+clean`, and report to Chris.
@@ -88,8 +96,16 @@
 3. **Cluster syslog floods the router.**
    - Today's `/var/log/messages` rotates at 256 KiB, roughly every 6 minutes. Remote lines landing there would erase the router's own logs within seconds.
    - The router has one 128 GB SSD.
-   - Expected: remote lines go only to `/var/log/cluster/cluster.log`, rotated by size and compressed.
-   - Test: `router/scripts/verify-syslog-receiver.sh`, which checks the marker is in `cluster.log` and absent from `messages`, plus a disk-use check 24 hours later (Task 3).
+   - Container lines carry no syslog severity of their own. fluent-bit sends every line as `info` (preset 6) unless a severity is derived, so a router-side "warning and above" filter would silently store nothing.
+   - Expected:
+     - only lines at warning and above (severity 0–4) are stored;
+     - they go only to `/var/log/cluster/cluster.log`, rotated by size and compressed;
+     - fluent-bit derives each line's severity from its level field, klog prefix or journald `PRIORITY`.
+   - Test:
+     - the severity cases in `scripts/test-fluent-bit-exclusion.sh` (Task 3 Step 8);
+     - `router/scripts/verify-syslog-receiver.sh`: the warning marker is in `cluster.log`, and the info marker is absent there; both are absent from `messages`;
+     - a warn/info canary pair end to end (Task 3 Step 9);
+     - a disk-use check 24 hours later (Task 3 Step 10).
 4. **The `luma-*` match catches too much or too little,** including Traefik's access lines for Luma hosts, which carry OAuth codes.
    - Expected dropped: `luma-system`, `luma-sandbox`, `luma-browser` and `luma-0b-canary` files, and Traefik lines naming a `luma-…` router.
    - Expected shipped: namespace `luma`, `notluma-x`, a pod or container named `luma-…` in `default`, and Traefik lines for other routers, including `notluma`.
@@ -136,7 +152,7 @@
 - **nfs-ganesha's 4.7 GiB is a cache at its default bound, not a leak.**
   - MDCACHE `Entries_HWMark` is 100000, and 100,008 caps were measured.
   - There is no override path in Rook 1.19 with Ganesha 5.9: Rook's `ganesha.conf` already has an `MDCACHE` block, Ganesha declares it `CONFIG_UNIQUE`, and the CephNFS spec has no config field.
-  - The 11-day max is 4796 Mi. It is sized at 5 Gi.
+  - The 11-day max is 4796 Mi. It is sized at 5 Gi, which Chris accepted. The upstream feature request is drafted, not filed (Appendix A).
 - **Rook NFS facts** (`pkg/operator/ceph/nfs`, v1.19.11):
   - The Deployment is RollingUpdate with maxSurge 1 and maxUnavailable 0, so old and new ganesha overlap, both with `nodeid = satellites.a` under `RecoveryBackend = rados_cluster`.
   - Rook sets `replicas: 1` on every reconcile, but its watch predicate ignores Deployment updates. A manual scale to 0 therefore sticks until the CephNFS CR changes.
@@ -183,8 +199,9 @@
   - VyOS 1.5-rolling-202409240007 has no CLI for an rsyslog input. There is no `imudp` and no UDP 514 listener.
   - `set system syslog host 0.0.0.0` is a *forwarding target*: it renders `*.info @0.0.0.0:514`.
   - `set system syslog file kubernetes-logs` renders a Python dict as the omfile target, because of a template bug: `:omfile:${{ file }}` uses the dict, not the file name.
-  - fluent-bit's syslog output has no `Syslog_Message_Key`, so even a working receiver would get empty message bodies.
+  - fluent-bit's syslog output has no `Syslog_Message_Key`, so even a working receiver would get empty message bodies. It also has no `Syslog_Severity_Key`, so every line would arrive as `info`.
   - Volume: about 1 GB/day of container log input across the 3 nodes. `syslog.0` has logged about 430k retries per node since 10-05.
+  - With warnings and above only (Chris, 2026-10-19), the estimate is a few percent of lines, about **10–50 MB/day** before compression. This is an estimate, not a measurement: Task 3 Step 10 measures it and stops above 300 MB/day.
   - The firewall input rule 100 already accepts UDP 514 from `NET-INSIDE-v4` (192.168.0.0/24).
   - The router disk is a 128 GB TLC SSD with 103 GB free.
 - **Traefik v3.7.14 access logs are CLF.** Each line holds the full request URI and the router name, for example `"websecure-<ns>-<ingress>-<host>@kubernetes"`. They are shipped to Azure today, including OAuth `code=` query strings.
@@ -231,14 +248,16 @@
 | 8 (CSI) | 7671 | 8532 | 10777 |
 | 9 (MetalLB, Grafana, trivy, HA on top) | 6583 | 8468 | 8281 |
 | 10 (Prometheus at 2560Mi) | 8119 | 8468 | 8281 |
-| memtest on `middle` (Chris) | — | — | — |
 | 11 (MDS-b on top, MDS-a on bottom) | 6455 | 8468 | 6617 |
 | 12 (NFS on middle) | **6455 (79.1%)** | **3348 (89.1%)** | **6617 (78.5%)** |
 
-- NFS's placement decides the exit. Every other placement fails it:
+- **The exit counts all three nodes** (Global Constraints): two nodes ≥ 4096 Mi, and every node ≥ 2048 Mi.
+  - With NFS on `middle`: top and bottom are ≥ 4096, and middle at 3348 is above the floor. It **passes**.
+  - Cluster-wide free: 16420 Mi (16.0 GiB).
+- NFS's placement decides the exit. Every other placement breaks the 2048 Mi floor, and puts that node over `NodeMemoryRequestsHigh`'s 95%:
   - on `top`: 1335 Mi free (95.7%);
   - on `bottom`: 1497 Mi free (95.1%).
-- This is why Task 12 prefers `middle` once the memtest passes.
+- This is why Task 12 prefers `middle`.
 - It also moves 4.7 GiB of real use off `top` (74% now, with the worn NVMe) onto `middle` (47% now).
 
 ## Sequence at a glance
@@ -255,7 +274,6 @@
 | 8 CSI requests | **Rook** | **yes** | — |
 | 9 Requests for non-Rook BestEffort pods | no | Chris picks HA's window | HA 1–2 min |
 | 10 Prometheus request | no | sign-off | Prometheus WAL replay |
-| — memtest86+ on `middle` | Chris, maintenance window | — | drain of `middle` |
 | 11 MDS requests, priority, placement | **Rook** | **yes** | CephFS failover: seconds |
 | 12 nfs-ganesha request, priority, placement | **Rook** | **yes** | NFS stall: minutes |
 | 13 Exit verification and records | read-only | — | — |
@@ -293,7 +311,7 @@
 
 - [ ] **Step 3: Maintenance state.**
   - Argo shows nothing unhealthy beyond `rook` and `rook-cluster`.
-  - Ask Chris once (AskUserQuestion): when is middle's memtest window? Record the date in Status. Tasks 11 and 12 wait for its verdict.
+  - No node is cordoned or in maintenance. No memtest window is waited for: Chris assumes it is fine (2026-10-19).
 
 - [ ] **Step 4: Re-measure.**
   - Record per-node `Allocated resources` and `kubectl top nodes`.
@@ -381,7 +399,7 @@ git push origin main
      - After 20 minutes (ingestion lag), read `WS` from Secret `logging/azure-log-analytics`, key `workspace-id`, into a variable without echoing it.
      - For each marker, run `nix develop -c az monitor log-analytics query -w "$WS" --analytics-query "luma_homelab_logs_CL | where TimeGenerated > ago(1h) | where * has '<marker>' | count" -o tsv`.
      - Expected: the control marker counts more than 0; the canary marker counts 0.
-     - If the query fails because of the Data Collector API retirement (see Follow-ups), record that and continue. The inotify result is the gate.
+     - If the query fails because of the HTTP Data Collector API retirement, record that and continue. The inotify result is the gate. The migration to the Logs Ingestion API is its own plan, `docs/superpowers/plans/2026-10-19-azure-logs-ingestion.md`. If that plan has already landed, query the table it names instead of `luma_homelab_logs_CL`.
   6. The router check for these same canaries is in Task 3.
 
 - [ ] **Step 8: Clean up.**
@@ -389,7 +407,7 @@ git push origin main
   - Record the result in Status.
   - **Rollback:** revert the commit.
 
-### Task 3: Router syslog receiver (Ansible) and fluent-bit's message key — **Chris approval**
+### Task 3: Router syslog receiver (Ansible, warnings and above) and fluent-bit's message and severity keys — **Chris approval**
 
 **Files:**
 - Create `router/ansible/templates/rsyslog-cluster-receiver.conf.j2` and `router/ansible/templates/cluster-syslog.logrotate.j2`.
@@ -397,21 +415,33 @@ git push origin main
 - Modify `router/ansible/group_vars/vyos_routers.yml`: the `monitoring.syslog` block.
 - Modify `router/scripts/vyos-postconfig-bootup.script`: the boot-time re-install, and the listener check in the LAN-recovery loop.
 - Create `router/scripts/verify-syslog-receiver.sh`.
-- Modify `cluster/applications/fluent-bit.yaml`: the syslog `[OUTPUT]`.
+- Modify `cluster/applications/fluent-bit.yaml`:
+  - the syslog `[OUTPUT]`;
+  - a new `valuesObject.luaScripts."severity.lua"` (the chart mounts it at `/fluent-bit/scripts/`);
+  - a new `[FILTER] Name lua`, placed last in `filters`.
+- Modify `scripts/test-fluent-bit-exclusion.sh`: the severity cases.
 
 **Interfaces:**
 - Consumes the Task 2 exclusion, which must be live before the router stores anything.
+- Consumes `scripts/test-fluent-bit-exclusion.sh` from Task 2. This task extends it.
 - Produces `router/scripts/verify-syslog-receiver.sh [marker]`, run from rowlett.
-  - It sends one RFC3164 UDP line, `logger --udp -n 192.168.0.1 -P 514 -t luma0b-syslog-test <marker>` (a uuid marker if none is given), then over SSH counts the marker in `/var/log/cluster/cluster.log` and in `/var/log/messages`.
-  - PASS = 1 and 0, plus a `192.168.0.1:514` UDP listener in `ss -ulnp`. Exit code 0 = pass.
+  - It sends two RFC3164 UDP lines (a uuid marker if none is given):
+    - `logger --udp -n 192.168.0.1 -P 514 -p user.warning -t luma0b-syslog-test <marker>-warn`;
+    - `logger --udp -n 192.168.0.1 -P 514 -p user.info -t luma0b-syslog-test <marker>-info`.
+  - Then, over SSH, it counts each marker in `/var/log/cluster/cluster.log` and in `/var/log/messages`.
+  - **PASS** = `-warn` 1 and `-info` 0 in `cluster.log`, both 0 in `messages`, plus a `192.168.0.1:514` UDP listener in `ss -ulnp`. Exit code 0 = pass.
   - Task 13 re-runs it.
-- Produces the variables `monitoring.syslog.{receiver_enabled: true, listen_address: 192.168.0.1, listen_port: 514, log_path: /var/log/cluster/cluster.log, rotate_size: 100M, rotate_count: 200}`. They replace `log_file`, `archive_size` and `archive_files`.
+- Produces the variables `monitoring.syslog.{receiver_enabled: true, listen_address: 192.168.0.1, listen_port: 514, log_path: /var/log/cluster/cluster.log, severity_max: 4, rotate_size: 100M, rotate_count: 200}`. They replace `log_file`, `archive_size` and `archive_files`.
+  - `severity_max: 4` means warning and above (0 emerg … 4 warning). Comment: Chris, 2026-10-19.
+- Produces the record key **`syslog_severity`** on every fluent-bit record: a one-character string, `"0"`–`"7"`. It also reaches Azure as an extra column; that is harmless.
 
 - [ ] **Step 1: Run the verifier.** Expected: FAIL, with no listener and a count of 0.
 
 - [ ] **Step 2: Write the templates.**
   - The rsyslog drop-in loads `imudp`, and its `input()` is bound to `listen_address:listen_port` with `ruleset="cluster"`.
-  - That ruleset holds one `omfile` action to `log_path`, with `rotation.sizeLimit` = `rotate_size` and `rotation.sizeLimitCommand` running `logrotate` on the cluster file. Then it calls `stop`, so remote lines never reach `/var/log/messages` (Review Focus 3).
+  - The ruleset holds one `omfile` action to `log_path`, inside `if $syslogseverity <= {{ severity_max }} then { … }`. The action has `rotation.sizeLimit` = `rotate_size`, and `rotation.sizeLimitCommand` runs `logrotate` on the cluster file.
+  - The ruleset then calls `stop`, unconditionally. So lines below warning are discarded, and no remote line ever reaches `/var/log/messages` (Review Focus 3).
+  - The filter is on the router, so it also covers any other LAN sender.
   - The logrotate file covers `log_path` with `size {{ rotate_size }}`, `rotate {{ rotate_count }}`, `compress`, `delaycompress`, `missingok` and `create 0640 root adm`.
     - `size` must be present. Otherwise logrotate, when rsyslog invokes it at the size limit, finds no due condition, and rsyslog keeps re-invoking it.
   - Header comment, in both files:
@@ -446,33 +476,84 @@ git push origin main
   - Run `nix develop -c ansible-playbook site.yml --tags monitoring`. The site-level parachute arms `commit_confirm 10`, verifies from outside and confirms.
   - A new file appears in `router/ansible/backups/`.
 
-- [ ] **Step 7: Re-run the verifier.** Expected: PASS. Also, `/etc/rsyslog.d/00-vyos.conf` no longer contains `omfile:${` or `@0.0.0.0`.
+- [ ] **Step 7: Re-run the verifier.** Expected: PASS, with the warning marker stored and the info marker dropped. Also, `/etc/rsyslog.d/00-vyos.conf` no longer contains `omfile:${` or `@0.0.0.0`.
 
-- [ ] **Step 8: fluent-bit message key.**
-  - Add `Syslog_Message_Key log` to the syslog `[OUTPUT]`, with a comment: the record key from the cri/docker parsers is `log`, and without it every message body is empty.
-  - Commit together with the router files, and only after Step 7 PASSes. If the parachute rolled the router back, fix the cause and repeat Steps 5–7 before committing, so that the repo never records an undeployed router state. Push, then watch the DaemonSet roll 3/3 (Monitor).
+- [ ] **Step 8: fluent-bit message and severity keys.**
+  1. **Write the severity test.** Extend `scripts/test-fluent-bit-exclusion.sh`:
+     - it also extracts every `Name lua` `[FILTER]`;
+     - it mounts each `valuesObject.luaScripts` entry at `/fluent-bit/scripts/<name>`;
+     - it adds `[INPUT] Name dummy, Tag host.sevtest, Samples 1, Dummy {"PRIORITY":"3","MESSAGE":"SEV-13"}`;
+     - it switches the stdout output to `Format json_lines`.
+
+     The Task 2 cases keep passing, because they only grep markers. Then add these cases, each passing when the record holding the marker has `syslog_severity` equal to the expected string. The CRI lines go in fixture `sev-1_default_sev-<id>.log`:
+
+     | payload (CRI `stdout F` unless noted) | expected |
+     |---|---|
+     | `{"level":"error","msg":"SEV-1"}` | `"3"` |
+     | `{"level":"WARN","msg":"SEV-2"}` | `"4"` |
+     | `{"level":"info","msg":"SEV-3 ERROR in text"}` | `"6"` (the level field wins) |
+     | `time=2026-10-19T00:00:00Z level=warning msg=SEV-4` | `"4"` |
+     | `level=fatal msg=SEV-5` | `"2"` |
+     | `{"severity":"ERROR","message":"SEV-6"}` | `"3"` |
+     | `E1019 01:02:03.456789       1 x.go:1] SEV-7` | `"3"` |
+     | `W1019 01:02:03.456789       1 x.go:1] SEV-8` | `"4"` |
+     | `I1019 01:02:03.456789       1 x.go:1] SEV-9`, on **`stderr`** | `"6"` (the stream is not a signal; klog writes info to stderr) |
+     | `2026-10-19 01:02:03 ERROR SEV-10` | `"3"` |
+     | `[WARNING] SEV-11` | `"4"` |
+     | `plain line SEV-12 with an error inside` | `"6"` (lowercase words do not count) |
+     | dummy record `PRIORITY "3"` (`SEV-13`) | `"3"` |
+
+  2. **Run it.** Expected: the 13 severity cases FAIL, because there is no `syslog_severity` key yet. The Task 2 cases still PASS.
+  3. **Write `severity.lua`.** It defines `function syslog_severity(tag, ts, record)`, which sets `record.syslog_severity` and returns `2, ts, record`. It reads only `PRIORITY` and `log`; the kubernetes filter keeps `log` (`Keep_Log` defaults to On). Rules, in order, first match wins:
+     1. `PRIORITY` is a single digit 0–7 (journald, `host.*`): use it.
+     2. A `level`, `lvl` or `severity` key, JSON (`"level":"x"`) or logfmt (`level=x`), in the first 512 characters of `log`, case-insensitive. Its value maps as:
+        - `emerg` → 0, `alert` → 1;
+        - `crit`, `critical`, `fatal`, `panic` → 2;
+        - `err`, `error` → 3;
+        - `warn`, `warning` → 4;
+        - `notice` → 5, `info` → 6;
+        - `debug`, `trace` → 7.
+
+        Any other value falls through.
+     3. A klog header `^[IWEF]%d%d%d%d `: `F` → 2, `E` → 3, `W` → 4, `I` → 6.
+     4. An uppercase whole word in the first 128 characters: `FATAL`, `PANIC` or `CRITICAL` → 2; `ERROR` → 3; `WARN` or `WARNING` → 4.
+     5. Otherwise `"6"`.
+
+     Values are one-character strings.
+  4. **Wire it.**
+     - Add `[FILTER] Name lua, Match *, script /fluent-bit/scripts/severity.lua, call syslog_severity`, last in `filters`.
+     - Add `Syslog_Message_Key log` to the syslog `[OUTPUT]`, with a comment: the record key from the cri/docker parsers is `log`, and without it every message body is empty.
+     - Add `Syslog_Severity_Key syslog_severity` to the same output, with a comment: container lines carry no severity; without the key every line goes out as `info` (preset 6) and the router's warning filter would store nothing.
+     - Filtering stays on the router, by design. fluent-bit filters act per tag, for both outputs, so dropping `info` there would also drop it from Azure. The LAN carries the ~1 GB/day of UDP easily.
+  5. **Run the test again.** Expected: all checks PASS (the 14 from Task 2 and the 13 severity cases).
+  6. **Commit,** together with the router files, and only after Step 7 PASSes. If the parachute rolled the router back, fix the cause and repeat Steps 5–7 before committing, so that the repo never records an undeployed router state. Push, then watch the DaemonSet roll 3/3 (Monitor).
 
 ```bash
 git add router/ansible/templates/rsyslog-cluster-receiver.conf.j2 router/ansible/templates/cluster-syslog.logrotate.j2 \
   router/ansible/playbooks/monitoring.yml router/ansible/group_vars/vyos_routers.yml \
   router/scripts/vyos-postconfig-bootup.script router/scripts/verify-syslog-receiver.sh \
-  cluster/applications/fluent-bit.yaml
-nix develop -c git commit -m "router: real rsyslog receiver for cluster logs; fluent-bit sends message bodies (Luma 0b)"
+  cluster/applications/fluent-bit.yaml scripts/test-fluent-bit-exclusion.sh
+nix develop -c git commit -m "router: rsyslog receiver for cluster logs, warnings and above; fluent-bit sends message bodies and severities (Luma 0b)"
 git push origin main
 ```
 
 - [ ] **Step 9: End-to-end with canaries.**
-  - Repeat Task 2 Step 7, items 1–3 (namespace `luma-0b-canary`, the same two pods, `Running`, markers visible in `kubectl logs`).
-  - After 2 minutes, over SSH: `grep -c <control-marker> /var/log/cluster/cluster.log` must be more than 0, and `grep -c <canary-marker>` must be 0.
+  - Repeat Task 2 Step 7, items 1–3 (namespace `luma-0b-canary`, the same two pods, `Running`, markers visible in `kubectl logs`). This time each pod echoes **two** lines every 5 s: `level=warn MARKER-<uuid>-<namespace>-warn` and `level=info MARKER-<uuid>-<namespace>-info`.
+  - After 2 minutes, run each of these over SSH; each prints a count:
+    - `grep -c <control>-warn /var/log/cluster/cluster.log` must be more than 0;
+    - `grep -c <control>-info /var/log/cluster/cluster.log` must be 0;
+    - both canary markers must count 0.
+  - If no `-warn` line arrives at all, while Step 7's `logger` line did: `out_syslog` is ignoring the key's type. Check which types v2.2.2 accepts, switch the Lua to integers (filter option `type_int_key syslog_severity`), and repeat Step 8 from item 5.
   - The fluent-bit `syslog.0` retry counter must stop climbing: read `fluentbit_output_retries_total{name="syslog.0"}` through the API-server pod proxy twice, 10 minutes apart, on each pod. Delta ≤ 5.
   - Clean up as in Task 2 Step 8.
 
 - [ ] **Step 10: 24 hours later.**
-  - `du -sh /var/log/cluster` must be under 3 GB.
-  - `ls /var/log/cluster` must show size-rotated, compressed files.
+  - `du -sh /var/log/cluster` must be under **300 MB**. The estimate is 10–50 MB/day at warning and above.
+    - **Above 300 MB:** stop and report the top senders to Chris: `awk '{print $5}' /var/log/cluster/cluster.log | sort | uniq -c | sort -rn | head`. Field 5 is the tag (the container name) in rsyslog's traditional file format. A chatty app logging `WARN`, or a mapping that is too loose, is the likely cause.
+  - Once more than 100 MB has been written, `ls /var/log/cluster` must show size-rotated, compressed files. At the estimate that takes days; check it at Task 13.
   - `/var/log/messages` must not have rotated faster than before (its own `messages.N` timestamps).
   - Record the daily volume in Status.
-  - **Rollback:** set `receiver_enabled: false`, run the playbook (parachute as usual), and revert the fluent-bit line.
+  - **Rollback:** set `receiver_enabled: false` and run the playbook (parachute as usual). Then revert the fluent-bit lines: the Lua filter and script, and both output keys.
 
 ### Task 4: Alert-noise pre-work and the repo-server change (lands before any rule loads) — **Chris approval**
 
@@ -811,19 +892,6 @@ git push origin main
   - Verify: Ready, targets up again, and `scripts/check-prometheus-rules.sh` PASSes.
   - **Rollback:** revert.
 
-### Checkpoint: memtest86+ on `middle` (Chris)
-
-- Chris runs it in a maintenance window, following S5 and `known_node_maintenance`:
-  - `noout` first;
-  - Patroni switchovers before the cordon;
-  - drain in batches;
-  - pick what waits Pending.
-- After Tasks 4–10 the drain strands far less than the 21.7 GiB of the baseline.
-- Record the verdict in Status.
-  - **PASS:** Tasks 11 and 12 run as written, with no `middle` exclusion for data-path reasons.
-  - **FAIL or no verdict:** Tasks 11 and 12 do not run, and the plan is replanned with Chris. A failing DIMM is its own incident, because middle's OSDs are writing through it.
-  - If Chris nevertheless wants Task 11 or 12 before a verdict, the `middle` exclusion is `preferred`, weight 100, never `required`, and the per-node exit is then not met (see the projection).
-
 ### Task 11: MDS requests, priority and placement — **Chris approval**
 
 **Files:** `cluster/rook-cluster/fs-pool.yaml`, under `spec.metadataServer`:
@@ -832,7 +900,7 @@ git push origin main
 - `priorityClassName: system-cluster-critical`, **in this same commit**. With a request and priority 0, the MDS would become a preemption victim, for example of the standby mgr during a drain.
 - `placement`:
   - `podAntiAffinity` preferred, weight 100, on `app=rook-ceph-mds`, topology `kubernetes.io/hostname`, so a and b split.
-  - `nodeAffinity` preferred, weight 100, `kubernetes.io/hostname NotIn [middle]`. Comment: this is capacity, not the memtest; `middle` takes nfs-ganesha in Task 12; preferred, so a drain can always re-place it.
+  - `nodeAffinity` preferred, weight 100, `kubernetes.io/hostname NotIn [middle]`. Comment: this is request capacity only, because `middle` takes nfs-ganesha in Task 12; it is preferred, so a drain can always re-place it.
 
 - [ ] **Step 1: The tests, before.** Record each of these:
   - `ceph config show mds.fs-pool-a mds_cache_memory_limit` and the same for `mds.fs-pool-b`. Both are `4294967296` today. Also `ceph config get` (the store value; absent today).
@@ -841,7 +909,6 @@ git push origin main
   - A timed CephFS read: `kubectl -n immich exec deploy/immich-server -- sh -c 's=$(date +%s%N); n=$(ls /family | wc -l); e=$(date +%s%N); echo "$n entries $(( (e-s)/1000000 )) ms"'`.
 
 - [ ] **Step 2: Fit and prerequisites.**
-  - The memtest checkpoint is PASS.
   - Each of `top` and `bottom` has at least 1664 Mi free; about 8.1 GiB is projected.
   - Gate PASS, Chris's go, and a 1-hour `namespace=rook` silence.
 
@@ -871,19 +938,18 @@ git push origin main
 
 **Files:**
 - `cluster/rook-cluster/ceph-nfs.yaml`, under `spec.server`:
-  - `resources: {requests: {memory: 5Gi}}`, with no limit. Comment:
+  - `resources: {requests: {memory: 5Gi}}`, with no limit. 5Gi is accepted as it stands (Chris, 2026-10-19). Comment:
     - the bounded cache (MDCACHE `Entries_HWMark` 100000; 100,008 caps measured);
     - there is no override path in Rook 1.19 with Ganesha 5.9;
-    - the upstream question.
+    - a Rook feature request is drafted in this plan's Appendix A but not filed (Chris, 2026-10-19). Revisit the request if Rook ever gains a ganesha config override.
   - `priorityClassName: system-cluster-critical`, **in this same commit**. It may preempt priority-0 pods, Luma's included, when it has to move during a drain. That is consistent with spec §14 ("Luma is shed during drains").
   - `placement.nodeAffinity` preferred, weight 100, `kubernetes.io/hostname In [middle]`. Comment:
-    - after the memtest PASS, `middle` has the most request room, the lowest real use and the healthiest NVMe;
-    - on `top` or `bottom`, the per-node exit fails;
+    - `middle` has the most request room, the lowest real use and the healthiest NVMe. No memtest gate applies (Chris, 2026-10-19);
+    - on `top` or `bottom`, the per-node exit's 2048 Mi floor fails;
     - preferred, so a drain of `middle` re-places it.
 - `cluster/prometheus-stack/rules/capacity-alerts.yaml`: add `NfsGaneshaOverRequest`: `max by (pod) (container_memory_working_set_bytes{namespace="rook",container="nfs-ganesha"}) > on (pod) max by (pod) (kube_pod_container_resource_requests{namespace="rook",container="nfs-ganesha",resource="memory"})`, `for: 30m`, warning. Comment: the 5Gi request assumes the cache bound holds; this says when it does not.
 
 - [ ] **Step 1: Fit and prerequisites.**
-  - The memtest checkpoint is PASS.
   - `middle` has at least 5120 Mi free; about 8.3 GiB is projected.
   - Gate PASS, Chris's go, and a 1-hour `namespace=rook` silence.
   - Chris confirms that no copy into `/family` or `/archive` is running on rowlett.
@@ -929,8 +995,11 @@ git push origin main
 - Modify `docs/luma.md`: the 0b row in the phase table, and the "Memory headroom" gate.
 
 - [ ] **Step 1: Headroom, per node.** Run `kubectl describe node top middle bottom | grep -A8 'Allocated resources'`.
-  - **Exit:** `top` and `bottom` each have at least 4096 Mi of free memory requests; about 6.3 and 6.5 GiB are projected.
-  - Also record `middle`, and the cluster-wide net against the 8.4 GiB baseline (projected 16.0 GiB).
+  - **Exit, counting all three nodes:**
+    - at least two nodes each have at least 4096 Mi of free memory requests;
+    - every node has at least 2048 Mi.
+  - Projected: top 6455 Mi (6.3 GiB), middle 3348 Mi (3.3 GiB) and bottom 6617 Mi (6.5 GiB).
+  - Also record the cluster-wide net against the 8.4 GiB baseline (projected 16.0 GiB).
 
 - [ ] **Step 2: Real use.** Run `max_over_time((100*(1 - node_memory_MemAvailable_bytes/node_memory_MemTotal_bytes))[7d:5m])`. **Exit:** under 85% on every node.
 
@@ -944,7 +1013,8 @@ git push origin main
 
 - [ ] **Step 5: Logs.**
   - `scripts/test-fluent-bit-exclusion.sh` PASSes.
-  - `router/scripts/verify-syslog-receiver.sh` PASSes.
+  - `router/scripts/verify-syslog-receiver.sh` PASSes: the warning line is stored, and the info line is dropped.
+  - Once `/var/log/cluster` has taken more than 100 MB in total, `ls /var/log/cluster` shows size-rotated, compressed files (deferred from Task 3 Step 10). Until then, record "not yet rotated" and the daily volume.
   - The live results from Tasks 2 and 3 are recorded.
 
 - [ ] **Step 6: Records.**
@@ -952,16 +1022,16 @@ git push origin main
   - Update these memory notes:
     - `known_alert_rules_not_loading`: resolved, with the new label convention and the platform rules;
     - `known_middle_mem_requests`: the new per-node numbers, and NFS on `middle`;
-    - `known_issues`: the ganesha cache finding, the router syslog fix and its daily volume, the MDS `config rm` rollback trap, and the OSD latency gate's pass rate.
+    - `known_issues`: the ganesha cache finding, the router syslog fix (warnings and above) and its daily volume, the MDS `config rm` rollback trap, the OSD latency gate's pass rate, and that middle's memtest was not run (Chris accepted the RAM risk 2026-10-19).
 
-## Deferred: HDD OSD request cut (old Task 9) — revisit after middle's memtest
+## Deferred: HDD OSD request cut (old Task 9)
 
 - Chris chose to skip it for now. The facts, for when it comes back:
   - It would set `spec.resources.osd.requests.memory` from 4Gi to 3328Mi, with the limit staying 4Gi. That gives −4608 Mi, −1536 per node.
   - The `osd_memory_target` = min(3328Mi, 0.8 × 4Gi) = **3435973836 B, unchanged**.
   - Rook restarts the OSDs in host-sized batches (`ok-to-stop --max`), so both HDD OSDs of a host can go down at once. On SMR, expect 30–60 minutes.
   - It needs a time-boxed `CephOSDDown` silence plus the `namespace=rook` one, and the full gate.
-- Revisit it after the memtest verdict, and after the NVMe swaps if phase 4's capacity needs it.
+- Revisit it after the NVMe swaps, if phase 4's capacity needs it.
 
 ## Open questions
 
@@ -971,14 +1041,16 @@ git push origin main
 - The Alertmanager weekday window uses `America/Los_Angeles` (Task 4).
 - Router syslog: fix the receiver through Ansible with commit-confirm (Task 3), rather than drop fluent-bit's output.
 - Satellites `.243` and `.244` are intentionally off; their targets are dropped by relabeling (Task 4).
-- Memtest on `middle` runs before the MDS and NFS tasks (the checkpoint).
+
+**Answered in the final review round (2026-10-19):**
+- **Memtest on `middle`:** assume it is fine. There is no checkpoint, and the MDS and NFS tasks do not wait for one. memtest not run; Chris accepted the RAM risk 2026-10-19 (see docs/luma.md).
+- **NFS on `middle`:** yes (Task 12). The exit is recomputed over all three nodes (Global Constraints).
+- **The ganesha cache:** accept the 5Gi request. A Rook feature request is drafted in Appendix A, and Chris decided **not to file it**.
+- **Router SSD load:** the router stores **warnings and above** only (Task 3). The estimate is 10–50 MB/day.
+- **Azure:** the move to the Logs Ingestion API is its own plan, `docs/superpowers/plans/2026-10-19-azure-logs-ingestion.md`.
 
 **Still open (only Chris can answer):**
-1. **NFS on `middle` after the memtest PASS.** The exit depends on it, and it puts the family export on the media node. Confirm, or name another reclaim that frees about 1.7 GiB on `top`.
-2. **The ganesha cache upstream.** File a Rook issue or PR for a CephNFS ganesha config override (`MDCACHE Entries_HWMark`, worth about 4 GiB), or accept 5 Gi permanently?
-3. **Router SSD load.** The receiver writes about 1–1.5 GB/day of cluster logs to the router's 128 GB TLC SSD, capped at 100M × 200 compressed. Acceptable, or should the syslog output carry only warnings and above?
-4. **Azure.** The HTTP Data Collector API passed its retirement date (2026-09-14) and still answers. Should the migration to the Logs Ingestion API (DCR) be scheduled now as its own plan?
-5. **Gate waits.** The 1000 ms latency gate passes in about 25% of 15-minute windows. Accept multi-hour waits for each Rook task (my recommendation), rather than loosening it?
+1. **Gate waits.** The 1000 ms latency gate passes in about 25% of 15-minute windows. Accept multi-hour waits for each Rook task (my recommendation), rather than loosening it?
 
 ## Follow-ups and out of scope (surface, don't do)
 
@@ -987,11 +1059,11 @@ git push origin main
    - etcd is unmonitored today, despite about 3 elections a day and the worn NVMes (#2661).
 2. **Controller-manager, scheduler and kube-proxy metrics** need Talos `bind-address` (S4). The readiness rules cover liveness only.
 3. **Watchdog → an external heartbeat** (a dead man's switch). Today Watchdog routes to `null`.
-4. **Azure:** migrate fluent-bit's azure output to `azure_logs_ingestion` before the retired API stops answering. Add a fluent-bit PodMonitor (`release: prometheus`) so that output retries and drops become visible.
+4. **Azure:** the HTTP Data Collector API is retired (2026-09-14) but still answers. The move of fluent-bit's azure output to `azure_logs_ingestion` is its own plan: `docs/superpowers/plans/2026-10-19-azure-logs-ingestion.md`. A fluent-bit PodMonitor (`release: prometheus`), so that output retries and drops become visible, belongs there too, unless that plan says otherwise.
 5. **Traefik access logs ship every app's OAuth callback `code=` query strings** to Azure today (oauth2-proxy, Dex). Consider dropping query strings cluster-wide. For phase 1, the per-router `traefik.ingress.kubernetes.io/router.observability.accesslogs: "false"` on Luma Ingresses is optional defence in depth: check the annotation against the Traefik v3.7 docs first.
 6. **The dead ConfigMap rules** (the `luma-homelab-alert-rules` generator): convert or delete them. Four Ceph rules now live in `ceph-critical-alerts`.
 7. **`gonic-alerts`** references an unscraped job and the removed `music-sync` CronJob.
-8. **Upstream Rook:** a CephNFS ganesha config override would reclaim about 4 GiB (Open question 2).
+8. **Upstream Rook:** a CephNFS ganesha config override would reclaim about 4 GiB. The request is drafted in Appendix A and **not filed**, by Chris's decision (2026-10-19). Nothing in this plan posts it anywhere.
 9. **VyOS:** the `system syslog file` template bug (`${{ file }}`) is in this two-year-old rolling image. Do not use `system syslog file` until the image is upgraded, and check the receiver drop-in survives that upgrade (the postconfig script re-installs it).
 10. **Phase-1 plan cross-references:** its P3 gate says "0b's throwaway `luma-system` namespace is gone". That should now read "`luma-0b-canary` is gone", and 0b never touches `luma-system`.
 
@@ -1037,3 +1109,45 @@ git push origin main
   - 35 stock objects; 9 MDS sessions; 0 blocklist entries;
   - the `drivers.csi.ceph.io` CRD name; the rule-file basename format;
   - Alertmanager metric labels; the 25% gate pass rate.
+- **Final review round (2026-10-19):**
+  - The memtest checkpoint and every "after memtest" condition are removed. The MDS `NotIn [middle]` preference stays, because it is capacity-driven. NFS keeps its preferred `In [middle]`.
+  - The exit is recomputed over three nodes (two ≥ 4096 Mi, all ≥ 2048 Mi), and the projection is unchanged.
+  - Syslog stores warnings and above. Severity is derived in fluent-bit (13 test cases) and filtered on the router. The volume estimate and the 24-hour threshold are updated.
+  - The Rook issue is a draft only (Appendix A), with no filing step.
+  - The Azure retirement points at `2026-10-19-azure-logs-ingestion.md`.
+  - The names `syslog_severity`, `severity_max` and `severity.lua` are used consistently across Task 3's Interfaces and steps.
+
+## Appendix A: Rook feature request, drafted and not filed
+
+Chris decided on 2026-10-19 **not to file this**. It is kept as reference only, for if the ganesha request ever needs revisiting. No step in this plan posts it anywhere. If it is ever filed, that is a new decision: first re-check the claims against the then-current Rook and Ganesha sources, and search the existing issues.
+
+**Title:** `CephNFS: allow overriding NFS-Ganesha config blocks that Rook generates (e.g. MDCACHE Entries_HWMark)`
+
+**Body:**
+
+> **Is this a bug report or feature request?**
+> Feature request.
+>
+> **What should the feature do:**
+> Let a CephNFS set NFS-Ganesha options in the blocks Rook writes into its generated `ganesha.conf`. The first need is `MDCACHE { Entries_HWMark }`. One possible shape is a typed `spec.server.mdcache` (or a small `spec.server.config` map), rendered into Rook's own `MDCACHE` block:
+>
+> ```yaml
+> spec:
+>   server:
+>     active: 1
+>     mdcache:            # hypothetical
+>       entriesHWMark: 20000
+> ```
+>
+> Another shape: Rook omits its `MDCACHE` block when the user supplies one.
+>
+> **What is the use case behind this feature:**
+> Ganesha's metadata cache is bounded by `Entries_HWMark`, which defaults to 100000. A CephFS export walked nightly by a backup client (NFSv4.1) fills the cache to that bound, and the server keeps it. We measure about 4.7 GiB of RSS, and about 100k MDS caps held by the ganesha client, which also keeps `MDS_CLIENT_RECALL` raised. Sizing the pod's memory request to that cache costs 5 GiB on a 32 GiB node. A lower bound would fit what the workload needs.
+>
+> Today there is no way to set it:
+> - Rook's generated `ganesha.conf` already contains an `MDCACHE` block, and Ganesha parses `MDCACHE` as a unique block. A second `MDCACHE` (for example, in the user config object Rook includes) cannot override it.
+> - The CephNFS spec has no field for Ganesha configuration.
+>
+> **Environment:** Rook v1.19.11, Ceph 19.2.6, NFS-Ganesha 5.9 (the image Rook deploys), with RADOS-backed config and `rados_cluster` recovery.
+>
+> We are happy to test a patch.

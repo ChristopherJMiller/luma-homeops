@@ -2,7 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** draft v2, 2026-10-18. It is revised after the adversarial reviews, with Chris's decisions applied. Not approved, not executed.
+**Status:** draft v2, 2026-10-18. It is revised after the adversarial reviews, with Chris's decisions applied. Revised again for the final review round (2026-10-19; `docs/luma.md`):
+- the `middle` exclusions are dropped;
+- login takes Google and Microsoft;
+- the Patroni REST fix moves to its own plan;
+- the root-Spilo branch for WAL-G cron is written out.
+
+Not approved, not executed.
 
 **Goal:** Luma phase 1 ("Lean chat") runs in `luma-system` at `https://luma.chrismiller.xyz` for Chris only, which gives:
 - its own SSD Postgres with PITR and a synchronous standby;
@@ -61,7 +67,7 @@ It then meets every phase-1 exit criterion.
 **Fixed values (spec and Chris)**
 - **Namespace:** `luma-system`.
 - **Postgres:** `acid-luma`.
-  - Placement: `rook-ceph-block-ssd`, **required `NotIn [middle]` until the memtest verdict**.
+  - Placement: `rook-ceph-block-ssd`, with **the two members on two different nodes**, any of the three (H10). No node is excluded. **memtest not run; Chris accepted the RAM risk 2026-10-19 (see docs/luma.md).**
   - Durability: `synchronous_commit=on`, plus Patroni **`synchronous_mode: true` (non-strict)**.
   - Backups: WAL-G to B2 with a **dedicated key** (`namePrefix spilo/acid-luma/`), the nightly logical dump, and a restore drill into `acid-drill`.
 - **Anthropic** *(Chris)*:
@@ -97,7 +103,7 @@ These are the five failure modes most likely to bite, which no step below would 
    - a manual base backup, plus a **second, cron-made one the next day**;
    - a daily `wal-g backup-list` canary that fails when the newest backup is over 36 h old.
 4. **Monitoring objects that are inert:** a monitor without `release: prometheus`, or a rule outside `prometheus` (known: ruleSelector, servicemonitor release label). Task 9 checks `/api/v1/targets` and `/api/v1/rules`, not the YAML.
-5. **The conductor's 2 GiB request landing on a node without headroom, or on `middle`.** It would sit Pending, or squeeze BestEffort household pods. 0b's exit gate gives top and bottom each ≥ 4096 Mi of free requests. Task 7 re-reads per-node allocation (Core + conductor + an `acid-luma` member + the nightly eval Job on one node) before syncing, and the conductor prefers nodes other than `middle`.
+5. **The conductor's 2 GiB request landing on a node without headroom.** It would sit Pending, or squeeze BestEffort household pods. 0b's exit gives at least two nodes ≥ 4096 Mi of free requests and every node ≥ 2048 Mi, counting all three nodes. Task 7 re-reads per-node allocation before syncing: Core + conductor + an `acid-luma` member + the nightly eval Job on one node. No Luma pod has a node preference.
 
 ## 0. Preconditions (each is a go/no-go, and gates only the tasks named)
 
@@ -105,7 +111,7 @@ These are the five failure modes most likely to bite, which no step below would 
 |---|---|---|---|---|
 | P1 | Ceph at its usual WARN noise | PG 1.c repaired 2026-10-19 UTC | ceph-doctor run clean (S7) | 4, 7, 12 |
 | P2 | Phase 0a done | Dex `v2.44.0` live | Dex v2.46.0 with `DEX_CONFIG_DISALLOW_UNKNOWN_FIELDS=true`, sessions on, `skipApprovalScreen: false` (0a Tasks 4, 7) | 5 |
-| P3 | Phase 0b done (`docs/superpowers/plans/2026-10-18-luma-0b-platform-prep.md`) | requests at 89–91 % per node | All of 0b's exit outputs (referenced here, not re-specified): (a) the per-node gate, **top and bottom each ≥ 4096 Mi of free memory requests**; (b) the live fluent-bit `luma-*` input exclusion **and** its grep filter dropping Traefik access-log lines for `luma-*` routers; (c) `scripts/check-prometheus-rules.sh` PASS; (d) 0b's canary namespace **`luma-0b-canary` is gone**. | (b, d) 2, 3; (a) 4, 7; (c) 9 |
+| P3 | Phase 0b done (`docs/superpowers/plans/2026-10-18-luma-0b-platform-prep.md`) | requests at 89–91 % per node | All of 0b's exit outputs (referenced here, not re-specified): (a) the per-node gate over all three nodes, **at least two nodes ≥ 4096 Mi of free memory requests and every node ≥ 2048 Mi**; (b) the live fluent-bit `luma-*` input exclusion **and** its grep filter dropping Traefik access-log lines for `luma-*` routers; (c) `scripts/check-prometheus-rules.sh` PASS; (d) 0b's canary namespace **`luma-0b-canary` is gone**. | (b, d) 2, 3; (a) 4, 7; (c) 9 |
 | P4 | A luma chart release exists | none (product Task 29) | `v0.1.0-rc.1` with `ci-ok` green. `helm search repo luma --devel` finds it, and `gh attestation verify` passes for the three image digests in its `values.yaml` | **6, 7 only** |
 | P5 | Product Spike G is recorded | not started (product Task 3) | `~/Repos/luma/test/gateway/agentgateway.yaml` committed and `docs/spikes/phase-1.md` §G written | 3 |
 | P6 | Namespace `luma-system` **has never existed** | absent | `kubectl get ns luma-system` → NotFound, and no `luma-system` Argo app or rule in history (0b no longer uses it) | 2 |
@@ -129,10 +135,10 @@ These are the five failure modes most likely to bite, which no step below would 
 | H4 | `BACKUP_SCHEDULE: "15 5 * * *"`, `BACKUP_NUM_TO_RETAIN: "30"`, **full base backups only** (no `WALG_DELTA_MAX_STEPS`), and `WALG_PREVENT_WAL_OVERWRITE=true`. A daily canary fails when the newest base backup is over 36 h old. | The lifecycle hides `spilo/` objects at 30 days. A delta chain, or a backup cron that silently stopped, would leave nothing restorable. |
 | H5 | The `exfil-deny` list is the chart default. Our domains, Discord and the WAN `/32` are site values in `luma-release.yaml`. The ACL and config are chart-rendered, so a change rolls smokescreen. | A generic list belongs to the product; house names belong here. |
 | H6 | The live halves of the §17 spikes run **before** the stack: a hand-applied Job (Task 3) with the pinned agentgateway as a native sidecar (`ci` route only) and a curl probe, on `luma-ci`. | They cost cents, and they feed the product plan before its chart is final. |
-| H7 | The registry holds Chris only, with his Google address under connector `google`. The Dex client has **`allowedConnectors: [google]`** (confirmed with Chris at Task 5). It is a SealedSecret, because the repo is public. | §8.2 pilot. The key is `json:"allowedConnectors"` in Dex v2.46 `storage.Client`, verified. |
+| H7 | The registry holds Chris only, with **two connector/email pairs**: his Google address under connector `google`, and his Microsoft address under connector `microsoft`. The Dex client has **`allowedConnectors: [google, microsoft]`** *(Chris, 2026-10-19)*. **The connector stays pinned:** an address is accepted only when it arrives through the connector it is registered under (product `Registry.Lookup(connectorID, email)`). The registry is a SealedSecret, because the repo is public. | §8.2 pilot. The key is `json:"allowedConnectors"` in Dex v2.46 `storage.Client`, verified. Both connector ids exist in today's Dex config (`google`, `microsoft`). |
 | H8 | `x-luma-*` headers reach Anthropic carrying an **opaque person ref** and product enums (agent, tier, source), never a name. Unknown values are labelled `other` at the gateway. | *(Chris)* |
 | H9 | Patroni `synchronous_mode: true`, `synchronous_mode_strict: false`, `max_slot_wal_keep_size: 4GB`. | With `synchronous_commit=on`, an acknowledged write is on two nodes. Non-strict keeps the primary writable when the standby is down, and the slot cap stops a dead standby filling `pg_wal`. |
-| H10 | **Placement:** `acid-luma` has required `NotIn [middle]` until the memtest verdict. Core and the conductor *prefer* not-`middle`. | middle's disks showed three bad replicas since 10-11. |
+| H10 | **Placement:** no node is excluded, and no Luma pod has a node preference. `acid-luma`'s two members should sit on **two different nodes**. Phase 1 gets that softly, and verifies it (Task 4 Step 6):<br>- The operator's v1.11 `postgresql` CR has no per-cluster pod anti-affinity. Its `enable_pod_antiaffinity` is operator-wide, and turning it on would roll every `acid-*` cluster, so it is not used.<br>- If the CRD at execution has a `topologySpreadConstraints` field, the soft spread goes there (Task 4 Step 2).<br>- Otherwise the scheduler's default soft spreading applies, and the placement is verified. | Chris assumed middle's memtest is fine (2026-10-19). memtest not run; Chris accepted the RAM risk 2026-10-19 (see docs/luma.md). A sync standby on the primary's node would share its failure domain. |
 | H11 | **Shedding is a commit.** Before any drain: maintenance on → wait for 0 running turns → commit `shed: true` in `luma-release` → drain. After: `shed: false` → Ready → maintenance off. | selfHeal reverts a hand scale-down, and a drain cannot place 3 GiB of Luma requests (§14 capacity). |
 | H12 | **Rollback without resources-finalizers.** The Namespace and the `postgresql` CR carry `argocd.argoproj.io/sync-options: Prune=false,Delete=false`. A rollback first empties the workloads (`enabled: false` plus an emptied `cluster/luma`), then removes the apps. | No app here has `resources-finalizer.argocd.argoproj.io`, so removing an Application orphans its resources. Data must survive by design. |
 | H13 | The **Admin key** lives in its own SealedSecret `luma-anthropic-admin`, mounted only by CronJob `luma-usage-reconcile` (product P22). | *(Chris)* An Admin key can manage the org; Core stays without it. |
@@ -154,7 +160,7 @@ These are the five failure modes most likely to bite, which no step below would 
 | `cluster/luma/anthropic-admin.{secret.yaml,yaml}` | new | Secret `luma-anthropic-admin`: `ANTHROPIC_ADMIN_KEY` (**Chris pastes**) |
 | `cluster/luma/internal.{secret.yaml,yaml}` | new | Secret `luma-internal`: `GATEWAY_TOKEN_INTERACTIVE`, `GATEWAY_TOKEN_CI` (generated) |
 | `cluster/luma/core.{secret.yaml,yaml}` | new | Secret `luma-core`: `OIDC_CLIENT_SECRET`, `SESSION_SIGNING_KEY` (generated) |
-| `cluster/luma/registry.{secret.yaml,yaml}` | new | Secret `luma-registry`: `registry.yaml` (H7; Chris fills the address) |
+| `cluster/luma/registry.{secret.yaml,yaml}` | new | Secret `luma-registry`: `registry.yaml` (H7; Chris fills his Google and Microsoft addresses) |
 | `cluster/luma/agents/{luma,deep-think}/AGENT.md`, `cluster/luma/agents/*/evals/*.yaml`, `cluster/luma/models.yaml` | new | copied from the luma repo at the pinned tag, plus site branches |
 | `cluster/luma/ingress.yaml` | new | Task 8 |
 | `cluster/luma/prometheusrule.yaml` | new | `metadata.namespace: prometheus` (Task 9) |
@@ -363,7 +369,9 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
 - [ ] **Step 2: Write `psql.yaml`.** It has `cluster/gramps/psql.yaml`'s shape, with these differences:
   - **Identity:** `name: acid-luma`, `namespace: luma-system`, `numberOfInstances: 2`, `enableLogicalBackup: true`, `spiloRunAsUser: 101`, `spiloRunAsGroup: 103`, `spiloFSGroup: 103`.
   - **Argo:** `metadata.annotations` `argocd.argoproj.io/sync-options: Prune=false,Delete=false` (H12).
-  - **Placement:** `spec.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms: [{matchExpressions: [{key: kubernetes.io/hostname, operator: NotIn, values: [middle]}]}]`, with a comment: the memtest gate in `docs/luma.md`; lift it after the verdict.
+  - **Placement:** no `nodeAffinity`, because no node is excluded (H10). Check first: `kubectl get crd postgresqls.acid.zalan.do -o json | jq '[.spec.versions[] | .schema.openAPIV3Schema.properties.spec.properties | has("topologySpreadConstraints")]'`.
+    - **If it prints `true`:** set `topologySpreadConstraints: [{maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: ScheduleAnyway, labelSelector: {matchLabels: {galaxy: acid-luma}}}]`. The label key is the operator's `cluster_name_label`, which is `galaxy`. Comment: a soft spread of the two members (H10).
+    - **If `false`** (expected on v1.11): add nothing. Placement is verified in Step 6 instead.
   - **Roles and database:** `users: {luma_core: [], luma_conductor: []}`, `databases: {luma: luma_core}`.
   - **`postgresql.parameters`:**
     - `synchronous_commit: "on"` and `archive_timeout: "300s"` (H3);
@@ -410,10 +418,13 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
     ```
 - [ ] **Step 6: Verify the cluster** with `Monitor`.
   - `kubectl -n luma-system get postgresql acid-luma` → `Running`.
-  - `kubectl -n luma-system get pods -l cluster-name=acid-luma -o wide` → two pods on **two nodes, neither `middle`**.
+  - `kubectl -n luma-system get pods -l galaxy=acid-luma -o wide` → two pods on **two different nodes**. Any of the three may be used (H10).
+    - **If both pods share a node:** the sync standby shares the primary's failure domain. Record it, and with Chris's OK, `kubectl -n luma-system delete pod <the replica>` (S2 exception). Delete the replica only, found with `-l galaxy=acid-luma,spilo-role=replica`, and never the primary.
+    - Its RBD volume can attach anywhere, so the scheduler's spreading re-places it. `Monitor` until it is Running, then re-check that the nodes differ.
+    - If it lands on the same node again, stop and report: the other nodes lack room (P3a).
   - PVCs are Bound on `rook-ceph-block-ssd`.
 - [ ] **Step 7: Find the primary and check the sync standby.** Every later exec uses `$P`, never `acid-luma-0` by name.
-  - Run `P=$(kubectl -n luma-system get pod -l cluster-name=acid-luma,spilo-role=master -o name)`.
+  - Run `P=$(kubectl -n luma-system get pod -l galaxy=acid-luma,spilo-role=master -o name)`.
   - Run `kubectl -n luma-system exec "$P" -c postgres -- patronictl list`. Expected: one `Leader` and one **`Sync Standby`**, with lag 0.
 - [ ] **Step 8: Verify WAL-G.** The container already runs as uid 101, so there is **no `su`**.
   - **Archiving:** `kubectl -n luma-system exec "$P" -c postgres -- psql -U postgres -Atc "select pg_switch_wal(); select archived_count, failed_count from pg_stat_archiver"`. Expected: `archived_count ≥ 1` within a minute, and `failed_count = 0`.
@@ -424,12 +435,31 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
 
     If `WALG_PREVENT_WAL_OVERWRITE` is missing, Spilo does not pass it through; record it, and set it through the operator's `pod_environment_configmap` as a follow-up.
   - **Cron:** `kubectl -n luma-system exec "$P" -c postgres -- sh -c 'ls /etc/service; ps -eo comm | grep -c "^cron"'`. Expected: `cron` is listed and the count is ≥ 1.
-    - **Branch, if cron is not running:** non-root Spilo cannot run cron. Ask Chris (S4: it rolls the pods), then remove the three `spiloRun*`/`spiloFSGroup` fields from `psql.yaml` for `acid-luma` only, so Spilo starts as root and runs cron. PSS `baseline` (H1) allows it. Re-verify.
+    - **Branch, if cron is not running under uid 101: run Spilo as root for `acid-luma`** *(Chris, 2026-10-19; pre-approved, so no new question)*. Non-root Spilo cannot run cron, so the base backup at `BACKUP_SCHEDULE` would never happen. The namespace's PSS `baseline` (H1) admits a root container.
+      1. **Record before:** `kubectl -n luma-system exec "$P" -c postgres -- stat -c '%u:%g' /home/postgres/pgdata/pgroot/data`. Expected: `101:103`.
+      2. **Edit `psql.yaml`:** remove `spiloRunAsUser`, `spiloRunAsGroup` and `spiloFSGroup` from `acid-luma` only, with a comment: "root so Spilo's cron runs `BACKUP_SCHEDULE` (Chris, 2026-10-19); Spilo still runs Postgres as `postgres`, uid 101". Leave the canary CronJob at `runAsUser: 101`, because it runs no cron.
+      3. **Commit and push:** `git commit -m "luma: run acid-luma's Spilo as root so WAL-G base-backup cron runs"`. The operator rolls the StatefulSet: the replica first, then a switchover, then the former primary. `Monitor` until both pods are Running and `patronictl list` again shows a `Leader` and a `Sync Standby` with lag 0 (S3; don't delete pods to hurry it).
+      4. **Verify,** with `P` re-read (the primary has moved):
+         - `kubectl -n luma-system exec "$P" -c postgres -- sh -c 'id -u; ps -eo user,comm | awk "\$2==\"cron\"{print \$1}" | sort -u; ps -eo user,comm | awk "\$2==\"postgres\"{print \$1}" | sort -u; crontab -l -u postgres | grep -c postgres_backup.sh; stat -c %u:%g /home/postgres/pgdata/pgroot/data'`. Expected, in order:
+           - `0`: the container is root;
+           - `root`: cron runs;
+           - `postgres` only: the server is not root;
+           - `1`: the backup entry is installed;
+           - `101:103`: data ownership is unchanged.
+         - Then the archiving check above again: `failed_count = 0` after a `pg_switch_wal()`.
+         - Then the envdir check above again.
+         - Pod admission: `kubectl -n luma-system get events --field-selector reason=FailedCreate` is empty. `warn: restricted` warnings on apply are expected and fine.
+      5. **The real proof** is Step 11's cron-made base backup the next morning. If it is missing even as root, stop and report: the cause is not the uid.
+      6. **Rollback:** revert the commit. The operator rolls back the same way.
   - **First base backup**, by hand: `kubectl -n luma-system exec "$P" -c postgres -- envdir /run/etc/wal-e.d/env /scripts/postgres_backup.sh /home/postgres/pgdata/pgroot/data`, then `… -- envdir /run/etc/wal-e.d/env wal-g backup-list`. Expected: one `base_…` line.
   - **From the laptop,** with Chris's existing B2 auth: `nix develop --command backblaze-b2 ls --recursive b2://galaxy-cluster-backups/spilo/acid-luma/wal-g-1/ | head`. Expected: `basebackups_005/` and `wal_005/` objects.
 - [ ] **Step 9: Check Patroni REST auth (read-only).**
   - Run `kubectl -n luma-system exec "$P" -c postgres -- python3 -c 'import yaml; c = yaml.safe_load(open("/run/postgres.yml")); print("restapi_auth", "authentication" in c.get("restapi", {}))'`.
-  - **If it prints `False`:** any pod can call Patroni's write endpoints on :8008 (switchover, restart, config). That is a **finding for every `acid-*` cluster**, not only Luma's. Surface it to Chris (open question 2); don't fix it here. NetworkPolicy closes it in phase 4.
+  - **If it prints `False`:** any pod can call Patroni's write endpoints on :8008 (switchover, restart, config). That is a **finding for every `acid-*` cluster**, not only Luma's.
+    - Chris decided (2026-10-19) to **fix it now, as its own plan**: `docs/superpowers/plans/2026-10-19-patroni-rest-auth.md`. Do not fix it inline here.
+    - Record the result, `True` or `False`, in that plan's Status, and in `docs/luma.md` "Operations (phase 1)" (Task 11).
+    - **Phase-1 deploy proceeds regardless.** This step gates nothing, and `acid-luma` gets the fix along with the other clusters when that plan runs.
+  - **If it prints `True`:** record it the same way. The separate plan decides what, if anything, remains for the other `acid-*` clusters.
 - [ ] **Step 10: Verify the CronJobs and the canary.**
   - `kubectl -n luma-system get cronjob logical-backup-acid-luma walg-canary-acid-luma`: both exist.
   - `kubectl -n luma-system create job --from=cronjob/walg-canary-acid-luma walg-canary-first`, then `Monitor` to `Complete`. Its log is one line with the age in hours.
@@ -450,19 +480,20 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
       name: Luma
       secret: <generated: equals luma-core OIDC_CLIENT_SECRET>
       redirectURIs: [https://luma.chrismiller.xyz/auth/callback]
-      allowedConnectors: [google]   # H7; key verified against v2.46 storage.Client
+      allowedConnectors: [google, microsoft]   # H7 (Chris, 2026-10-19); key verified against v2.46 storage.Client
     ```
   - Secret `luma-core`: `OIDC_CLIENT_SECRET` (64 hex chars) and `SESSION_SIGNING_KEY` (base64 of 32 random bytes; 44 chars).
-  - Secret `luma-registry` with key `registry.yaml`:
+  - Secret `luma-registry` with key `registry.yaml`. Each address is pinned to its connector (H7):
     ```yaml
     people:
-      chris: {display_name: Chris, tier: admin, household: true, emails: {google: [__CHRIS_GOOGLE_ADDRESS__]}}
+      chris: {display_name: Chris, tier: admin, household: true,
+              emails: {google: [__CHRIS_GOOGLE_ADDRESS__], microsoft: [__CHRIS_MICROSOFT_ADDRESS__]}}
     ```
 
 - [ ] **Step 1 (S1): read Dex's live state, without secrets.**
   - `kubectl -n dex get secret dex-config -o jsonpath='{.data.config\.yaml}' | base64 -d | yq '.staticClients[].id'`. Expected: the ids in git (`oauth2-proxy-admin, immich, oauth2-proxy-family, gramps`, plus any 0a added).
   - `kubectl -n dex get deploy dex -o jsonpath='{.spec.template.spec.containers[0].image} {.spec.template.spec.containers[0].env[?(@.name=="DEX_CONFIG_DISALLOW_UNKNOWN_FIELDS")].value}'`. Expected: `…dex:v2.46.0@sha256:… true`. With strict config, a misspelt key crashloops the **new** pod while the old ones keep serving.
-  - **(Chris, AskUserQuestion)** Confirm that the registry and `allowedConnectors` are Google only for phase 1 (open question 1).
+  - `kubectl -n dex get secret dex-config -o jsonpath='{.data.config\.yaml}' | base64 -d | yq '[.connectors[].id] | sort'`. Expected: the list includes both `google` and `microsoft` (ids only, never config). If `microsoft` is missing, stop: `allowedConnectors` would name a connector that does not exist.
   - Record the pre-edit structural hash, which is a hash only:
     ```bash
     yq '.stringData."config.yaml"' cluster/dex/config.secret.yaml | yq -o=json -I0 '.' | sha256sum > /tmp/luma-dex-before.sha
@@ -482,7 +513,7 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
   assert "id: luma-core" not in s, "already present"
   block = ("      - id: luma-core\n        name: Luma\n        secret: " + os.environ["OIDC"] + "\n"
            "        redirectURIs:\n          - https://luma.chrismiller.xyz/auth/callback\n"
-           "        allowedConnectors: [google]\n\n")
+           "        allowedConnectors: [google, microsoft]\n\n")
   open(p, "w").write(s.replace(anchor, "\n" + block + "    connectors:\n"))
   PY
   yq -n ".apiVersion=\"v1\" | .kind=\"Secret\" | .metadata.name=\"luma-core\" | .metadata.namespace=\"luma-system\"
@@ -494,8 +525,13 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
   Expected: `dex vs core client secret: match`, `OIDC_CLIENT_SECRET len=64` and `SESSION_SIGNING_KEY len=44`. `python3` comes from `nix develop`, because rowlett has none.
 - [ ] **Step 3: Write the registry.**
   - The agent writes `cluster/luma/registry.secret.yaml` (Secret `luma-registry`, key `registry.yaml`) with the placeholder above.
-  - **Chris** replaces `__CHRIS_GOOGLE_ADDRESS__` in `$EDITOR`. It is the address he uses at Google sign-in, as in `cluster/oauth2-proxy/emails-admin.secret.yaml`.
-  - Verify with `grep -c __CHRIS_ cluster/luma/registry.secret.yaml` → `0`, and `yq '.stringData."registry.yaml" | from_yaml | .people | keys'` → `["chris"]`.
+  - **Chris** replaces both placeholders in `$EDITOR`:
+    - `__CHRIS_GOOGLE_ADDRESS__`: the address he uses at Google sign-in, as in `cluster/oauth2-proxy/emails-admin.secret.yaml`;
+    - `__CHRIS_MICROSOFT_ADDRESS__`: the address of the Microsoft account he signs in with. Dex's `microsoft` connector reports the account's `userPrincipalName` as the email, which for a personal account is its sign-in address.
+  - Verify, printing names and booleans only:
+    - `grep -c __CHRIS_ cluster/luma/registry.secret.yaml` → `0`;
+    - `yq '.stringData."registry.yaml" | from_yaml | .people | keys'` → `["chris"]`;
+    - `yq '.stringData."registry.yaml" | from_yaml | .people.chris.emails | to_entries | .[] | .key + " n=" + (.value | length | tostring)'` → `google n=1` and `microsoft n=1`.
 - [ ] **Step 4: Seal** (Review Focus 2).
   - Run `rm cluster/dex/config.yaml && KUBECONFIG=/tmp/galaxy-kubeconfig nix develop --command ./sign.sh`. Expected: it prints `cluster/dex/config.secret.yaml`, `cluster/luma/core.secret.yaml` and `cluster/luma/registry.secret.yaml`, with no `FAIL`.
   - `git add` each pair and do the `\0GITCRYPT` check.
@@ -576,9 +612,9 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
 
 - [ ] **Step 1 (S1, Review Focus 5): read per-node allocation and placement.**
   - `kubectl describe node top middle bottom | grep -A8 'Allocated resources'`;
-  - `kubectl -n luma-system get pods -l cluster-name=acid-luma -o wide`.
+  - `kubectl -n luma-system get pods -l galaxy=acid-luma -o wide`.
 
-  Expected: a non-`middle` node with ≥ 3.1 GiB of memory-request room. That covers conductor 2 Gi, Core 256 Mi and the nightly eval Job's 768 Mi on the node that doesn't already carry the busier `acid-luma` member. Otherwise **stop** (P3a).
+  Expected: a node (any of the three) with ≥ 3.1 GiB of memory-request room. That covers conductor 2 Gi, Core 256 Mi and the nightly eval Job's 768 Mi on the node that doesn't already carry the busier `acid-luma` member. Otherwise **stop** (P3a).
 - [ ] **Step 2: Write `luma-release.yaml`**, in `telephony-release.yaml`'s shape:
   - `repoURL: https://christopherjmiller.github.io/luma`, `chart: luma`, `targetRevision: 0.1.0-rc.1`, `releaseName: luma`, destination `luma-system`;
   - automated sync with prune and selfHeal, and **no `CreateNamespace`** (the `luma` app owns the namespace);
@@ -598,17 +634,11 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
                  credentialsSecret: luma-core.acid-luma.credentials.postgresql.acid.zalan.do, conductorRole: luma_conductor}
       config: {existingConfigMap: luma-config}
       resources: {requests: {cpu: 50m, memory: 256Mi}, limits: {memory: 768Mi}}
-      affinity: &notMiddle         # memtest suspect: prefer elsewhere (H10)
-        nodeAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-            - weight: 100
-              preference: {matchExpressions: [{key: kubernetes.io/hostname, operator: NotIn, values: [middle]}]}
     conductor:
       maxHosts: 4                  # §6: 4 in phase 1
       idleMinutes: 10
       database: {credentialsSecret: luma-conductor.acid-luma.credentials.postgresql.acid.zalan.do}
       resources: {requests: {cpu: 200m, memory: 2Gi}, limits: {memory: 3Gi}}   # includes the 512Mi memory emptyDir
-      affinity: *notMiddle
     internalSecretName: luma-internal
     gateway:
       replicas: 2
@@ -638,13 +668,13 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
     priorityClass: {create: true, name: luma-batch, value: -5}
     serviceMonitor: {enabled: true, labels: {release: prometheus}}
     ```
-    Add P8's IPv6 prefix to `extraDenyRanges` (after `[0]`) if there is one. YAML anchors are fine in `valuesObject`, because Argo reads the file as YAML.
+    Add P8's IPv6 prefix to `extraDenyRanges` (after `[0]`) if there is one. Core and the conductor carry no `affinity`: no node is excluded (H10).
 - [ ] **Step 3: Write `check-wan-ip.sh`** and a local pre-commit hook `wan-ip-consistent`, whose `files:` matches the two source files. Test it on a scratch copy with the IP changed: the script exits 1 and names both files. Then run it for real: exit 0.
 - [ ] **Step 4: Add the Renovate rule** to `.renovaterc.json`: `matchManagers: ["argocd"]`, `matchPackageNames: ["luma"]`, `automerge: false`, for **every** update type. Its description: "A luma chart bump changes the Agent SDK, CLI, gateway or prompts. It waits for the eval gate (docs/luma.md, Upgrading Luma)."
 - [ ] **Step 5: Commit and push.** Run pre-commit, then `git add cluster/applications/luma-release.yaml cluster/applications/kustomization.yaml .renovaterc.json .pre-commit-config.yaml scripts/check-wan-ip.sh`, then `git commit -m "luma: deploy chart 0.1.0-rc.1; WAN IP consistency check"`, and push.
 - [ ] **Step 6: Watch the rollout** (safe-rollout skill, `Monitor`).
   - `kubectl -n argo-cd get app luma-release` reaches Synced/Healthy, and `kubectl -n luma-system get pods -o wide` shows every pod Ready. Expected:
-    - the conductor and Core are off `middle`;
+    - the conductor is on a node that had the Step 1 room (any node, `middle` included);
     - the two gateway pods are on different nodes;
     - `kubectl -n luma-system logs deploy/luma-conductor | grep -c '"msg":"core link up"'` ≥ 1, which proves the projected token passed TokenReview;
     - Core's `/readyz` is 200;
@@ -676,7 +706,7 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
   The `args` are **replaced, not appended**. `Monitor` to completion. Expected: exit 0, and every guard target reported as denied (ids only).
 - [ ] **Step 9: First usage reconcile.**
   - Run `kubectl -n luma-system create job --from=cronjob/luma-usage-reconcile luma-usage-reconcile-first`, then `Monitor` to Complete.
-  - Then, with `P=$(kubectl -n luma-system get pod -l cluster-name=acid-luma,spilo-role=master -o name)`, run `kubectl -n luma-system exec "$P" -c postgres -- psql -U postgres -d luma -Atc "select day, workspace, api_usd, ledger_usd from usage_reconciliations order by day desc limit 2"`.
+  - Then, with `P=$(kubectl -n luma-system get pod -l galaxy=acid-luma,spilo-role=master -o name)`, run `kubectl -n luma-system exec "$P" -c postgres -- psql -U postgres -d luma -Atc "select day, workspace, api_usd, ledger_usd from usage_reconciliations order by day desc limit 2"`.
   - Expected: rows for `luma-interactive` (≈ 0) and `luma-ci` (≈ Task 3's spike cost). Chris compares `luma-ci` with the Console's daily cost, which confirms the Admin API units.
 
 ### Task 8: Ingress `luma.chrismiller.xyz` and the edge snapshot
@@ -703,10 +733,14 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
   - `curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Origin: https://evil.example' https://luma.chrismiller.xyz/v1/sessions` → `403`.
   - `./cloudflare/dns/tf.sh plan`: empty.
   - `kubectl -n traefik logs -l app.kubernetes.io/name=traefik --since=10m | grep -c 'luma.chrismiller.xyz'` → `0` (the router's access logs are off).
-- [ ] **Step 6: First login (Chris).**
-  - Open `https://luma.chrismiller.xyz` on the laptop and sign in with Google. **Expect Dex's consent page ("Luma would like to:") the first time**, because 0a turned the skip off and remembers consent. Approve it.
-  - Expected: the chat loads, and `/v1/me` shows `chris`. A second login shows no consent page.
+- [ ] **Step 6: First login (Chris), through both connectors.**
+  - Open `https://luma.chrismiller.xyz` on the laptop and sign in with **Google**. **Expect Dex's consent page ("Luma would like to:") the first time**, because 0a turned the skip off and remembers consent. Approve it.
+  - Expected: the chat loads, and `/v1/me` shows `chris`. A second Google login shows no consent page.
+  - Sign out, then sign in with **Microsoft**. Expect its own consent page once.
+  - Expected: `/v1/me` again shows `chris`, the same person and the same history.
+    - If Microsoft gives "This account isn't invited to Luma.", the registered address differs from the one Dex reports. Chris reads it himself (not in chat): `kubectl -n dex logs deploy/dex --since=10m | grep 'login successful' | grep microsoft | tail -1`. He corrects the `microsoft` address in `registry.secret.yaml`, then reseals it (Task 5 Step 4; `rm cluster/luma/registry.yaml` first), commits and pushes. Core watches the registry, so it needs no restart.
   - Then sign in with an address that is not in the registry. Expected: the "This account isn't invited to Luma." page.
+  - Connector pinning (an address accepted only through its registered connector) is covered by product Task 8's tests. It cannot be exercised live with real accounts.
 
 ### Task 9: Observability: rules, dashboard, and what Prometheus really loaded
 
@@ -839,7 +873,8 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
     - "Upgrading Luma" (Task 10), "Site branches" (Task 6), and the restore runbook (Task 12);
     - the phase-1 burn-in log and the phone checklist;
     - "If the WAN IP changes" (router reflection rules and the `/32` together, via vyos-deploy plus this repo);
-    - the Patroni REST finding, if any (Task 4 Step 9);
+    - the Patroni REST result (Task 4 Step 9), with a link to `docs/superpowers/plans/2026-10-19-patroni-rest-auth.md`;
+    - the two login connectors (Google and Microsoft) and the connector-pinned registry (H7);
     - **rotation:**
       - **Anthropic keys:** Chris edits the `.secret.yaml` in `$EDITOR`, then `rm` the sealed sibling and `./sign.sh`. The gateway watches its key files, so no restart.
       - **Gateway tokens:** maintenance on → regenerate both in one shell → reseal → `rollout restart` the gateway and conductor → maintenance off.
@@ -856,7 +891,7 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
   - **`ceph-ssd-pool` skill:** the same two hooks around its per-node `kubectl drain` / power-off step.
   - **`docs/backups.md`:**
     - the Postgres tier row becomes "eight clusters";
-    - a WAL-G note for `acid-luma`: the only PITR cluster; path H2; the **dedicated** key; full base backups only; the daily canary; the 30-day lifecycle;
+    - a WAL-G note for `acid-luma`: the only PITR cluster; path H2; the **dedicated** key; full base backups only; the daily canary; the 30-day lifecycle; and whether Spilo runs as root (the Task 4 Step 8 branch, and why);
     - the drill row (Task 12).
 
 - [ ] **Step 1: Write the docs.**
@@ -878,10 +913,10 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
 - Produces: a timestamped drill-log row proving both restore paths.
 
 - [ ] **Step 1: Write a marker and note the time.**
-  - Set `P=$(kubectl -n luma-system get pod -l cluster-name=acid-luma,spilo-role=master -o name)`, the current primary, which may have moved since Task 4.
+  - Set `P=$(kubectl -n luma-system get pod -l galaxy=acid-luma,spilo-role=master -o name)`, the current primary, which may have moved since Task 4.
   - Run `kubectl -n luma-system exec "$P" -c postgres -- psql -U postgres -d luma -c "insert into settings(key,value,updated_at) values ('drill-2026-MM-DD', '{}', now())"`. It is the only write, and the key is inert.
   - Note T = now (UTC) + 1 minute. `Monitor` until `pg_stat_archiver.last_archived_time` > T. That takes at most 5 min: the insert is WAL activity, so `archive_timeout` switches.
-- [ ] **Step 2: Write `acid-drill-luma.yaml`.** It has `docs/backups/acid-drill.yaml`'s shape, in `luma-system`, labelled `backup-drill: "true"`, with **no `WAL_S3_BUCKET`** (the drill never archives) and the same `NotIn [middle]` affinity:
+- [ ] **Step 2: Write `acid-drill-luma.yaml`.** It has `docs/backups/acid-drill.yaml`'s shape, in `luma-system`, labelled `backup-drill: "true"`, with **no `WAL_S3_BUCKET`** (the drill never archives) and no node affinity (H10):
   ```yaml
   spec:
     clone:
@@ -977,10 +1012,20 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
 - **Seam:** every Secret name, key, chart value and env name used here matches product C6, C8 and C10. The two names this plan supplies at execution are the gateway request counter (from product §G) and L5's error text (from Task 3).
 - **Placeholders:** they are only the `__PASTE_…__` and `__CHRIS_…__` markers, which Chris replaces, and digests resolved at execution. Each has a verification step that fails while it is still present.
 - **Proportion:** about 10.9k words against the spec's 11.9k. The growth from the review draft (6.9k) is the secret-handling, WAL-G, Dex-verification and rollback findings.
+- **Final review round (2026-10-19):**
+  - The `NotIn [middle]` affinities on `acid-luma`, Core, the conductor and the drill are gone. The two members' spread is verified, and uses `topologySpreadConstraints` only if the CRD has the field.
+  - Spilo pods are selected with the operator's `cluster_name_label`, `galaxy=acid-luma`, as in `docs/media.md`. The earlier `cluster-name=` selectors matched nothing.
+  - The Dex client and the registry take `google` and `microsoft`, connector-pinned, and both are logged in live at Task 8.
+  - Patroni REST is verify-only, pointing at its own plan.
+  - The root-Spilo branch has its own verification, and Step 11 is its real proof.
 
 ## Open questions (Chris)
 
-1. **Registry and `allowedConnectors`:** Google only for phase 1 (H7)? This is asked at Task 5 Step 1. If you want a Microsoft address too, it goes in both the registry and the Dex client.
-2. **Patroni REST without auth** (Task 4 Step 9, if found): fix it cluster-wide now (`PATRONI_RESTAPI_USERNAME/PASSWORD` in every `acid-*` CR), or leave it for phase 4's NetworkPolicy?
-3. **If Spilo's cron doesn't run as uid 101** (Task 4 Step 8): OK to start `acid-luma` as root (drop the `spiloRun*` fields), which PSS baseline allows?
-4. **The drift alert threshold:** 10 % **and** $0.50 per workspace-day (Task 9). Tighter or looser?
+**Answered in the final review round (2026-10-19):**
+- **Registry and `allowedConnectors`:** Google **and** Microsoft. Both pairs are pinned in the registry, and `allowedConnectors: [google, microsoft]` (H7, Task 5).
+- **Patroni REST without auth:** fix it now for every `acid-*` cluster, in its own plan, `docs/superpowers/plans/2026-10-19-patroni-rest-auth.md`. This plan only verifies, and proceeds regardless (Task 4 Step 9).
+- **Spilo's cron under uid 101:** if it doesn't run, start `acid-luma` as root. The branch is written out in Task 4 Step 8.
+- **`middle`:** assume its memtest is fine. Every placement exclusion is dropped (H10). memtest not run; Chris accepted the RAM risk 2026-10-19 (see docs/luma.md).
+
+**Still open:**
+1. **The drift alert threshold:** 10 % **and** $0.50 per workspace-day (Task 9). Tighter or looser?
