@@ -77,11 +77,13 @@ Sticky sessions / WebSockets: WS is native. Sticky goes on the **Service** as `t
 
 ```bash
 cd .claude/skills/edge-ingress
-nix-shell -p openssl --run ./edge-snapshot.sh > /tmp/before.txt
+nix-shell -p openssl jq --run ./edge-snapshot.sh > /tmp/before.txt
 # make the change, wait for Argo
-nix-shell -p openssl --run ./edge-snapshot.sh > /tmp/after.txt
+nix-shell -p openssl jq --run ./edge-snapshot.sh > /tmp/after.txt
 diff <(sed 's/ cert=.*//' /tmp/before.txt) <(sed 's/ cert=.*//' /tmp/after.txt)
 ```
+
+The script ends with an MCP block (mcp/dex discovery, `/gramps/mcp`, `/oauth/*`) whose `/.well-known/*` bodies are printed in full: read them, don't just diff them.
 
 Empty diff = no behavioural change. Any line that differs is either your intended change or a regression — decide which before moving on. This is what proved the 2026-09-20 canonicalization of 25 ingresses was byte-for-byte identical.
 

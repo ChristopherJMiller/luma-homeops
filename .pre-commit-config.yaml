@@ -26,6 +26,16 @@ repos:
         entry: scripts/check-kustomizations.sh
         pass_filenames: false
         files: ^cluster/.*\.(yaml|yml)$
+      # Dex client ids starting `mcp-` are reserved for the MCP facade, which
+      # creates and deletes them itself (dynamic client registration). A static
+      # client with that prefix would be adopted or swept by it. `idEnv` is
+      # refused too: the id would come from the environment, where this hook
+      # cannot see it.
+      - id: no-static-mcp-client
+        name: no static Dex client may use the reserved mcp- id prefix
+        language: pygrep
+        entry: '(?:^|[\s{,-])(?:id\s*:\s*["'']?mcp-|idEnv\s*:)'
+        files: ^cluster/dex/config\.secret\.yaml$
       # The family allowlist feeds four mounts across two namespaces, and a Secret
       # cannot be mounted across namespaces -- so the gramps-side copy is GENERATED
       # from the one list of record rather than maintained by hand. Behaves like a
