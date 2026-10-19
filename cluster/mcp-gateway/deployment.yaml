@@ -139,6 +139,15 @@ spec:
 #
 # There is deliberately NO catch-all `/` route: only these prefixes and the MCP
 # paths above are reachable at all.
+#
+# EXCEPT REGISTRATION (2026-10-18): /oauth/register is blocked by the Ingress
+# below. Registration was found to be part of a one-click token-theft path.
+# Dex has skipApprovalScreen on, and it applies to dynamically registered
+# clients too, so a client registered with an attacker's redirect_uri can turn
+# a crafted sign-in link into a stolen token. Clients that are already
+# registered keep working, because token refresh goes straight to Dex. Luma
+# phase 0a replaces this block with an exact-redirect allowlist plus a consent
+# page (docs/superpowers/specs/2026-10-18-luma-design.md §8.1, §9.1).
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -158,6 +167,45 @@ spec:
                 port:
                   number: 9000
           - path: /oauth
+            pathType: Prefix
+            backend:
+              service:
+                name: mcp-gateway
+                port:
+                  number: 9000
+---
+# Stopgap (2026-10-18): refuse dynamic client registration with a 403, until Luma
+# phase 0a ships the redirect allowlist and consent page. No source address can
+# match 255.255.255.255/32, so every request is rejected before it reaches the
+# gateway.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: deny-all
+  namespace: mcp-gateway
+spec:
+  ipAllowList:
+    sourceRange:
+      - 255.255.255.255/32
+---
+# This rule is longer than the /oauth prefix above, so Traefik routes
+# registration here and every other /oauth path (authorize, the scope fix-up)
+# is unchanged. The backend is never reached; the middleware answers 403 first.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mcp-gateway-register-blocked
+  namespace: mcp-gateway
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      mcp-gateway-deny-all@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: mcp.chrismiller.xyz
+      http:
+        paths:
+          - path: /oauth/register
             pathType: Prefix
             backend:
               service:

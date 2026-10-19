@@ -25,6 +25,7 @@ When this guide and a tool/agent default conflict, **this guide wins**.
 | GitOps | Argo CD app-of-apps | Root: `cluster/applications/applications.yaml`. Self-heal + prune ON. |
 | Talos | `nodes/talosconfig`, `nodes/controlplane.yaml` | Encrypted at rest via git-crypt (see "Secrets") |
 | Secrets | git-crypt + Sealed Secrets + agenix | `*.secret.yaml` + `*.secret.conf` + `nodes/*` + `satellites/.keys/*` are git-crypt encrypted (`.gitattributes`). For runtime cluster secrets, edit `*.secret.yaml`, run `./sign.sh` → SealedSecret for Argo. For satellite secrets, agenix (recipients in `satellites/secrets/recipients.nix`). |
+| Luma (in progress) | Household agent platform at `luma.chrismiller.xyz`. Product code is in `~/Repos/luma` and `~/Repos/ha-luma`; site config is `cluster/luma/`. | **Start at `docs/luma.md`**, which holds phase status, gates and how to resume. Design: `docs/superpowers/specs/2026-10-18-luma-design.md`. Research digest: `docs/luma/research-2026-10-18.md`. |
 | Satellites | NixOS edge devices at `192.168.0.243-.254` ("upper orbit") | Pull-based GitOps via comin from `satellites/`. NOT Argo-managed. See `satellites/README.md` and the Satellites section below. |
 
 The toolchain is a flake (`flake.nix`, pinned by `flake.lock`; bump with `nix flake update nixpkgs` — see the nix-shell-pin skill). Run anything that needs `talosctl`/`helm`/`argocd` through `nix develop --command …` or the equivalent `nix-shell shell.nix --run '…'` (a flake-compat shim; both give the identical toolchain). `pre-commit` and `az` only exist inside it.
