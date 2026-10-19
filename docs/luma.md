@@ -142,6 +142,21 @@ grouped PR.
   ganesha cache config override is **drafted in the 0b plan, not filed**
   (Chris: don't file it).
 
+**Logs and Postgres (2026-10-19).**
+- **fluent-bit 2.2.2 → 2.2.3** (CVE-2024-4323 backport) ships now, as its own
+  change.
+- **Azure Log Analytics** is kept, as a **debugging store**. Retention is 30
+  days. It migrates to the Logs Ingestion API under its own plan,
+  `docs/superpowers/plans/2026-10-19-azure-logs-ingestion.md`.
+- **Luma's logs go to Azure** (Chris). Designer's refinement: `luma-system`
+  ships, but `luma-sandbox` and `luma-browser` stay excluded, because they
+  carry raw user content from untrusted code and browsing.
+- **Traefik access lines** for luma routers are still dropped, because they
+  carry OAuth codes in query strings.
+- **Patroni REST auth:** fixed by patching the **operator only**. Spilo stays
+  stock. `acid-chrismillerxyz`'s pg_hba hardening is folded into that plan's
+  chrismillerxyz step (`2026-10-19-patroni-rest-auth.md`).
+
 ## How to resume
 
 1. Read this page, then the spec's §3 decisions and §14 for the phase you're

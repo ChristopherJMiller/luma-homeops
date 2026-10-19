@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Prepare galaxy for Luma phase 1. Reclaim over-requested memory first, then give the household-critical BestEffort pods real requests, so that at least two nodes keep 4 GiB or more of free request room and no node has less than 2 GiB. Load the stock and Luma alert rules cluster-wide without flooding Discord. Keep `luma-*` logs inside the house, and make the router's syslog receiver actually store the warning-and-above lines fluent-bit sends.
+**Goal:** Prepare galaxy for Luma phase 1. Reclaim over-requested memory first, then give the household-critical BestEffort pods real requests, so that at least two nodes keep 4 GiB or more of free request room and no node has less than 2 GiB. Load the stock and Luma alert rules cluster-wide without flooding Discord. Keep the raw user content in `luma-sandbox` and `luma-browser` inside the house (Luma's own logs ship, by Chris's 2026-10-19 ruling), and make the router's syslog receiver actually store the warning-and-above lines fluent-bit sends.
 
 **Architecture:** Every cluster change edits an existing Argo-managed values block or Rook CR in this repo. The router change goes through `router/ansible` under the commit-confirm parachute. Changes land one change set at a time: commit, sync, watch to a definite outcome, then the next one. Four small scripts are the repeatable tests:
 - `scripts/ceph-gate.sh` is the go/no-go gate for every Rook task.
@@ -10,7 +10,7 @@
 - `router/scripts/verify-syslog-receiver.sh` proves the router stores remote syslog at warning and above in its own file, drops lower severities, and writes nowhere else.
 - `scripts/check-prometheus-rules.sh` proves every PrometheusRule meant for this Prometheus is selected, loaded and evaluating cleanly.
 
-**Tech Stack:** Argo CD (chart argo-cd 10.9.2, v3.5.3); kube-prometheus-stack 79.12.0 (Prometheus v3.8.0, Alertmanager 0.29.0); Rook v1.19.11 with Ceph 19.2.6 (CSI through the ceph-csi-operator); nfs-ganesha 5.9; fluent-bit 2.2.2 (chart 0.47.10); Traefik v3.7.14; MetalLB 0.15.3; trivy-operator chart 0.25.0; ha-helm v0.6.0; Sealed Secrets; VyOS 1.5-rolling-202409240007 with rsyslog, driven by Ansible `vyos.vyos` over `network_cli`.
+**Tech Stack:** Argo CD (chart argo-cd 10.9.2, v3.5.3); kube-prometheus-stack 79.12.0 (Prometheus v3.8.0, Alertmanager 0.29.0); Rook v1.19.11 with Ceph 19.2.6 (CSI through the ceph-csi-operator); nfs-ganesha 5.9; fluent-bit 2.2.3 (chart 0.47.10; the CVE-2024-4323 hotfix, `7850cbe6`, digest-pinned 2026-10-19); Traefik v3.7.14; MetalLB 0.15.3; trivy-operator chart 0.25.0; ha-helm v0.6.0; Sealed Secrets; VyOS 1.5-rolling-202409240007 with rsyslog, driven by Ansible `vyos.vyos` over `network_cli`.
 
 **Spec:** `docs/superpowers/specs/2026-10-18-luma-design.md`: §2 (starting state), the §12.4 metrics bullet, §13.3, §14 "0b" and the Capacity table. Chris's 0b decisions are recorded in `docs/luma.md` ("Decisions after spec approval").
 
@@ -20,6 +20,11 @@
 - the ganesha request stays at 5Gi, and an upstream Rook issue is drafted but not filed (Appendix A);
 - the Azure retirement points at its own plan.
 
+Revised again on 2026-10-19 for the logs decisions (`docs/luma.md`, "Logs and Postgres"):
+- Luma's logs go to Azure. The input exclusion narrows to `luma-sandbox*` and `luma-browser*`, and the Traefik filter for Luma routers stays (Global Constraints, Task 2).
+- fluent-bit is on 2.2.3, shipped as its own change.
+- Task 3's syslog keys were corrected after reading the v2.2.3 `out_syslog` source: the app and proc keys never matched, and an integer severity would be ignored.
+
 **memtest not run; Chris accepted the RAM risk 2026-10-19 (see docs/luma.md).**
 
 ## Global Constraints
@@ -27,7 +32,8 @@
 - CLAUDE.md S1–S9 apply to every task. The S2 exceptions this plan uses are:
   - `kubectl rollout restart` and `kubectl delete pod`;
   - one temporary scale to 0 of the Rook-owned `rook-ceph-nfs-satellites-a` Deployment (Task 12; Rook sets it back to 1);
-  - throwaway canary objects that a task creates and removes within itself, always in namespace **`luma-0b-canary`**. Never create, label or delete `luma-system`; phase 1 owns it.
+  - throwaway canary objects that a task creates and removes within itself, in namespace **`luma-0b-canary`**. The log-exclusion canary in Tasks 2 and 3 also uses **`luma-sandbox-0b-canary`**, because `luma-0b-canary`'s logs now ship.
+  - Never create, label or delete `luma-system` (phase 1 owns it), `luma-sandbox` or `luma-browser` (phase 4).
   - time-boxed Alertmanager silences (`amtool silence add`) around Rook tasks.
 - Spec, verbatim:
   - "Rook mons 4 → 1.5 Gi (they stay system-node-critical)".
@@ -41,7 +47,13 @@
   - Projected: top 6455, middle 3348 and bottom 6617 Mi, which passes with NFS on `middle`. NFS on `top` or `bottom` leaves that node at about 1.4 GiB, which fails the floor (see the projection).
   - That also satisfies the phase-1 P3 gate (≥ 2.2 GiB on one node).
   - The cluster-wide net is reported, but it is not the exit.
-- Spec, verbatim: "**fluent-bit excludes every `luma-*` namespace** from the Azure and syslog outputs (an input exclude on the namespace path)". The namespaces are `luma-system`, `luma-sandbox` and `luma-browser`. This plan adds a filter that drops Traefik access lines for Luma routers, because they carry OAuth `code=` query strings.
+- Spec, verbatim: "**fluent-bit excludes every `luma-*` namespace** from the Azure and syslog outputs (an input exclude on the namespace path)". The namespaces are `luma-system`, `luma-sandbox` and `luma-browser`.
+- **Ruling (Chris, 2026-10-19; `docs/luma.md`, "Logs and Postgres"). It supersedes the spec line above:**
+  - "**Luma's logs go to Azure.**"
+  - Designer's refinement, recorded: `luma-system` ships, because Core and the conductor log metadata only (§13.3). `luma-sandbox` and `luma-browser` stay excluded, because they carry raw user content from untrusted code and browsing.
+  - The exclusion is `Exclude_Path /var/log/containers/*_luma-sandbox*_*.log,/var/log/containers/*_luma-browser*_*.log`. The prefix form also covers any later `luma-sandbox-…` namespace, and it lets a canary namespace (`luma-sandbox-0b-canary`) match without creating a phase-4 namespace.
+  - It is an input exclusion, so it applies to both outputs. `luma-system`'s warnings and above reach the router too.
+  - This plan still adds a filter that drops Traefik access lines for Luma routers, because they carry OAuth `code=` query strings.
 - Spec, verbatim: "Rules are PrometheusRule CRDs in namespace `prometheus` with the selector labels, plus a deploy check that they appear in `/api/v1/rules`." Also: "ServiceMonitors need `release=prometheus`."
 - **The Rook-touching tasks are 7, 8, 11 and 12.** Each one needs all of the following:
   - `scripts/ceph-gate.sh` PASS within the 15 minutes before the commit. The gate includes the latency rule (15-minute max OSD commit latency under 1000 ms) and the backup-window rule (no Rook work between 00:30 and 05:00 UTC, that is 17:30–22:00 PDT).
@@ -81,7 +93,7 @@
   - Never `set` anything by hand on VyOS.
 - **Secrets:**
   - Never print a secret value. `alertmanager-config.secret.yaml` and the live `alertmanager-main` Secret hold the Discord webhooks. Decode them only into `umask 077` scratch files, compare them by sha256, and delete the files afterwards.
-  - fluent-bit's azure output logs the Log Analytics workspace id on every flush. Grep fluent-bit logs; never paste them into chat, docs or commits.
+  - fluent-bit's azure output logs the Log Analytics workspace id on every flush, until the Azure plan's Task 2 sets `Log_Level warn` on it. Grep fluent-bit logs; never paste them into chat, docs or commits.
 
 ## Review Focus
 
@@ -106,9 +118,13 @@
      - `router/scripts/verify-syslog-receiver.sh`: the warning marker is in `cluster.log`, and the info marker is absent there; both are absent from `messages`;
      - a warn/info canary pair end to end (Task 3 Step 9);
      - a disk-use check 24 hours later (Task 3 Step 10).
-4. **The `luma-*` match catches too much or too little,** including Traefik's access lines for Luma hosts, which carry OAuth codes.
-   - Expected dropped: `luma-system`, `luma-sandbox`, `luma-browser` and `luma-0b-canary` files, and Traefik lines naming a `luma-…` router.
-   - Expected shipped: namespace `luma`, `notluma-x`, a pod or container named `luma-…` in `default`, and Traefik lines for other routers, including `notluma`.
+4. **The exclusion catches too much or too little,** including Traefik's access lines for Luma hosts, which carry OAuth codes.
+   - Expected dropped: `luma-sandbox`, `luma-browser` and `luma-sandbox-0b-canary` files, and Traefik lines naming a `luma-…` router.
+   - Expected shipped:
+     - `luma-system` and `luma-0b-canary`, by the 2026-10-19 ruling;
+     - namespace `luma`, `notluma-x` and `notluma-sandbox`;
+     - a pod or container named `luma-…` or `luma-sandbox…` in `default`;
+     - Traefik lines for other routers, including `notluma`.
    - Test: the Task 2 fixtures.
 5. **NFS clients during the ganesha restart** (rowlett: NFSv4.1, automount, `hard`).
    - A RollingUpdate would run two ganesha instances with the same `nodeid` against the `rados_cluster` grace DB.
@@ -200,6 +216,7 @@
   - `set system syslog host 0.0.0.0` is a *forwarding target*: it renders `*.info @0.0.0.0:514`.
   - `set system syslog file kubernetes-logs` renders a Python dict as the omfile target, because of a template bug: `:omfile:${{ file }}` uses the dict, not the file name.
   - fluent-bit's syslog output has no `Syslog_Message_Key`, so even a working receiver would get empty message bodies. It also has no `Syslog_Severity_Key`, so every line would arrive as `info`.
+  - Its `Syslog_Appname_Key kubernetes_container_name` and `Syslog_Procid_Key kubernetes_pod_name` never match. `out_syslog` (v2.2.3 `syslog.c`) reads only top-level keys with string (or binary) values, and the kubernetes filter nests both names under `kubernetes`. A severity value must be a single digit `0`–`7` or a severity name; an integer is skipped silently.
   - Volume: about 1 GB/day of container log input across the 3 nodes. `syslog.0` has logged about 430k retries per node since 10-05.
   - With warnings and above only (Chris, 2026-10-19), the estimate is a few percent of lines, about **10–50 MB/day** before compression. This is an estimate, not a measurement: Task 3 Step 10 measures it and stops above 300 MB/day.
   - The firewall input rule 100 already accepts UDP 514 from `NET-INSIDE-v4` (192.168.0.0/24).
@@ -265,7 +282,7 @@
 | task | touches | Chris "go" | user-visible blip |
 |---|---|---|---|
 | 1 Gate script and baseline | read-only | — | — |
-| 2 fluent-bit `luma-*` exclusion and Traefik filter | logging | sign-off, plus the canary-namespace delete | — |
+| 2 fluent-bit `luma-sandbox*`/`luma-browser*` exclusion and Traefik filter | logging | sign-off, plus the two canary-namespace deletes | — |
 | 3 Router syslog receiver | **router** (Ansible), logging | **yes** | none |
 | 4 Alert-noise pre-work and repo-server | Alertmanager, kps, argo-cd (prunes kube-system objects) | **yes** | — |
 | 5 Rule loading and platform rules | Prometheus | sign-off | — |
@@ -325,7 +342,7 @@ nix develop -c git commit -m "scripts: ceph-gate.sh, the go/no-go for Rook chang
 git push origin main
 ```
 
-### Task 2: fluent-bit drops `luma-*` namespaces at the input, and Luma's Traefik lines
+### Task 2: fluent-bit drops `luma-sandbox*` and `luma-browser*` at the input, and Luma's Traefik lines
 
 **Files:**
 - Create `scripts/test-fluent-bit-exclusion.sh`.
@@ -349,20 +366,26 @@ git push origin main
   | `web-1_default_luma-agent-<id>.log` | marker | shipped (container name `luma-…`) |
   | `x-1_luma_c-<id>.log` | marker | shipped (namespace exactly `luma`) |
   | `x-1_notluma-x_c-<id>.log` | marker | shipped |
-  | `core-1_luma-system_core-<id>.log` | marker | **dropped** |
+  | `core-1_luma-system_core-<id>.log` | marker | shipped (the 2026-10-19 ruling) |
+  | `c-1_luma-0b-canary_c-<id>.log` | marker | shipped (a `luma-*` namespace that is neither sandbox nor browser) |
+  | `luma-sandbox-1_default_c-<id>.log` | marker | shipped (pod name `luma-sandbox-…`) |
+  | `sb-1_default_luma-sandbox-<id>.log` | marker | shipped (container name `luma-sandbox`) |
+  | `x-1_notluma-sandbox_c-<id>.log` | marker | shipped (`_luma-sandbox` needs the `_` right before it) |
   | `sb-1_luma-sandbox_shell-<id>.log` | marker | **dropped** |
   | `br-1_luma-browser_chrome-<id>.log` | marker | **dropped** |
-  | `c-1_luma-0b-canary_c-<id>.log` | marker | **dropped** |
+  | `c-1_luma-sandbox-0b-canary_c-<id>.log` | marker | **dropped** (the prefix form; the live canary's namespace) |
   | `traefik-1_traefik_traefik-<id>.log` | 5 CLF lines: routers `websecure-luma-system-luma-luma-chrismiller-xyz@kubernetes`, `web-luma-system-luma-luma-chrismiller-xyz@kubernetes`, `luma-system-share@kubernetescrd`, `websecure-media-mm-plex-plex-chrismiller-xyz@kubernetes`, `websecure-notluma-x-a-b@kubernetes` | first 3 **dropped**, last 2 shipped |
 
   - Each line's marker is unique: the file stem, plus the line number for Traefik.
   - A case passes when its marker is present in stdout, or absent for a dropped case.
 
-- [ ] **Step 2: Run it.** Expected: FAIL on the 4 dropped namespace cases and the 3 dropped Traefik lines, because nothing is excluded today.
+- [ ] **Step 2: Run it.** Expected: FAIL on the 3 dropped namespace cases and the 3 dropped Traefik lines, because nothing is excluded today.
 
-- [ ] **Step 3: Add to the tail INPUT.** The line is `Exclude_Path /var/log/containers/*_luma-*_*.log`, with a comment saying:
+- [ ] **Step 3: Add to the tail INPUT.** The line is `Exclude_Path /var/log/containers/*_luma-sandbox*_*.log,/var/log/containers/*_luma-browser*_*.log`, with a comment saying:
   - CRI log names are `<pod>_<namespace>_<container>-<id>.log`;
-  - pod, namespace and container names cannot contain `_`, so `_luma-…_` can only be the namespace;
+  - pod, namespace and container names cannot contain `_`, so `_luma-sandbox…_` and `_luma-browser…_` can only be the namespace;
+  - only these two are excluded: they carry raw user content from untrusted code and browsing. `luma-system` ships, because Luma's logs go to Azure (Chris, 2026-10-19);
+  - the prefix form also covers any later `luma-sandbox-…`/`luma-browser-…` namespace;
   - the exclusion is at the input, so neither the azure output nor the syslog output ever sees these files;
   - `K8S-Logging.Exclude Off` stays, so a workload can never opt itself back in or out.
 
@@ -373,13 +396,13 @@ git push origin main
     - this drops Luma's request lines from both outputs, while `kubectl logs` keeps them;
     - the leading quote anchors the namespace, so `notluma` is kept.
 
-- [ ] **Step 5: Run it again.** Expected: all 14 checks PASS (9 file cases and 5 Traefik lines).
+- [ ] **Step 5: Run it again.** Expected: all 18 checks PASS (13 file cases and 5 Traefik lines).
 
 - [ ] **Step 6: Commit and watch.**
 
 ```bash
 git add scripts/test-fluent-bit-exclusion.sh cluster/applications/fluent-bit.yaml
-nix develop -c git commit -m "logging: fluent-bit drops luma-* namespaces at the input and Luma's Traefik lines (Luma 0b)"
+nix develop -c git commit -m "logging: fluent-bit drops luma-sandbox*/luma-browser* at the input and Luma's Traefik lines (Luma 0b)"
 git push origin main
 ```
 
@@ -387,23 +410,23 @@ git push origin main
   - The live ConfigMap contains the `Exclude_Path` line and the grep filter.
 
 - [ ] **Step 7: Live check with throwaway canaries.**
-  1. Create namespace `luma-0b-canary`, labelled `purpose=luma-0b-canary`. If it already exists, stop and ask.
+  1. Create namespaces `luma-0b-canary` and `luma-sandbox-0b-canary`, both labelled `purpose=luma-0b-canary`. If either already exists, stop and ask.
   2. Start two `busybox:1.36.1` pods, both with `nodeName: bottom`, that echo `MARKER-<uuid>-<namespace>` every 5 s:
-     - `fb-canary` in `luma-0b-canary`;
-     - `fb-canary-control` in `default`.
+     - `fb-canary` in `luma-sandbox-0b-canary`, which must be dropped;
+     - `fb-canary-control` in `luma-0b-canary`, which must ship. It is a Luma-style namespace that is neither sandbox nor browser, so it also proves the ruling.
   3. Both must be `Running`, and each marker must show in its own `kubectl logs`. This proves the pods really log.
   4. After 2 minutes, on the fluent-bit pod on `bottom`, take `kubectl -n logging logs <pod> --since=5m | grep inotify_fs_add`.
-     - At least 1 line must name `fb-canary-control_default_`.
-     - 0 lines may name `_luma-0b-canary_`.
-  5. **Chris runs the Azure check** (it needs `az login`).
-     - After 20 minutes (ingestion lag), read `WS` from Secret `logging/azure-log-analytics`, key `workspace-id`, into a variable without echoing it.
-     - For each marker, run `nix develop -c az monitor log-analytics query -w "$WS" --analytics-query "luma_homelab_logs_CL | where TimeGenerated > ago(1h) | where * has '<marker>' | count" -o tsv`.
+     - At least 1 line must name `fb-canary-control_luma-0b-canary_`.
+     - 0 lines may name `_luma-sandbox-0b-canary_`.
+  5. **Chris runs the Azure check** (it needs `az login`). Wait 20 minutes for ingestion lag first, then read the workspace id into `WS` without echoing it: `az monitor log-analytics workspace show … --query customerId -o tsv`.
+     - Until the Azure plan's Task 6, run for each marker: `nix develop -c az monitor log-analytics query -w "$WS" --analytics-query "luma_homelab_logs_CL | where TimeGenerated > ago(1h) | where * has '<marker>' | count" -o tsv`.
+     - Once `GalaxyLogs_CL` exists (that plan's Task 3), run `GalaxyLogs_CL | where TimeGenerated > ago(1h) | where Log has '<marker>' | count` as well. It is a Basic table: it needs the explicit time range, and it goes through `/search`, as that plan's `verify-ingestion.sh` does.
      - Expected: the control marker counts more than 0; the canary marker counts 0.
-     - If the query fails because of the HTTP Data Collector API retirement, record that and continue. The inotify result is the gate. The migration to the Logs Ingestion API is its own plan, `docs/superpowers/plans/2026-10-19-azure-logs-ingestion.md`. If that plan has already landed, query the table it names instead of `luma_homelab_logs_CL`.
+     - If a query fails, record that and continue. Causes include the HTTP Data Collector API retirement, and the daily cap: an `OverQuota` row in `_LogOperation` today makes a 0 meaningless. The inotify result is the gate. The migration is its own plan, `docs/superpowers/plans/2026-10-19-azure-logs-ingestion.md`.
   6. The router check for these same canaries is in Task 3.
 
 - [ ] **Step 8: Clean up.**
-  - Delete both pods, then namespace `luma-0b-canary`. This is S4: Chris pre-approves this one deletion when he signs off the plan. Re-confirm first that only the canary was ever in it.
+  - Delete both pods, then namespaces `luma-sandbox-0b-canary` and `luma-0b-canary`. This is S4: Chris pre-approves these two deletions when he signs off the plan. Re-confirm first that only the canaries were ever in them.
   - Record the result in Status.
   - **Rollback:** revert the commit.
 
@@ -433,7 +456,9 @@ git push origin main
   - Task 13 re-runs it.
 - Produces the variables `monitoring.syslog.{receiver_enabled: true, listen_address: 192.168.0.1, listen_port: 514, log_path: /var/log/cluster/cluster.log, severity_max: 4, rotate_size: 100M, rotate_count: 200}`. They replace `log_file`, `archive_size` and `archive_files`.
   - `severity_max: 4` means warning and above (0 emerg … 4 warning). Comment: Chris, 2026-10-19.
-- Produces the record key **`syslog_severity`** on every fluent-bit record: a one-character string, `"0"`–`"7"`. It also reaches Azure as an extra column; that is harmless.
+- Produces the record key **`syslog_severity`** on every fluent-bit record: a one-character string, `"0"`–`"7"`.
+  - On `kube.*` records it also produces **`syslog_appname`** (the container name) and **`syslog_procid`** (the pod name), as top-level strings, which is the only form `out_syslog` reads.
+  - All three also reach Azure as extra properties. The Azure plan's DCR keeps `syslog_severity`, as its `Severity` column, and drops the other two.
 
 - [ ] **Step 1: Run the verifier.** Expected: FAIL, with no listener and a count of 0.
 
@@ -482,7 +507,7 @@ git push origin main
   1. **Write the severity test.** Extend `scripts/test-fluent-bit-exclusion.sh`:
      - it also extracts every `Name lua` `[FILTER]`;
      - it mounts each `valuesObject.luaScripts` entry at `/fluent-bit/scripts/<name>`;
-     - it adds `[INPUT] Name dummy, Tag host.sevtest, Samples 1, Dummy {"PRIORITY":"3","MESSAGE":"SEV-13"}`;
+     - it adds `[INPUT] Name dummy, Tag host.sevtest, Samples 1, Dummy {"PRIORITY":"3","MESSAGE":"SEV-13"}`, plus a second dummy input, `Tag kube.apptest`, for the SEV-14 row;
      - it switches the stdout output to `Format json_lines`.
 
      The Task 2 cases keep passing, because they only grep markers. Then add these cases, each passing when the record holding the marker has `syslog_severity` equal to the expected string. The CRI lines go in fixture `sev-1_default_sev-<id>.log`:
@@ -502,9 +527,15 @@ git push origin main
      | `[WARNING] SEV-11` | `"4"` |
      | `plain line SEV-12 with an error inside` | `"6"` (lowercase words do not count) |
      | dummy record `PRIORITY "3"` (`SEV-13`) | `"3"` |
+     | dummy record, `Tag kube.apptest`: `{"log":"W1019 01:02:03.456789       1 x.go:1] SEV-14","kubernetes":{"container_name":"ctr-14","pod_name":"pod-14"}}` | `"4"`, plus `syslog_appname` `"ctr-14"` and `syslog_procid` `"pod-14"` |
 
-  2. **Run it.** Expected: the 13 severity cases FAIL, because there is no `syslog_severity` key yet. The Task 2 cases still PASS.
-  3. **Write `severity.lua`.** It defines `function syslog_severity(tag, ts, record)`, which sets `record.syslog_severity` and returns `2, ts, record`. It reads only `PRIORITY` and `log`; the kubernetes filter keeps `log` (`Keep_Log` defaults to On). Rules, in order, first match wins:
+  2. **Run it.** Expected: the 14 severity cases FAIL, because there is no `syslog_severity` key yet. The Task 2 cases still PASS.
+  3. **Write `severity.lua`.** It defines `function syslog_severity(tag, ts, record)`, which sets `record.syslog_severity` and returns `2, ts, record`.
+     - For severity it reads only `PRIORITY` and `log`.
+     - The kubernetes filter leaves `log` untouched: the Azure plan's Task 2 sets `Merge_Log Off`, and before that `Keep_Log` defaults to On. The Lua reads no labels or annotations, so that plan's `Labels Off`/`Annotations Off` don't affect it.
+     - When `record.kubernetes` is a table, it also copies `kubernetes.container_name` to `syslog_appname` and `kubernetes.pod_name` to `syslog_procid`, when they are strings.
+
+     The severity rules, in order, first match wins:
      1. `PRIORITY` is a single digit 0–7 (journald, `host.*`): use it.
      2. A `level`, `lvl` or `severity` key, JSON (`"level":"x"`) or logfmt (`level=x`), in the first 512 characters of `log`, case-insensitive. Its value maps as:
         - `emerg` → 0, `alert` → 1;
@@ -524,8 +555,9 @@ git push origin main
      - Add `[FILTER] Name lua, Match *, script /fluent-bit/scripts/severity.lua, call syslog_severity`, last in `filters`.
      - Add `Syslog_Message_Key log` to the syslog `[OUTPUT]`, with a comment: the record key from the cri/docker parsers is `log`, and without it every message body is empty.
      - Add `Syslog_Severity_Key syslog_severity` to the same output, with a comment: container lines carry no severity; without the key every line goes out as `info` (preset 6) and the router's warning filter would store nothing.
+     - Replace `Syslog_Appname_Key kubernetes_container_name` and `Syslog_Procid_Key kubernetes_pod_name` with `Syslog_Appname_Key syslog_appname` and `Syslog_Procid_Key syslog_procid`. Comment: `out_syslog` matches only top-level string keys (v2.2.3 `syslog.c`), and the kubernetes filter nests these names under `kubernetes`, so the old keys never matched and lines went out with no tag.
      - Filtering stays on the router, by design. fluent-bit filters act per tag, for both outputs, so dropping `info` there would also drop it from Azure. The LAN carries the ~1 GB/day of UDP easily.
-  5. **Run the test again.** Expected: all checks PASS (the 14 from Task 2 and the 13 severity cases).
+  5. **Run the test again.** Expected: all checks PASS (the 18 from Task 2 and the 14 severity cases).
   6. **Commit,** together with the router files, and only after Step 7 PASSes. If the parachute rolled the router back, fix the cause and repeat Steps 5–7 before committing, so that the repo never records an undeployed router state. Push, then watch the DaemonSet roll 3/3 (Monitor).
 
 ```bash
@@ -538,18 +570,21 @@ git push origin main
 ```
 
 - [ ] **Step 9: End-to-end with canaries.**
-  - Repeat Task 2 Step 7, items 1–3 (namespace `luma-0b-canary`, the same two pods, `Running`, markers visible in `kubectl logs`). This time each pod echoes **two** lines every 5 s: `level=warn MARKER-<uuid>-<namespace>-warn` and `level=info MARKER-<uuid>-<namespace>-info`.
+  - Repeat Task 2 Step 7, items 1–3: namespaces `luma-0b-canary` and `luma-sandbox-0b-canary`, the same two pods, `Running`, and markers visible in `kubectl logs`. This time each pod echoes **two** lines every 5 s: `level=warn MARKER-<uuid>-<namespace>-warn` and `level=info MARKER-<uuid>-<namespace>-info`.
   - After 2 minutes, run each of these over SSH; each prints a count:
     - `grep -c <control>-warn /var/log/cluster/cluster.log` must be more than 0;
+    - `grep <control>-warn /var/log/cluster/cluster.log | grep -c '\[fb-canary-control\]'` must be more than 0. The procid is the pod name, so this proves the appname/procid keys;
     - `grep -c <control>-info /var/log/cluster/cluster.log` must be 0;
-    - both canary markers must count 0.
-  - If no `-warn` line arrives at all, while Step 7's `logger` line did: `out_syslog` is ignoring the key's type. Check which types v2.2.2 accepts, switch the Lua to integers (filter option `type_int_key syslog_severity`), and repeat Step 8 from item 5.
+    - both `luma-sandbox-0b-canary` markers must count 0.
+  - If no `-warn` line arrives at all, while Step 7's `logger` line did, check the key, not its type.
+    - `out_syslog` (v2.2.3 `syslog.c`) reads only top-level keys with string values, and takes a single digit `0`–`7` or a severity name. An integer is skipped silently, so never switch to `type_int_key`.
+    - Confirm in the harness output that `syslog_severity` is top-level and a one-character string. Stop and report if it is.
   - The fluent-bit `syslog.0` retry counter must stop climbing: read `fluentbit_output_retries_total{name="syslog.0"}` through the API-server pod proxy twice, 10 minutes apart, on each pod. Delta ≤ 5.
   - Clean up as in Task 2 Step 8.
 
 - [ ] **Step 10: 24 hours later.**
   - `du -sh /var/log/cluster` must be under **300 MB**. The estimate is 10–50 MB/day at warning and above.
-    - **Above 300 MB:** stop and report the top senders to Chris: `awk '{print $5}' /var/log/cluster/cluster.log | sort | uniq -c | sort -rn | head`. Field 5 is the tag (the container name) in rsyslog's traditional file format. A chatty app logging `WARN`, or a mapping that is too loose, is the likely cause.
+    - **Above 300 MB:** stop and report the top senders to Chris: `awk '{print $5}' /var/log/cluster/cluster.log | sort | uniq -c | sort -rn | head`. Field 5 is the tag (`<container>[<pod>]:`, from Step 8's appname and procid keys) in rsyslog's traditional file format. A chatty app logging `WARN`, or a mapping that is too loose, is the likely cause.
   - Once more than 100 MB has been written, `ls /var/log/cluster` must show size-rotated, compressed files. At the estimate that takes days; check it at Task 13.
   - `/var/log/messages` must not have rotated faster than before (its own `messages.N` timestamps).
   - Record the daily volume in Status.
@@ -1049,6 +1084,10 @@ git push origin main
 - **Router SSD load:** the router stores **warnings and above** only (Task 3). The estimate is 10–50 MB/day.
 - **Azure:** the move to the Logs Ingestion API is its own plan, `docs/superpowers/plans/2026-10-19-azure-logs-ingestion.md`.
 
+**Answered for logs (2026-10-19):**
+- **Luma's logs go to Azure.** `luma-system` ships, and `luma-sandbox*` and `luma-browser*` stay excluded (designer's refinement, recorded in Global Constraints). The Traefik drop for Luma routers stays (Task 2).
+- **fluent-bit 2.2.3** (CVE-2024-4323) shipped as its own change (`7850cbe6`). The move to 5.1.3 belongs to the Azure plan.
+
 **Still open (only Chris can answer):**
 1. **Gate waits.** The 1000 ms latency gate passes in about 25% of 15-minute windows. Accept multi-hour waits for each Rook task (my recommendation), rather than loosening it?
 
@@ -1059,13 +1098,21 @@ git push origin main
    - etcd is unmonitored today, despite about 3 elections a day and the worn NVMes (#2661).
 2. **Controller-manager, scheduler and kube-proxy metrics** need Talos `bind-address` (S4). The readiness rules cover liveness only.
 3. **Watchdog → an external heartbeat** (a dead man's switch). Today Watchdog routes to `null`.
-4. **Azure:** the HTTP Data Collector API is retired (2026-09-14) but still answers. The move of fluent-bit's azure output to `azure_logs_ingestion` is its own plan: `docs/superpowers/plans/2026-10-19-azure-logs-ingestion.md`. A fluent-bit PodMonitor (`release: prometheus`), so that output retries and drops become visible, belongs there too, unless that plan says otherwise.
+4. **Azure:** the HTTP Data Collector API is retired (2026-09-14) but still answers. The move of fluent-bit's azure output to `azure_logs_ingestion` is its own plan: `docs/superpowers/plans/2026-10-19-azure-logs-ingestion.md`. That plan also:
+   - adds the fluent-bit ServiceMonitor (`release: prometheus`), so output retries and drops become visible;
+   - trims the records: no pod labels, annotations or `log_processed`;
+   - sets `Log_Level warn` on the Azure outputs.
+
+   None of that touches this plan's exclusion, grep filter, Lua script or syslog output.
 5. **Traefik access logs ship every app's OAuth callback `code=` query strings** to Azure today (oauth2-proxy, Dex). Consider dropping query strings cluster-wide. For phase 1, the per-router `traefik.ingress.kubernetes.io/router.observability.accesslogs: "false"` on Luma Ingresses is optional defence in depth: check the annotation against the Traefik v3.7 docs first.
 6. **The dead ConfigMap rules** (the `luma-homelab-alert-rules` generator): convert or delete them. Four Ceph rules now live in `ceph-critical-alerts`.
 7. **`gonic-alerts`** references an unscraped job and the removed `music-sync` CronJob.
 8. **Upstream Rook:** a CephNFS ganesha config override would reclaim about 4 GiB. The request is drafted in Appendix A and **not filed**, by Chris's decision (2026-10-19). Nothing in this plan posts it anywhere.
 9. **VyOS:** the `system syslog file` template bug (`${{ file }}`) is in this two-year-old rolling image. Do not use `system syslog file` until the image is upgraded, and check the receiver drop-in survives that upgrade (the postconfig script re-installs it).
-10. **Phase-1 plan cross-references:** its P3 gate says "0b's throwaway `luma-system` namespace is gone". That should now read "`luma-0b-canary` is gone", and 0b never touches `luma-system`.
+10. **Phase-1 plan cross-references:**
+    - Its P3 gate says "0b's throwaway `luma-system` namespace is gone". That should now read "`luma-0b-canary` and `luma-sandbox-0b-canary` are gone", and 0b never touches `luma-system`.
+    - Its "Logs" bullet says fluent-bit "excludes `luma-*`". Since the 2026-10-19 ruling, that should read "excludes `luma-sandbox*` and `luma-browser*`; Luma's own logs ship".
+    - Phase 1 should verify that `luma-system`'s other tenants log metadata only, because they ship now: `acid-luma`, smokescreen and agentgateway.
 
 ## Self-review (2026-10-19)
 
@@ -1104,7 +1151,8 @@ git push origin main
 - **Names checked across tasks:**
   - scripts: `ceph-gate.sh`, `test-fluent-bit-exclusion.sh`, `verify-syslog-receiver.sh`, `check-prometheus-rules.sh`;
   - rules: `platform-selftest`, `ceph-critical-alerts`, `capacity-alerts`, `control-plane-alerts`;
-  - namespace: `luma-0b-canary`.
+  - namespaces: `luma-0b-canary`, and `luma-sandbox-0b-canary` (the log canaries in Tasks 2–3 only);
+  - record keys: `syslog_severity`, `syslog_appname`, `syslog_procid`.
 - **Numbers checked against the live cluster:**
   - 35 stock objects; 9 MDS sessions; 0 blocklist entries;
   - the `drivers.csi.ceph.io` CRD name; the rule-file basename format;
@@ -1115,6 +1163,16 @@ git push origin main
   - Syslog stores warnings and above. Severity is derived in fluent-bit (13 test cases) and filtered on the router. The volume estimate and the 24-hour threshold are updated.
   - The Rook issue is a draft only (Appendix A), with no filing step.
   - The Azure retirement points at `2026-10-19-azure-logs-ingestion.md`.
+- **Logs decisions (2026-10-19):**
+  - The ruling is recorded in Global Constraints, superseding §13.3's "every `luma-*`".
+  - `Exclude_Path` covers only `*_luma-sandbox*_*` and `*_luma-browser*_*`.
+  - The Task 2 fixtures are now 13 file cases plus 5 Traefik lines (18 checks). `luma-system` and `luma-0b-canary` flip to shipped, and four anchoring cases are added.
+  - The live canary moves to `luma-sandbox-0b-canary`, with its control in `luma-0b-canary` (Tasks 2 and 3).
+  - The Traefik drop is unchanged.
+  - Checked against the `out_syslog` v2.2.3 source:
+    - the dead app and proc keys are replaced by Lua-set top-level keys, with a 14th Task 3 case;
+    - the integer-severity fallback is removed, because an integer would be ignored.
+  - fluent-bit 2.2.3 is noted as live.
   - The names `syslog_severity`, `severity_max` and `severity.lua` are used consistently across Task 3's Interfaces and steps.
 
 ## Appendix A: Rook feature request, drafted and not filed

@@ -86,7 +86,7 @@ It then meets every phase-1 exit criterion.
 - **Upstream headers:** `x-luma-*` carry **opaque ids only** (`u_<10 hex>`; product P21) *(Chris)*.
 - **Priorities** *(Chris)*: Core, conductor, gateway and smokescreen at **0**; evals and reconcile at `luma-batch` **−5**.
 - **Ingress:** `luma.chrismiller.xyz`, one Ingress with a host and **no oauth2-proxy middleware** (D39). It has no `spec.tls` and no DNS/cert annotations. Its only annotation turns Traefik access logs off for the router.
-- **Logs:** fluent-bit excludes `luma-*` and drops Traefik access-log lines for `luma-*` routers (both phase 0b; verified here).
+- **Logs (ruling 2026-10-19):** `luma-system` logs **ship to Azure**, which means Core, the conductor, agentgateway, smokescreen and `acid-luma` must log metadata only. fluent-bit excludes only `luma-sandbox*` and `luma-browser*`, and it drops Traefik access-log lines for `luma-*` routers. Both are phase 0b, verified here.
 - **Repo:** the luma repo is public; nothing from this repo's secrets reaches it.
 - **Expected cost:** about **$8–20/month** for Chris's chat, plus about **$3–5/month** of evals on `luma-ci`.
 
@@ -111,7 +111,7 @@ These are the five failure modes most likely to bite, which no step below would 
 |---|---|---|---|---|
 | P1 | Ceph at its usual WARN noise | PG 1.c repaired 2026-10-19 UTC | ceph-doctor run clean (S7) | 4, 7, 12 |
 | P2 | Phase 0a done | Dex `v2.44.0` live | Dex v2.46.0 with `DEX_CONFIG_DISALLOW_UNKNOWN_FIELDS=true`, sessions on, `skipApprovalScreen: false` (0a Tasks 4, 7) | 5 |
-| P3 | Phase 0b done (`docs/superpowers/plans/2026-10-18-luma-0b-platform-prep.md`) | requests at 89–91 % per node | All of 0b's exit outputs (referenced here, not re-specified): (a) the per-node gate over all three nodes, **at least two nodes ≥ 4096 Mi of free memory requests and every node ≥ 2048 Mi**; (b) the live fluent-bit `luma-*` input exclusion **and** its grep filter dropping Traefik access-log lines for `luma-*` routers; (c) `scripts/check-prometheus-rules.sh` PASS; (d) 0b's canary namespace **`luma-0b-canary` is gone**. | (b, d) 2, 3; (a) 4, 7; (c) 9 |
+| P3 | Phase 0b done (`docs/superpowers/plans/2026-10-18-luma-0b-platform-prep.md`) | requests at 89–91 % per node | All of 0b's exit outputs (referenced here, not re-specified): (a) the per-node gate over all three nodes, **at least two nodes ≥ 4096 Mi of free memory requests and every node ≥ 2048 Mi**; (b) the live fluent-bit input exclusion of `luma-sandbox*` and `luma-browser*` only (`luma-system` ships to Azure), **and** its grep filter dropping Traefik access-log lines for `luma-*` routers; (c) `scripts/check-prometheus-rules.sh` PASS; (d) 0b's canary namespaces **`luma-0b-canary` and `luma-sandbox-0b-canary` are gone**. | (b, d) 2, 3; (a) 4, 7; (c) 9 |
 | P4 | A luma chart release exists | none (product Task 29) | `v0.1.0-rc.1` with `ci-ok` green. `helm search repo luma --devel` finds it, and `gh attestation verify` passes for the three image digests in its `values.yaml` | **6, 7 only** |
 | P5 | Product Spike G is recorded | not started (product Task 3) | `~/Repos/luma/test/gateway/agentgateway.yaml` committed and `docs/spikes/phase-1.md` §G written | 3 |
 | P6 | Namespace `luma-system` **has never existed** | absent | `kubectl get ns luma-system` → NotFound, and no `luma-system` Argo app or rule in history (0b no longer uses it) | 2 |
@@ -221,7 +221,8 @@ There is no `luma-vault` Secret in phase 1. The connections vault key arrives wi
   Also the Argo app `luma`. Later tasks only add files to `cluster/luma/`.
 
 - [ ] **Step 1 (S1, P3 b/d, P6): read the current state.**
-  - `kubectl get ns luma-system luma-0b-canary`: both NotFound.
+  - `kubectl get ns luma-system luma-0b-canary luma-sandbox-0b-canary`: all NotFound.
+  - Metadata-only logging check, because `luma-system` ships to Azure: after the first chat turn, `kubectl -n luma-system logs` for Core, the conductor, agentgateway and smokescreen contains no message text, tool arguments, prompts or emails. Grep for a unique marker phrase sent in that turn; it must return zero matches.
   - `kubectl -n argo-cd get applications.argoproj.io -o wide`: the P7 baseline.
   - `kubectl -n logging get cm -o yaml | grep -c -e 'Exclude_Path /var/log/containers/\*_luma-\*_\*.log' -e 'luma-\[a-z0-9-\]+@kubernetes'`: ≥ 2. This is 0b's input exclusion plus its Traefik grep filter, the outputs of 0b Task 2.
 - [ ] **Step 2: Write the namespace and the app.**
