@@ -4,18 +4,24 @@
 # the slider being open means the insert is in. Tunables are input_numbers whose
 # `initial:` makes git the source of truth (edit them here, not in the UI).
 #
-# The living room ecobee is wired to nothing: it is the dial. Its mode (cool /
-# heat_cool) and cool setpoint say what the room should be, and its sensor
-# (sensor.living_room_temperature) says what the room is. The AC
-# (climate.portable_air_conditioner, Hisense via the ConnectLife cloud) is aimed
-# below that setpoint, because its own sensor sits by the insert and would call
-# the room done too early; HA stops it on the ecobee's reading instead.
+# The living room ecobee is wired to nothing: it is the dial and the brain. HA owns
+# its schedule (Chris, 2026-10-18): sensor.climate_comfort picks Home / Sleep / Away
+# from presence and the sleep window, and HA writes that comfort's heat-cool pair
+# to the ecobee as a hold (its Hold Action is "until I change it", its own program
+# is a flat Home, Smart Home/Away is off). A turn of the dial lasts until the next
+# comfort change. The ecobee's own call (hvac_action) then drives the real
+# equipment: `cooling` the portable AC (climate.portable_air_conditioner, Hisense
+# via the ConnectLife cloud), `heating` the SmartRent wall thermostat
+# (climate.living_room_thermostat). Each is aimed past the ecobee's setpoint (AC
+# below, heat above), because their own sensors sit elsewhere and would call the
+# room done too early; HA stops them when the ecobee stops calling.
 #
 # Safety rules (plan-4 review): a decision sensor is `unavailable` while any of
 # its inputs is unknown, so missing data never sends a command; the actuator
 # automations act on the first known value after a reload (so they resync); the
-# AC is only commanded while binary_sensor.ac_ready (reachable, reading °F), and
-# climate only stops an AC run it started (any cool run when the house empties).
+# AC is only commanded while binary_sensor.ac_ready (reachable, reading °F; in
+# winter it is unplugged, so offline), the heat only while SmartRent is reachable,
+# and climate only stops a run it started (any AC cool run when the house empties).
 #
 # GitOps source of truth (see bedroom.yaml header for the mount mechanism).
 
@@ -33,6 +39,32 @@ input_boolean:
   ac_started_by_climate:
     name: AC Started by Climate
     icon: mdi:air-conditioner
+  # Set when climate put the SmartRent thermostat into heat, so heat set by hand is left alone.
+  heat_started_by_climate:
+    name: Heat Started by Climate
+    icon: mdi:radiator
+
+# The comfort (and setpoints) last written to the ecobee, e.g. "Home 70/76". A
+# reload only rewrites the hold if the wanted comfort differs, so a deploy never
+# undoes a turn of the dial. No `initial:`, so it survives a restart.
+input_text:
+  climate_comfort_applied:
+    name: Climate Comfort Applied
+    icon: mdi:thermostat
+    max: 32
+
+# The Sleep comfort's window (Chris, 2026-10-18: 23:00 -> 07:00, every day).
+input_datetime:
+  climate_sleep_start:
+    name: Climate Sleep Start
+    has_date: false
+    has_time: true
+    initial: "23:00:00"
+  climate_sleep_end:
+    name: Climate Sleep End
+    has_date: false
+    has_time: true
+    initial: "07:00:00"
 
 timer:
   # A floor fan switched by hand is left alone this long (Chris, 2026-10-18).
@@ -74,6 +106,65 @@ input_number:
     step: 1
     unit_of_measurement: °F
     initial: 4
+    mode: box
+  # How far above the ecobee's heat setpoint the SmartRent heat is aimed (capped at 78).
+  heat_setpoint_offset:
+    name: Heat Setpoint Offset
+    min: 0
+    max: 10
+    step: 1
+    unit_of_measurement: °F
+    initial: 4
+    mode: box
+  # The schedule's heat-cool pairs (Chris, 2026-10-18). The ecobee needs the pair at
+  # least its heatCoolMinDelta (5 °F) apart.
+  comfort_home_heat:
+    name: Comfort Home Heat
+    min: 55
+    max: 85
+    step: 0.5
+    unit_of_measurement: °F
+    initial: 70
+    mode: box
+  comfort_home_cool:
+    name: Comfort Home Cool
+    min: 60
+    max: 90
+    step: 0.5
+    unit_of_measurement: °F
+    initial: 76
+    mode: box
+  comfort_sleep_heat:
+    name: Comfort Sleep Heat
+    min: 55
+    max: 85
+    step: 0.5
+    unit_of_measurement: °F
+    initial: 67
+    mode: box
+  comfort_sleep_cool:
+    name: Comfort Sleep Cool
+    min: 60
+    max: 90
+    step: 0.5
+    unit_of_measurement: °F
+    initial: 74
+    mode: box
+  comfort_away_heat:
+    name: Comfort Away Heat
+    min: 55
+    max: 85
+    step: 0.5
+    unit_of_measurement: °F
+    initial: 62
+    mode: box
+  comfort_away_cool:
+    name: Comfort Away Cool
+    min: 60
+    max: 90
+    step: 0.5
+    unit_of_measurement: °F
+    initial: 82
     mode: box
 
 template:
@@ -160,31 +251,33 @@ template:
              and indoor >= states('input_number.free_cooling_floor') | float(70)
              and (aqi is none or aqi <= states('input_number.aqi_limit') | float(100)) }}
 
-      # The ecobee asks for cooling (cool / heat_cool, setpoint S). Hysteresis on
-      # both edges: the room (start at S + 1, stop at S - 1, so it averages S) and
-      # the "outside air can't do it" margin (+1°F to start, -1°F to stop); the AC
-      # automation adds 5 min either way, so the compressor isn't short-cycled.
+      # The ecobee calls for cooling (its own differential and minimum off time; the
+      # schedule sets its setpoint, so Away's 82 keeps it quiet while nobody is home)
+      # and outside air can't do it (+1°F to start, -1°F to stop). The AC automation
+      # adds 5 min either way, so the compressor isn't short-cycled.
       - name: AC Cool Wanted
         unique_id: ac_cool_wanted
         icon: mdi:snowflake
         availability: >-
           {{ states('binary_sensor.window_insert_installed') in ['on', 'off']
-             and states('binary_sensor.house_occupied') in ['on', 'off']
              and states('climate.living_room') not in ['unavailable', 'unknown']
              and states('sensor.living_room_temperature') | is_number
              and state_attr('weather.forecast_home', 'temperature') | is_number }}
         state: >-
-          {% set mode = states('climate.living_room') %}
-          {% set target = state_attr('climate.living_room', 'target_temp_high' if mode == 'heat_cool' else 'temperature') | float(none) %}
           {% set indoor = states('sensor.living_room_temperature') | float %}
           {% set outdoor = state_attr('weather.forecast_home', 'temperature') | float %}
           {% set delta = states('input_number.free_cooling_delta') | float(2) %}
           {% set on = this.state == 'on' %}
-          {{ mode in ['cool', 'heat_cool'] and target is not none
+          {{ state_attr('climate.living_room', 'hvac_action') == 'cooling'
              and is_state('binary_sensor.window_insert_installed', 'on')
-             and is_state('binary_sensor.house_occupied', 'on')
-             and ((indoor > target - 1) if on else (indoor >= target + 1))
              and outdoor > indoor - delta + (-1 if on else 1) }}
+
+      # The ecobee calls for heat. The heat automation adds 5 min either way.
+      - name: Heat Wanted
+        unique_id: heat_wanted
+        icon: mdi:radiator
+        availability: "{{ states('climate.living_room') not in ['unavailable', 'unknown'] }}"
+        state: "{{ state_attr('climate.living_room', 'hvac_action') == 'heating' }}"
 
       # Sanity gate. The unit can be switched to °C at any time (an IR frame did it,
       # 2026-10-18); stock hisense_ac_plugin then read Celsius under a °F label. Our
@@ -215,6 +308,35 @@ template:
           {% set target = state_attr('climate.living_room', 'target_temp_high' if mode == 'heat_cool' else 'temperature') | float %}
           {% set floor = state_attr('climate.portable_air_conditioner', 'min_temp') | float(61) %}
           {{ [target - states('input_number.ac_setpoint_offset') | float(4), floor] | max | round(0) | int }}
+
+      # What the SmartRent thermostat is set to while climate heats: the ecobee's heat
+      # setpoint plus the offset, capped at 78 so a missed "off" can't overheat the
+      # room. Unavailable unless the ecobee heats.
+      - name: Heat Drive Setpoint
+        unique_id: heat_drive_setpoint
+        icon: mdi:thermometer-chevron-up
+        unit_of_measurement: °F
+        availability: >-
+          {% set mode = states('climate.living_room') %}
+          {{ mode in ['heat', 'heat_cool']
+             and state_attr('climate.living_room', 'target_temp_low' if mode == 'heat_cool' else 'temperature') | is_number }}
+        state: >-
+          {% set mode = states('climate.living_room') %}
+          {% set target = state_attr('climate.living_room', 'target_temp_low' if mode == 'heat_cool' else 'temperature') | float %}
+          {{ [target + states('input_number.heat_setpoint_offset') | float(4), 78] | min | round(0) | int }}
+
+      # The schedule: Away while the house is empty (guests count as home), Sleep in
+      # the sleep window, Home otherwise. Each has a heat-cool pair of input_numbers.
+      - name: Climate Comfort
+        unique_id: climate_comfort
+        icon: mdi:home-thermometer
+        availability: "{{ states('binary_sensor.house_occupied') in ['on', 'off'] }}"
+        state: >-
+          {% set start = states('input_datetime.climate_sleep_start') %}
+          {% set end = states('input_datetime.climate_sleep_end') %}
+          {% set t = now().strftime('%H:%M:%S') %}
+          {% set sleep = (t >= start or t < end) if start > end else (t >= start and t < end) %}
+          {{ 'Away' if is_state('binary_sensor.house_occupied', 'off') else ('Sleep' if sleep else 'Home') }}
 
   - sensor:
       - name: Free Cooling Status
@@ -344,15 +466,96 @@ automation:
           entity_id: timer.floor_fan_manual_hold
     mode: queued
 
+  # The ecobee's schedule (its setpoints) has this one owner.
+  - id: climate_ecobee_follows_comfort
+    alias: Climate - Ecobee Follows the Schedule
+    description: >-
+      Writes the wanted comfort's heat-cool pair (sensor.climate_comfort: Home, Sleep,
+      or Away while the house is empty) to the living room ecobee as a hold, whenever
+      it differs from the last one written (input_text.climate_comfort_applied), so a
+      turn of the dial lasts until the next comfort change and a deploy doesn't undo
+      it. Climate Auto coming back on, or the ecobee's mode changing, rewrites it.
+    triggers:
+      # the comfort changed, or its first known value after a reload or restart
+      - trigger: state
+        entity_id: sensor.climate_comfort
+        not_to: [unavailable, unknown]
+      # a pair changed in git (`initial:` applies on the deploy's reload)
+      - trigger: state
+        entity_id:
+          - input_number.comfort_home_heat
+          - input_number.comfort_home_cool
+          - input_number.comfort_sleep_heat
+          - input_number.comfort_sleep_cool
+          - input_number.comfort_away_heat
+          - input_number.comfort_away_cool
+        not_to: [unavailable, unknown]
+      - trigger: homeassistant
+        event: start
+      - trigger: state
+        entity_id: input_boolean.climate_auto
+        from: "off"
+        to: "on"
+        id: force
+      # a cool- or heat-only hold carries one setpoint for both, so heat_cool needs the pair back
+      - trigger: state
+        entity_id: climate.living_room
+        not_from: [unavailable, unknown]
+        not_to: [unavailable, unknown]
+        id: force
+    conditions:
+      - condition: state
+        entity_id: input_boolean.climate_auto
+        state: "on"
+      - condition: template
+        value_template: >-
+          {{ states('sensor.climate_comfort') in ['Home', 'Sleep', 'Away']
+             and states('climate.living_room') in ['heat_cool', 'cool', 'heat'] }}
+    actions:
+      - variables:
+          comfort: "{{ states('sensor.climate_comfort') }}"
+          pairs:
+            Home: [input_number.comfort_home_heat, input_number.comfort_home_cool]
+            Sleep: [input_number.comfort_sleep_heat, input_number.comfort_sleep_cool]
+            Away: [input_number.comfort_away_heat, input_number.comfort_away_cool]
+          heat: "{{ states(pairs[comfort][0]) | float }}"
+          cool: "{{ states(pairs[comfort][1]) | float }}"
+          key: "{{ comfort }} {{ heat }}/{{ cool }}"
+      - condition: template
+        value_template: "{{ trigger.id == 'force' or key != states('input_text.climate_comfort_applied') }}"
+      - if:
+          - condition: state
+            entity_id: climate.living_room
+            state: heat_cool
+        then:
+          - action: climate.set_temperature
+            target:
+              entity_id: climate.living_room
+            data:
+              target_temp_low: "{{ heat }}"
+              target_temp_high: "{{ cool }}"
+        else:
+          - action: climate.set_temperature
+            target:
+              entity_id: climate.living_room
+            data:
+              temperature: "{{ cool if is_state('climate.living_room', 'cool') else heat }}"
+      - action: input_text.set_value
+        target:
+          entity_id: input_text.climate_comfort_applied
+        data:
+          value: "{{ key }}"
+    mode: queued
+
   - id: climate_ac_follows_cool_wanted
     alias: Climate - AC Follows Cooling Need
     description: >-
-      The portable AC (Hisense, ConnectLife cloud) cools while the ecobee asks for
-      cooling, the insert is in, the house is occupied, the room is above the
-      ecobee's setpoint and outside air can't do it. It runs at the drive setpoint
-      (ecobee setpoint less the offset) and follows ecobee changes; it is stopped on
-      the ecobee's reading. Only a run climate started is stopped, except that any
-      cool run stops when the house empties. Nothing is sent unless the AC is ready.
+      The portable AC (Hisense, ConnectLife cloud) cools while the ecobee calls for
+      cooling, the insert is in and outside air can't do it. It runs at the drive
+      setpoint (ecobee setpoint less the offset) and follows ecobee changes; it stops
+      when the ecobee stops calling. Only a run climate started is stopped, except that
+      any cool run stops when the house empties. Nothing is sent unless the AC is
+      ready (in winter it is unplugged, so offline).
     triggers:
       - trigger: state
         entity_id: binary_sensor.ac_cool_wanted
@@ -470,4 +673,108 @@ automation:
               - action: input_boolean.turn_off
                 target:
                   entity_id: input_boolean.ac_started_by_climate
+    mode: queued
+
+  - id: climate_heat_follows_heat_wanted
+    alias: Climate - Heat Follows the Ecobee
+    description: >-
+      The SmartRent wall thermostat (climate.living_room_thermostat, the real heat)
+      heats while the living room ecobee calls for heat, at the heat drive setpoint
+      (ecobee heat setpoint plus the offset, capped at 78), and follows ecobee
+      changes; it is switched off when the ecobee stops calling. Only heat climate
+      started is stopped; nothing is sent while SmartRent is unreachable; its cool
+      mode is never used.
+    triggers:
+      # 5 min hysteresis on real changes ...
+      - trigger: state
+        entity_id: binary_sensor.heat_wanted
+        from: ["on", "off"]
+        to: ["on", "off"]
+        for: "00:05:00"
+        id: sync
+      # ... immediate resync on the first known value after a reload, when Climate
+      # Auto returns, and when SmartRent is reachable again
+      - trigger: state
+        entity_id: binary_sensor.heat_wanted
+        from: [unavailable, unknown]
+        to: ["on", "off"]
+        id: sync
+      - trigger: state
+        entity_id: input_boolean.climate_auto
+        from: "off"
+        to: "on"
+        id: sync
+      - trigger: state
+        entity_id: climate.living_room_thermostat
+        from: [unavailable, unknown]
+        not_to: [unavailable, unknown]
+        id: sync
+      # the ecobee heat setpoint (or the offset) moved while it heats
+      - trigger: state
+        entity_id: sensor.heat_drive_setpoint
+        not_from: [unavailable, unknown]
+        not_to: [unavailable, unknown]
+        id: setpoint
+    conditions:
+      - condition: state
+        entity_id: input_boolean.climate_auto
+        state: "on"
+      - condition: template
+        value_template: "{{ states('climate.living_room_thermostat') not in ['unavailable', 'unknown'] }}"
+    actions:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ trigger.id == 'sync' and is_state('binary_sensor.heat_wanted', 'on')
+                     and states('sensor.heat_drive_setpoint') | is_number }}
+            sequence:
+              - if:
+                  - condition: template
+                    value_template: "{{ not is_state('climate.living_room_thermostat', 'heat') }}"
+                then:
+                  - action: climate.set_hvac_mode
+                    target:
+                      entity_id: climate.living_room_thermostat
+                    data:
+                      hvac_mode: heat
+              - action: climate.set_temperature
+                target:
+                  entity_id: climate.living_room_thermostat
+                data:
+                  temperature: "{{ states('sensor.heat_drive_setpoint') | int }}"
+              - action: input_boolean.turn_on
+                target:
+                  entity_id: input_boolean.heat_started_by_climate
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ trigger.id == 'setpoint' and is_state('input_boolean.heat_started_by_climate', 'on')
+                     and is_state('climate.living_room_thermostat', 'heat') }}
+            sequence:
+              - action: climate.set_temperature
+                target:
+                  entity_id: climate.living_room_thermostat
+                data:
+                  temperature: "{{ states('sensor.heat_drive_setpoint') | int }}"
+          - conditions:
+              - condition: template
+                value_template: >-
+                  {{ trigger.id == 'sync' and is_state('binary_sensor.heat_wanted', 'off')
+                     and is_state('input_boolean.heat_started_by_climate', 'on') }}
+            sequence:
+              # Only from heat: if it was switched to another mode by hand, that stays.
+              - if:
+                  - condition: state
+                    entity_id: climate.living_room_thermostat
+                    state: heat
+                then:
+                  - action: climate.set_hvac_mode
+                    target:
+                      entity_id: climate.living_room_thermostat
+                    data:
+                      hvac_mode: "off"
+              - action: input_boolean.turn_off
+                target:
+                  entity_id: input_boolean.heat_started_by_climate
     mode: queued

@@ -173,6 +173,17 @@ cards:
           icon_color: "{{ 'amber' if is_state('input_boolean.climate_auto', 'on') else 'disabled' }}"
           tap_action:
             action: toggle
+        # The schedule HA writes to the ecobee: the comfort and its heat-cool pair.
+        - type: template
+          entity: sensor.climate_comfort
+          content: >-
+            {% set c = states('sensor.climate_comfort') %}
+            {% set pairs = {'Home': ['input_number.comfort_home_heat', 'input_number.comfort_home_cool'],
+                            'Sleep': ['input_number.comfort_sleep_heat', 'input_number.comfort_sleep_cool'],
+                            'Away': ['input_number.comfort_away_heat', 'input_number.comfort_away_cool']} %}
+            {% if c in pairs %}{{ c }} {{ '%g' | format(states(pairs[c][0]) | float(0)) }}–{{ '%g' | format(states(pairs[c][1]) | float(0)) }}°{% else %}Schedule unknown{% endif %}
+          icon: "{{ {'Away': 'mdi:home-export-outline', 'Sleep': 'mdi:weather-night'}.get(states('sensor.climate_comfort'), 'mdi:home-thermometer') }}"
+          icon_color: "{{ 'amber' if is_state('input_boolean.climate_auto', 'on') else 'disabled' }}"
         - type: template
           entity: binary_sensor.window_insert_installed
           content: "Insert {{ 'in' if is_state('binary_sensor.window_insert_installed', 'on') else 'out' }}"
@@ -186,9 +197,12 @@ cards:
             {% set a = states('sensor.airnow_air_quality_index') | float(none) %}
             {% set limit = states('input_number.aqi_limit') | float(100) %}
             {{ 'disabled' if a is none else ('red' if a > limit else ('amber' if a > 50 else 'green')) }}
-        # Climate won't command the AC: unreachable (cloud) or switched to °C.
+        # Climate won't command the AC: unreachable (cloud) or switched to °C. Only while
+        # the insert is in: in winter the AC is unplugged on purpose.
         - type: conditional
           conditions:
+            - entity: binary_sensor.window_insert_installed
+              state: "on"
             - entity: binary_sensor.ac_ready
               state: "off"
           chip:
@@ -201,8 +215,8 @@ cards:
       entity: sensor.free_cooling_status
       primary: "Free cooling: {{ states('sensor.free_cooling_status') }}"
       secondary: >-
-        Δ {{ states('input_number.free_cooling_delta') | float(0) | round(1) }}° · floor {{ states('input_number.free_cooling_floor') | float(0) | round(1) }}°
-        · AQI ≤ {{ states('input_number.aqi_limit') | int(0) }} · AC {{ states('input_number.ac_setpoint_offset') | int(0) }}° under ecobee
+        Δ {{ '%g' | format(states('input_number.free_cooling_delta') | float(0)) }}° · floor {{ '%g' | format(states('input_number.free_cooling_floor') | float(0)) }}°
+        · AQI ≤ {{ states('input_number.aqi_limit') | int(0) }} · AC −{{ states('input_number.ac_setpoint_offset') | int(0) }}° · heat +{{ states('input_number.heat_setpoint_offset') | int(0) }}°
       icon: "{% set s = states('sensor.free_cooling_status') %}{{ {'running': 'mdi:fan', 'smoke': 'mdi:smoke', 'insert out': 'mdi:window-closed-variant', 'paused': 'mdi:pause-circle-outline'}.get(s, 'mdi:fan-off') }}"
       icon_color: "{{ 'amber' if is_state('sensor.free_cooling_status', 'running') else ('red' if is_state('sensor.free_cooling_status', 'smoke') else 'disabled') }}"
     - type: custom:mushroom-climate-card
@@ -213,6 +227,12 @@ cards:
       entity: climate.portable_air_conditioner
       name: A/C
       icon: mdi:air-conditioner
+      collapsible_controls: true
+    # The real heat: SmartRent's wall thermostat, which climate runs while the ecobee calls for heat.
+    - type: custom:mushroom-climate-card
+      entity: climate.living_room_thermostat
+      name: Heat
+      icon: mdi:radiator
       collapsible_controls: true
     - type: custom:mushroom-entity-card
       entity: switch.vent_fan_switch
