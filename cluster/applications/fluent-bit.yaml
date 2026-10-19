@@ -17,7 +17,8 @@ spec:
         replicaCount: 1
         image:
           repository: fluent/fluent-bit
-          tag: 2.2.2
+          tag: 2.2.3
+          digest: sha256:4d5e3b6bfd717447687eb8bb09ec57edfebd66344c12e343f97686dd4b2574e4
         serviceAccount:
           create: true
         rbac:
@@ -27,7 +28,8 @@ spec:
         # /api/v1/health flips to 500 whenever any output is in retry —
         # the syslog→VyOS UDP path retries often (UDP is lossy by design),
         # which left pods flapping 0/1 → 1/1 every few seconds. There's
-        # no Service in front of a DaemonSet, so readiness should reflect
+        # fluent-bit:2020 Service fronts the DaemonSet (metrics only), so
+        # readiness should reflect
         # "process is up" (uptime endpoint), not output-health (which is
         # surfaced through the fluentbit_output_retries_failed_total Prom
         # metric instead).
