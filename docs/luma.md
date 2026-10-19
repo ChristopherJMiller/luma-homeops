@@ -56,8 +56,8 @@ Update this table whenever a phase moves.
 ## Gates and blockers outside Luma
 
 - **Ceph / node `middle` (2026-10-18).**
-  - PG 1.c had a bad replica on osd.6. Chris approved `ceph pg repair 1.c`,
-    started 01:16 UTC; verify it ended `active+clean`.
+  - PG 1.c had a bad replica on osd.6. It was repaired 2026-10-19 01:16→01:53 UTC (evening of 10-18 Pacific) with
+    Chris's approval: 0 inconsistents, health back to the usual WARN.
   - **The memtest86+ trigger on `middle` is met**: three bad non-primary
     replicas on middle's disks since 10-11, with SMART clean, so RAM, DMA or
     SATA is suspected. Chris runs memtest in a maintenance window (see the

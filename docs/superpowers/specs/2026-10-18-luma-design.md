@@ -103,8 +103,8 @@ works):
 - **`middle` is the memtest suspect.** There have been three bad replicas on
   middle's two HDDs since 10-11 (PGs 1.16, 1.b and 1.c), all non-primary,
   with SMART clean. That points at RAM, DMA or the SATA controller.
-  - PG 1.c repair started 2026-10-18 with Chris's approval. Verify it ends
-    clean.
+  - PG 1.c was repaired 2026-10-19 01:16→01:53 UTC (10-18 evening Pacific; Chris approved), with
+    0 inconsistents remaining.
   - Memtest86+ on middle is pending, in a maintenance window.
   - Anything placed on middle (the Polaris card, for example) waits for the
     verdict.
