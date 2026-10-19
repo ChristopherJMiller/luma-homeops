@@ -70,9 +70,54 @@ Update this table whenever a phase moves.
   pass comes before phase 1 deploys anything sizeable.
 - **Anthropic Commercial Terms.** Chris reviews the "not for consumer use"
   clause before the first relative is onboarded (the phase 2 gate).
-- **Anthropic Console.** Chris creates the workspaces (`luma-interactive`
-  $150, `luma-house` $10, `luma-background` $10, `luma-ci` $20; total $200 or
-  less) and their keys. Keys get sealed. They are never pasted into chat.
+- **Anthropic Console.** Chris creates the workspaces and their keys. Phase 1
+  needs `luma-interactive` ($150), `luma-ci` ($20) and an org Admin key for
+  the Usage API reconcile. `luma-house` ($10) arrives in phase 3, and
+  `luma-background` ($10) with the first Batch job. The total stays at $200
+  or less. Keys get sealed and are never pasted into chat.
+
+## Decisions after spec approval (2026-10-18/19)
+
+These are Chris's answers during the plan reviews. Where they refine the
+spec, they win.
+
+**MCP registration (0a).**
+- Registration on `mcp.chrismiller.xyz` is **open, with an exact-redirect
+  allowlist plus Dex consent**.
+- Until consent is live and verified, the stopgap stays: `/oauth/register`
+  answers 403, as of commit `c3fbca0a`. It is lifted in an explicit commit
+  afterwards.
+- Dex **sessions are enabled** (`DEX_SESSIONS_ENABLED`), so consent is
+  remembered.
+- The DCR client "ChatGPT" (`7QITXD4SBM…`) is Chris's. It stays
+  grandfathered and reconnects through the facade. The cluster holds no Dex
+  refresh tokens today.
+
+**Renovate PR #2662.** It bundles Dex 2.46 and oauth2-proxy 7.15.5. **Do not
+merge it until 0a is done.** 0a splits those dependencies out of the
+grouped PR.
+
+**Phase 0b.**
+- **No HDD OSD request cut.** Reclaim from Argo repo-server and immich-ml
+  instead.
+- **Alertmanager:** the weekday window moves to `America/Los_Angeles`.
+- **Router syslog:** **fix the VyOS rsyslog receiver** through Ansible
+  rather than dropping the output.
+- **Satellites:** `.243` and `.244` are intentionally off, so their scrape
+  targets are silenced.
+
+**Phase 1.**
+- The **layered task order is kept**. No walking-skeleton restructure.
+- The nightly **Usage API reconcile runs in-cluster with an org Admin API
+  key**, held in its own SealedSecret.
+- **Workspaces:** only `luma-interactive` ($150) and `luma-ci` ($20) are
+  created now.
+- **Keys:** Chris pastes the Anthropic keys himself into the `*.secret.yaml`
+  files the deploy plan names, then runs `./sign.sh`. Keys never go through
+  chat.
+- **Egress:** Discord is denied. Blocking pastebin and file-drop reads is
+  accepted.
+- `x-luma-*` headers reach Anthropic with **opaque ids only**.
 
 ## How to resume
 
