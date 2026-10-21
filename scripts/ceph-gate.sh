@@ -31,7 +31,8 @@ fi
 ALLOWED='["AUTH_INSECURE_CLIENT_KEY_TYPE","AUTH_INSECURE_KEYS_ALLOWED","AUTH_INSECURE_KEYS_CREATABLE","BLUESTORE_SPURIOUS_READ_ERRORS","MDS_CLIENT_RECALL","BLUESTORE_SLOW_OP_ALERT"]'
 
 fails=()
-ceph() { kubectl -n rook exec deploy/rook-ceph-tools -- ceph "$@" 2>/dev/null; }
+kc() { timeout 30 kubectl --request-timeout=25s "$@"; }
+ceph() { kc -n rook exec deploy/rook-ceph-tools -- ceph "$@" 2>/dev/null; }
 
 # 1. health checks beyond the allowed set (SLOW_OPS is deliberately not allowed)
 if h=$(ceph health detail -f json) && jq -e . >/dev/null 2>&1 <<<"$h"; then
@@ -43,6 +44,7 @@ fi
 
 if s=$(ceph status -f json) && jq -e . >/dev/null 2>&1 <<<"$s"; then
   # 2. every PG active+clean (+scrubbing / +deep allowed)
+  jq -e '(.pgmap.num_pgs // 0) > 0 and ((.pgmap.pgs_by_state // []) | length) > 0' >/dev/null 2>&1 <<<"$s" || fails+=("no pg data")
   badpg=$(jq -r '[.pgmap.pgs_by_state[] | select(((.state_name | split("+")) - ["scrubbing","deep"]) != ["active","clean"]) | "\(.state_name)=\(.count)"] | join(" ")' <<<"$s")
   [ -z "$badpg" ] || fails+=("pgs not active+clean: $badpg")
   # 3. 3 mons in quorum
@@ -56,7 +58,7 @@ else
 fi
 
 # 5. no node SchedulingDisabled
-if n=$(kubectl get nodes -o json 2>/dev/null) && jq -e . >/dev/null 2>&1 <<<"$n"; then
+if n=$(kc get nodes -o json 2>/dev/null) && jq -e . >/dev/null 2>&1 <<<"$n"; then
   cord=$(jq -r '[.items[] | select(.spec.unschedulable == true) | .metadata.name] | join(",")' <<<"$n")
   [ -z "$cord" ] || fails+=("node SchedulingDisabled: $cord")
 else
@@ -65,15 +67,15 @@ fi
 
 if [ "$health_only" -eq 0 ]; then
   # 6. OSD commit latency, 15 min max, via wget in the Prometheus pod
-  POD=$(kubectl -n prometheus get pod -l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+  POD=$(kc -n prometheus get pod -l app.kubernetes.io/name=prometheus -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
   q='max(max_over_time(ceph_osd_commit_latency_ms[15m]))'
   r=""
-  [ -z "$POD" ] || r=$(kubectl -n prometheus exec "$POD" -c prometheus -- \
+  [ -z "$POD" ] || r=$(kc -n prometheus exec "$POD" -c prometheus -- \
       wget -qO- --post-data="query=$(printf '%s' "$q" | sed -e 's/%/%25/g' -e 's/+/%2B/g' -e 's/&/%26/g')" \
       "http://localhost:9090/api/v1/query" 2>/dev/null)
   lat=$(jq -r 'if .status=="success" then (.data.result[0].value[1] // "") else "" end' <<<"$r" 2>/dev/null)
   if [[ "$lat" =~ ^[0-9.]+$ ]]; then
-    awk -v l="$lat" -v m="$max_ms" 'BEGIN{exit !(l < m)}' || fails+=("latency ${lat%%.*}ms >= ${max_ms}ms (15m max osd commit)")
+    awk -v l="$lat" -v m="$max_ms" 'BEGIN{exit !(l < m)}' || fails+=("latency $(printf "%.0f" "$lat")ms >= ${max_ms}ms (15m max osd commit)")
   else
     fails+=("latency unreadable")
   fi
