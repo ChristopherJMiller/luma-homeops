@@ -157,6 +157,29 @@ grouped PR.
   stock. `acid-chrismillerxyz`'s pg_hba hardening is folded into that plan's
   chrismillerxyz step (`2026-10-19-patroni-rest-auth.md`).
 
+**Execution approvals (2026-10-21, `/goal`: bring Luma to a usable deployed form).**
+- **0b:** every task that needs Chris's go is **pre-approved** (3, 4, 7, 8, 11, 12).
+  - Each runs as written, one at a time, after its gate passes, with a report
+    after each.
+  - The gate stays at **1000 ms**; multi-hour waits are accepted.
+- **HA restarts (0b Task 9, Patroni acid-ha/acid-attic):** any time.
+- **0a:**
+  - Chris has his own Microsoft account for the Task 4/9 sign-ins.
+  - The ChatGPT client's display name is renamed to `chatgpt.com — ChatGPT`.
+  - Task 11's canary waits for a ping to Chris.
+- **Phase 1:** the drift alert fires at 10 % **and** $0.50 per workspace-day.
+- **Patroni:**
+  - It runs as revised: canary `acid-royaltracker`, the leader is switched back
+    off `top` after each roll, and the probe may send the no-op
+    `DELETE /restart`.
+  - For `acid-chrismillerxyz`, TLS goes into both apps first, then pg_hba
+    moves to `hostssl … md5`.
+- **Azure:**
+  - The steady cap is **3 GB/day**, with a **$40/month** budget alert.
+  - The cap goes up to 4 GB temporarily for the checkpoint.
+  - Pre-approved: deleting the canary namespaces, and disabling local auth
+    after its gate passes.
+
 ## How to resume
 
 1. Read this page, then the spec's §3 decisions and §14 for the phase you're
