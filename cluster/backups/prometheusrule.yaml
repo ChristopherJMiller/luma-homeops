@@ -1,7 +1,7 @@
 ---
 # Backup alerting. A real PrometheusRule (the operator's ruleSelector only
 # loads these, not the ConfigMaps under cluster/prometheus-stack/rules/),
-# in the prometheus namespace where ruleNamespaceSelector looks.
+# selected by `release: prometheus` (any namespace since 0b Task 5; it lives in prometheus).
 # Names deliberately avoid Volume/Storage/Ceph so they route to
 # homelab-default (Discord, weekday hours) rather than the storage route.
 # Covers: restic-* (config tier + maintenance + canary), family-backup,

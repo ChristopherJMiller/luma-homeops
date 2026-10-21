@@ -112,7 +112,7 @@ cluster/kvm/
   ingress-mac.yaml                   Ingresses mac-connect, mac-tunnel
   middlewares.yaml                   Middleware strip-set-cookie
   servicemonitor.yaml                release: prometheus
-  prometheusrule.yaml                namespace prometheus, labels prometheus: kube-prometheus, role: alert-rules
+  prometheusrule.yaml                namespace prometheus, labels release: prometheus (+ legacy prometheus: kube-prometheus, role: alert-rules)
   config/bridge-mac.toml  config/rdpgw-mac.yaml  config/defaults.rdp  config/relay.conf
 images/rdpgw/                        Dockerfile + committed go.sum; .github/workflows/rdpgw-image.yml
 ```
@@ -363,7 +363,7 @@ Logging out of the vendor UI ends the bridge's KVM token too (logout is global).
 
 - **ServiceMonitor `kvm`** (`release: prometheus`, or it is silently never scraped): selects both Services by a shared label (`app.kubernetes.io/part-of: kvm`) with endpoint port `metrics`. That is the bridge's `:9464` and the relay's `:9090` → rdpgw `/metrics`. `targetLabels: [app.kubernetes.io/name]`. Confirm the targets are `up` with the Prometheus targets query in `docs/auth.md`, using namespace `kvm`.
 - **Neither metrics port is reachable from the edge.** Traefik routes only the two Exact paths to port `http`. The bridge's admin listener is cluster-internal (kvm-rdp §4.5 keeps secrets out of it).
-- **PrometheusRule `kvm-alerts`** (ns `prometheus`, labels `prometheus: kube-prometheus, role: alert-rules`, the backups precedent). It only loads with those labels. Alert names avoid Volume, Storage and Ceph so they route to homelab-default.
+- **PrometheusRule `kvm-alerts`** (ns `prometheus`, labels `release: prometheus` plus the legacy `prometheus: kube-prometheus, role: alert-rules`). Since 0b Task 5 (2026-10-21) the ruleSelector is `release: prometheus`. Alert names avoid Volume, Storage and Ceph so they route to homelab-default.
   - `KvmBridgeDown`: the bridge target is down for 10 min.
   - `KvmBridgeUpstreamFatal`: any fatal upstream disconnect cause (`kvm_*`, `stream_*`) in 15 min. Plan C names the series.
 - **Acceptance reads:** `rdpgw_websocket_connections` / `rdpgw_legacy_connections` (item 2), and the bridge's §10.4 series.

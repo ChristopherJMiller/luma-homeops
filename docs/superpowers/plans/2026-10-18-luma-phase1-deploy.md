@@ -92,6 +92,7 @@ It then meets every phase-1 exit criterion.
   - **`discord.com` / `discordapp.com`** *(Chris)*;
   - the **WAN IP as a `/32` range**;
   - the chart defaults: RFC1918, CGNAT, link-local, IPv6 ULA/link-local/mapped, NAT64, 6to4, Teredo, and the curated `exfil-deny` list. Paste and file-drop **reads** are blocked too, which Chris accepts.
+  - **Allowed, by chart default: `api.anthropic.com:443`** (product S33). The CLI's WebFetch sends its domain check there through smokescreen, and a denial fails every WebFetch. No site value may deny it: `extraGlobalDenyList` holds no `api.anthropic.com` and no `*.` glob matching it (`*.anthropic.com`); the chart refuses to render one. No key travels on it, and product's URL guard still denies model-chosen fetches to it.
 - **Upstream headers:** `x-luma-*` carry **opaque ids only** (`u_<10 hex>`; product P21) *(Chris)*.
 - **Priorities** *(Chris)*: Core, conductor, gateway and smokescreen at **0**; evals and reconcile at `luma-batch` **−5**.
 - **Ingress:** `luma.chrismiller.xyz`, one Ingress with a host and **no oauth2-proxy middleware** (D39). It has no `spec.tls` and no DNS/cert annotations. Its only annotation turns Traefik access logs off for the router.
@@ -162,7 +163,7 @@ From the pre-flight scan (`.superpowers/sdd/2026-10-18-luma-phase1-deploy/prefli
 - **D4** (F4): the full rollback keeps the data path (`logical-backup-s3`, the canary, the PodMonitor). Touches rollback.
 - **D5** (F5): the fluent-bit check is fixed-string counts on `data["fluent-bit.conf"]` plus `scripts/test-fluent-bit-exclusion.sh`. Touches 2 Step 1.
 - **D6** (F6): the metadata-only log check moves after the first chat turn and covers every `luma-system` container. Touches 2 Step 1, 8 Step 6.
-- **D7** (F7, F8): P5 is the product tag `stage-1a`; Task 3 fills the `__UPSTREAM_*__` tokens and asserts none remain. Touches P5, cross-plan order, 3.
+- **D7** (F7, F8): P5 is the product tag `stage-1a`; Task 3 fills the `__UPSTREAM_*__` tokens with `api.anthropic.com`, `443` and **`{}`** (a `backendTLS` policy, never `true`; product S26) and asserts none remain. Touches P5, cross-plan order, 3.
 - **D8** (F9): an L1 FAIL changes the TTL in the luma repo (product 26b Step 0), never the site `models.yaml`; the nightly PASS list follows §L. Touches 3 Step 3, 6 Step 1, 10 Step 1.
 - **D9** (F10): no `conductor.idleMinutes` in site values. Touches 7 Step 2.
 - **D10** (F11): the first reconcile runs `--day <Task 3's UTC date>`, then a default-day run. Touches 3 Step 3, 7 Step 9.
@@ -171,13 +172,20 @@ From the pre-flight scan (`.superpowers/sdd/2026-10-18-luma-phase1-deploy/prefli
 - **D13** (F14): the root-Spilo branch runs the manual base backup as `postgres`. Touches 4 Step 8.
 - **D14** (F15): the authorize probe sends S256 PKCE and expects both connectors; P2 cites 0a Tasks 4 and 9; Task 5 Step 1 checks sessions and consent. Touches P2, 5.
 - **D15** (F16): log greps use `--tail=-1 --prefix`, and Dex logs are read by label. Touches 8 Steps 5, 6.
-- **D16** (F17): the gateway cache-share panel takes its token types from §G/L3 and is dropped under `detect`. Touches 3 Step 3, 9.
+- **D16** (F17): the gateway cache-share panel takes its token types from §G/L3, is a cross-check whose `input` is the whole prompt (product S28), and is dropped only if L3 shows no `input`/`input_cache_read` samples. Touches 3 Step 3, 9.
 - **D17** (F18, F19): approved status; drift threshold answered; Chris-only pauses; S2 list; 0b R2 LIVE LOCK. Touches Status, Global Constraints, 3, Open questions.
 - **D18** (F20–F22, F27): Spilo members by `application=spilo,galaxy=acid-luma`; the canary image from the OperatorConfiguration; job names `luma-core-internal` and `luma-system/postgres-acid-luma`; `nix-shell -p openssl jq`. Touches 4 (Steps 2, 4, 6, 7), 7 (Steps 1, 9), 8 Step 1, 9 (Steps 1, 3), 12 Step 1, self-review.
 - **D19** (F23, F24): product Task 15 sends HSTS when `LUMA_PUBLIC_URL` is https; L5 keeps the binding-error fixture a substring of the live text. Touches 3 Step 3.
 - **D20** (F25, F28): Task 7's headroom is ≥ 3.3 GiB; the drill explains count deficits by deletes after T. Touches 7 Step 1, 12 Step 3.
 
 Product-plan seam items (D7, D8, D10, D18, D19) are written into `~/Repos/luma/docs/plans/phase-1-lean-chat.md`.
+
+**Carried in from the product's spike rulings and 0b (2026-10-21),** written into the task text:
+- **Product S26:** `__UPSTREAM_TLS__` is filled with `{}`, never `true`. Touches D7, 3.
+- **Product S28:** the gateway's token `input` = input + cache read + cache write, a cross-check only. Touches D16, 9 (dashboard).
+- **Product S32:** each auto-compaction costs one main-class binding 400, and other 400s are sent twice. `LumaThinkingBinding` excludes `request_class="compaction"` 400s, subtracts one 400 per successful compaction, and fires at ≥ 1: the gateway counts sends, a binding 400 is one send (Spike S11) and any other 400 two, so halving would hide a single binding failure. Touches 9.
+- **Product S33:** smokescreen `web` allows `api.anthropic.com:443` (the CLI's WebFetch domain check) as a chart default, so no site value denies it. Touches Global Constraints, 7.
+- **0b Task 4's report:** the live Alertmanager tree has two top-level `critical-alerts` routes, so the D12 structure check is `all(. == false)` (yq-go: `all_c(. == false)`, plus a non-empty guard). Touches 9 Step 3.
 
 ## File map
 
@@ -354,12 +362,15 @@ There is no `luma-vault` Secret in phase 1. The connections vault key arrives wi
     ```bash
     t=$(mktemp -d)
     git -C ~/Repos/luma show stage-1a:test/gateway/agentgateway.yaml \
-      | sed -e 's/__UPSTREAM_HOST__/api.anthropic.com/g' -e 's/__UPSTREAM_PORT__/443/g' -e 's/__UPSTREAM_TLS__/true/g' \
+      | sed -e 's/__UPSTREAM_HOST__/api.anthropic.com/g' -e 's/__UPSTREAM_PORT__/443/g' -e 's/__UPSTREAM_TLS__/{}/g' \
       | yq 'del(.routes[] | select(.name == "interactive"))' > "$t/spike-gateway.yaml"
     yq -o=json -I0 '[.routes[].name]' "$t/spike-gateway.yaml"
+    yq -o=json -I0 '[.routes[].backends[].ai | (.hostOverride, .policies.backendTLS)]' "$t/spike-gateway.yaml"
     grep -c -e __UPSTREAM_ -e GATEWAY_TOKEN_INTERACTIVE "$t/spike-gateway.yaml"
     ```
-    Expected: `["ci"]` and `0`. A literal token left in would stop the gateway loading; the file holds no `hostOverride` (product S8);
+    Expected: `["ci"]`, `["api.anthropic.com:443",{}]` and `0`.
+    - **`__UPSTREAM_TLS__` is `{}`, never `true` (product S26).** It is the `backendTLS` policy itself: agentgateway v1.6.0 has no boolean TLS switch, and the file's `hostOverride` turns the Anthropic provider's default TLS off, so `{}` is what turns TLS (with the image's system roots) back on. A `true` fill fails to load.
+    - A literal token left in would stop the gateway loading. The file's only `hostOverride` is the filled `__UPSTREAM_HOST__:__UPSTREAM_PORT__`; it holds no fake address (product S8);
   - `luma-anthropic` key `ANTHROPIC_KEY_CI` and `luma-internal` key `GATEWAY_TOKEN_CI` only.
 - Produces: five recorded results with their branches applied. **Every line prints names and numbers only**, except L5's API error string, which is not content.
 
@@ -735,6 +746,7 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
         # destination_address (scripts/check-wan-ip.sh, pre-commit). Reflection would hairpin it to Traefik.
         extraDenyRanges: ["152.44.247.88/32"]
         acl:
+          # Never api.anthropic.com or a glob matching it: the CLI's WebFetch domain check needs it (product S33).
           extraGlobalDenyList: [chrismiller.xyz, "*.chrismiller.xyz", realliance.net, "*.realliance.net",
                                 werethemille.rs, "*.werethemille.rs", buttert.art, "*.buttert.art",
                                 discord.com, "*.discord.com", discordapp.com, "*.discordapp.com"]   # Discord: Chris
@@ -779,6 +791,7 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
   - **Egress, over CONNECT:** `curl -s -o /dev/null -w '%{http_connect}' -x http://luma-egress-web:4750 https://<target>/` for `192.168.0.1`, `152.44.247.88`, `home.chrismiller.xyz`, `discord.com` and `webhook.site`. Expected: each prints `407`, and `-D -` shows `X-Smokescreen-Error`.
   - **Egress, plain HTTP on port 80:** `curl -s -o /dev/null -w '%{http_code}' -x http://luma-egress-web:4750 http://152.44.247.88/` → `407`.
   - **Egress, allowed:** `curl -s -o /dev/null -w '%{http_code}' -x http://luma-egress-web:4750 https://example.com/` → `200`.
+  - **Egress, the WebFetch domain check (product S33):** `curl -s -o /dev/null -w '%{http_connect}' -x http://luma-egress-web:4750 https://api.anthropic.com/` → `200` (the CONNECT is allowed; the HTTP status behind it doesn't matter). A `407` means a site value denies it: fix `luma-release.yaml`, because every WebFetch would fail.
   - **Core ports:**
     - `curl -s -o /dev/null -w '%{http_code}' http://luma-core:8080/internal/v1/conductor` → `404`.
     - `curl -s -o /dev/null -w '%{http_code}' 'http://luma-core-internal:8081/internal/v1/agents/luma/spec?tier=fast'` → `401` (no ServiceAccount token).
@@ -853,7 +866,7 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
 - Consumes:
   - product C7 metric names;
   - **the gateway request counter's exact name and labels, as recorded in product `docs/spikes/phase-1.md` §G** (written `<gw_requests>{<status>, request_class}` below);
-  - `agentgateway_gen_ai_client_token_usage{gen_ai_token_type}`, with the `gen_ai_token_type` values recorded in §G and §L (L3), and §G's `RouteType` (D16);
+  - `agentgateway_gen_ai_client_token_usage{gen_ai_token_type}`, with the `gen_ai_token_type` values recorded in §G and §L (L3), and §G's `RouteType` (D16). Its `input` is the whole prompt (input + cache read + cache write; product S28);
   - postgres-exporter's `pg_stat_archiver_*` and `pg_wal_size_bytes`;
   - kube-state-metrics.
 - Produces: PrometheusRule `luma-alerts` in `prometheus`, labelled `release: prometheus` plus the legacy `prometheus: kube-prometheus` and `role: alert-rules`, with group `luma`.
@@ -867,7 +880,7 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
 | `LumaGatewayDegraded` | `(count(up{namespace="luma-system",service="luma-gateway"} == 1) or vector(0)) < 2 SUPPRESS` | 15m | warning |
 | `LumaSmokescreenDown` | `(count(up{namespace="luma-system",service="luma-egress-web"} == 1) or vector(0)) < 1 SUPPRESS` | 10m | warning |
 | `LumaGateway5xxRatio` | `sum(rate(<gw_requests>{namespace="luma-system",<status>=~"5.."}[10m])) / sum(rate(<gw_requests>{namespace="luma-system"}[10m])) > 0.05 and sum(rate(<gw_requests>{namespace="luma-system"}[10m])) > 0.01` | 10m | warning |
-| `LumaThinkingBinding` | `sum(increase(<gw_requests>{namespace="luma-system",<status>="400",request_class="main"}[1h])) > 0 or increase(luma_thinking_binding_errors_total[1h]) > 0`. The annotation quotes L5's error text. The CLI strips thinking and retries, so only the gateway sees these. | 0m | warning |
+| `LumaThinkingBinding` | `(sum(increase(<gw_requests>{namespace="luma-system",<status>="400",request_class="main"}[1h])) - (sum(increase(<gw_requests>{namespace="luma-system",<status>=~"2..",request_class="compaction"}[1h])) or vector(0))) >= 1 or increase(luma_thinking_binding_errors_total[1h]) > 0`. **Counting (product S32, Spike S4/S11):** the numerator is main-class only, so `request_class="compaction"` 400s never count. Each successful auto-compaction causes exactly one expected main-class binding 400 (the kept turn's thinking is bound to the pre-compaction prefix; the CLI strips it and retries), so one 400 per compaction is subtracted. The gateway counter has no request-id label, so it counts sends, not requests: a binding 400 is **one** send (the CLI strips and retries), any other main-class 400 **two** (the CLI resends it once without the thinking-display beta). The threshold therefore stays at ≥ 1, never 2, or a single binding failure would be missed; the annotation says that a value of 1 per event is a binding failure and 2 per event a non-binding 400 (for example a workspace limit). It also quotes L5's error text. The CLI strips thinking and retries, so only the gateway sees these. | 5m (a compaction and its 400 can straddle the window edge for a few seconds) | warning |
 | `LumaBudget80` | `max(luma_budget_spent_usd) / max(luma_budget_cap_usd) >= 0.8` | 0m | warning |
 | `LumaCacheSLO` | `sum(increase(luma_main_request_tokens_total{slo="included",type="cache_read"}[24h])) / sum(increase(luma_main_request_tokens_total{slo="included"}[24h])) < 0.8`, with the denominator > 200000 | 1h | warning |
 | `LumaLedgerDrift` | `max(abs(luma_usage_reconcile_drift_ratio) > 0.10 and abs(luma_usage_reconcile_drift_usd) > 0.50)` | 0m | warning |
@@ -892,7 +905,10 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
 - **Dollars per person per day:** bars, `sum by (person) (increase(luma_cost_usd_total[1d]))`, interval 1d.
 - **Month to date vs the $150 cap:** stat plus gauge.
 - **Ledger vs Usage API drift by workspace:** `luma_usage_reconcile_drift_usd`, `…_ratio`.
-- **Cache-read share by request class** (gateway), **only when §G's `RouteType` is `messages`** (D16). Under `detect` the gateway has no input or cache tokens, so drop the panel; Core's SLO panel is the source (product P10). The two `gen_ai_token_type` values below are placeholders: use the ones §G/L3 recorded.
+- **Cache-read share by request class** (gateway), **a cross-check only** (D16, product S28); Core's SLO panel is the source (product P10). Title it "gateway cross-check".
+  - **The gateway's `input` is the whole prompt** (input + cache read + cache write; §G: 1000 input / 800 cache read records `input` 1800). So the share is `input_cache_read / input` as below, never `input_cache_read / (input + input_cache_read)`, and `input` is never shown as "uncached input".
+  - §G's `RouteType` is `detect`, which reads usage from the API's `message_delta` only. Keep the panel if L3 printed `input` and `input_cache_read`; drop it if L3 shows only `output`.
+  - The `gen_ai_token_type` values are §G's (`input`, `input_cache_read`, `input_cache_write`, `output`); use L3's if they differ.
   ```
   sum by (request_class) (rate(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input_cache_read"}[1h]))
   / sum by (request_class) (rate(agentgateway_gen_ai_client_token_usage_sum{gen_ai_token_type="input"}[1h]))
@@ -917,7 +933,7 @@ The pod finishes when the probe exits. The script builds a synthetic system prom
   - **Routing (D12),** on a scratch copy, printing receivers and booleans only, never a receiver config or webhook URL:
     - `umask 077; t=$(mktemp -d)`, then `nix shell nixpkgs#yq-go -c yq '.stringData["alertmanager.yaml"]' cluster/prometheus-stack/alertmanager-config.secret.yaml > "$t/am.yaml"`.
     - Run 0b Task 4's route matrix (`nix shell nixpkgs#prometheus-alertmanager -c amtool config routes test --config.file "$t/am.yaml" --verify.receivers=<receiver> <labels>`), with two Luma rows added: `alertname=LumaPostgresArchiveFailing severity=critical` → `critical-alerts`, and `alertname=LumaBudget80 severity=warning` → `homelab-default`. Expected: every row PASS.
-    - Structure only: `yq '[.route.routes[] | select(.receiver == "critical-alerts") | (has("active_time_intervals") or has("mute_time_intervals"))]' "$t/am.yaml"` → `[false]`, so critical alerts are never muted on weekdays.
+    - Structure only: `yq -o=json -I0 '[.route.routes[] | select(.receiver == "critical-alerts") | (has("active_time_intervals") or has("mute_time_intervals"))] | [(length > 0), all_c(. == false)]' "$t/am.yaml"` → `[true,true]`: at least one top-level `critical-alerts` route, and none muted, so critical alerts are never muted on weekdays. The live tree has **two** top-level `critical-alerts` routes (the old "weekend critical" one is unreachable), so the inner list is `[false,false]`, not `[false]` (0b Task 4's report). `all_c(. == false)` is yq-go's spelling of jq's `all(. == false)`; yq v4.53 rejects `all(…)` with an argument.
     - `rm -r "$t"`.
 
 ### Task 10: Evals: the first runs, and the eval-gate procedure

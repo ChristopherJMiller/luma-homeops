@@ -77,7 +77,7 @@
   - One Ingress per host and path. No per-host cert. No external-dns or cert-manager annotation.
   - Facade Ingresses carry `traefik.ingress.kubernetes.io/router.priority: "200"`. The stopgap carries `"300"` until it is deleted.
   - Run `edge-snapshot.sh` before and after every edge change.
-- Monitoring: an alert is a `PrometheusRule` in namespace `prometheus` labelled `prometheus: kube-prometheus, role: alert-rules`. A ServiceMonitor needs `release: prometheus`. Non-critical alerts route to Discord (`homelab-default`).
+- Monitoring: an alert is a `PrometheusRule` in namespace `prometheus` labelled `release: prometheus` (the selector since 0b Task 5, 121ece15), plus the legacy `prometheus: kube-prometheus, role: alert-rules`. A ServiceMonitor needs `release: prometheus`. Non-critical alerts route to Discord (`homelab-default`).
 
 ## Review Focus
 
@@ -620,7 +620,7 @@ grant_types ["client_credentials"] â†’ 400 invalid_client_metadata; 9 KiB body â
   - `loopback-port 8976 /callback` (Claude Code `--callback-port 8976`, and `tools/mcp-probe`)
   - `# segment https://oauth-redirect.googleusercontent.com/r/user_bound_custom-mcp-`: Gemini, commented out until a refusal logs the real form.
 - Create: `cluster/oauth2-proxy/mcp-jwt-auth-dex-client.yaml`. Certificate `mcp-jwt-auth-dex-client`, ClusterIssuer `edge-ca`, CN `mcp-jwt-auth`, `client auth`, ECDSA 256, 8760h/720h; the same shape as hyprmcp's.
-- Create: `cluster/prometheus-stack/rules/mcp-facade-alerts.yaml`, a PrometheusRule `mcp-facade-alerts` in namespace `prometheus` with labels `prometheus: kube-prometheus, role: alert-rules` and group `mcp-facade`:
+- Create: `cluster/prometheus-stack/rules/mcp-facade-alerts.yaml`, a PrometheusRule `mcp-facade-alerts` in namespace `prometheus` with labels `release: prometheus` (required since 0b Task 5) plus the legacy `prometheus: kube-prometheus, role: alert-rules` and group `mcp-facade`:
   - `MCPFacadeClientsNearCap`: `max(mcp_facade_clients) >= 0.8 * max(mcp_facade_clients_max)` for 5m, `severity: warning`. The description points at the pruning procedure in `docs/auth.md`.
   - `MCPFacadeClientInvariantViolation`: `increase(mcp_facade_client_violations_total[10m]) > 0`, `severity: warning`.
   - `MCPFacadeClientRegistered`: `increase(mcp_facade_registrations_total{result="created"}[10m]) > 0`, `severity: info`. It is the detective control for the shared-callback limit (Step 8).
