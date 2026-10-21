@@ -62,7 +62,7 @@ spec:
               mountPath: /playlists
           resources:
             requests:
-              memory: 2Gi
+              memory: 256Mi # was 2Gi (Luma 0b); the 2Gi limit is unchanged
               cpu: 1
             limits:
               memory: 2Gi
