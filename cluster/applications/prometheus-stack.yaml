@@ -41,6 +41,20 @@ spec:
             nodeExporterRecording: true
             prometheus: true
             prometheusOperator: true
+          # By design, two nodes cannot hold three nodes' requests (spec §14:
+          # Luma is shed during drains). Replaced by ClusterMemoryDrainDeficitHigh
+          # and NodeMemoryRequestsHigh in rules/capacity-alerts.yaml.
+          disabled:
+            KubeMemoryOvercommit: true
+        # Talos binds these to 127.0.0.1. All 9 targets have always been down.
+        # Scraping them needs machine-config bind-address changes (S4).
+        # Readiness is covered by control-plane-alerts.
+        kubeControllerManager:
+          enabled: false
+        kubeScheduler:
+          enabled: false
+        kubeProxy:
+          enabled: false
         alertmanager:
           alertmanagerSpec:
             configSecret: alertmanager-main
@@ -129,6 +143,13 @@ spec:
                       - 192.168.0.244:9100 # printer
                     labels:
                       group: satellites
+                relabel_configs:
+                  # octoprint and printer are intentionally powered off (Chris,
+                  # 2026-10-18); delete this rule when they return. The target
+                  # list stays as the record.
+                  - source_labels: [__address__]
+                    regex: '192\.168\.0\.24[34]:\d+'
+                    action: drop
               # comin's GitOps deploy state per satellite (last_deployment,
               # number of fetches, etc.). Same hosts, port 4243.
               - job_name: satellites-comin
@@ -139,6 +160,13 @@ spec:
                     labels:
                       group: satellites
                       component: comin
+                relabel_configs:
+                  # octoprint and printer are intentionally powered off (Chris,
+                  # 2026-10-18); delete this rule when they return. The target
+                  # list stays as the record.
+                  - source_labels: [__address__]
+                    regex: '192\.168\.0\.24[34]:\d+'
+                    action: drop
             storageSpec:
               volumeClaimTemplate:
                 spec:
