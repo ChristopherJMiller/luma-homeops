@@ -12,6 +12,7 @@ metadata:
   labels:
     prometheus: kube-prometheus
     role: alert-rules
+    release: prometheus
 spec:
   groups:
     - name: media-exporters

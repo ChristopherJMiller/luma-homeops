@@ -1,0 +1,19 @@
+---
+# Proof that the rule pipeline works end to end: a PrometheusRule labelled
+# `release: prometheus` is selected, written to a rule file, reloaded and
+# evaluated. `platform:prometheusrule_selftest:loaded` returning 1 means rules
+# load; an empty result means nothing here is being evaluated.
+# Checked by scripts/check-prometheus-rules.sh.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: platform-selftest
+  namespace: prometheus
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: platform-selftest
+      rules:
+        - record: platform:prometheusrule_selftest:loaded
+          expr: vector(1)

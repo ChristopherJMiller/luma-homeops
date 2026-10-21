@@ -1,0 +1,60 @@
+---
+# The critical Ceph alerts, as a PrometheusRule so they actually load.
+# Expressions, `for:` and severity are copied from rook-ceph-alerts.yaml (a
+# ConfigMap the operator never selected).
+#
+# Deliberately NOT CephClusterHealthWarning: the SMR OSDs keep Ceph at
+# HEALTH_WARN (BLUESTORE_SLOW_OP_ALERT, CLAUDE.md sharp edge 1), so it would
+# fire forever. Critical routes to critical-alerts (Discord @everyone, never
+# muted) -- every alert here must mean "act now".
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ceph-critical-alerts
+  namespace: prometheus
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: ceph-critical
+      interval: 30s
+      rules:
+        - alert: CephClusterHealthError
+          expr: |
+            ceph_health_status == 2
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Ceph cluster health status is ERROR"
+            description: "Ceph cluster is in ERROR state. Immediate investigation required."
+
+        - alert: CephOSDDown
+          expr: |
+            ceph_osd_up == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Ceph OSD {{ $labels.ceph_daemon }} is down"
+            description: "OSD {{ $labels.ceph_daemon }} has been down for more than 5 minutes."
+
+        - alert: CephPGInconsistent
+          expr: |
+            ceph_pg_inconsistent > 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Ceph has inconsistent placement groups"
+            description: "{{ $value }} inconsistent PGs detected. Data integrity may be at risk."
+
+        - alert: CephStorageCapacityCritical
+          expr: |
+            (ceph_cluster_total_used_raw_bytes / ceph_cluster_total_bytes) * 100 > 90
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Ceph storage capacity is critically low"
+            description: "Ceph cluster is {{ $value | humanize }}% full. Immediate action required!"

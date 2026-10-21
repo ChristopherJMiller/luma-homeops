@@ -1,0 +1,46 @@
+---
+# Memory-request capacity. Replaces the stock KubeMemoryOvercommit, which is
+# disabled in cluster/applications/prometheus-stack.yaml: by design two nodes
+# cannot hold three nodes' requests (Luma spec §14 -- Luma is shed during
+# drains), so that alert would fire permanently.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: capacity-alerts
+  namespace: prometheus
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: capacity
+      rules:
+        - alert: ClusterMemoryDrainDeficitHigh
+          # Requests that would not fit if the largest node drained. The
+          # deficit was 21.7 GiB before Luma 0b and is projected at 14.0 GiB
+          # after it (phase 4 brings it back to about 24), so this fires only
+          # if the cluster ends up worse than before 0b.
+          expr: |
+            sum(namespace_memory:kube_pod_container_resource_requests:sum) - (sum(kube_node_status_allocatable{resource="memory",job="kube-state-metrics"}) - max(kube_node_status_allocatable{resource="memory",job="kube-state-metrics"})) > 24 * 2^30
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Draining a node would strand {{ $value | humanize1024 }}B of memory requests"
+            description: >-
+              Memory requests exceed what the two smallest nodes can hold by
+              {{ $value | humanize1024 }}B (threshold 24 GiB, the pre-0b level).
+              A drain will leave more pods Pending than before -- reclaim
+              requests before the next node maintenance.
+
+        - alert: NodeMemoryRequestsHigh
+          expr: |
+            sum by (node) (cluster:namespace:pod_memory:active:kube_pod_container_resource_requests) / on (node) group_left() max by (node) (kube_node_status_allocatable{resource="memory",job="kube-state-metrics"}) > 0.95
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node {{ $labels.node }} memory requests at {{ $value | humanizePercentage }} of allocatable"
+            description: >-
+              Pods on {{ $labels.node }} request {{ $value | humanizePercentage }}
+              of its allocatable memory. A restarting pod may not fit back on it;
+              free requests or move work before it does.

@@ -7,6 +7,10 @@ namespace: prometheus
 # is a legacy path the operator does not load; new rules go here as resources.
 resources:
   - media-pipeline-alerts.yaml
+  - selftest.yaml
+  - ceph-critical-alerts.yaml
+  - capacity-alerts.yaml
+  - control-plane-alerts.yaml
 configMapGenerator:
   - name: luma-homelab-alert-rules
     files:

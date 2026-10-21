@@ -1,0 +1,42 @@
+---
+# Scheduler and controller-manager readiness. Talos binds their metrics to
+# 127.0.0.1, so they are not scraped (kubeScheduler/kubeControllerManager are
+# disabled in cluster/applications/prometheus-stack.yaml) and the stock
+# KubeSchedulerDown/KubeControllerManagerDown are gone with them. These use the
+# static pods' kube-state-metrics series instead.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: control-plane-alerts
+  namespace: prometheus
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: control-plane
+      rules:
+        - alert: ControlPlanePodNotReady
+          expr: |
+            max by (pod) (kube_pod_status_ready{namespace="kube-system",condition="true",pod=~"kube-(scheduler|controller-manager)-.+"}) == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Control-plane pod {{ $labels.pod }} is not Ready"
+            description: >-
+              kube-system/{{ $labels.pod }} has not been Ready for 10m. With
+              three control-plane nodes the other replicas hold leadership, but
+              one more failure leaves no scheduler or controller-manager.
+
+        - alert: ControlPlanePodMissing
+          expr: |
+            count(kube_pod_info{namespace="kube-system",pod=~"kube-scheduler-.+"}) < 3 or count(kube_pod_info{namespace="kube-system",pod=~"kube-controller-manager-.+"}) < 3 or absent(kube_pod_info{namespace="kube-system",pod=~"kube-scheduler-.+"}) or absent(kube_pod_info{namespace="kube-system",pod=~"kube-controller-manager-.+"})
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Fewer than 3 kube-scheduler or kube-controller-manager pods"
+            description: >-
+              kube-system is missing a kube-scheduler or kube-controller-manager
+              static pod for 10m (expected one per node, 3 in all). Check the
+              node's kubelet and `talosctl -n <node> service`.
