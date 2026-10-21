@@ -90,6 +90,17 @@ spec:
                 Mem_Buf_Limit 50MB
                 Skip_Long_Lines On
                 Refresh_Interval 10
+                # CRI log names are <pod>_<namespace>_<container>-<id>.log. Pod,
+                # namespace and container names cannot contain "_", so
+                # "_luma-sandbox…_" / "_luma-browser…_" can only be the namespace.
+                # Only these two are dropped: they carry raw user content from
+                # untrusted code and browsing. luma-system ships, because Luma's
+                # logs go to Azure (Chris, 2026-10-19). The prefix form also covers
+                # any later luma-sandbox-… / luma-browser-… namespace. The exclusion
+                # is at the input, so neither the azure nor the syslog output ever
+                # sees these files. K8S-Logging.Exclude stays Off below, so a
+                # workload can never opt itself back in or out.
+                Exclude_Path /var/log/containers/*_luma-sandbox*_*.log,/var/log/containers/*_luma-browser*_*.log
             [INPUT]
                 Name systemd
                 Tag host.*
@@ -97,6 +108,14 @@ spec:
                 Systemd_Filter _SYSTEMD_UNIT=containerd.service
                 DB /var/fluent-bit/state/flb_systemd.db
           filters: |
+            # Traefik's CLF line names the router <entrypoint>-<namespace>-<ingress>-<host>@kubernetes
+            # (or <ns>-<name>@kubernetescrd), and the URI carries OAuth code=.
+            # This drops Luma's request lines from both outputs (kubectl logs keeps
+            # them). The leading quote anchors the namespace, so "notluma" is kept.
+            [FILTER]
+                Name grep
+                Match kube.var.log.containers.traefik-*_traefik_*
+                Exclude log "(web-|websecure-)?luma-[a-z0-9-]+@kubernetes(crd)?"
             [FILTER]
                 Name kubernetes
                 Match kube.*
