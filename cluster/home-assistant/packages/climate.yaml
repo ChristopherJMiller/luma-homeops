@@ -91,6 +91,16 @@ input_number:
     unit_of_measurement: °F
     initial: 70
     mode: box
+  # How far past the ecobee's cool setpoint the room may get on outside air alone
+  # before the AC takes over from free cooling.
+  free_cooling_overshoot:
+    name: Free Cooling Overshoot
+    min: 0
+    max: 10
+    step: 0.5
+    unit_of_measurement: °F
+    initial: 2
+    mode: box
   aqi_limit:
     name: AQI Limit
     min: 0
@@ -253,8 +263,12 @@ template:
 
       # The ecobee calls for cooling (its own differential and minimum off time; the
       # schedule sets its setpoint, so Away's 82 keeps it quiet while nobody is home)
-      # and outside air can't do it (+1°F to start, -1°F to stop). The AC automation
-      # adds 5 min either way, so the compressor isn't short-cycled.
+      # and either outside air can't do it (+1°F) or free cooling is losing: the room
+      # is free_cooling_overshoot past the cool setpoint anyway (2026-10-21: sun through
+      # the slider outran the vent fan all day at 61°F outside, 72.6 -> 80 while the AC
+      # sat locked out). Once started, the AC finishes the ecobee's call, so it doesn't
+      # short-cycle around either threshold; ac_started_by_climate (restored) carries
+      # that across a reload. The AC automation adds 5 min either way.
       - name: AC Cool Wanted
         unique_id: ac_cool_wanted
         icon: mdi:snowflake
@@ -267,10 +281,14 @@ template:
           {% set indoor = states('sensor.living_room_temperature') | float %}
           {% set outdoor = state_attr('weather.forecast_home', 'temperature') | float %}
           {% set delta = states('input_number.free_cooling_delta') | float(2) %}
-          {% set on = this.state == 'on' %}
+          {% set mode = states('climate.living_room') %}
+          {% set cool = state_attr('climate.living_room', 'target_temp_high' if mode == 'heat_cool' else 'temperature') | float(none) %}
+          {% set running = this.state == 'on' or is_state('input_boolean.ac_started_by_climate', 'on') %}
           {{ state_attr('climate.living_room', 'hvac_action') == 'cooling'
              and is_state('binary_sensor.window_insert_installed', 'on')
-             and outdoor > indoor - delta + (-1 if on else 1) }}
+             and (running
+                  or outdoor > indoor - delta + 1
+                  or (cool is not none and indoor >= cool + states('input_number.free_cooling_overshoot') | float(2))) }}
 
       # The ecobee calls for heat. The heat automation adds 5 min either way.
       - name: Heat Wanted
@@ -551,7 +569,8 @@ automation:
     alias: Climate - AC Follows Cooling Need
     description: >-
       The portable AC (Hisense, ConnectLife cloud) cools while the ecobee calls for
-      cooling, the insert is in and outside air can't do it. It runs at the drive
+      cooling, the insert is in and outside air can't do it (or free cooling has let
+      the room get past the cool setpoint by the overshoot). It runs at the drive
       setpoint (ecobee setpoint less the offset) and follows ecobee changes; it stops
       when the ecobee stops calling. Only a run climate started is stopped, except that
       any cool run stops when the house empties. Nothing is sent unless the AC is
