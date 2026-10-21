@@ -2,15 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** not started. Revised 2026-10-19 for Chris's "option B" (patched operator only, stock Spilo).
+**Status:** not started. Revised 2026-10-19 for Chris's "option B" (patched operator only, stock Spilo). Amended 2026-10-21 for `acid-luma` (the Luma deploy plan's pre-flight ruling D3).
 
-**Goal:** Every Patroni member of the seven `acid-*` clusters rejects unauthenticated writes on :8008, while the postgres-operator, Patroni peers (failsafe) and `patronictl` keep working.
+**Goal:** Every Patroni member of the seven `acid-*` clusters, and of `acid-luma` once it exists, rejects unauthenticated writes on :8008, while the postgres-operator, Patroni peers (failsafe) and `patronictl` keep working.
 
 **Architecture:**
 - **Credentials:** one sealed Secret `patroni-restapi` per cluster namespace. Each CR opts in by listing `PATRONI_RESTAPI_USERNAME` / `PATRONI_RESTAPI_PASSWORD` (`secretKeyRef` → `patroni-restapi`) in `spec.env`.
 - **Operator patch, half 1 (pods):** for an opted-in CR, the operator emits those two env vars *before* `SPILO_CONFIGURATION` and adds `restapi.authentication: {username: "$(PATRONI_RESTAPI_USERNAME)", password: "$(PATRONI_RESTAPI_PASSWORD)"}` to the generated `SPILO_CONFIGURATION`. The kubelet expands `$(VAR)`. Stock Spilo merges it into `/run/postgres.yml`, which the Patroni daemon, `patronictl` and `inplace_upgrade.py` all read. A CR without the vars gets a byte-identical StatefulSet, so deploying the operator rolls nothing.
 - **Operator patch, half 2 (client):** the operator's own Patroni client adds Basic auth to its writes. It reads the same Secret per request, with a timeout.
 - **Rollout:** operator image → Secrets → operator → canary → the rest, one cluster at a time. `acid-chrismillerxyz` also gets its pg_hba hardened in its own roll, after its two clients move to TLS.
+- **`acid-luma` (ns `luma-system`) and its drill CR `docs/backups/acid-drill-luma.yaml`: two branches** (Luma deploy pre-flight D3, 2026-10-21):
+  - **It exists, open, when this rollout runs** (created before Task 4): it is the **eighth cluster**. Its Secret `cluster/luma/patroni-restapi.*` ships in Task 3 (or, if it appears after Task 3, in its own commit before its roll), Task 4's no-roll checks count it, Task 7 rolls it last, and Task 9 gives its drill CR the env block.
+  - **The patched operator is already live when it is created:** the deploy plan's Task 4 ships the env block and the `patroni-restapi` SealedSecret (with the `Prune=false` patch) in the CR's own commit, and its drill CR carries the pair. This plan only audits it (`AUTH-ON` in Task 8 Step 3).
 
 **Tech Stack:**
 - postgres-operator v1.11.0 (ckotzbauer chart 1.12.2)
@@ -20,7 +23,7 @@
 - Sealed Secrets, Argo CD
 - Rust `diesel-async` for the two chrismillerxyz clients (Task 6)
 
-**Spec:** `docs/luma.md`, "Final review round (2026-10-19)": "**Patroni REST API (8008):** verify whether it has auth. If it's open, **fix it now** for every `acid-*` cluster, as its own small plan". Also, under "Logs and Postgres (2026-10-19)": "**Patroni REST auth:** fixed by patching the **operator only**. Spilo stays stock. `acid-chrismillerxyz`'s pg_hba hardening is folded into that plan's chrismillerxyz step". This plan also answers open question 2 of `docs/superpowers/plans/2026-10-18-luma-phase1-deploy.md`.
+**Spec:** `docs/luma.md`, "Final review round (2026-10-19)": "**Patroni REST API (8008):** verify whether it has auth. If it's open, **fix it now** for every `acid-*` cluster, as its own small plan". Also, under "Logs and Postgres (2026-10-19)": "**Patroni REST auth:** fixed by patching the **operator only**. Spilo stays stock. `acid-chrismillerxyz`'s pg_hba hardening is folded into that plan's chrismillerxyz step". This plan also answers the Patroni question of `docs/superpowers/plans/2026-10-18-luma-phase1-deploy.md` (answered there, with its D3 branches).
 
 ## Verified state (2026-10-19, read-only)
 
@@ -94,7 +97,7 @@
   - operator runtime base `registry.opensource.zalan.do/acid/postgres-operator:v1.11.0@sha256:20ba5dbb3f2d3566eddb4cd0616379cc73e55bacce398301e577d4f6353ad4e9` (what runs today);
   - Spilo is unchanged: the operator's `docker_image` `ghcr.io/zalando/spilo-16:3.2-p3@sha256:b59493aaba6e35c017f22954fa09548060616c8669c58ab2b368689f0ee21884`, and immich's `spilo-vchord:sha-46fc125@sha256:0f7e4b42…`. **No CR's `dockerImage` changes in this plan.**
 - **Our image:** `ghcr.io/christopherjmiller/postgres-operator`, pinned as `:sha-<short>@sha256:<digest>`. Version string `v1.11.0-galaxy.1`. It must be anonymously pullable.
-- **Order is load-bearing:** operator image → all 7 Secrets present → operator → canary → the rest. Rollback runs in exact reverse.
+- **Order is load-bearing:** operator image → all 7 Secrets present (8 with an open `acid-luma`) → operator → canary → the rest. Rollback runs in exact reverse.
 - **Never revert the operator while any cluster has auth on. Never upgrade or replace the operator image without porting both patches.** The upstream operator would regenerate every opted-in StatefulSet without `restapi`, which rolls them. Each of those rolls would then stall at a switchover it can't authenticate, leaving that cluster half auth-on.
 - **One cluster in flight at a time.** Don't roll while any of these holds:
   - a node is cordoned or draining, or Talos/etcd work is under way (S5);
@@ -110,20 +113,20 @@
 1. **An operator write to a member that requires auth.** Every rolling switchover in this plan goes to a leader that still has auth off, so the rolls prove nothing. Task 5 Step 6 commits a reload-only parameter, so the operator sends `PATCH /config` to an auth-on member. Task 2's tests pin that `/failover`, `/restart` and `PATCH /config` all go through the one `Do`.
 2. **Deploying the operator must not change any StatefulSet.** If a CR that hasn't opted in gets a different StatefulSet, all 7 clusters roll at once. Task 2's `TestGalaxyGoldenStatefulSets` compares patched output with golden files that the *unpatched* source wrote in the same build. Task 4 Step 3 checks that every StatefulSet's generation is unchanged.
 3. **The Secret missing or misreferenced.** A missing non-optional Secret gives `CreateContainerConfigError`, an outage on attic or ha. `optional: true` gives a literal `$(…)` credential. Task 3 gates on all 7 Secrets. Task 1 reports `BROKEN` for a missing Secret or an unexpanded `$(`. Task 2's `TestPatroniRESTAPIAuthEnv` ignores refs to other Secrets, plain values and half pairs.
-4. **A new `postgresql` CR without the env block** (`acid-luma`, the `acid-drill` restore cluster) stays open. Task 1 audits every CR it finds, not a fixed list. Task 9 fixes `acid-drill.yaml` and the Luma plan, and proposes an admission check.
+4. **A new `postgresql` CR without the env block** (`acid-luma`, the `acid-drill` restore clusters) stays open. Task 1 audits every CR it finds, not a fixed list. `acid-luma` is opted in on one of the two branches in Architecture. Task 9 fixes the drill CRs and proposes an admission check.
 5. **Credential drift: rotation, or a Secret read that hangs.** The operator reads the Secret per request (`TestAuthClientDoReadsSecretPerRequest`), bounded by `secretGetTimeout` (`TestAuthClientDoSecretReadTimesOut`). Pods keep the old value until they restart, so Task 9's runbook gives the rotation sequence.
 
 ## File map
 
 - `scripts/check-patroni-restapi.sh`: audit, read-only by default; `--probe` adds the no-op write check. *(Task 1)*
 - `images/postgres-operator/{Dockerfile, patches/0001-patroni-restapi-basic-auth.patch, patches/0002-patroni-restapi-spilo-configuration.patch, golden/galaxy_golden_test.go}`, `.github/workflows/postgres-operator-image.yml` *(Task 2)*
-- `cluster/<ns>/patroni-restapi.secret.yaml` plus the generated `patroni-restapi.yaml`, and `cluster/<ns>/kustomization.yaml`, for ns ∈ {attic, chrismillerxyz, gramps, home-assistant, immich, media, royaltracker}; `docs/backups.md` *(Task 3)*
+- `cluster/<ns>/patroni-restapi.secret.yaml` plus the generated `patroni-restapi.yaml`, and `cluster/<ns>/kustomization.yaml`, for ns ∈ {attic, chrismillerxyz, gramps, home-assistant, immich, media, royaltracker}, plus `cluster/luma/` for an open `acid-luma`; `docs/backups.md` *(Task 3)*
 - `cluster/applications/postgres-operator.yaml` *(Task 4)*
 - `cluster/royaltracker/psql.yaml` *(Task 5)*
 - the repos `ChristopherJMiller/chrismiller.xyz` and `ChristopherJMiller/chatterbox`; `cluster/chrismillerxyz/{site,sync}.yaml` *(Task 6)*
-- `cluster/{gramps,media,immich,chrismillerxyz}/psql.yaml` *(Task 7)*
+- `cluster/{gramps,media,immich,chrismillerxyz}/psql.yaml`, plus `cluster/luma/psql.yaml` for an open `acid-luma` *(Task 7)*
 - `cluster/{attic,home-assistant}/psql.yaml` *(Task 8)*
-- `docs/postgres.md` (new), `.renovaterc.json`, `CLAUDE.md`, `docs/backups/acid-drill.yaml`, `docs/superpowers/plans/2026-10-18-luma-phase1-deploy.md` *(Task 9)*
+- `docs/postgres.md` (new), `.renovaterc.json`, `CLAUDE.md`, `docs/backups/acid-drill.yaml`, and `docs/backups/acid-drill-luma.yaml` if it exists *(Task 9)*
 
 ---
 
@@ -160,7 +163,7 @@
     - `OPEN` otherwise.
 - [ ] **Step 2: Run it against today's cluster (the failing test).** Run `KUBECONFIG=/tmp/galaxy-kubeconfig scripts/check-patroni-restapi.sh; echo "exit=$?"`. Don't use `--probe` here. Expected:
   - `operator image=no`;
-  - 12 lines `OPEN env=no secret=no sts=no file=no daemon=ok ctl=no get=ok`;
+  - 12 lines `OPEN env=no secret=no sts=no file=no daemon=ok ctl=no get=ok` (14 with an open `acid-luma`);
   - `exit=1`.
 - [ ] **Step 3: Run `shellcheck scripts/check-patroni-restapi.sh`.** Expected: clean.
 - [ ] **Step 4: Commit.** `git add scripts/check-patroni-restapi.sh && git commit -m "scripts: audit Patroni REST API auth on every acid cluster"`.
@@ -271,8 +274,8 @@
 ### Task 3: One `patroni-restapi` Secret per cluster namespace
 
 **Files:**
-- Create: `cluster/<ns>/patroni-restapi.secret.yaml` and the generated `cluster/<ns>/patroni-restapi.yaml`, for the 7 namespaces
-- Modify: `cluster/<ns>/kustomization.yaml`. Add `- patroni-restapi.yaml` after `- logical-backup-s3.yaml`, plus this patch (none of the 7 has a `patches:` key today):
+- Create: `cluster/<ns>/patroni-restapi.secret.yaml` and the generated `cluster/<ns>/patroni-restapi.yaml`, for the 7 namespaces, **plus `cluster/luma/` (ns `luma-system`) if `acid-luma` exists open** (the eighth cluster; skip it if its CR already carries the env block)
+- Modify: `cluster/<ns>/kustomization.yaml`. Add `- patroni-restapi.yaml` after `- logical-backup-s3.yaml`, plus this patch (none of the 7 has a `patches:` key today; check `cluster/luma/kustomization.yaml` before adding):
 
   ```yaml
   patches:
@@ -292,24 +295,24 @@
 **Interfaces:**
 - Produces a Secret `patroni-restapi` in each ns, keys `username` (`patroni`) and `password` (64 hex characters, unique). Tasks 4–8 consume it.
 
-- [ ] **Step 1: Generate the 7 files without displaying them.**
+- [ ] **Step 1: Generate the 7 files (8 with `acid-luma`) without displaying them.**
   - One loop, `umask 077`, `pw=$(openssl rand -hex 32)`, then a heredoc to `cluster/$ns/patroni-restapi.secret.yaml`.
-  - Each file holds one `kind: Secret` with `metadata: {name: patroni-restapi, namespace: $ns}` and `stringData: {username: patroni, password: $pw}`, matching the `logical-backup-s3.secret.yaml` style.
+  - Each file holds one `kind: Secret` with `metadata: {name: patroni-restapi, namespace: $ns}` and `stringData: {username: patroni, password: $pw}`, matching the `logical-backup-s3.secret.yaml` style. For `cluster/luma/` the namespace is `luma-system`.
   - A comment line points to `docs/postgres.md`.
   - Never `cat` the files.
-- [ ] **Step 2: Check encryption before sealing.** `git check-attr filter -- cluster/*/patroni-restapi.secret.yaml`. Expected: 7 × `filter: git-crypt`.
-- [ ] **Step 3: Seal.** `nix develop --command ./sign.sh`. Expected: 7 paths printed, no `FAIL` or `SKIP`, and 7 `patroni-restapi.yaml` files with `kind: SealedSecret`.
+- [ ] **Step 2: Check encryption before sealing.** `git check-attr filter -- cluster/*/patroni-restapi.secret.yaml`. Expected: 7 × `filter: git-crypt` (8 with `acid-luma`).
+- [ ] **Step 3: Seal.** `nix develop --command ./sign.sh`. Expected: 7 paths printed (8 with `luma-system`), no `FAIL` or `SKIP`, and as many `patroni-restapi.yaml` files with `kind: SealedSecret`. Where `cluster/luma/` exists, the Luma deploy plan's sealing rule (its D2) applies first: `grep -l -e __PASTE_ -e __CHRIS_ cluster/luma/*.secret.yaml` prints nothing, and any other new `cluster/luma/*.yaml` is deleted, never staged.
 - [ ] **Step 4: Add the kustomization entries and patch, then check.**
   - `for ns in …; do kubectl kustomize cluster/$ns | grep -A6 'kind: SealedSecret' | grep -c 'Prune=false'; done`. Expected: 1 for each ns.
-  - `git diff --no-textconv --stat` lists exactly 7×2 new files and 7 kustomizations.
+  - `git diff --no-textconv --stat` lists exactly 7×2 new files and 7 kustomizations (8 each with `acid-luma`).
   - Pre-commit passes.
 - [ ] **Step 5: Add the DR note to `docs/backups.md`.** Under the "## Postgres" gotchas, add three points:
   - Every `acid-*` CR references Secret `patroni-restapi` (non-optional, D7), so a Spilo pod **cannot start** without it.
   - It's a SealedSecret marked `Prune=false`. In a cold start, the sealed-secrets controller (and its key) must be back before any Postgres pod can be created.
   - Never re-create the Secret by hand with a different password while pods run. Use the rotation in `docs/postgres.md`.
-- [ ] **Step 6: Commit, push, and wait for Argo.** `git commit -m "postgres: per-cluster patroni-restapi Secrets (unreferenced, Prune=false)"`. Watch the 7 apps to Synced/Healthy.
+- [ ] **Step 6: Commit, push, and wait for Argo.** `git commit -m "postgres: per-cluster patroni-restapi Secrets (unreferenced, Prune=false)"`. Watch the 7 apps (and `luma`, with `acid-luma`) to Synced/Healthy.
 - [ ] **Step 7: Verify (the gate for Tasks 4–8).**
-  - Run `scripts/check-patroni-restapi.sh`. Expected: 12 × `OPEN … secret=ok`.
+  - Run `scripts/check-patroni-restapi.sh`. Expected: 12 × `OPEN … secret=ok` (14 with an open `acid-luma`).
   - `kubectl -n <ns> get sealedsecret patroni-restapi -o jsonpath='{.metadata.annotations}'` shows `Prune=false`.
   - No Spilo pod restarted: ages from `kubectl get pods -A -l application=spilo` are unchanged.
 
@@ -328,7 +331,7 @@
 - [ ] **Step 1: Preflight (S1).**
   - The Argo app `postgres-operator` is Synced/Healthy.
   - No pod has `zalando-postgres-operator-rolling-update-required`.
-  - Record the 12 members' `.status.startTime` and `containerStatuses[0].imageID`, and the 7 StatefulSets' `.metadata.generation`.
+  - Record the 12 members' `.status.startTime` and `containerStatuses[0].imageID`, and the 7 StatefulSets' `.metadata.generation` (14 and 8 with `acid-luma`).
   - Anonymous pull works: `docker logout ghcr.io; docker manifest inspect ghcr.io/christopherjmiller/postgres-operator:sha-<short>` succeeds.
   - `kubectl auth can-i get secrets -n royaltracker --as=system:serviceaccount:postgres-operator:postgres-operator` → `yes`.
   - Get Chris's go: an operator restart re-syncs all 7 clusters.
@@ -337,7 +340,7 @@
   - The audit's first line reads `operator image=ok`. That's a digest match against the pin, not a prefix match.
   - `kubectl -n postgres-operator logs deploy/postgres-operator | grep 'Spilo operator v1.11.0-galaxy.1'` matches.
   - No `level=error`, and no match for `not authenticated|no auth header|patroni-restapi`.
-  - Against the Step 1 record: all 12 start times and imageIDs, and all 7 StatefulSet generations, are unchanged. No rolling-update flags appear.
+  - Against the Step 1 record: all 12 start times and imageIDs, and all 7 StatefulSet generations (14 and 8 with `acid-luma`), are unchanged. No rolling-update flags appear.
   - **Rollback trigger:** any StatefulSet generation bump, any Spilo pod recreated, or any error naming `patroni-restapi` → revert this commit. That is safe here, because no cluster has auth on yet.
 
 ### Task 5: Canary `acid-royaltracker`, plus proof that the operator authenticates
@@ -403,11 +406,13 @@
 **Files:**
 - Modify: `cluster/gramps/psql.yaml`, `cluster/media/psql.yaml`, `cluster/immich/psql.yaml`, `cluster/chrismillerxyz/psql.yaml`. Add the Global Constraints env block. `dockerImage` is unchanged everywhere: immich keeps its `spilo-vchord` pin.
 - For `cluster/chrismillerxyz/psql.yaml` only: in the **same commit**, delete the whole `patroni.pg_hba` block and its comment (D9).
+- `cluster/luma/psql.yaml`, only if `acid-luma` is still open (the eighth cluster; Architecture). Add the same env block.
 
-- [ ] **Step 1: Run the Task 5 Steps 1–5 cycle for each cluster, in this order:** `acid-gramps` → `acid-media` → `acid-immich` → `acid-chrismillerxyz`. chrismillerxyz goes last because it waits on Task 6.
+- [ ] **Step 1: Run the Task 5 Steps 1–5 cycle for each cluster, in this order:** `acid-gramps` → `acid-media` → `acid-immich` → `acid-chrismillerxyz` → `acid-luma` (if open). chrismillerxyz waits on Task 6; `acid-luma` comes after it, with its Secret already synced (Task 3, or its own earlier commit).
   - Each cluster is its own commit (`postgres(<ns>): Patroni REST auth`) and is fully verified, including the D8 switch-back, before the next.
   - Check each cluster's app afterwards: Gramps Web loads; Sonarr, Radarr and Lidarr have no DB errors; Immich loads.
   - For immich only: `psql -tAc "select extversion from pg_extension where extname='vchord'"` still returns its version.
+  - For `acid-luma` only: `patronictl list` shows a `Sync Standby` (it runs `synchronous_mode`), Luma Core's `/readyz` is 200, and the drill CR `docs/backups/acid-drill-luma.yaml` gets the env block in the same commit.
 - [ ] **Step 2: acid-chrismillerxyz extras.**
   - **Before its commit:** Task 6 is done, and Step 1 of Task 6 shows only `ssl = t` for non-localhost clients.
   - **After the roll:**
@@ -418,7 +423,7 @@
     - the same with `sslmode=disable` → `pg_hba.conf rejects connection … no encryption`.
   - **Apps:** the site responds, the next `notion-sync` run succeeds, and the exporter reports `pg_up 1`.
   - **Rollback:** reverting the commit restores the trust lines along with removing auth.
-- [ ] **Step 3: Check the four together.** The script shows 10 × `AUTH-ON`: these four clusters plus royaltracker.
+- [ ] **Step 3: Check them together.** The script shows 10 × `AUTH-ON`: these four clusters plus royaltracker (12 with `acid-luma`, on either branch).
 
 ### Task 8: The single-member clusters (outage), each on Chris's go
 
@@ -430,13 +435,13 @@
   - Expected operator log: `cannot perform switch over before re-creating the pod: no replicas`. The pod is back Ready in about 1–2 minutes, because the image is unchanged and cached.
   - Verify: the script (with `--probe` if Chris approved probes) shows `AUTH-ON`, and the attic server pod is Ready with no persistent DB errors.
 - [ ] **Step 2: `acid-ha`.** Same steps, at a quiet time Chris picks. Afterwards, `hactl` health is clean, and there are no recorder errors in the HA log after the pod is back.
-- [ ] **Step 3: Full audit.** `scripts/check-patroni-restapi.sh; echo "exit=$?"` → `operator image=ok`, 12 × `AUTH-ON` (14 if `acid-luma` exists), `exit=0`. If `acid-luma` exists and is still `OPEN`, run it through Task 7's cycle, with its own Secret.
+- [ ] **Step 3: Full audit.** `scripts/check-patroni-restapi.sh; echo "exit=$?"` → `operator image=ok`, 12 × `AUTH-ON` (14 if `acid-luma` exists, on either branch), `exit=0`. An `acid-luma` still `OPEN` here missed Task 7: run its cycle now.
 
 ### Task 9: Runbook and guardrails
 
 **Files:**
 - Create: `docs/postgres.md`
-- Modify: `.renovaterc.json`, `CLAUDE.md` (sharp edge #6), `docs/backups/acid-drill.yaml`, `docs/superpowers/plans/2026-10-18-luma-phase1-deploy.md` (Task 4 Step 9, the acid-luma CR, open question 2)
+- Modify: `.renovaterc.json`, `CLAUDE.md` (sharp edge #6), `docs/backups/acid-drill.yaml`, and `docs/backups/acid-drill-luma.yaml` if it exists without the env block
 
 - [ ] **Step 1: Write the "Patroni REST API auth" section of `docs/postgres.md`.** It covers:
   - D3/D4/D7 in three lines;
@@ -463,12 +468,9 @@
   - Extend the existing argocd operators rule's description: the chart never moves the operator image (it's overridden to our build), and an operator upgrade = port the patches (`docs/postgres.md`).
   - Run `npx --yes --package renovate -- renovate-config-validator .renovaterc.json`. Expected: valid.
 - [ ] **Step 3: Update `CLAUDE.md` sharp edge #6** to list `postgres-operator` among the images we build. Add one line: "Patroni REST writes need auth (since 2026-10); never revert or upgrade the operator without porting its patches: `docs/postgres.md`."
-- [ ] **Step 4: Add the env block to `docs/backups/acid-drill.yaml`,** with a comment saying that every acid namespace has `patroni-restapi`. `kubectl apply --dry-run=client -f docs/backups/acid-drill.yaml` passes.
-- [ ] **Step 5: Update the Luma phase-1 plan.**
-  - In Task 4 Step 9, the `/run/postgres.yml` file check is valid again (D3). Expected output is `restapi_auth True` once this plan's Task 4 operator runs and `acid-luma`'s CR has the env block. Also run `scripts/check-patroni-restapi.sh --cluster luma-system/acid-luma` → `AUTH-ON`. Drop the "it would print False even after the fix" reasoning.
-  - Give `acid-luma`'s CR the env block, plus `cluster/luma/patroni-restapi.secret.yaml` with its sealed sibling and the kustomize `Prune=false` patch, in the CR's own commit. This is fail-closed, so the Secret ships together with the reference.
-  - Update the answered open question 2: "operator-only patch (option B), Spilo stock; `docs/superpowers/plans/2026-10-19-patroni-rest-auth.md`".
-- [ ] **Step 6: Commit.** `git commit -m "docs(postgres): Patroni REST auth runbook; renovate, drill CR and luma plan follow-ups"`.
+- [ ] **Step 4: Add the env block to `docs/backups/acid-drill.yaml`,** with a comment saying that every acid namespace has `patroni-restapi`. Do the same for `docs/backups/acid-drill-luma.yaml` if it exists without it. `kubectl apply --dry-run=client -f` passes for each.
+- [ ] **Step 5: The Luma phase-1 plan needs no edit.** Its pre-flight ruling D3 (2026-10-21) already wrote both branches into its Task 4 (Steps 2, 5 and 9), Task 12 Step 2 and rollback. Record here, in Status, which branch `acid-luma` took.
+- [ ] **Step 6: Commit.** `git commit -m "docs(postgres): Patroni REST auth runbook; renovate and drill CR follow-ups"`.
 
 ---
 
