@@ -88,13 +88,16 @@ spec:
                 memory: 4Gi
               limits:
                 memory: 4Gi
+            # Convention: every PrometheusRule for this Prometheus carries
+            # `release: prometheus`, in any namespace (the chart's stock rules
+            # already do). Luma's own rules still live in `prometheus`. Older
+            # rules also keep the legacy prometheus/role pair, which nothing
+            # selects any more. Prove a rule loads with
+            # scripts/check-prometheus-rules.sh.
             ruleSelector:
               matchLabels:
-                prometheus: kube-prometheus
-                role: alert-rules
-            ruleNamespaceSelector:
-              matchLabels:
-                kubernetes.io/metadata.name: prometheus
+                release: prometheus
+            ruleNamespaceSelector: {}
             additionalScrapeConfigs:
               - job_name: kubernetes-pods
                 kubernetes_sd_configs:

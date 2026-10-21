@@ -1,9 +1,9 @@
 ---
 # Media pipeline alerts (exportarr + mega-media reconciler).
 # PrometheusRule, NOT a ConfigMap: the Prometheus ruleSelector matches
-# {prometheus: kube-prometheus, role: alert-rules} on PrometheusRule CRDs — the
-# same shape as cluster/ipmi-exporter/prometheusrule.yaml. (The configMapGenerator
-# rules in this dir are not selected by the operator and do not load.)
+# `release: prometheus` on PrometheusRule CRDs (the legacy prometheus/role pair
+# is kept but no longer selects anything). (The configMapGenerator rules in this
+# dir are not selected by the operator and do not load.)
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
