@@ -179,7 +179,13 @@ spec:
                   resources:
                     requests:
                       cpu: 100m
-                      memory: 1Gi
+                      # 384Mi, down from 1Gi (Luma 0b). Departs from the 1.25x
+                      # sizing rule on purpose: idle working set is 274 Mi (3d
+                      # p95), but a batch bursts to ~1169 Mi while models are
+                      # loaded and unloads after the idle TTL. The 3Gi limit
+                      # covers the burst; immich-ml is the designated "may
+                      # wait" pod in drains.
+                      memory: 384Mi
                     limits:
                       cpu: "2"
                       memory: 3Gi
