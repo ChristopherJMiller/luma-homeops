@@ -25,20 +25,27 @@ spec:
     # feature request is drafted in the 0b plan's Appendix A but not filed
     # (Chris, 2026-10-19); revisit it if Rook ever gains a ganesha config
     # override. NfsGaneshaOverRequest says when the cache bound stops holding.
+    #
+    # The pod's total is 5Gi, but this says 2560Mi: Rook v1.19.11 applies
+    # server.resources to BOTH containers, nfs-ganesha and the dbus-daemon
+    # sidecar, and the CRD has no separate sidecar field. The 5Gi written here
+    # on 2026-10-22 made a 10 GiB pod that fit no node, so it preempted four
+    # pods on bottom. Kubelet eviction compares pod usage with the pod's
+    # summed requests, so the 5Gi total is what protects the cache.
     resources:
       requests:
-        memory: 5Gi
+        memory: 2560Mi
     # With a request and priority 0 ganesha would become a preemption victim.
     # It may itself preempt priority-0 pods (Luma's included) when a drain
     # moves it; Luma is shed during drains (Luma spec §14).
     priorityClassName: system-cluster-critical
     placement:
       nodeAffinity:
-        # middle has the most request room, the lowest real use and the
-        # healthiest NVMe (no memtest gate applies; Chris, 2026-10-19). On top
-        # or bottom the 5Gi request takes that node below the 0b exit's
-        # 2048 Mi free-request floor. Preferred, so a drain of middle can
-        # re-place it.
+        # bottom, by request room (0b ruling R8, re-projected from actuals
+        # on 2026-10-22): with this pod there it keeps about 5.2 GiB free;
+        # middle would drop to about 20 Mi, below the 0b exit's 2048 Mi
+        # free-request floor, and top cannot fit it. Preferred, so a drain of
+        # bottom can re-place it.
         preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
             preference:
@@ -46,7 +53,7 @@ spec:
                 - key: kubernetes.io/hostname
                   operator: In
                   values:
-                    - middle
+                    - bottom
 ---
 # Pin the auto-created NFS Service to a known IP from the lan-internal
 # MetalLB pool. We deliberately request 192.168.0.230 so satellites can

@@ -46,11 +46,15 @@ spec:
               free requests or move work before it does.
 
         - alert: NfsGaneshaOverRequest
-          # The 5Gi request in cluster/rook-cluster/ceph-nfs.yaml assumes the
-          # metadata cache bound (MDCACHE Entries_HWMark 100000) holds; this
-          # says when it does not.
+          # The 5Gi pod request in cluster/rook-cluster/ceph-nfs.yaml assumes
+          # the metadata cache bound (MDCACHE Entries_HWMark 100000) holds;
+          # this says when it does not. It compares against the pod's SUMMED
+          # container requests: Rook gives the dbus-daemon sidecar the same
+          # request as nfs-ganesha (2560Mi each), so a single container's
+          # request is only half of what the pod holds. The `on (pod)` match
+          # keeps only the ganesha pod from the namespace-wide sum.
           expr: |
-            max by (pod) (container_memory_working_set_bytes{namespace="rook",container="nfs-ganesha"}) > on (pod) max by (pod) (kube_pod_container_resource_requests{namespace="rook",container="nfs-ganesha",resource="memory"})
+            max by (pod) (container_memory_working_set_bytes{namespace="rook",container="nfs-ganesha"}) > on (pod) sum by (pod) (kube_pod_container_resource_requests{namespace="rook",resource="memory"})
           for: 30m
           labels:
             severity: warning
