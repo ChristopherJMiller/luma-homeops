@@ -1,0 +1,450 @@
+From 96899830455586549824978bcd531fd893737a7d Mon Sep 17 00:00:00 2001
+From: Christopher Miller <git@chrismiller.xyz>
+Date: Thu, 22 Oct 2026 08:18:11 -0700
+Subject: [PATCH] patroni: basic auth for REST API writes from per-namespace
+ Secret
+
+---
+ pkg/cluster/cluster.go               |   2 +-
+ pkg/util/patroni/auth_client.go      |  84 +++++++
+ pkg/util/patroni/auth_client_test.go | 324 +++++++++++++++++++++++++++
+ 3 files changed, 409 insertions(+), 1 deletion(-)
+ create mode 100644 pkg/util/patroni/auth_client.go
+ create mode 100644 pkg/util/patroni/auth_client_test.go
+
+diff --git a/pkg/cluster/cluster.go b/pkg/cluster/cluster.go
+index 1b1239f3..45936b66 100644
+--- a/pkg/cluster/cluster.go
++++ b/pkg/cluster/cluster.go
+@@ -147,7 +147,7 @@ func New(cfg Config, kubeClient k8sutil.KubernetesClient, pgSpec acidv1.Postgres
+ 	cluster.logger = logger.WithField("pkg", "cluster").WithField("cluster-name", cluster.clusterName())
+ 	cluster.teamsAPIClient = teams.NewTeamsAPI(cfg.OpConfig.TeamsAPIUrl, logger)
+ 	cluster.oauthTokenGetter = newSecretOauthTokenGetter(&kubeClient, cfg.OpConfig.OAuthTokenSecretName)
+-	cluster.patroni = patroni.New(cluster.logger, nil)
++	cluster.patroni = patroni.New(cluster.logger, patroni.NewAuthClient(kubeClient.SecretsGetter, pgSpec.Namespace))
+ 	cluster.eventRecorder = eventRecorder
+ 
+ 	cluster.EBSVolumes = make(map[string]volumes.VolumeProperties)
+diff --git a/pkg/util/patroni/auth_client.go b/pkg/util/patroni/auth_client.go
+new file mode 100644
+index 00000000..f8bd0512
+--- /dev/null
++++ b/pkg/util/patroni/auth_client.go
+@@ -0,0 +1,84 @@
++// galaxy patch — luma-homeops docs/postgres.md
++//
++// Basic auth for the operator's Patroni REST API writes. The credentials come
++// from the Secret patroni-restapi (keys username, password) in the cluster's
++// namespace, read on every write so a rotation needs no operator restart.
++// A namespace without that Secret gets upstream behaviour: no header.
++
++package patroni
++
++import (
++	"context"
++	"fmt"
++	"net/http"
++	"time"
++
++	httpclient "github.com/zalando/postgres-operator/pkg/util/httpclient"
++	apierrors "k8s.io/apimachinery/pkg/api/errors"
++	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
++	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
++)
++
++// PatroniRESTAPISecretName is the per-namespace Secret holding the Patroni
++// REST API credentials, under the keys "username" and "password".
++const PatroniRESTAPISecretName = "patroni-restapi"
++
++// secretGetTimeout bounds each Secret read. A var so the test can shorten it.
++var secretGetTimeout = 5 * time.Second
++
++type authClient struct {
++	client    *http.Client
++	secrets   corev1.SecretsGetter
++	namespace string
++}
++
++// NewAuthClient returns an HTTPClient that adds Basic auth from the namespace's
++// patroni-restapi Secret to every Do. Get is never authenticated: Patroni does
++// not require auth for GET, and the operator polls with GET every second.
++func NewAuthClient(secrets corev1.SecretsGetter, namespace string) httpclient.HTTPClient {
++	return &authClient{
++		client:    &http.Client{Timeout: timeout},
++		secrets:   secrets,
++		namespace: namespace,
++	}
++}
++
++func (c *authClient) Do(req *http.Request) (*http.Response, error) {
++	if err := c.authenticate(req); err != nil {
++		// http.Client.Do closes the body even on errors; keep that contract.
++		if req.Body != nil {
++			req.Body.Close()
++		}
++		return nil, err
++	}
++	return c.client.Do(req)
++}
++
++func (c *authClient) Get(url string) (*http.Response, error) {
++	return c.client.Get(url)
++}
++
++// authenticate sets Basic auth on req from the Secret. A missing Secret (or no
++// Secrets client) leaves req unchanged; any other failure sends nothing.
++func (c *authClient) authenticate(req *http.Request) error {
++	if c.secrets == nil {
++		return nil
++	}
++	ctx, cancel := context.WithTimeout(req.Context(), secretGetTimeout)
++	defer cancel()
++
++	secret, err := c.secrets.Secrets(c.namespace).Get(ctx, PatroniRESTAPISecretName, metav1.GetOptions{})
++	switch {
++	case apierrors.IsNotFound(err):
++		return nil
++	case err != nil:
++		return fmt.Errorf("could not read secret %s/%s: %w", c.namespace, PatroniRESTAPISecretName, err)
++	}
++
++	username, password := string(secret.Data["username"]), string(secret.Data["password"])
++	if username == "" || password == "" {
++		return fmt.Errorf("secret %s/%s must have non-empty keys username and password", c.namespace, PatroniRESTAPISecretName)
++	}
++	req.SetBasicAuth(username, password)
++	return nil
++}
+diff --git a/pkg/util/patroni/auth_client_test.go b/pkg/util/patroni/auth_client_test.go
+new file mode 100644
+index 00000000..fac42997
+--- /dev/null
++++ b/pkg/util/patroni/auth_client_test.go
+@@ -0,0 +1,324 @@
++// galaxy patch — luma-homeops docs/postgres.md
++
++package patroni
++
++import (
++	"context"
++	"errors"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"strings"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/sirupsen/logrus"
++	v1 "k8s.io/api/core/v1"
++	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
++	"k8s.io/apimachinery/pkg/runtime"
++	"k8s.io/client-go/kubernetes/fake"
++	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
++	k8stesting "k8s.io/client-go/testing"
++)
++
++const authTestNamespace = "royaltracker"
++
++var authTestLogger = logrus.New().WithField("test", "patroni-auth")
++
++// authServer records the Authorization header of every request it receives.
++type authServer struct {
++	*httptest.Server
++	mu      sync.Mutex
++	headers []string
++}
++
++func newAuthServer(t *testing.T) *authServer {
++	t.Helper()
++	s := &authServer{}
++	s.Server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		s.mu.Lock()
++		s.headers = append(s.headers, r.Header.Get("Authorization"))
++		s.mu.Unlock()
++		w.WriteHeader(http.StatusOK)
++	}))
++	t.Cleanup(s.Close)
++	return s
++}
++
++func (s *authServer) requests() []string {
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	return append([]string(nil), s.headers...)
++}
++
++func restAPISecret(namespace string, data map[string]string) *v1.Secret {
++	secret := &v1.Secret{
++		ObjectMeta: metav1.ObjectMeta{Name: PatroniRESTAPISecretName, Namespace: namespace},
++		Data:       map[string][]byte{},
++	}
++	for k, v := range data {
++		secret.Data[k] = []byte(v)
++	}
++	return secret
++}
++
++func fullSecret(namespace string) *v1.Secret {
++	return restAPISecret(namespace, map[string]string{"username": "patroni", "password": "s3cret"})
++}
++
++func doPost(t *testing.T, client interface {
++	Do(*http.Request) (*http.Response, error)
++}, url string) error {
++	t.Helper()
++	req, err := http.NewRequest(http.MethodPost, url, strings.NewReader(`{}`))
++	if err != nil {
++		t.Fatalf("could not build request: %v", err)
++	}
++	resp, err := client.Do(req)
++	if resp != nil {
++		resp.Body.Close()
++	}
++	return err
++}
++
++// expectOneRequest fails unless the server saw exactly one request, and returns its Authorization header.
++func expectOneRequest(t *testing.T, s *authServer) string {
++	t.Helper()
++	got := s.requests()
++	if len(got) != 1 {
++		t.Fatalf("expected 1 request, server saw %d", len(got))
++	}
++	return got[0]
++}
++
++func expectNoRequest(t *testing.T, s *authServer) {
++	t.Helper()
++	if got := s.requests(); len(got) != 0 {
++		t.Fatalf("expected no request, server saw %d", len(got))
++	}
++}
++
++func TestAuthClientDoAddsBasicAuth(t *testing.T) {
++	s := newAuthServer(t)
++	clientset := fake.NewSimpleClientset(fullSecret(authTestNamespace))
++	client := NewAuthClient(clientset.CoreV1(), authTestNamespace)
++
++	if err := doPost(t, client, s.URL+failoverPath); err != nil {
++		t.Fatalf("unexpected error: %v", err)
++	}
++	if got, want := expectOneRequest(t, s), "Basic cGF0cm9uaTpzM2NyZXQ="; got != want {
++		t.Errorf("Authorization = %q, want %q", got, want)
++	}
++}
++
++func TestAuthClientDoWithoutSecretSendsNoAuth(t *testing.T) {
++	s := newAuthServer(t)
++	client := NewAuthClient(fake.NewSimpleClientset().CoreV1(), authTestNamespace)
++
++	if err := doPost(t, client, s.URL+failoverPath); err != nil {
++		t.Fatalf("unexpected error: %v", err)
++	}
++	if got := expectOneRequest(t, s); got != "" {
++		t.Errorf("Authorization = %q, want none", got)
++	}
++}
++
++func TestAuthClientDoNilSecretsGetterSendsNoAuth(t *testing.T) {
++	s := newAuthServer(t)
++	client := NewAuthClient(nil, authTestNamespace)
++
++	if err := doPost(t, client, s.URL+failoverPath); err != nil {
++		t.Fatalf("unexpected error: %v", err)
++	}
++	if got := expectOneRequest(t, s); got != "" {
++		t.Errorf("Authorization = %q, want none", got)
++	}
++}
++
++func TestAuthClientDoSecretInOtherNamespaceIgnored(t *testing.T) {
++	s := newAuthServer(t)
++	clientset := fake.NewSimpleClientset(fullSecret("gramps"))
++	client := NewAuthClient(clientset.CoreV1(), authTestNamespace)
++
++	if err := doPost(t, client, s.URL+failoverPath); err != nil {
++		t.Fatalf("unexpected error: %v", err)
++	}
++	if got := expectOneRequest(t, s); got != "" {
++		t.Errorf("Authorization = %q, want none", got)
++	}
++}
++
++func TestAuthClientDoIncompleteSecretFails(t *testing.T) {
++	s := newAuthServer(t)
++	clientset := fake.NewSimpleClientset(restAPISecret(authTestNamespace, map[string]string{"username": "patroni"}))
++	client := NewAuthClient(clientset.CoreV1(), authTestNamespace)
++
++	err := doPost(t, client, s.URL+failoverPath)
++	if err == nil {
++		t.Fatal("expected an error for a Secret without a password")
++	}
++	if !strings.Contains(err.Error(), PatroniRESTAPISecretName) {
++		t.Errorf("error %q does not name %s", err, PatroniRESTAPISecretName)
++	}
++	expectNoRequest(t, s)
++}
++
++func TestAuthClientDoSecretReadErrorFails(t *testing.T) {
++	s := newAuthServer(t)
++	readErr := errors.New("etcdserver: request timed out")
++	clientset := fake.NewSimpleClientset(fullSecret(authTestNamespace))
++	clientset.PrependReactor("get", "secrets", func(k8stesting.Action) (bool, runtime.Object, error) {
++		return true, nil, readErr
++	})
++	client := NewAuthClient(clientset.CoreV1(), authTestNamespace)
++
++	err := doPost(t, client, s.URL+failoverPath)
++	if err == nil {
++		t.Fatal("expected an error when the Secret cannot be read")
++	}
++	if !errors.Is(err, readErr) {
++		t.Errorf("error %q does not wrap the read error", err)
++	}
++	if !strings.Contains(err.Error(), PatroniRESTAPISecretName) {
++		t.Errorf("error %q does not name %s", err, PatroniRESTAPISecretName)
++	}
++	expectNoRequest(t, s)
++}
++
++// blockingSecretsGetter hands out a SecretInterface whose Get hangs until its context ends.
++type blockingSecretsGetter struct{ inner corev1.SecretsGetter }
++
++func (g blockingSecretsGetter) Secrets(namespace string) corev1.SecretInterface {
++	return blockingSecrets{g.inner.Secrets(namespace)}
++}
++
++type blockingSecrets struct{ corev1.SecretInterface }
++
++func (blockingSecrets) Get(ctx context.Context, _ string, _ metav1.GetOptions) (*v1.Secret, error) {
++	<-ctx.Done()
++	return nil, ctx.Err()
++}
++
++func TestAuthClientDoSecretReadTimesOut(t *testing.T) {
++	saved := secretGetTimeout
++	secretGetTimeout = 50 * time.Millisecond
++	t.Cleanup(func() { secretGetTimeout = saved })
++
++	s := newAuthServer(t)
++	getter := blockingSecretsGetter{fake.NewSimpleClientset(fullSecret(authTestNamespace)).CoreV1()}
++	client := NewAuthClient(getter, authTestNamespace)
++
++	start := time.Now()
++	err := doPost(t, client, s.URL+failoverPath)
++	elapsed := time.Since(start)
++
++	if !errors.Is(err, context.DeadlineExceeded) {
++		t.Fatalf("error = %v, want context.DeadlineExceeded", err)
++	}
++	if elapsed >= time.Second {
++		t.Errorf("Do took %v, want < 1s", elapsed)
++	}
++	expectNoRequest(t, s)
++}
++
++func TestAuthClientDoReadsSecretPerRequest(t *testing.T) {
++	s := newAuthServer(t)
++	clientset := fake.NewSimpleClientset(fullSecret(authTestNamespace))
++	client := NewAuthClient(clientset.CoreV1(), authTestNamespace)
++
++	if err := doPost(t, client, s.URL+failoverPath); err != nil {
++		t.Fatalf("first request: %v", err)
++	}
++	rotated := restAPISecret(authTestNamespace, map[string]string{"username": "patroni", "password": "rotated"})
++	if _, err := clientset.CoreV1().Secrets(authTestNamespace).Update(context.TODO(), rotated, metav1.UpdateOptions{}); err != nil {
++		t.Fatalf("could not rotate the Secret: %v", err)
++	}
++	if err := doPost(t, client, s.URL+failoverPath); err != nil {
++		t.Fatalf("second request: %v", err)
++	}
++
++	got := s.requests()
++	if len(got) != 2 {
++		t.Fatalf("expected 2 requests, server saw %d", len(got))
++	}
++	if want := "Basic cGF0cm9uaTpzM2NyZXQ="; got[0] != want {
++		t.Errorf("first Authorization = %q, want %q", got[0], want)
++	}
++	if want := "Basic cGF0cm9uaTpyb3RhdGVk"; got[1] != want {
++		t.Errorf("second Authorization = %q, want %q", got[1], want)
++	}
++}
++
++func TestAuthClientGetNeverAuthenticates(t *testing.T) {
++	s := newAuthServer(t)
++	clientset := fake.NewSimpleClientset(fullSecret(authTestNamespace))
++	client := NewAuthClient(clientset.CoreV1(), authTestNamespace)
++
++	resp, err := client.Get(s.URL + statusPath)
++	if err != nil {
++		t.Fatalf("unexpected error: %v", err)
++	}
++	resp.Body.Close()
++
++	if got := expectOneRequest(t, s); got != "" {
++		t.Errorf("Authorization = %q, want none", got)
++	}
++	for _, action := range clientset.Actions() {
++		if action.Matches("get", "secrets") {
++			t.Errorf("Get read the Secret: %v", action)
++		}
++	}
++}
++
++// writeRecorder is an HTTPClient that records calls and answers 200 OK without touching the network.
++type writeRecorder struct {
++	dos  []string
++	gets []string
++}
++
++func (r *writeRecorder) Do(req *http.Request) (*http.Response, error) {
++	r.dos = append(r.dos, req.Method+" "+req.URL.Path)
++	return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("OK"))}, nil
++}
++
++func (r *writeRecorder) Get(url string) (*http.Response, error) {
++	r.gets = append(r.gets, url)
++	return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("{}"))}, nil
++}
++
++// The operator's writes must all go through Do, which is where NewAuthClient adds the credentials.
++func TestPatroniWritesUseDo(t *testing.T) {
++	pod := &v1.Pod{
++		ObjectMeta: metav1.ObjectMeta{Name: "acid-royaltracker-0", Namespace: authTestNamespace},
++		Status:     v1.PodStatus{PodIP: "10.244.1.17"},
++	}
++	tests := []struct {
++		name  string
++		write func(p *Patroni) error
++		want  string
++	}{
++		{"Switchover", func(p *Patroni) error { return p.Switchover(pod, "acid-royaltracker-1") }, "POST " + failoverPath},
++		{"Restart", func(p *Patroni) error { return p.Restart(pod) }, "POST " + restartPath},
++		{"SetConfig", func(p *Patroni) error {
++			return p.SetConfig(pod, map[string]interface{}{"ttl": 30})
++		}, "PATCH " + configPath},
++		{"SetPostgresParameters", func(p *Patroni) error {
++			return p.SetPostgresParameters(pod, map[string]string{"log_min_duration_statement": "500"})
++		}, "PATCH " + configPath},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			recorder := &writeRecorder{}
++			if err := tt.write(New(authTestLogger, recorder)); err != nil {
++				t.Fatalf("unexpected error: %v", err)
++			}
++			if len(recorder.dos) != 1 || recorder.dos[0] != tt.want {
++				t.Errorf("Do calls = %q, want [%q]", recorder.dos, tt.want)
++			}
++			if len(recorder.gets) != 0 {
++				t.Errorf("Get calls = %q, want none", recorder.gets)
++			}
++		})
++	}
++}
+-- 
+2.54.0
+
