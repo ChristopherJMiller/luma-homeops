@@ -241,7 +241,7 @@ spec:
     mgr:
       requests:
         cpu: 500m
-        memory: 2Gi
+        memory: 1408Mi
       limits:
         memory: 2Gi
     mon:
