@@ -44,3 +44,21 @@ spec:
               Pods on {{ $labels.node }} request {{ $value | humanizePercentage }}
               of its allocatable memory. A restarting pod may not fit back on it;
               free requests or move work before it does.
+
+        - alert: NfsGaneshaOverRequest
+          # The 5Gi request in cluster/rook-cluster/ceph-nfs.yaml assumes the
+          # metadata cache bound (MDCACHE Entries_HWMark 100000) holds; this
+          # says when it does not.
+          expr: |
+            max by (pod) (container_memory_working_set_bytes{namespace="rook",container="nfs-ganesha"}) > on (pod) max by (pod) (kube_pod_container_resource_requests{namespace="rook",container="nfs-ganesha",resource="memory"})
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "nfs-ganesha {{ $labels.pod }} is using more memory than it requests"
+            description: >-
+              {{ $labels.pod }} has a working set of {{ $value | humanize1024 }}B,
+              above its memory request, for 30 minutes. The request assumes the
+              metadata cache stays at its bound (Entries_HWMark 100000); either
+              that bound no longer holds or something else is growing. Re-size
+              the request in cluster/rook-cluster/ceph-nfs.yaml, or find the growth.
