@@ -1,4 +1,4 @@
-From 96899830455586549824978bcd531fd893737a7d Mon Sep 17 00:00:00 2001
+From 804d332b45fdac4837a65e4cc307bae7c328a347 Mon Sep 17 00:00:00 2001
 From: Christopher Miller <git@chrismiller.xyz>
 Date: Thu, 22 Oct 2026 08:18:11 -0700
 Subject: [PATCH] patroni: basic auth for REST API writes from per-namespace
@@ -6,9 +6,11 @@ Subject: [PATCH] patroni: basic auth for REST API writes from per-namespace
 
 ---
  pkg/cluster/cluster.go               |   2 +-
- pkg/util/patroni/auth_client.go      |  84 +++++++
- pkg/util/patroni/auth_client_test.go | 324 +++++++++++++++++++++++++++
- 3 files changed, 409 insertions(+), 1 deletion(-)
+ pkg/cluster/patroni_client_test.go   |  48 ++++
+ pkg/util/patroni/auth_client.go      | 110 ++++++++
+ pkg/util/patroni/auth_client_test.go | 374 +++++++++++++++++++++++++++
+ 4 files changed, 533 insertions(+), 1 deletion(-)
+ create mode 100644 pkg/cluster/patroni_client_test.go
  create mode 100644 pkg/util/patroni/auth_client.go
  create mode 100644 pkg/util/patroni/auth_client_test.go
 
@@ -25,18 +27,74 @@ index 1b1239f3..45936b66 100644
  	cluster.eventRecorder = eventRecorder
  
  	cluster.EBSVolumes = make(map[string]volumes.VolumeProperties)
+diff --git a/pkg/cluster/patroni_client_test.go b/pkg/cluster/patroni_client_test.go
+new file mode 100644
+index 00000000..8f4c73d4
+--- /dev/null
++++ b/pkg/cluster/patroni_client_test.go
+@@ -0,0 +1,48 @@
++// galaxy patch — luma-homeops docs/postgres.md
++
++package cluster
++
++import (
++	"reflect"
++	"testing"
++
++	"github.com/sirupsen/logrus"
++	acidv1 "github.com/zalando/postgres-operator/pkg/apis/acid.zalan.do/v1"
++	"github.com/zalando/postgres-operator/pkg/util/k8sutil"
++	"github.com/zalando/postgres-operator/pkg/util/patroni"
++	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
++	"k8s.io/client-go/kubernetes/fake"
++	"k8s.io/client-go/tools/record"
++)
++
++// Guards the wiring in New: if a port of the patches loses it, the operator silently
++// goes back to unauthenticated writes, and every opted-in cluster's next roll stalls.
++// The fields are unexported, so this reads them through reflect.
++func TestClusterPatroniClientAuthenticates(t *testing.T) {
++	c := New(
++		Config{},
++		k8sutil.KubernetesClient{SecretsGetter: fake.NewSimpleClientset().CoreV1()},
++		acidv1.Postgresql{ObjectMeta: metav1.ObjectMeta{Name: "acid-royaltracker", Namespace: "royaltracker"}},
++		logrus.New().WithField("test", "patroni-client"),
++		record.NewFakeRecorder(1),
++	)
++
++	p, ok := c.patroni.(*patroni.Patroni)
++	if !ok {
++		t.Fatalf("c.patroni is %T, want *patroni.Patroni", c.patroni)
++	}
++	client := reflect.ValueOf(p).Elem().FieldByName("httpClient")
++	if !client.IsValid() || client.IsNil() {
++		t.Fatal("patroni.Patroni has no httpClient; port this guard with the patches")
++	}
++	if got := client.Elem().Type().String(); got != "*patroni.authClient" {
++		t.Fatalf("c.patroni's httpClient is %s, want *patroni.authClient (cluster.go: patroni.NewAuthClient)", got)
++	}
++	auth := client.Elem().Elem()
++	if got := auth.FieldByName("namespace").String(); got != "royaltracker" {
++		t.Errorf("authClient namespace = %q, want the cluster's namespace %q", got, "royaltracker")
++	}
++	if auth.FieldByName("secrets").IsNil() {
++		t.Error("authClient has no SecretsGetter; New must pass kubeClient.SecretsGetter")
++	}
++}
 diff --git a/pkg/util/patroni/auth_client.go b/pkg/util/patroni/auth_client.go
 new file mode 100644
-index 00000000..f8bd0512
+index 00000000..88b5f65d
 --- /dev/null
 +++ b/pkg/util/patroni/auth_client.go
-@@ -0,0 +1,84 @@
+@@ -0,0 +1,110 @@
 +// galaxy patch — luma-homeops docs/postgres.md
 +//
 +// Basic auth for the operator's Patroni REST API writes. The credentials come
 +// from the Secret patroni-restapi (keys username, password) in the cluster's
 +// namespace, read on every write so a rotation needs no operator restart.
-+// A namespace without that Secret gets upstream behaviour: no header.
++// A namespace without that Secret gets upstream behaviour: no header. Any other
++// read failure, an empty key, or a value outside [A-Za-z0-9._~-] fails the
++// write without sending it (fail closed), with an error naming the Secret.
 +
 +package patroni
 +
@@ -112,15 +170,39 @@ index 00000000..f8bd0512
 +	if username == "" || password == "" {
 +		return fmt.Errorf("secret %s/%s must have non-empty keys username and password", c.namespace, PatroniRESTAPISecretName)
 +	}
++	if !safeCredential(username) {
++		return fmt.Errorf("secret %s/%s: key username may only contain [A-Za-z0-9._~-]", c.namespace, PatroniRESTAPISecretName)
++	}
++	if !safeCredential(password) {
++		return fmt.Errorf("secret %s/%s: key password may only contain [A-Za-z0-9._~-]", c.namespace, PatroniRESTAPISecretName)
++	}
 +	req.SetBasicAuth(username, password)
 +	return nil
 +}
++
++// safeCredential reports whether s uses only [A-Za-z0-9._~-]. The pods splice the
++// credentials raw into SPILO_CONFIGURATION's JSON through $(VAR), so a quote or a
++// backslash there would corrupt (or inject into) Patroni's config, and a colon in
++// the username would break Basic auth. Refusing here makes that misconfiguration
++// loud in the operator log instead of silent in the pods.
++func safeCredential(s string) bool {
++	for i := 0; i < len(s); i++ {
++		b := s[i]
++		switch {
++		case 'a' <= b && b <= 'z', 'A' <= b && b <= 'Z', '0' <= b && b <= '9':
++		case b == '.', b == '_', b == '~', b == '-':
++		default:
++			return false
++		}
++	}
++	return true
++}
 diff --git a/pkg/util/patroni/auth_client_test.go b/pkg/util/patroni/auth_client_test.go
 new file mode 100644
-index 00000000..fac42997
+index 00000000..7baa6111
 --- /dev/null
 +++ b/pkg/util/patroni/auth_client_test.go
-@@ -0,0 +1,324 @@
+@@ -0,0 +1,374 @@
 +// galaxy patch — luma-homeops docs/postgres.md
 +
 +package patroni
@@ -285,6 +367,56 @@ index 00000000..fac42997
 +		t.Errorf("error %q does not name %s", err, PatroniRESTAPISecretName)
 +	}
 +	expectNoRequest(t, s)
++}
++
++// The pods splice the credentials raw into SPILO_CONFIGURATION's JSON through $(VAR), so
++// only [A-Za-z0-9._~-] is allowed; anything else fails closed without echoing the value.
++func TestAuthClientDoRejectsUnsafeCredentials(t *testing.T) {
++	tests := []struct {
++		name, username, password string
++		wantHeader               string // empty: the request must fail and send nothing
++	}{
++		{"every allowed character", "patroni", "Az09._~-", "Basic cGF0cm9uaTpBejA5Ll9+LQ=="},
++		{"double quote", "patroni", `s3"cret`, ""},
++		{"backslash", "patroni", `s3\cret`, ""},
++		{"space", "patroni", "s3 cret", ""},
++		{"newline", "patroni", "s3cret\n", ""},
++		{"variable reference", "patroni", "$(PATRONI_RESTAPI_PASSWORD)", ""},
++		{"non-ASCII", "patroni", "sécret", ""},
++		{"colon in username", "pat:roni", "s3cret", ""},
++	}
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			s := newAuthServer(t)
++			secret := restAPISecret(authTestNamespace, map[string]string{"username": tt.username, "password": tt.password})
++			client := NewAuthClient(fake.NewSimpleClientset(secret).CoreV1(), authTestNamespace)
++
++			err := doPost(t, client, s.URL+failoverPath)
++			if tt.wantHeader != "" {
++				if err != nil {
++					t.Fatalf("unexpected error: %v", err)
++				}
++				if got := expectOneRequest(t, s); got != tt.wantHeader {
++					t.Errorf("Authorization = %q, want %q", got, tt.wantHeader)
++				}
++				return
++			}
++			if err == nil {
++				t.Fatal("expected an error for a credential outside [A-Za-z0-9._~-]")
++			}
++			if !strings.Contains(err.Error(), PatroniRESTAPISecretName) {
++				t.Errorf("error %q does not name %s", err, PatroniRESTAPISecretName)
++			}
++			bad := tt.password
++			if tt.password == "s3cret" {
++				bad = tt.username
++			}
++			if strings.Contains(err.Error(), bad) {
++				t.Errorf("error %q echoes the credential", err)
++			}
++			expectNoRequest(t, s)
++		})
++	}
 +}
 +
 +func TestAuthClientDoSecretReadErrorFails(t *testing.T) {

@@ -1,4 +1,4 @@
-From e8227dd97f37d19bfacb82e9a579028923a1b610 Mon Sep 17 00:00:00 2001
+From d514b175682aa3019f8e2f93f68373a1973049b9 Mon Sep 17 00:00:00 2001
 From: Christopher Miller <git@chrismiller.xyz>
 Date: Thu, 22 Oct 2026 08:25:11 -0700
 Subject: [PATCH] cluster: opt-in Patroni REST API auth in SPILO_CONFIGURATION
@@ -6,9 +6,9 @@ Subject: [PATCH] cluster: opt-in Patroni REST API auth in SPILO_CONFIGURATION
 
 ---
  pkg/cluster/k8sres.go                    |  16 +-
- pkg/cluster/patroni_restapi_auth.go      |  62 ++++++++
- pkg/cluster/patroni_restapi_auth_test.go | 193 +++++++++++++++++++++++
- 3 files changed, 270 insertions(+), 1 deletion(-)
+ pkg/cluster/patroni_restapi_auth.go      |  79 ++++++++
+ pkg/cluster/patroni_restapi_auth_test.go | 229 +++++++++++++++++++++++
+ 3 files changed, 323 insertions(+), 1 deletion(-)
  create mode 100644 pkg/cluster/patroni_restapi_auth.go
  create mode 100644 pkg/cluster/patroni_restapi_auth_test.go
 
@@ -69,16 +69,17 @@ index 2cd1a96e..0970df63 100644
  	}
 diff --git a/pkg/cluster/patroni_restapi_auth.go b/pkg/cluster/patroni_restapi_auth.go
 new file mode 100644
-index 00000000..6ea3d515
+index 00000000..be4fba8f
 --- /dev/null
 +++ b/pkg/cluster/patroni_restapi_auth.go
-@@ -0,0 +1,62 @@
+@@ -0,0 +1,79 @@
 +// galaxy patch — luma-homeops docs/postgres.md
 +//
 +// Per-CR opt-in to Patroni REST API auth. A CR opts in by listing both
 +// PATRONI_RESTAPI_USERNAME and PATRONI_RESTAPI_PASSWORD in spec.env as
-+// secretKeyRefs to the Secret patroni-restapi. The operator then emits those
-+// two entries before SPILO_CONFIGURATION and adds
++// secretKeyRefs to the Secret patroni-restapi, keys username and password. The
++// operator then emits those two entries (never optional) before
++// SPILO_CONFIGURATION and adds
 +// restapi.authentication = {username: $(PATRONI_RESTAPI_USERNAME), password: $(PATRONI_RESTAPI_PASSWORD)}
 +// to it; the kubelet expands the $(VAR) references because the vars come
 +// earlier in the list. The StatefulSet holds only the references. A CR that
@@ -102,17 +103,26 @@ index 00000000..6ea3d515
 +	Authentication map[string]string `json:"authentication"`
 +}
 +
-+// patroniRESTAPIAuthEnv returns the CR's [username, password] entries, copied
-+// verbatim, when the CR opts in: both names present (exact case), each a
-+// secretKeyRef to the patroni-restapi Secret. Otherwise it returns nil. When a
-+// name is listed twice, the first entry counts, as in appendEnvVars.
++// patroniRESTAPIAuthEnv returns [username, password] env entries when the CR
++// opts in. Opting in means the first exact-case PATRONI_RESTAPI_USERNAME entry
++// is a secretKeyRef to patroni-restapi key "username", and the first exact-case
++// PATRONI_RESTAPI_PASSWORD entry is a secretKeyRef to patroni-restapi key
++// "password". Otherwise it returns nil.
++//
++// The entries are copies of the CR's with Optional cleared (D7): a missing
++// Secret must fail the pod closed rather than leave a literal $(…) as the
++// password. The CR's env is not modified.
++//
++// Matching here is exact-case, but appendEnvVars deduplicates case-insensitively
++// (isEnvVarPresent uses strings.EqualFold). So once these two are injected, every
++// later spec.Env entry with either name, in any case, is dropped.
 +func patroniRESTAPIAuthEnv(env []v1.EnvVar) []v1.EnvVar {
 +	username, okUsername := firstEnvVar(env, patroniRESTAPIUsernameEnv)
 +	password, okPassword := firstEnvVar(env, patroniRESTAPIPasswordEnv)
-+	if !okUsername || !okPassword || !refsRESTAPISecret(username) || !refsRESTAPISecret(password) {
++	if !okUsername || !okPassword || !refsRESTAPISecret(username, "username") || !refsRESTAPISecret(password, "password") {
 +		return nil
 +	}
-+	return []v1.EnvVar{username, password}
++	return []v1.EnvVar{nonOptional(username), nonOptional(password)}
 +}
 +
 +func firstEnvVar(env []v1.EnvVar, name string) (v1.EnvVar, bool) {
@@ -124,9 +134,16 @@ index 00000000..6ea3d515
 +	return v1.EnvVar{}, false
 +}
 +
-+func refsRESTAPISecret(e v1.EnvVar) bool {
++func refsRESTAPISecret(e v1.EnvVar, key string) bool {
 +	return e.ValueFrom != nil && e.ValueFrom.SecretKeyRef != nil &&
-+		e.ValueFrom.SecretKeyRef.Name == patroni.PatroniRESTAPISecretName
++		e.ValueFrom.SecretKeyRef.Name == patroni.PatroniRESTAPISecretName &&
++		e.ValueFrom.SecretKeyRef.Key == key
++}
++
++func nonOptional(e v1.EnvVar) v1.EnvVar {
++	out := *e.DeepCopy()
++	out.ValueFrom.SecretKeyRef.Optional = nil
++	return out
 +}
 +
 +func patroniRESTAPIAuthentication() *spiloRestAPI {
@@ -137,10 +154,10 @@ index 00000000..6ea3d515
 +}
 diff --git a/pkg/cluster/patroni_restapi_auth_test.go b/pkg/cluster/patroni_restapi_auth_test.go
 new file mode 100644
-index 00000000..7226541d
+index 00000000..49946921
 --- /dev/null
 +++ b/pkg/cluster/patroni_restapi_auth_test.go
-@@ -0,0 +1,193 @@
+@@ -0,0 +1,229 @@
 +// galaxy patch — luma-homeops docs/postgres.md
 +
 +package cluster
@@ -179,6 +196,13 @@ index 00000000..7226541d
 +	restAPIPasswordRef = secretRefEnv(patroniRESTAPIPasswordEnv, "patroni-restapi", "password")
 +)
 +
++func optionalRef(e v1.EnvVar) v1.EnvVar {
++	out := *e.DeepCopy()
++	optional := true
++	out.ValueFrom.SecretKeyRef.Optional = &optional
++	return out
++}
++
 +func TestPatroniRESTAPIAuthEnv(t *testing.T) {
 +	tests := []struct {
 +		name string
@@ -216,14 +240,43 @@ index 00000000..7226541d
 +			},
 +		},
 +		{
++			name: "keys swapped",
++			env: []v1.EnvVar{
++				secretRefEnv(patroniRESTAPIUsernameEnv, "patroni-restapi", "password"),
++				secretRefEnv(patroniRESTAPIPasswordEnv, "patroni-restapi", "username"),
++			},
++		},
++		{
++			name: "wrong username key",
++			env:  []v1.EnvVar{secretRefEnv(patroniRESTAPIUsernameEnv, "patroni-restapi", "user"), restAPIPasswordRef},
++		},
++		{
++			name: "wrong password key",
++			env:  []v1.EnvVar{restAPIUsernameRef, secretRefEnv(patroniRESTAPIPasswordEnv, "patroni-restapi", "pass")},
++		},
++		{
++			// D7: the injected copies are never optional, so a missing Secret fails the
++			// pod closed (CreateContainerConfigError) instead of leaving a literal $(…).
++			name: "optional refs come back non-optional",
++			env:  []v1.EnvVar{optionalRef(restAPIUsernameRef), optionalRef(restAPIPasswordRef)},
++			want: []v1.EnvVar{restAPIUsernameRef, restAPIPasswordRef},
++		},
++		{
 +			name: "no env",
 +		},
 +	}
 +	for _, tt := range tests {
 +		t.Run(tt.name, func(t *testing.T) {
++			var before []v1.EnvVar
++			for i := range tt.env {
++				before = append(before, *tt.env[i].DeepCopy())
++			}
 +			got := patroniRESTAPIAuthEnv(tt.env)
 +			if !reflect.DeepEqual(got, tt.want) {
 +				t.Errorf("patroniRESTAPIAuthEnv() = %+v, want %+v", got, tt.want)
++			}
++			if !reflect.DeepEqual(tt.env, before) {
++				t.Errorf("patroniRESTAPIAuthEnv modified the CR's env: %+v, was %+v", tt.env, before)
 +			}
 +		})
 +	}

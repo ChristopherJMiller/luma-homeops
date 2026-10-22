@@ -9,8 +9,9 @@
 # operator only") in docs/superpowers/plans/2026-10-19-patroni-rest-auth.md.
 # Runbook: docs/postgres.md.
 #
-# Bump the upstream ref (step 1) and the runtime base (last FROM) together,
-# and port both patches to the new source. Never deploy an operator without
+# Bump the upstream ref (step 1) and the runtime base (runtime-base) together,
+# and port both patches to the new source; step 1 fails the build when the
+# runtime base is not the source's own release. Never deploy an operator without
 # them while any CR has the PATRONI_RESTAPI_* env block: upstream compares env
 # by name and ignores restapi, so a revert rolls nothing, but every operator
 # write then fails authentication and the next unrelated roll stalls at its
@@ -25,6 +26,11 @@
 # and `go test ./pkg/...` with Go 1.26.8 (2026-10-22), so 1.26.8 builds it
 # instead of upstream's 1.21.7. go.mod and go.sum stay exactly as upstream.
 
+# Upstream's v1.11.0 image, the one this replaces: the final stage keeps its
+# alpine base, curl, ca-certificates, USER 1000:1000 and ENTRYPOINT
+# /postgres-operator, and only swaps the binary.
+FROM registry.opensource.zalan.do/acid/postgres-operator:v1.11.0@sha256:20ba5dbb3f2d3566eddb4cd0616379cc73e55bacce398301e577d4f6353ad4e9 AS runtime-base
+
 FROM golang:1.26.8-bookworm@sha256:dc9ad6c05acc7a88e5b71bde60a5fe3bd4b9f0db209011711b464107438a8107 AS build
 
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=
@@ -37,6 +43,19 @@ RUN set -eux; \
     git fetch -q --depth 1 origin 0f96eb20bfcc7381dacf0ec673e7d0824f442570; \
     git checkout -q FETCH_HEAD; \
     test "$(git rev-parse HEAD)" = 0f96eb20bfcc7381dacf0ec673e7d0824f442570
+#    The runtime base must be the source's own release, so a base-only bump
+#    fails here: the version its binary was built with (-X=main.version, from
+#    its build info) must equal the image tag the source's own deployment
+#    manifest pins.
+COPY --from=runtime-base /postgres-operator /tmp/runtime-base-operator
+RUN set -eux; \
+    src="$(sed -n 's|^ *image: registry.opensource.zalan.do/acid/postgres-operator:\(v[0-9][0-9.]*\)$|\1|p' manifests/postgres-operator.yaml)"; \
+    base="$(go version -m /tmp/runtime-base-operator | sed -n 's|^[[:space:]]*build[[:space:]]*-ldflags=-X=main.version=\(v[0-9][0-9.]*\)$|\1|p')"; \
+    echo "source version: ${src:-none}; runtime base version: ${base:-none}"; \
+    test -n "$src"; \
+    test "$base" = "$src"; \
+    echo "$src" > /source-version; \
+    rm /tmp/runtime-base-operator
 
 # 2. Upstream CI's test prerequisites (mocks need mockgen v1.6.0 and vendor/),
 #    without `make deps`, which would rewrite go.mod/go.sum. Then the golden
@@ -62,10 +81,12 @@ RUN set -eux; \
     GALAXY_GOLDEN_DIR=/golden go test -count=1 ./pkg/util/patroni/ ./pkg/cluster/; \
     GALAXY_GOLDEN_DIR=/golden go test -count=1 -v ./pkg/cluster/ -run TestGalaxyGoldenStatefulSets
 
-# 5. The binary, built like upstream's docker/build_operator.sh.
-RUN CGO_ENABLED=0 go build -o /out/postgres-operator -ldflags "-X=main.version=v1.11.0-galaxy.1" cmd/main.go
+# 5. The binary, built like upstream's docker/build_operator.sh. Its version
+#    must be <source version>-galaxy.N.
+RUN set -eux; \
+    version=v1.11.0-galaxy.1; \
+    case "$version" in "$(cat /source-version)-galaxy."*) ;; *) echo "version $version is not $(cat /source-version)-galaxy.N" >&2; exit 1 ;; esac; \
+    CGO_ENABLED=0 go build -o /out/postgres-operator -ldflags "-X=main.version=$version" cmd/main.go
 
-# Upstream's v1.11.0 image, the one this replaces: keeps its alpine base,
-# curl, ca-certificates, USER 1000:1000 and ENTRYPOINT /postgres-operator.
-FROM registry.opensource.zalan.do/acid/postgres-operator:v1.11.0@sha256:20ba5dbb3f2d3566eddb4cd0616379cc73e55bacce398301e577d4f6353ad4e9
+FROM runtime-base
 COPY --from=build /out/postgres-operator /postgres-operator

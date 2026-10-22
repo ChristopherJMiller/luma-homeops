@@ -76,7 +76,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # Proves the pushed tag carries our binary, not upstream's.
+      # Proves the pushed digest (what the pin names, not a tag that could move)
+      # carries our binary, not upstream's. ${IMAGE,,}: the owner in IMAGE is
+      # mixed case and image references must be lowercase.
       - name: Verify the galaxy build is in the pushed image
         if: github.event_name != 'pull_request'
         env:
@@ -84,9 +86,10 @@ jobs:
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -eux
-          img="$(printf '%s\n' "$TAGS" | grep ':sha-')"
-          docker run --rm --entrypoint /bin/sh "$img" -c 'grep -c v1.11.0-galaxy.1 /postgres-operator'
-          echo "Pin: \`${img#*:}@${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+          test -n "$DIGEST"
+          docker run --rm --entrypoint /bin/sh "${IMAGE,,}@${DIGEST}" -c 'grep -c v1.11.0-galaxy.1 /postgres-operator'
+          tag="$(printf '%s\n' "$TAGS" | grep ':sha-')"
+          echo "Pin: \`${tag##*:}@${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
 
       # The operator pulls without an imagePullSecret, so the package must be
       # public. An empty DOCKER_CONFIG means no credentials: this fails while
@@ -94,8 +97,7 @@ jobs:
       - name: Anonymous pull works
         if: github.event_name != 'pull_request'
         env:
-          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build.outputs.digest }}
         run: |
           set -eux
-          img="$(printf '%s\n' "$TAGS" | grep ':sha-')"
-          DOCKER_CONFIG="$(mktemp -d)" docker manifest inspect "$img"
+          DOCKER_CONFIG="$(mktemp -d)" docker manifest inspect "${IMAGE,,}@${DIGEST}"
