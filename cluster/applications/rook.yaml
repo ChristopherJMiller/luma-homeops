@@ -26,6 +26,149 @@ spec:
           # StorageClass does NOT work — the provisioner never copies it into
           # the PV volumeAttributes, so the mount is attempted without it.
           cephFSKernelMountOptions: ms_mode=prefer-crc
+          # CSI memory requests, cut for Luma 0b: measured <=216 Mi per
+          # ctrlplugin pod and <=84 Mi per nodeplugin pod, against chart
+          # defaults of 1024 Mi and 640 Mi. Only requests.memory differs from
+          # the rook-ceph 1.19.11 defaults; limits and CPU are the chart's.
+          # Each string is the chart's FULL list (a string replaces the whole
+          # default, so an entry left out would lose its resources) — re-copy
+          # from `helm show values` when bumping the chart.
+          csiRBDProvisionerResource: |
+            - name : csi-provisioner
+              resource:
+                requests:
+                  memory: 64Mi
+                  cpu: 100m
+                limits:
+                  memory: 256Mi
+            - name : csi-resizer
+              resource:
+                requests:
+                  memory: 64Mi
+                  cpu: 100m
+                limits:
+                  memory: 256Mi
+            - name : csi-attacher
+              resource:
+                requests:
+                  memory: 64Mi
+                  cpu: 100m
+                limits:
+                  memory: 256Mi
+            - name : csi-snapshotter
+              resource:
+                requests:
+                  memory: 64Mi
+                  cpu: 100m
+                limits:
+                  memory: 256Mi
+            - name : csi-rbdplugin
+              resource:
+                requests:
+                  memory: 128Mi
+                limits:
+                  memory: 1Gi
+            - name : csi-omap-generator
+              resource:
+                requests:
+                  memory: 512Mi
+                  cpu: 250m
+                limits:
+                  memory: 1Gi
+            - name : liveness-prometheus
+              resource:
+                requests:
+                  memory: 128Mi
+                  cpu: 50m
+                limits:
+                  memory: 256Mi
+          csiRBDPluginResource: |
+            - name : driver-registrar
+              resource:
+                requests:
+                  memory: 32Mi
+                  cpu: 50m
+                limits:
+                  memory: 256Mi
+            - name : csi-rbdplugin
+              resource:
+                requests:
+                  memory: 128Mi
+                  cpu: 250m
+                limits:
+                  memory: 1Gi
+            - name : liveness-prometheus
+              resource:
+                requests:
+                  memory: 128Mi
+                  cpu: 50m
+                limits:
+                  memory: 256Mi
+          csiCephFSProvisionerResource: |
+            - name : csi-provisioner
+              resource:
+                requests:
+                  memory: 64Mi
+                  cpu: 100m
+                limits:
+                  memory: 256Mi
+            - name : csi-resizer
+              resource:
+                requests:
+                  memory: 64Mi
+                  cpu: 100m
+                limits:
+                  memory: 256Mi
+            - name : csi-attacher
+              resource:
+                requests:
+                  memory: 64Mi
+                  cpu: 100m
+                limits:
+                  memory: 256Mi
+            - name : csi-snapshotter
+              resource:
+                requests:
+                  memory: 64Mi
+                  cpu: 100m
+                limits:
+                  memory: 256Mi
+            - name : csi-cephfsplugin
+              resource:
+                requests:
+                  memory: 128Mi
+                  cpu: 250m
+                limits:
+                  memory: 1Gi
+            - name : liveness-prometheus
+              resource:
+                requests:
+                  memory: 128Mi
+                  cpu: 50m
+                limits:
+                  memory: 256Mi
+          csiCephFSPluginResource: |
+            - name : driver-registrar
+              resource:
+                requests:
+                  memory: 32Mi
+                  cpu: 50m
+                limits:
+                  memory: 256Mi
+            - name : csi-cephfsplugin
+              resource:
+                requests:
+                  memory: 128Mi
+                  cpu: 250m
+                limits:
+                  memory: 1Gi
+            - name : liveness-prometheus
+              resource:
+                requests:
+                  memory: 128Mi
+                  cpu: 50m
+                limits:
+                  memory: 256Mi
         monitoring:
           enabled: true
   destination:
