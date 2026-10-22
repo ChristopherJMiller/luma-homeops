@@ -20,6 +20,11 @@ spec:
       synchronous_commit: "off"
   patroni:
     failsafe_mode: true
+  env: # Patroni REST API auth — docs/postgres.md
+    - name: PATRONI_RESTAPI_USERNAME
+      valueFrom: {secretKeyRef: {name: patroni-restapi, key: username}}
+    - name: PATRONI_RESTAPI_PASSWORD
+      valueFrom: {secretKeyRef: {name: patroni-restapi, key: password}}
   teamId: acid
   users:
     royaltracker:
