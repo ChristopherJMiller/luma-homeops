@@ -93,8 +93,18 @@
     {
       "matchFileNames": ["images/postgres-operator/**"],
       "groupName": "postgres-operator image deps",
+      "groupSlug": "postgres-operator-image-deps",
       "automerge": false,
       "description": "PRs stay open as a CVE signal. A golang bump may merge once the build (golden test included) is green. A postgres-operator base bump means porting both patches to the matching source ref first, never merging the base alone."
+    },
+    {
+      "matchFileNames": ["images/postgres-operator/**"],
+      "matchPackageNames": ["registry.opensource.zalan.do/acid/postgres-operator"],
+      "groupName": "postgres-operator runtime base",
+      "groupSlug": "postgres-operator-runtime-base",
+      "dependencyDashboardApproval": true,
+      "automerge": false,
+      "description": "The runtime base of images/postgres-operator, alone in its own PR, raised only from the Dependency Dashboard. It is upstream's operator image for the same release as the patched source, and the Dockerfile fails the build when they differ. So a base bump is an operator upgrade: move the source ref with it and port both Patroni REST auth patches (docs/postgres.md). Never merge it alone."
     },
     {
       "matchManagers": ["kubernetes"],
