@@ -4,6 +4,16 @@ kind: Kustomization
 namespace: royaltracker
 resources:
   - logical-backup-s3.yaml
+  - patroni-restapi.yaml
   - psql.yaml
   - config.yaml
   - db.yaml
+patches:
+  - target: {kind: SealedSecret, name: patroni-restapi}
+    patch: |- # fail-closed dependency of every Spilo pod (D7): never prune it
+      apiVersion: bitnami.com/v1alpha1
+      kind: SealedSecret
+      metadata:
+        name: patroni-restapi
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=false

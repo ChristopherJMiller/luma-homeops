@@ -255,6 +255,19 @@ Gotchas already hit:
   v1.11.0 in the values — keep them in lockstep.
 - A dump of a 31 MB database took ~11 minutes: cold catalog reads on the
   spinners. Fine for a nightly, don't panic at the duration.
+- Every `acid-*` CR references Secret `patroni-restapi` in its own namespace
+  (Patroni REST API auth; non-optional, D7 of
+  `docs/superpowers/plans/2026-10-19-patroni-rest-auth.md`), so a Spilo pod
+  **cannot start** without it — it sits in `CreateContainerConfigError`.
+  Running pods are unaffected; only pod creation needs it.
+- It's a SealedSecret marked `Prune=false` (a patch in each cluster's
+  `kustomization.yaml`, so it survives a reseal). In a cold start, the
+  sealed-secrets controller (and its key) must be back before any Postgres pod
+  can be created. Lost the controller key? Reseal the git-crypted
+  `cluster/<ns>/patroni-restapi.secret.yaml` as it is — same password.
+- Never re-create the Secret by hand with a different password while pods
+  run: members would disagree and the operator's writes get 401. Use the
+  rotation in `docs/postgres.md`.
 
 ### Restore — `docs/backups/pg-restore.sh`
 

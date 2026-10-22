@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: home-assistant
 resources:
   - logical-backup-s3.yaml
+  - patroni-restapi.yaml
   - restic-config.yaml
   - restic-backup-cronjob.yaml
   - psql.yaml
@@ -12,6 +13,15 @@ resources:
   - ha-reload.yaml
   - ha-reload-token.yaml
   - ha-secrets.yaml
+patches:
+  - target: {kind: SealedSecret, name: patroni-restapi}
+    patch: |- # fail-closed dependency of every Spilo pod (D7): never prune it
+      apiVersion: bitnami.com/v1alpha1
+      kind: SealedSecret
+      metadata:
+        name: patroni-restapi
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=false
 
 # HA config packages (git-tracked source of truth). Rendered into a ConfigMap
 # that the ha-helm chart mounts at /config/packages via extraConfigMounts.

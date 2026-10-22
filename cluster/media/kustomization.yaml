@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: media
 resources:
   - logical-backup-s3.yaml
+  - patroni-restapi.yaml
   - restic-config.yaml
   - restic-backup-plex-cronjob.yaml
   - psql.yaml
@@ -22,3 +23,12 @@ resources:
   - ombi-ingress.yaml
   - maintainerr-ingress.yaml
   - webdav.yaml
+patches:
+  - target: {kind: SealedSecret, name: patroni-restapi}
+    patch: |- # fail-closed dependency of every Spilo pod (D7): never prune it
+      apiVersion: bitnami.com/v1alpha1
+      kind: SealedSecret
+      metadata:
+        name: patroni-restapi
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=false

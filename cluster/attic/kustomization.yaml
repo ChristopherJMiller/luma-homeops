@@ -4,9 +4,19 @@ kind: Kustomization
 namespace: attic
 resources:
   - logical-backup-s3.yaml
+  - patroni-restapi.yaml
   - psql.yaml
   - db.yaml
   - server-secret.yaml
   - server-config.yaml
   - server.yaml
   - ingress.yaml
+patches:
+  - target: {kind: SealedSecret, name: patroni-restapi}
+    patch: |- # fail-closed dependency of every Spilo pod (D7): never prune it
+      apiVersion: bitnami.com/v1alpha1
+      kind: SealedSecret
+      metadata:
+        name: patroni-restapi
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=false
