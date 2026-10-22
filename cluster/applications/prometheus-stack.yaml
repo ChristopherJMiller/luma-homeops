@@ -179,6 +179,15 @@ spec:
                     requests:
                       storage: 200Gi
         grafana:
+          # Real requests (Luma 0b), requests only: both were BestEffort.
+          resources:
+            requests:
+              memory: 448Mi
+          sidecar:
+            # One key covers both sidecars (dashboards + datasources).
+            resources:
+              requests:
+                memory: 384Mi
           admin:
             existingSecret: grafana-admin-secret
             userKey: admin-user
