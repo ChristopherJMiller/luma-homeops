@@ -18,6 +18,42 @@ spec:
   metadataServer:
     activeCount: 1
     activeStandby: true
+    # Luma 0b: a real request, plus a limit, because Rook derives the cache
+    # from the limit: mds_cache_memory_limit = 4Gi x 0.5 = 2 GiB (the cache
+    # held 0.89 GB on 2026-10-22). Rook writes it to the mon config store,
+    # so a revert must also `ceph config rm mds.fs-pool-{a,b}
+    # mds_cache_memory_limit` (see the 0b plan, Task 11).
+    resources:
+      requests:
+        memory: 1664Mi
+      limits:
+        memory: 4Gi
+    # Rook's default too, but set explicitly: a default can change under an upgrade.
+    cacheMemoryLimitFactor: 0.5
+    # With a request and priority 0 the MDS would become a preemption victim,
+    # for example of the standby mgr during a drain.
+    priorityClassName: system-cluster-critical
+    placement:
+      podAntiAffinity:
+        # a and b on different nodes
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: rook-ceph-mds
+              topologyKey: kubernetes.io/hostname
+      nodeAffinity:
+        # Request capacity only: middle takes nfs-ganesha (0b Task 12).
+        # Preferred, so a drain can always re-place it.
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+                - key: kubernetes.io/hostname
+                  operator: NotIn
+                  values:
+                    - middle
 ---
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
