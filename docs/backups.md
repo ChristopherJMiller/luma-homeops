@@ -255,7 +255,7 @@ Gotchas already hit:
   v1.11.0 in the values — keep them in lockstep.
 - A dump of a 31 MB database took ~11 minutes: cold catalog reads on the
   spinners. Fine for a nightly, don't panic at the duration.
-- Every `acid-*` CR references Secret `patroni-restapi` in its own namespace
+- Once the Patroni plan's Tasks 5–8 have opted it in (check the CR's `spec.env`), every `acid-*` CR references Secret `patroni-restapi` in its own namespace
   (Patroni REST API auth; non-optional, D7 of
   `docs/superpowers/plans/2026-10-19-patroni-rest-auth.md`), so a Spilo pod
   **cannot start** without it — it sits in `CreateContainerConfigError`.
