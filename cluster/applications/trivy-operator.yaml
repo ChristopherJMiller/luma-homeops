@@ -29,12 +29,13 @@ spec:
           # rescan wave can't saturate a node's disk.
           scanJobsRetryDelay: 1h
           scanJobsConcurrentLimit: 3
-          resources:
-            requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              memory: 512Mi
+        # Chart 0.25.0 reads only this top-level `resources` for the operator
+        # (the old `operator.resources` block was dead config). Requests only: the
+        # old 512Mi limit would OOM the operator (868 Mi max working set).
+        resources:
+          requests:
+            cpu: 100m
+            memory: 1088Mi
         trivy:
           resources:
             requests:
