@@ -13,6 +13,26 @@ spec:
     helm:
       releaseName: postgres-operator
       valuesObject:
+        # Our build of v1.11.0 (prints "v1.11.0-galaxy.1"), images/postgres-operator/:
+        # upstream's binary plus two Patroni REST API auth patches.
+        #   0001: the operator's own Patroni writes (switchover, restart,
+        #         PATCH /config) send Basic auth from the Secret
+        #         `patroni-restapi` in the cluster's namespace; no Secret, no header.
+        #   0002: a CR that opts in with the PATRONI_RESTAPI_* env block gets
+        #         restapi.authentication in SPILO_CONFIGURATION. CRs without the
+        #         block render byte-identical StatefulSets (golden test), so
+        #         deploying this rolls nothing.
+        # It stays at v1.11.0, in lockstep with logical_backup_docker_image below.
+        # NEVER revert or upgrade without porting the patches while any CR has
+        # auth on: every operator write would then fail authentication and the
+        # next roll would stall at its switchover. A Renovate base bump does not
+        # ship here; CI publishes a new sha- tag and re-pinning it is a manual
+        # commit (CLAUDE.md sharp edge #6). Verify by digest: every build prints
+        # the same version. Plan: docs/superpowers/plans/2026-10-19-patroni-rest-auth.md.
+        image:
+          registry: ghcr.io
+          repository: christopherjmiller/postgres-operator
+          tag: "sha-92e868d@sha256:8a851592e7685cfac1c41256400dac1acd70bff11eae0f7a4618a313939c4786"
         configMajorVersionUpgrade:
           target_major_version: '16'
         configKubernetes:
@@ -32,8 +52,8 @@ spec:
         # key can't delete, the bucket's lifecycle rule hides dumps after 30d.
         # Restore is manual — docs/backups.md → "Postgres".
         configLogicalBackup:
-          # Keep in lockstep with the operator image (chart default image.tag,
-          # v1.11.0). The chart's own default is logical-backup v1.12.0, whose
+          # Keep in lockstep with the operator image (image.tag above, built
+          # from v1.11.0). The chart's own default is logical-backup v1.12.0, whose
           # dump.sh needs LOGICAL_BACKUP_S3_BUCKET_PREFIX — an env var the
           # 1.11 operator doesn't set — and dies with "unbound variable".
           logical_backup_docker_image: registry.opensource.zalan.do/acid/logical-backup:v1.11.0@sha256:635346ca458a88c5ffeb02090b8ad882cb5442fff00b60ff7ee56535cd2a32f6
