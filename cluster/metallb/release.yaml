@@ -16,7 +16,15 @@ spec:
     helm:
       releaseName: metallb
       valuesObject:
+        # Real requests (Luma 0b): both were BestEffort. Requests only, no limit.
+        controller:
+          resources:
+            requests:
+              memory: 128Mi
         speaker:
+          resources:
+            requests:
+              memory: 64Mi
           # L2-only deployment; no BGP, no FRR sidecar.
           frr:
             enabled: false
