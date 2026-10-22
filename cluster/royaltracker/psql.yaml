@@ -18,6 +18,7 @@ spec:
     version: '16'
     parameters:
       synchronous_commit: "off"
+      log_min_error_statement: "error" # explicit PG default; its PATCH proved operator auth — docs/postgres.md
   patroni:
     failsafe_mode: true
   env: # Patroni REST API auth — docs/postgres.md
