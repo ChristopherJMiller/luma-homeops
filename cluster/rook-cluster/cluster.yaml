@@ -247,7 +247,7 @@ spec:
     mon:
       requests:
         cpu: 500m
-        memory: 4Gi
+        memory: 1536Mi
       limits:
         memory: 4Gi
     osd:
