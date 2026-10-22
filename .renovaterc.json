@@ -91,6 +91,12 @@
       "description": "Dependencies of images/mcp-jwt-auth. The facade is the MCP authorization decision, so a base-image or module bump is an auth change: read the diff and let the workflow smoke test pass before merging."
     },
     {
+      "matchFileNames": ["images/postgres-operator/**"],
+      "groupName": "postgres-operator image deps",
+      "automerge": false,
+      "description": "PRs stay open as a CVE signal. A golang bump may merge once the build (golden test included) is green. A postgres-operator base bump means porting both patches to the matching source ref first, never merging the base alone."
+    },
+    {
       "matchManagers": ["kubernetes"],
       "matchPackageNames": ["ghcr.io/christopherjmiller/grampsweb"],
       "automerge": false,
