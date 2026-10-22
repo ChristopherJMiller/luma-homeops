@@ -10,6 +10,10 @@
 # STATUS is AUTH-ON, OPEN or BROKEN. Exit 0 only if the operator image is the
 # pinned one and every member is AUTH-ON. Uses KUBECONFIG from the environment.
 #
+# Without --probe the verdict is structural (config, file, daemon, patronictl);
+# only --probe confirms the behaviour (unauth=401, auth=404). auth=401 means
+# the credentials were rejected while auth is on, reported as BROKEN.
+#
 # Read-only, with one exception: --probe sends a no-op DELETE /restart to each
 # member (once without credentials, once with), and only when GET /patroni shows
 # no scheduled_restart. Chris approved that 2026-10-21; no other write to any
@@ -43,9 +47,14 @@ pinned=$(awk '
     if (RLENGTH <= ind) { inblk = 0; next }
     if ($0 ~ /^[[:space:]]*tag:/) { print; exit }
   }' "$opfile" 2>/dev/null | grep -oE 'sha256:[0-9a-f]{64}' | head -1)
-running=$(kubectl -n postgres-operator get pod -l app.kubernetes.io/name=postgres-operator \
-  -o jsonpath='{.items[*].status.containerStatuses[*].imageID}' 2>/dev/null)
-if [ -n "$pinned" ] && [ -n "$running" ] && [ "${running%"$pinned"}" != "$running" ]; then
+# Every Ready operator pod must run the pinned digest (and at least one must be Ready).
+img_ok=no
+if [ -n "$pinned" ]; then
+  img_ok=$(timeout 30 kubectl -n postgres-operator get pod -l app.kubernetes.io/name=postgres-operator -o json 2>/dev/null |
+    jq -r --arg d "$pinned" '[.items[] | select(any(.status.conditions[]?; .type == "Ready" and .status == "True"))
+      | all(.status.containerStatuses[]?; (.imageID // "") | endswith("@" + $d))] | if length > 0 and all then "ok" else "no" end' 2>/dev/null)
+fi
+if [ "$img_ok" = ok ]; then
   echo "operator image=ok"
 else
   echo "operator image=no"; rc=1
@@ -90,17 +99,23 @@ r = PatroniRequest(Config("/home/postgres/postgres.yml", validator=None))
 print(any(str(k).lower() == "authorization" for k in r._pool.headers))
 ' 2>/dev/null)"
 
-get=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8008/patroni)
+get=$(curl --max-time 5 -s -o /dev/null -w '%{http_code}' http://localhost:8008/patroni)
 echo "get=$get"
 
 if [ "$PROBE" = 1 ]; then
-  body=$(curl -s http://localhost:8008/patroni)
-  case "$body" in
-    *scheduled_restart*) echo "unauth=skip"; echo "auth=skip" ;;
-    *)
-      echo "unauth=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE http://localhost:8008/restart)"
+  # Only send the no-op DELETE when GET /patroni answered 200 with a body that
+  # shows no scheduled_restart.
+  resp=$(curl --max-time 5 -s -w '\n%{http_code}' http://localhost:8008/patroni)
+  pcode=$(printf '%s\n' "$resp" | tail -n1)
+  body=$(printf '%s\n' "$resp" | sed '$d')
+  case "$pcode:$body" in
+    200:) echo "unauth=skip"; echo "auth=skip" ;;
+    200:*scheduled_restart*) echo "unauth=skip"; echo "auth=skip" ;;
+    200:*)
+      echo "unauth=$(curl --max-time 5 -s -o /dev/null -w '%{http_code}' -X DELETE http://localhost:8008/restart)"
       echo "auth=$(printf 'user = "%s:%s"\n' "$PATRONI_RESTAPI_USERNAME" "$PATRONI_RESTAPI_PASSWORD" |
-        curl -s -K - -o /dev/null -w '%{http_code}' -X DELETE http://localhost:8008/restart)" ;;
+        curl --max-time 5 -s -K - -o /dev/null -w '%{http_code}' -X DELETE http://localhost:8008/restart)" ;;
+    *) echo "unauth=skip"; echo "auth=skip" ;;
   esac
 fi
 EOS
@@ -108,13 +123,16 @@ EOS
 yn() { if [ "$1" = "True" ]; then echo ok; else echo no; fi; }
 
 # --- clusters ---------------------------------------------------------------
-crs=$(kubectl get postgresql -A -o json 2>/dev/null) || { echo "cannot list postgresql CRs" >&2; exit 1; }
+crs=$(timeout 30 kubectl get postgresql -A -o json 2>/dev/null) || { echo "cannot list postgresql CRs" >&2; exit 1; }
+[ "$(jq '.items | length' <<<"$crs" 2>/dev/null)" -gt 0 ] 2>/dev/null || { echo "no postgresql CRs found" >&2; exit 1; }
+audited=0; matched=0
 # shellcheck disable=SC2016 # literal $( ) is the expected value
 want_auth='{"password":"$(PATRONI_RESTAPI_PASSWORD)","username":"$(PATRONI_RESTAPI_USERNAME)"}'
 
 while IFS=/ read -r ns name; do
   [ -n "$ns" ] || continue
   if [ -n "$only" ] && [ "$only" != "$ns/$name" ]; then continue; fi
+  matched=1
 
   env_ok=$(jq -r --arg ns "$ns" --arg n "$name" '
     def ref($var; $key): (.spec.env // []) | any(.name == $var
@@ -151,8 +169,11 @@ while IFS=/ read -r ns name; do
   [ -n "$pods" ] || { echo "$ns/$name NO-MEMBERS"; rc=1; continue; }
 
   for pod in $pods; do
-    out=$(printf 'PROBE=%s\n%s\n' "$probe" "$podscript" |
-      kubectl -n "$ns" exec -i -c postgres "$pod" -- sh -s 2>/dev/null)
+    audited=$((audited + 1))
+    if ! out=$(printf 'PROBE=%s\n%s\n' "$probe" "$podscript" |
+      timeout 30 kubectl -n "$ns" exec -i -c postgres "$pod" -- sh -s 2>/dev/null) || [ -z "$out" ]; then
+      echo "$ns/$pod BROKEN exec-failed"; rc=1; continue
+    fi
     get_kv() { sed -n "s/^$1=//p" <<<"$out" | head -1; }
     file=$(get_kv file); daemon=$(get_kv daemon); ctl=$(get_kv ctl); get=$(get_kv get)
     unauth=$(get_kv unauth); auth=$(get_kv auth)
@@ -168,6 +189,8 @@ while IFS=/ read -r ns name; do
       status=AUTH-ON
       if [ "$probe" = 1 ] && { [ "$unauth" != 401 ] || [ "$auth" != 404 ]; }; then status=OPEN; fi
     fi
+    # Credentials rejected by a member that demands auth: broken, not merely open.
+    if [ "$probe" = 1 ] && [ "$auth" = 401 ]; then status=BROKEN; fi
     [ "$status" = AUTH-ON ] || rc=1
 
     line="$ns/$pod $status env=$(yn "$env_ok") secret=$(yn "$secret_ok") sts=$(yn "$sts_ok") file=$fileword daemon=$(yn "$daemon") ctl=$(yn "$ctl") get=$(yn "$get_ok")"
@@ -176,4 +199,6 @@ while IFS=/ read -r ns name; do
   done
 done < <(jq -r '.items[] | "\(.metadata.namespace)/\(.metadata.name)"' <<<"$crs")
 
+if [ -n "$only" ] && [ "$matched" = 0 ]; then echo "--cluster $only matched no postgresql CR" >&2; exit 1; fi
+if [ "$audited" -eq 0 ]; then echo "no members audited" >&2; exit 1; fi
 exit "$rc"
