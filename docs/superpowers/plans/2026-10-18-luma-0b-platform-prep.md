@@ -1007,7 +1007,7 @@ git push origin main
   - The new pod is Ready on `middle`, with `priorityClassName: system-cluster-critical` and QoS `Burstable`.
   - `rook-ceph-nfs-satellites-lb` endpoints point at the new pod IP (`.230` is the LB IP).
   - The ganesha log shows the grace period starting and ending, and any `reclaim` lines. Grep for `grace` and `reclaim`, and record them.
-  - `ceph osd blocklist ls`: no entry for the new instance's address. A stale entry for the old address after a clean stop is unexpected: record it.
+  - `ceph osd blocklist ls`: no entry for the new instance's address. A stale entry for the OLD address after a clean stop is EXPECTED (measured 2026-10-22: ganesha does not close its CephFS session on stop, so the MDS evicts it after ~300 s and blocklists the old address for 1 h); record it. Also: Rook v1.19.11 applies spec.server.resources to BOTH nfs-ganesha and the dbus-daemon sidecar, so the pod request is twice the value written (ruling R8: 2560Mi per container = 5Gi pod).
   - `rados … listwatchers conf-nfs.satellites` shows the new pod. The "lost RADOS watch" gotcha in `docs/backups.md` applies.
   - A new `nfs.satellites…` session appears in the MDS `session ls`.
 

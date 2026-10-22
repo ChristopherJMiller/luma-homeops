@@ -44,7 +44,10 @@ spec:
                   app: rook-ceph-mds
               topologyKey: kubernetes.io/hostname
       nodeAffinity:
-        # Request capacity only: middle takes nfs-ganesha (0b Task 12).
+        # Request capacity only. Written (0b Task 11) to keep middle free for
+        # nfs-ganesha; since 0b ruling R8 (2026-10-22) ganesha prefers bottom
+        # instead, so this now just spreads the MDS pods onto top and bottom.
+        # Changing it rolls the MDS, so it stays until a capacity re-plan.
         # Preferred, so a drain can always re-place it.
         preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
