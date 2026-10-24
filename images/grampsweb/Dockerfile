@@ -20,7 +20,7 @@
 # The patch is applied to the installed package rather than built from source:
 # upstream's own build is what produces the frontend bundle, the Gramps addons
 # and the venv, and none of that should be reproduced here to change nine lines.
-FROM ghcr.io/gramps-project/grampsweb:latest@sha256:ac4db1ba963f5d2604e6b9a34be50c5a2c37271699f5a6df93c9492ecc8870e5
+FROM ghcr.io/gramps-project/grampsweb:latest@sha256:81291e399390041e9dcb2ffc9f1b67d44c5151b3c3604a9d49a3d8bbe60ee578
 
 # negative-role-permissions.patch is a BACKPORT, not ours: upstream fixed the
 # 500 itself (#998, 2026-09-22) but has not rebuilt the image since, so the fix
