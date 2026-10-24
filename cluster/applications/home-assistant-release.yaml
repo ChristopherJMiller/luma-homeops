@@ -14,7 +14,7 @@ spec:
       releaseName: ha
       valuesObject:
         image:
-          tag: 2026.9.4
+          tag: 2026.10.3
         hacs: false
         # Real request (Luma 0b), requests only: the pod was BestEffort. Prefer `top`:
         # the Luma capacity plan puts HA there (soft, so HA still schedules elsewhere).
