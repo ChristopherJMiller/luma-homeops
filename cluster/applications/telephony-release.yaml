@@ -17,7 +17,7 @@ spec:
     # The chart pins its own image by digest (patchbay's release job), so
     # this version is the whole deployment. A bump recreates the PBX pod
     # (host ports) and drops calls: Renovate leaves minor/major to a human.
-    targetRevision: 0.1.0
+    targetRevision: 0.2.0
     helm:
       releaseName: patchbay
       valuesObject:
@@ -50,6 +50,22 @@ spec:
         # domain (patchbay docs/sounds.md). A change restarts the PBX pod.
         sounds:
           voice: ljspeech
+        # Streams (dial 7XX to listen): the bridge, a per-call limit, and at most
+        # one of the HDHomeRun FLEX DUO's two tuners (Plex DVR keeps the other).
+        streamBridge:
+          enabled: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi # peaked at 116 MiB in e2e
+            limits:
+              memory: 512Mi
+        streams:
+          callLimit: 2h
+          tunerPools:
+            - name: hdhomerun
+              hosts: ["192.168.0.58"]
+              max: 1
         podMonitor:
           enabled: true # carries release: prometheus
   destination:

@@ -53,6 +53,33 @@ pb models                      # what each model supports
   new Cisco load is a patchbay commit + release, then a chart bump here,
   then `pb firmware load`.
 
+## Streams (dial a number, hear live audio)
+
+`cluster/telephony/streams.yaml`. TV is 7 + the major channel, from the
+HDHomeRun FLEX DUO at 192.168.0.58; radio is SomaFM.
+
+| Number | Stream | Source |
+|---|---|---|
+| 704 / 705 / 707 / 713 | KOMO 4 / KING 5 / KIRO 7 / FOX 13 | HDHomeRun (a tuner) |
+| 750–755 | Groove Salad, Drone Zone, Indie Pop Rocks!, Secret Agent, DEF CON Radio, Underground 80s | SomaFM (no tuner) |
+
+- **Tuners:** phones hold **at most one** of the HDHomeRun's two (Plex DVR
+  keeps the other): `streams.tunerPools` in `telephony-release`. Everyone on
+  the same channel shares one tuner; a second TV channel while one plays
+  hears "not available" and the Stream shows `Busy`. The tuner is released
+  about 5 s after the last caller hangs up.
+- **Time limit:** every stream call ends after `streams.callLimit` (2 h),
+  so a phone left off the hook cannot hold the tuner.
+- **Status:** `kubectl -n telephony get streams` (State, Listeners, Ready,
+  Reason); `pb status` too.
+- **Add one:** a `Stream` with a 7XX number and a direct `http(s)` audio URL
+  (not a `.pls`/`.m3u` playlist); TV sources on 192.168.0.58 count against
+  the tuner pool automatically.
+- **The bridge** (`patchbay-streams`, a normal pod) reaches the HDHomeRun on
+  the LAN and SomaFM over the internet; no router change. Any pod in the
+  cluster can reach its ports (flannel enforces no NetworkPolicy): an
+  accepted limit, patchbay docs/streams.md.
+
 ## Upgrades
 
 `telephony-release`'s `targetRevision` is the whole deployment (the chart
