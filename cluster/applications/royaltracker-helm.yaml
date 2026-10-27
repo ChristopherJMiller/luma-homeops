@@ -15,7 +15,7 @@ spec:
       valuesObject:
         publicUrl: https://rccl-tracker.chrismiller.xyz
         image:
-          tag: fe19bc85735a282a5600de9220654015a8d75c19
+          tag: 7e2ac4e7cdec67a0eb4f613e004770751eeac63d
         ingress:
           enabled: true
           className: traefik
