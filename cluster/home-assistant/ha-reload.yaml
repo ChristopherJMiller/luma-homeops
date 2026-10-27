@@ -63,7 +63,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: reload
-          image: docker.io/library/python:3.13-alpine@sha256:bf12ecc0bea3f171d55145dd02c78b5eeb09f30ee2ac9cc2b4c9e4e8f5e30741
+          image: docker.io/library/python:3.13-alpine@sha256:37ed081dbe77115b843b3d139801105e110f43005a2df4e80af94777cfd807f5
           command: [python3, /app/ha_reload.py]
           env:
             - name: HA_URL
