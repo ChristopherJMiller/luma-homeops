@@ -46,6 +46,10 @@ pb models                      # what each model supports
   it under unknown phones (also an `UnknownPhone` Event on `patchbay-pbx-config`).
   Add a `Phone` with that MAC to `cluster/telephony/` and the kustomization.
 - **Add a softphone:** a `Softphone` in git, then `pb softphone qr <name>`.
+  Scan it on the home network (the URL is `http://192.168.0.240:8088/p/…`,
+  LAN only; no Tailscale route to .240, by choice). Since 0.3.0 Linphone
+  also gets every extension and stream as read-only contacts
+  (`/directory/contacts.vcf`), refreshed each time Linphone restarts.
 - **A phone needs a person:** its `status.humanAction` (shown by `pb status`)
   says exactly what: stage firmware, factory-reset it (hold `#` while
   powering on, then `123456789*0#`), or plug it in.
