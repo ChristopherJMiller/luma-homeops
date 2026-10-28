@@ -159,9 +159,10 @@ class Bmc:
                                                 urllib.request.HTTPCookieProcessor(jar))
         status, _, data = self._call(self._web, "POST", "/api/session",
                                      {"username": self._user, "password": self._password}, form=True)
-        if status != 200 or not isinstance(data, dict) or "CSRFToken" not in data:
+        # While the BMC is still starting it can answer 200 with "CSRFToken": null.
+        if status != 200 or not isinstance(data, dict) or not data.get("CSRFToken"):
             self._web = None
-            raise BmcctlError(f"{self.host}: web login failed (HTTP {status})")
+            raise BmcctlError(f"{self.host}: web login failed (HTTP {status}; BMC still starting?)")
         self._csrf = data["CSRFToken"]
 
     def logout(self):

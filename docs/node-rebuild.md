@@ -62,8 +62,12 @@ bmcctl status                    # power, temps, BIOS boot profile, media, per B
    receiving nodes. The media stack on middle is `nodeName`-pinned: leave it. Two
    nodes cannot hold three nodes' requests, so pick what waits Pending: Prometheus,
    immich-ml, trivy-server.
-6. **Stage the boot profile** if this node goes UEFI: `bmcctl bios NODE --set uefi`
-   (applies at the next POST).
+6. **Boot mode.** The ISO is booted UEFI through the one-time override (step C), and
+   Talos then installs as UEFI. On 2026-10-27 that was enough for UEFI *boot*, but
+   not for the iGPU. That also needs "Launch Video OpROM Policy: UEFI only" in BIOS
+   setup, and Redfish BIOS writes crash this firmware (`PATCH Bios/SD` gives a 500
+   `[web.lua] … thread is dead`). So that is a BIOS-setup change (monitor or the
+   BMC's H5Viewer) with a reboot; it needs no reinstall.
 7. **Shut it down:** `talosctl -n IP -e IP shutdown --force`. Wait for
    `bmcctl power NODE status` to read Off.
 
@@ -77,21 +81,29 @@ Unplug it and pull it. Then:
   has no AM4 mount); otherwise clean and repaste the old one.
 - middle only: reseat the DIMMs and leave the RX 580 in.
 
-Rack it, plug it in, and don't press power. The BMC returns about 2 min after AC,
-and the node may power itself on and stop at "no boot device". That is fine.
+Rack it, plug it in, and don't press power. The node powers itself on when AC
+returns (Restore on AC = Auto) and sits in firmware with nothing to boot, which is
+fine. Its BMC pings within about 2 min, but Redfish answers 503 for about another
+5 min.
 
 ### C. Reinstall
 
 ```bash
+T110=~/.cache/luma-homeops/talosctl-v1.10.9     # 1.14 gets "API is not implemented in maintenance mode"
 bmcctl mount NODE && bmcctl boot NODE cd && bmcctl power NODE restart --force
-talosctl -n IP -e IP get disks --insecure              # maintenance mode: new NVMe is nvme0n1
+$T110 -n IP -e IP get disks --insecure                 # maintenance mode: new NVMe is nvme0n1
 talosctl -n PEER -e PEER etcd remove-member MEMBER_ID  # PEER = a healthy node
-talosctl apply-config --insecure -n IP -e IP --file nodes/controlplane.yaml
+$T110 apply-config --insecure -n IP -e IP --file nodes/controlplane.yaml
 bmcctl eject NODE                                      # the ISO runs from RAM; the override was one-shot
 ```
 
-If talosctl 1.14 and the 1.10 maintenance API disagree, use
-`~/.cache/luma-homeops/talosctl-v1.10.9` (checksum-verified).
+The maintenance API only speaks to a client of its own minor version. The
+v1.10.9 client is checksum-verified from the release; fetch the right one for
+another Talos version.
+
+On top (2026-10-27): about 6 min from the restart to the installer, about 4 min
+from `apply-config` to the installed system booting from the new NVMe (no EFI-shell
+detour), etcd rejoining as a new voting member, and the node Ready.
 
 Watch it install, reboot from the NVMe and join: `talosctl -n IP -e IP dmesg -f`,
 `talosctl -n PEER -e PEER etcd members`, `kubectl get node NODE -w`.
@@ -111,9 +123,10 @@ Watch it install, reboot from the NVMe and join: `talosctl -n IP -e IP dmesg -f`
 
 ## Rollback
 
-- **The ISO won't boot under UEFI:** run `bmcctl bios NODE --set legacy`, then
-  `bmcctl power NODE restart --force`. The ISO boots legacy, as before; carry on,
-  and that node's iGPU stays dead.
+- **The ISO won't boot under UEFI:** boot it legacy instead, with
+  `ipmitool … chassis bootdev cdrom` (no `efiboot`) and
+  `bmcctl power NODE restart --force`. The boot filter still allows legacy, so
+  Talos installs legacy, as before.
 - **The install or join fails and can't be fixed forward:** put the old NVMe back,
   set the legacy profile and boot it. Its etcd member was removed, so wipe its
   stale etcd data before it can rejoin:

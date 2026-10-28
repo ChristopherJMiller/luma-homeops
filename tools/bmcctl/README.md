@@ -75,6 +75,13 @@ The BMC side splits by API:
   `active_redirections` with `state: 1`.
 - **Redfish's `RMediaStatus` lags the real state** by minutes; trust
   `/api/settings/media/general`.
+- **Redfish BIOS writes crash the web handler.** Every `PATCH /Systems/Self/Bios/SD`
+  (basic auth or session token, with or without If-Match, even a single
+  attribute) answers 500 `[web.lua] Error in RequestHandler, thread … is dead`, so
+  `bmcctl bios --set` fails on this firmware. Reads work. Change BIOS settings in
+  setup (monitor or H5Viewer). The boot-override PATCH to `Systems/Self/SD` works.
+- **After AC power returns, the BMC pings within about 2 min**, but Redfish answers
+  503 for about another 5 min.
 - **These settings are staged until the next POST**: the BIOS profile and the boot
   override both take effect at the next boot. `bmcctl status` shows anything staged.
 
