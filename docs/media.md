@@ -66,6 +66,11 @@ updates: bump the sha, and first run a one-off Job with
 
 ## Plex
 
+- **Hardware transcode** (since 2026-10-27): Plex requests `amd.com/gpu: 1`,
+  which is middle's Sapphire RX 580 (Polaris). Its VAAPI decodes H.264 and HEVC
+  8/10-bit and encodes H.264; there is no VP9 decode and no AV1. Before that,
+  every transcode ran on the CPU, and those were middle's nightly 95 °C spikes
+  (#2603).
 - Sonarr/Radarr/Lidarr have a "Plex" Connect target (reconciler, token from the
   sealed `ombi-bootstrap` secret), so imports/renames/deletes trigger a
   targeted scan.

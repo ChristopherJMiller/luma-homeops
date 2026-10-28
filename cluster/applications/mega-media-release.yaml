@@ -123,9 +123,13 @@ spec:
               cpu: 1
             limits:
               memory: 4Gi
-              # amd.com/gpu: 1  # TEMP removed 2026-07-16: middle's GPU fails init
-              # on Talos 1.9 kernel 6.12 ("Unable to locate a BIOS ROM") — plex
-              # was hard-down with 0 schedulable pods. Restore once GPU works.
+              # middle's Sapphire RX 580 (Polaris, VAAPI via the amd-gpu device
+              # plugin). Removed 2026-07-16 because amd.com/gpu went to 0; that
+              # failure was the 5700G *iGPU* (0000:30:00.0, no VFCT, #2596), not
+              # this card, which is 0000:10:00.0 and has initialized on every
+              # boot since, including the 2026-10-27 reinstall. If it ever
+              # vanishes again, Plex goes unschedulable: drop this line.
+              amd.com/gpu: 1
           config:
             storageClassName: rook-ceph-block-ssd # #2665
             # Plex metadata + thumbnails + databases + daily DB backups live here.
