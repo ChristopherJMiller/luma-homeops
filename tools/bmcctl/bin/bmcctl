@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# bmcctl — galaxy node BMCs: power, BIOS, boot override, install media. See tools/bmcctl/README.md.
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec env PYTHONPATH="$here/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m bmcctl "$@"
