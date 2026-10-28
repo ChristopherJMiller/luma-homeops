@@ -34,12 +34,10 @@ argo-cd:
         selector:
           release: prometheus
   dex:
-    resources:
-      limits:
-        memory: 96Mi
-      requests:
-        cpu: 10m
-        memory: 96Mi
+    # Unused: argocd-cm has no dex.config, so nothing logs in through it (SSO
+    # for apps is the separate Dex in ns `dex`). Since the 2026-10-27 node
+    # rebuilds it segfaulted (exit 139) on every start.
+    enabled: false
   redis:
     resources:
       limits:
