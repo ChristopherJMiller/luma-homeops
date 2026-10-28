@@ -400,7 +400,9 @@ spec:
         # spare node to place a mon on: it only scales the out-of-quorum mon to 0 and
         # strands it (2026-10-04, mon-u during bottom's maintenance). 2h covers a
         # node maintenance window; a mon that is really gone still fails over.
-        timeout: 2h
+        # TEMPORARY 4h for the 2026-10-27 NVMe rebuilds (docs/node-rebuild.md):
+        # each node's mon starts from an empty store and resyncs. Back to 2h after.
+        timeout: 4h
       osd:
         disabled: false
         interval: 60s
