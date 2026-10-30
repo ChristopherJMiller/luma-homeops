@@ -69,6 +69,17 @@ cards:
             service: switch.toggle
             target:
               entity_id: switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian
+        # morning_routine.yaml: the alarm skips the dim glow and starts the day at Bright
+        - type: template
+          entity: input_boolean.bright_wake
+          content: Bright wake
+          icon: mdi:alarm-light
+          icon_color: "{{ 'amber' if is_state('input_boolean.bright_wake','on') else '' }}"
+          tap_action:
+            action: call-service
+            service: input_boolean.toggle
+            target:
+              entity_id: input_boolean.bright_wake
 - type: vertical-stack
   view_layout:
     grid-area: lights

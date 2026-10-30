@@ -12,11 +12,19 @@
 #                       script.start_your_day (via bedroom.yaml), which re-enables
 #                       circadian and turns the rooms on, then disarms.
 # A timeout auto-disarms if the switch flip never happens.
+#
+# Bright Wake (input_boolean.bright_wake, the Bedroom dashboard's "Bright wake"
+# chip) skips Phase 1's dim glow: the alarm runs Start Your Day itself, with the
+# bedroom held at its Bright scene, so falling back asleep under a 15% glow can't
+# happen (Chris, 2026-10-29). Every alarm repeats it, snoozes included.
 
 input_boolean:
   wake_up_pending:
     name: Wake Up Pending
     icon: mdi:weather-sunset-up
+  bright_wake:
+    name: Bright Wake
+    icon: mdi:alarm-light
 
 template:
   - sensor:
@@ -39,8 +47,14 @@ template:
 script:
   start_your_day:
     alias: Start Your Day
-    description: Re-enable circadian lighting and put the bedroom and living room on in Auto; disarm the routine.
+    description: Re-enable circadian lighting and put the bedroom and living room on in Auto (with bright, the bedroom at Bright); disarm the routine.
     mode: single
+    fields:
+      bright:
+        description: Bedroom to its Bright scene instead of Auto (Bright Wake)
+        default: false
+        selector:
+          boolean:
     sequence:
       - action: input_boolean.turn_off
         target:
@@ -49,11 +63,21 @@ script:
       - action: switch.turn_off
         target:
           entity_id: switch.adaptive_lighting_circadian_adaptive_lighting_sleep_mode_circadian
-      # bedroom back to Auto (Phase 1 made its lamps manual), then the living room on in Auto
-      - action: script.room_auto
-        data:
-          room: bedroom
-          turn_on: true
+      # bedroom back to Auto (Phase 1 made its lamps manual), or held at Bright for a
+      # Bright Wake (adaptive lighting is ~45% / 2200 K at 5:30); then the living room on in Auto
+      - if:
+          - condition: template
+            value_template: "{{ bright | default(false) | bool }}"
+        then:
+          - action: script.room_scene
+            data:
+              room: bedroom
+              scene: Bright
+        else:
+          - action: script.room_auto
+            data:
+              room: bedroom
+              turn_on: true
       - action: script.room_auto
         data:
           room: living_room
@@ -66,6 +90,7 @@ automation:
     description: >-
       One minute before the phone alarm, take the bedroom lamps out of adaptive
       lighting and ease them into a warm dim glow, then arm "start your day".
+      With Bright Wake on, run Start Your Day at once with the bedroom at Bright.
     triggers:
       - trigger: time
         at: sensor.wake_up_light_time
@@ -74,23 +99,32 @@ automation:
         entity_id: person.chris_m
         zone: zone.home
     actions:
-      # Per-room manual control, not the global adaptive-lighting switch: turning that off
-      # left the whole house unadapted all day whenever "start your day" didn't happen.
-      - action: adaptive_lighting.set_manual_control
-        data:
-          entity_id: switch.circadian_adaptive_lighting_circadian
-          lights: [light.nightstand_lamp, light.dresser_lamp, light.floor_lamp]
-          manual_control: true
-      - action: light.turn_on
-        target:
-          entity_id: light.bedroom_all
-        data:
-          brightness_pct: 15
-          color_temp_kelvin: 2200
-          transition: 60
-      - action: input_boolean.turn_on
-        target:
-          entity_id: input_boolean.wake_up_pending
+      - if:
+          - condition: state
+            entity_id: input_boolean.bright_wake
+            state: "on"
+        then:
+          - action: script.start_your_day
+            data:
+              bright: true
+        else:
+          # Per-room manual control, not the global adaptive-lighting switch: turning that off
+          # left the whole house unadapted all day whenever "start your day" didn't happen.
+          - action: adaptive_lighting.set_manual_control
+            data:
+              entity_id: switch.circadian_adaptive_lighting_circadian
+              lights: [light.nightstand_lamp, light.dresser_lamp, light.floor_lamp]
+              manual_control: true
+          - action: light.turn_on
+            target:
+              entity_id: light.bedroom_all
+            data:
+              brightness_pct: 15
+              color_temp_kelvin: 2200
+              transition: 60
+          - action: input_boolean.turn_on
+            target:
+              entity_id: input_boolean.wake_up_pending
     mode: single
 
 
