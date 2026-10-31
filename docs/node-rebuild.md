@@ -120,6 +120,23 @@ Watch it install, reboot from the NVMe and join: `talosctl -n IP -e IP dmesg -f`
    amdgpu initializing `0000:30:00.0` (the iGPU), plus `0000:10:00.0` (the RX 580)
    on middle.
 4. **Temperatures:** `bmcctl status NODE`, against the 7-day baseline in #2603.
+5. **After the last node, rebalance memory requests.** The scheduler never moves
+   a running pod, so the node that went down last comes back nearly empty while
+   the others stay near 95–99% of requests (`NodeMemoryRequestsHigh` on top,
+   2026-10-28: 97 / 82 / 72%).
+   - Check: `kubectl describe node top middle bottom | grep -A5 'Allocated resources' | grep memory`.
+   - If the spread is over about 10 points, restart the big movable pods on the
+     fullest node. The scheduler puts them on the emptiest one:
+     `kubectl -n prometheus rollout restart deploy/prometheus-grafana`,
+     `kubectl -n trivy-system rollout restart deploy/trivy-operator`, and, if
+     the **standby** mgr (`ceph mgr stat`) is on that node,
+     `kubectl -n rook delete pod -l app=rook-ceph-mgr,mgr=X`. On 2026-10-30
+     that moved 3.7 GiB and left 85 / 82 / 84%.
+   - Prometheus (4 GiB) is the next lever, at the cost of a scrape gap and a
+     WAL replay.
+   - No descheduler: it would evict around the hand placements (NFS on bottom,
+     MDS off middle, media on middle) to fix something that happens a few
+     times a year.
 
 ## Rollback
 

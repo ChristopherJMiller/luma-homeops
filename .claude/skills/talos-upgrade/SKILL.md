@@ -92,6 +92,8 @@ Only after all 6 pass: proceed to the next node.
 
 If any of these fails for > 15 min, stop and surface.
 
+**After the last node:** rebalance memory requests. Each drain piles that node's pods onto the other two, and nothing moves them back, so the node upgraded last ends up nearly empty and another sits near 95%+ (`NodeMemoryRequestsHigh`). Follow `docs/node-rebuild.md` §D step 5.
+
 ## Kubernetes upgrade (cluster-wide)
 
 After all 3 Talos nodes are on the new minor, you can do one k8s minor bump:
