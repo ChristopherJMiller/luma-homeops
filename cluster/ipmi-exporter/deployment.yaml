@@ -20,6 +20,20 @@ spec:
       labels:
         app: ipmi-exporter
     spec:
+      # Never on middle: middle's host cannot reach middle's own BMC (.117).
+      # ARP resolves, but unicast to the BMC MAC is dropped (2026-10-30: ping
+      # 0/2 from middle, 2/2 from rowlett). Likely cause: middle is the only
+      # host on X550 port 0 (enp35s0f0), which carries the BMC's NC-SI
+      # sideband. A drain left the pod on middle from 10-28 to 10-30 with
+      # .117 dark (BMCScrapeFailed).
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values: [middle]
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
