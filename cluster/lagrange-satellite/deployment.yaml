@@ -57,7 +57,7 @@ spec:
             - {name: assembled, mountPath: /out}
       containers:
         - name: wg
-          image: ghcr.io/linuxserver/wireguard:latest
+          image: ghcr.io/linuxserver/wireguard:latest@sha256:b677c3f46d524921c8a7c91873479eb7bab190d098fddbbd887ce333ec078c90
           command: [/bin/sh, -ec]
           args:
             - |

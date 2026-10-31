@@ -19,7 +19,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: backend
-              image: ghcr.io/christopherjmiller/chatterbox:1.3.1
+              image: ghcr.io/christopherjmiller/chatterbox:1.3.1@sha256:8eb16ab10076871d770705bc91e908d3b0879bf16315954428578339fbab302e
               securityContext:
                 readOnlyRootFilesystem: true
                 runAsUser: 101
