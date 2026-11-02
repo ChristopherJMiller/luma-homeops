@@ -178,3 +178,16 @@ repos stay on GitHub; imports are rare and deliberate.
 
 Chart version pin; PVC sizes beyond the starting point; Ingress annotations; bundle-vs-dump for repo backups; `custom/`
 placeholders for 2d; `svalabs/forgejo` resource layout.
+
+## Amendment — 2026-11-02 (planning)
+
+- **Storage tiers (Chris).** Postgres (`acid-forgejo`) and Forgejo's `/data` (queues, indexes, merge
+  scratch, SSH host keys, app.ini) go on `rook-ceph-block-ssd`. Bare repos move to a second volume on
+  `rook-ceph-block` (`[repository] ROOT=/repos`). LFS, packages, attachments, avatars and archives go
+  to B2. Forgejo cannot tier inside a repo; that would be unsupported and isn't needed, because the SMR
+  pain comes from small synced writes, which now all land on SSD.
+- **Router SSH keeps listening on all interfaces (correction).** The router runs Tailscale
+  (`tailscale0`), so `service ssh listen-address 192.168.0.1` would cut off router SSH over the
+  tailnet. The WAN destination-NAT for TCP 22 already sends every WAN SSH connection to Forgejo, so
+  item (1) under *SSH* is dropped. Success 7 then reads: the router's own SSH answers on the LAN and
+  the tailnet, never on the WAN.
