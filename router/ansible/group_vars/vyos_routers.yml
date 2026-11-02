@@ -159,6 +159,27 @@ nat:
       inbound_interface: eth2
       translation_address: 192.168.0.7
       translation_port: 443
+    # Git over SSH for the Realliance forge (git@git.realliance.net:org/repo.git) -> Forgejo's
+    # MetalLB IP .6 (docs/forgejo.md). The WAN forward captures every WAN :22 before the router's
+    # own sshd sees it, so router SSH is LAN + tailnet only without a listen-address: binding
+    # sshd to 192.168.0.1 would cut off tailnet SSH (tailscale0 runs on this router).
+    - rule: 400
+      description: 'SSH Port Forward (Forgejo)'
+      port: 22
+      protocol: tcp
+      inbound_interface: eth0
+      translation_address: 192.168.0.6
+      translation_port: 22
+    # Reflection pinned to the WAN IP: only SSH aimed at git.realliance.net is redirected;
+    # router (192.168.0.1), tailnet and github.com SSH are untouched.
+    - rule: 410
+      description: 'NAT Reflection: SSH (Forgejo)'
+      destination_address: 152.44.247.88
+      port: 22
+      protocol: tcp
+      inbound_interface: eth2
+      translation_address: 192.168.0.6
+      translation_port: 22
   source_rules:
     - rule: 100
       outbound_interface: eth0

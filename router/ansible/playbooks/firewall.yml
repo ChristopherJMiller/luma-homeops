@@ -60,6 +60,12 @@
         - set firewall ipv4 name OUTSIDE-IN rule 20 destination port '443'
         - set firewall ipv4 name OUTSIDE-IN rule 20 inbound-interface group 'WAN'
         - set firewall ipv4 name OUTSIDE-IN rule 20 protocol 'tcp_udp'
+        # Git over SSH to Forgejo (nat destination rule 400) — only to .6, only TCP 22.
+        - set firewall ipv4 name OUTSIDE-IN rule 30 action 'accept'
+        - set firewall ipv4 name OUTSIDE-IN rule 30 destination address '192.168.0.6'
+        - set firewall ipv4 name OUTSIDE-IN rule 30 destination port '22'
+        - set firewall ipv4 name OUTSIDE-IN rule 30 inbound-interface group 'WAN'
+        - set firewall ipv4 name OUTSIDE-IN rule 30 protocol 'tcp'
       # VyOS_MANAGEMENT chain
         - set firewall ipv4 name VyOS_MANAGEMENT default-action 'return'
         - set firewall ipv4 name VyOS_MANAGEMENT rule 15 action 'accept'
