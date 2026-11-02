@@ -1,0 +1,25 @@
+---
+# Forgejo (git.realliance.net) — plumbing only: namespace, volumes, database, secrets and backups.
+# Forgejo itself is the Helm release in cluster/applications/forgejo-release.yaml.
+# Spec: docs/superpowers/specs/2026-11-02-realliance-forge-design.md · Runbook: docs/forgejo.md
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: forgejo
+resources:
+  - namespace.yaml
+  - logical-backup-s3.yaml
+  - patroni-restapi.yaml
+  - app-ini.yaml
+  - oidc.yaml
+  - admin.yaml
+  - pvcs.yaml
+  - psql.yaml
+patches:
+  - target: {kind: SealedSecret, name: patroni-restapi}
+    patch: |- # fail-closed dependency of every Spilo pod (D7): never prune it
+      apiVersion: bitnami.com/v1alpha1
+      kind: SealedSecret
+      metadata:
+        name: patroni-restapi
+        annotations:
+          argocd.argoproj.io/sync-options: Prune=false

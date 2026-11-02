@@ -1,0 +1,31 @@
+---
+# Forgejo's storage, tiered (spec amendment 2026-11-02). Created here, not by the chart, so a Helm
+# change can never prune them. Both are Retain (rook-ceph-block* reclaim policy).
+#
+# forgejo-data → /data on the SSD pool: LevelDB queues (fsync on every enqueue), search indexes,
+# merge scratch, SSH host keys, app.ini. Small, latency-sensitive writes — exactly what the SMR
+# spinners are bad at.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-data
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: rook-ceph-block-ssd
+  resources:
+    requests:
+      storage: 5Gi
+---
+# forgejo-repos → /repos ([repository] ROOT) on the HDD pool: every bare repo, i.e. all git
+# history. Grows without bound, read-mostly, small writes per push. LFS, packages, attachments,
+# avatars and archives are in B2 (realliance-forge-objects), never here.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-repos
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 50Gi

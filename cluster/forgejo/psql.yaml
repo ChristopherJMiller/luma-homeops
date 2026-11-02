@@ -1,0 +1,43 @@
+---
+# Forgejo's database: all forge metadata (users, orgs, teams, issues, PRs, notifications).
+# A normal postgres-operator cluster on the SSD tier; its nightly logical backup goes to the
+# REALLIANCE B2 account (logical-backup-s3 overrides the operator-wide bucket), so either
+# Realliance operator can restore it. Runbook: docs/forgejo.md.
+apiVersion: acid.zalan.do/v1
+kind: postgresql
+metadata:
+  name: acid-forgejo
+  labels:
+    app: postgresql
+    cluster: acid-forgejo
+spec:
+  enableLogicalBackup: true # nightly pg_dumpall -> realliance-forge-backups/spilo/, docs/backups.md
+  databases:
+    forgejo: forgejo
+  numberOfInstances: 2
+  spiloRunAsUser: 101
+  spiloRunAsGroup: 103
+  spiloFSGroup: 103
+  postgresql:
+    version: '16'
+    parameters:
+      synchronous_commit: "off"
+  patroni:
+    failsafe_mode: true
+  env: # Patroni REST API auth — docs/backups.md (patroni-restapi)
+    - name: PATRONI_RESTAPI_USERNAME
+      valueFrom: {secretKeyRef: {name: patroni-restapi, key: username}}
+    - name: PATRONI_RESTAPI_PASSWORD
+      valueFrom: {secretKeyRef: {name: patroni-restapi, key: password}}
+  teamId: acid
+  users:
+    forgejo: [] # owns its database; needs nothing more
+  volume:
+    size: 10Gi
+    storageClass: rook-ceph-block-ssd
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi

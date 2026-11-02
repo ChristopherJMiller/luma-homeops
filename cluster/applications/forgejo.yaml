@@ -1,0 +1,26 @@
+---
+# Forgejo (git.realliance.net) — plumbing only (namespace, volumes, the postgres
+# cluster, secrets, backups); Forgejo itself is the Helm release in
+# forgejo-release.yaml. Runbook: docs/forgejo.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/forgejo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgejo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

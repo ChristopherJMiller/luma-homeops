@@ -12,6 +12,7 @@ resources:
   - chrismillerxyz.yaml
   - dns.yaml
   - fluent-bit.yaml
+  - forgejo.yaml
   - grafana-config.yaml
   - gramps.yaml
   - mcp-gateway.yaml
