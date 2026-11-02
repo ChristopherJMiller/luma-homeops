@@ -130,13 +130,16 @@ spec:
               ALLOW_ONLY_EXTERNAL_REGISTRATION: true # accounts only come from Realliance SSO
               ENABLE_INTERNAL_SIGNIN: false
               ENABLE_BASIC_AUTHENTICATION: false # no passwords anywhere; tokens still work
-              ENABLE_NOTIFY_MAIL: true
+              # Notification mail off for now (Chris 2026-11-01): Resend's free tier is 100/day,
+              # shared with SSO. In-app notifications stay; Matrix / a daily digest come later.
+              ENABLE_NOTIFY_MAIL: false
               DEFAULT_KEEP_EMAIL_PRIVATE: true
               DEFAULT_ALLOW_CREATE_ORGANIZATION: false # orgs are code (realliance/forge)
             service.explore:
               DISABLE_USERS_PAGE: true
             admin:
               DISABLE_REGULAR_ORG_CREATION: true
+              DEFAULT_EMAIL_NOTIFICATIONS: disabled # new accounts; people may opt in
             oauth2_client:
               ENABLE_AUTO_REGISTRATION: true
               ACCOUNT_LINKING: disabled
