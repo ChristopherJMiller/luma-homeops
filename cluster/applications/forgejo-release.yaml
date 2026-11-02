@@ -1,0 +1,185 @@
+---
+# Forgejo 15 LTS at https://git.realliance.net — the Realliance forge. The namespace, volumes,
+# database, secrets and backups are cluster/forgejo/ (Application `forgejo`); this is only the
+# Helm release, kept separate like immich-release so chart upgrades never touch the plumbing.
+#
+# Spec: docs/superpowers/specs/2026-11-02-realliance-forge-design.md · Runbook: docs/forgejo.md
+#
+# Storage is tiered (spec amendment 2026-11-02):
+#   /data   forgejo-data   rook-ceph-block-ssd  queues, indexes, merge scratch, SSH host keys, avatars
+#   /repos  forgejo-repos  rook-ceph-block      every bare repo (all git history)
+#   B2      realliance-forge-objects            LFS, packages, attachments, archives — served
+#                                               straight from B2 (SERVE_DIRECT) so downloads skip
+#                                               the cluster and the home uplink
+#
+# Sign-in is Realliance SSO only (auth source `realliance`); the SSO's /apps/forgejo group decides
+# who may sign in at all. Admin status (forgejo-admins) and team membership (groupTeamMap) sync at
+# each sign-in, never between sign-ins: offboarding is the two-step runbook in docs/forgejo.md.
+#
+# !! groupTeamMap is public here. That is fine ONLY while every org it names is public. Before
+# !! the first hidden org, move the map out of this file (docs/forgejo.md, "hidden-org gate").
+# !! Never map an Owners team: Forgejo refuses to remove a last owner and the sign-in fails.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo-release
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: code.forgejo.org/forgejo-helm # OCI; repository entry in cluster/argo-cd/values.yaml
+    chart: forgejo
+    targetRevision: 17.3.2 # appVersion 15.0.11 (LTS). 17.x/18.x of FORGEJO are the short track.
+    helm:
+      releaseName: forgejo
+      valuesObject:
+        test:
+          enabled: false # a helm-test Pod; Argo would just apply it as a stray Pod
+        strategy:
+          type: Recreate # one RWO repos volume
+        image:
+          rootless: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 512Mi
+          limits:
+            memory: 1Gi
+
+        persistence:
+          enabled: true
+          create: false
+          claimName: forgejo-data
+        extraVolumes:
+          - name: repos
+            persistentVolumeClaim:
+              claimName: forgejo-repos
+        extraContainerVolumeMounts:
+          - name: repos
+            mountPath: /repos
+
+        ingress:
+          enabled: true
+          className: traefik
+          hosts:
+            - host: git.realliance.net
+              paths:
+                - path: /
+                  pathType: Prefix
+          tls: [] # the wildcard *.realliance.net cert is Traefik's default TLSStore
+
+        service:
+          ssh:
+            type: LoadBalancer
+            port: 22
+            annotations:
+              # WAN :22 and LAN→WAN-IP :22 are forwarded here by the router (router/ansible
+              # nat rules 400/410).
+              metallb.universe.tf/loadBalancerIPs: 192.168.0.6
+
+        gitea:
+          admin:
+            # Break-glass only: the internal sign-in form is off, so this account is used through
+            # `forgejo admin user …` on the pod. Password: sso-secrets forge/secrets.env.
+            existingSecret: forgejo-admin
+            email: forgejo-admin@realliance.net
+            passwordMode: keepUpdated
+          oauth:
+            - name: realliance
+              provider: openidConnect
+              existingSecret: forgejo-oidc
+              autoDiscoverUrl: https://sso.realliance.net/realms/realliance/.well-known/openid-configuration
+              groupClaimName: groups
+              adminGroup: forgejo-admins
+              # claim group -> {org: [teams]}. Non-Owners teams only (see the header).
+              groupTeamMap: '{"realliance":{"realliance":["members"]},"realliance-maintainers":{"realliance":["maintainers"]}}'
+              # Flag keys must be spelled as in the chart's gitea.oauth_settings flag list; any other
+              # boolean key renders as `--key "true"` and breaks the init script.
+              groupTeamMapRemoval: true
+              skip-local-2fa: true # MFA happens at the SSO
+          additionalConfigSources:
+            - secret:
+                secretName: forgejo-app-ini
+          additionalConfigFromEnvs:
+            - name: FORGEJO__DATABASE__PASSWD
+              valueFrom:
+                secretKeyRef:
+                  name: forgejo.acid-forgejo.credentials.postgresql.acid.zalan.do
+                  key: password
+          config:
+            APP_NAME: Realliance Forge
+            server:
+              # Explicit: the chart would infer http:// because the Ingress carries no spec.tls.
+              ROOT_URL: https://git.realliance.net/
+              DOMAIN: git.realliance.net
+              SSH_DOMAIN: git.realliance.net
+              SSH_PORT: 22
+              SSH_LISTEN_PORT: 2222
+              LFS_START_SERVER: true
+            database:
+              DB_TYPE: postgres
+              HOST: acid-forgejo:5432
+              NAME: forgejo
+              USER: forgejo
+              SSL_MODE: require
+            repository:
+              ROOT: /repos
+              DEFAULT_PRIVATE: private
+            service:
+              DISABLE_REGISTRATION: false
+              ALLOW_ONLY_EXTERNAL_REGISTRATION: true # accounts only come from Realliance SSO
+              ENABLE_INTERNAL_SIGNIN: false
+              ENABLE_BASIC_AUTHENTICATION: false # no passwords anywhere; tokens still work
+              ENABLE_NOTIFY_MAIL: true
+              DEFAULT_KEEP_EMAIL_PRIVATE: true
+              DEFAULT_ALLOW_CREATE_ORGANIZATION: false # orgs are code (realliance/forge)
+            service.explore:
+              DISABLE_USERS_PAGE: true
+            admin:
+              DISABLE_REGULAR_ORG_CREATION: true
+            oauth2_client:
+              ENABLE_AUTO_REGISTRATION: true
+              ACCOUNT_LINKING: disabled
+              USERNAME: nickname # Keycloak sends no nickname; goth falls back to preferred_username
+              REGISTER_EMAIL_CONFIRM: false # Keycloak verified the address
+            session:
+              PROVIDER: db
+              SESSION_LIFE_TIME: 604800 # 7 days
+              COOKIE_SECURE: true
+            queue:
+              TYPE: level
+            cache:
+              ADAPTER: twoqueue
+            storage:
+              # "minio" is Forgejo's name for any S3 server; this is Backblaze B2 (Realliance
+              # account). Keys come from the forgejo-app-ini Secret.
+              STORAGE_TYPE: minio
+              MINIO_ENDPOINT: s3.us-east-005.backblazeb2.com
+              MINIO_LOCATION: us-east-005
+              MINIO_BUCKET: realliance-forge-objects
+              MINIO_USE_SSL: true
+              MINIO_CHECKSUM_ALGORITHM: md5 # required for Backblaze (Forgejo storage docs)
+              SERVE_DIRECT: true # downloads go client <-> B2 via signed URLs
+            avatar:
+              STORAGE_TYPE: local # loaded on every page view; tiny — keep on the SSD volume
+            repo-avatar:
+              STORAGE_TYPE: local
+            mailer:
+              ENABLED: true
+              PROTOCOL: smtps
+              SMTP_ADDR: smtp.resend.com
+              SMTP_PORT: 465
+              USER: resend
+              FROM: Realliance Forge <git@realliance.net>
+            cron.git_gc_repos:
+              ENABLED: false # full repacks are the one bulk write repos make on the HDD pool
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgejo
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

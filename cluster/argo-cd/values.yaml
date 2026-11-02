@@ -8,6 +8,11 @@ argo-cd:
     repositories:
       luma-homeops:
         url: https://github.com/ChristopherJMiller/luma-homeops
+      forgejo-helm: # OCI Helm registry for cluster/applications/forgejo-release.yaml
+        url: code.forgejo.org/forgejo-helm
+        type: helm
+        enableOCI: "true"
+        name: forgejo-helm
     clusterCredentials:
       default:
         server: https://kubernetes.default.svc

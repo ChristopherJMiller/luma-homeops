@@ -19,6 +19,7 @@ resources:
   - galaxy-site.yaml
   - immich.yaml
   - immich-release.yaml
+  - forgejo-release.yaml
   - home-assistant.yaml
   - home-assistant-release.yaml
   - home-assistant-mosquitto.yaml
