@@ -332,3 +332,38 @@ Realliance branding.
   realm admins, for the same reason hidden groups are console-only here.
 - Team membership updates at sign-in, so removing someone takes full effect at their next login;
   suspend them in Keycloak to cut them off immediately.
+
+---
+
+## Amendment — 2026-11-02 (decided by Chris during implementation)
+
+These decisions supersede the sections above where they conflict.
+
+1. **Sign-in is password first, MFA required.** `realliance-browser` = username + password, then a
+   required second factor: TOTP, a WebAuthn authenticator (FIDO2 security key or passkey) or a
+   recovery code. A user with no second factor is forced to enrol TOTP at sign-in (a
+   `conditional-sub-flow-executed` branch); WebAuthn keys are added from the account console.
+   Passkey-first (passwordless) sign-in is off. `admin-cli` password grants are disabled (they
+   would mint tokens without MFA).
+2. **Linked logins (Google, GitHub, Microsoft, Discord) are deferred.** The first-broker-login and
+   admin step-up designs return when they do.
+3. **People are code, in a private repo.** `realliance/sso-people` (private) holds `people.yaml`
+   (username, email, names, `active`, groups, plus hidden-project group definitions) and an
+   OpenTofu layer that makes users and memberships. Private so members' emails and hidden-project
+   names are never public. A new user is enrolled by a Keycloak 26.8 **workflow** (`user-created`
+   → `invite-user`) that emails the set-up link. `active: false` disables an account (sessions
+   end, data kept); deleting an entry is refused (`prevent_destroy`).
+4. **No console delegation.** Fine-grained admin permissions and per-group admins are dropped;
+   whoever may change membership does it by PR, approved by an operator. **No human account
+   holds an admin role in `realliance`**; only the master-realm break-glass admins (password +
+   TOTP) do. The admin console stays public, but nobody's everyday account can do anything there.
+5. **The box applies Keycloak config itself**, extending `ansible-pull`: every 5 minutes it pulls
+   `realliance/sso` and `realliance/sso-people` (read-only deploy key), verifies each head commit's
+   signature (operators or GitHub web-flow), runs the host playbook, then `tofu apply` for
+   `realm/` and the people layer. The `tofu-apply` secret never leaves the box. It reports
+   `sso/apply` commit statuses to GitHub with a token limited to commit statuses. GitHub Actions
+   only posts read-only `tofu-plan` plans on PRs. The daily full run re-applies everything,
+   self-healing drift; admin events are logged.
+6. **Email is Resend** (sending-only key restricted to realliance.net); its DNS records live in
+   `realliance/sso` `dns/` with the `sso` record. **State** stays on the Realliance B2 account
+   (no lockfile locking on B2; serialised by the single applier on the box).
