@@ -14,6 +14,9 @@ resources:
   - admin.yaml
   - pvcs.yaml
   - psql.yaml
+  - backup-rbac.yaml
+  - backup-b2.yaml
+  - backup-cronjob.yaml
 patches:
   - target: {kind: SealedSecret, name: patroni-restapi}
     patch: |- # fail-closed dependency of every Spilo pod (D7): never prune it

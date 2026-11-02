@@ -1,0 +1,34 @@
+---
+# forgejo-dump may exec into the Forgejo pod and nothing else.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: forgejo-dump
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: forgejo-dump
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["forgejo"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: forgejo-dump
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: forgejo-dump
+subjects:
+  - kind: ServiceAccount
+    name: forgejo-dump

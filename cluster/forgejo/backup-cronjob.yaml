@@ -1,0 +1,92 @@
+---
+# Nightly `forgejo dump` of the Realliance forge to the REALLIANCE B2 account
+# (realliance-forge-backups/dump/, object-locked 30 days). One self-contained restore artifact:
+# every repo, Forgejo's database (as postgres SQL), app.ini, custom/ and data/ (avatars, SSH host
+# keys). LFS, attachments, packages and archives are skipped — they already live in B2
+# (realliance-forge-objects) — and so are the rebuildable search indexes.
+#
+# The dump streams out of the running pod through `kubectl exec` straight into `rclone rcat`, so
+# nothing is written to a volume (no extra SMR writes). acid-forgejo's own pg_dumpall (00:30,
+# spilo/ in the same bucket) is the second copy of the database. Restore: docs/forgejo.md.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: forgejo-dump
+  labels:
+    app.kubernetes.io/name: forgejo-dump
+    backup-tier: forge
+spec:
+  schedule: "30 1 * * *" # after the 00:30 logical backup
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: forgejo-dump
+        spec:
+          serviceAccountName: forgejo-dump
+          restartPolicy: Never # keep failed pods and their logs
+          securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
+            runAsNonRoot: true
+            seccompProfile:
+              type: RuntimeDefault
+          volumes:
+            - name: tools
+              emptyDir: {}
+            - name: home
+              emptyDir: {}
+          initContainers:
+            - name: rclone
+              image: ghcr.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+              command: ["cp", "/usr/local/bin/rclone", "/tools/rclone"]
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              volumeMounts:
+                - {name: tools, mountPath: /tools}
+          containers:
+            - name: dump
+              image: alpine/k8s:1.33.13@sha256:e521cee1f1cb8699bc6e906b4ce6fe50e84addae97f52d5dcf05d3974002ac26
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: [ALL]
+              env:
+                - {name: HOME, value: /home/dump}
+              envFrom:
+                - secretRef:
+                    name: forgejo-backup-b2
+              volumeMounts:
+                - {name: tools, mountPath: /tools}
+                - {name: home, mountPath: /home/dump}
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  memory: 256Mi
+              command: ["/bin/bash"]
+              args:
+                - -c
+                - |
+                  set -euo pipefail
+                  key="dump/forgejo-$(date -u +%Y%m%dT%H%M%SZ).tar.gz"
+                  echo "forgejo-dump start $(date -u +%FT%TZ) -> $key"
+                  kubectl -n forgejo exec deploy/forgejo -c forgejo -- \
+                    forgejo dump --type tar.gz --file - --database postgres \
+                      --skip-lfs-data --skip-attachment-data --skip-package-data \
+                      --skip-repo-archives --skip-index --skip-log \
+                    | /tools/rclone rcat "b2:realliance-forge-backups/$key" --s3-chunk-size 16M
+                  # An empty or truncated stream must fail the Job, not pass as a backup.
+                  bytes=$(/tools/rclone size --json "b2:realliance-forge-backups/$key" | sed -E 's/.*"bytes":([0-9]+).*/\1/')
+                  if [ "${bytes:-0}" -lt 1024 ]; then echo "dump too small: ${bytes:-0} bytes" >&2; exit 2; fi
+                  echo "forgejo-dump done $(date -u +%FT%TZ): $bytes bytes"
