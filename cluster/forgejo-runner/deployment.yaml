@@ -1,9 +1,17 @@
 ---
 # forgejo-runner daemon, host mode. Every job runs IN THIS POD as uid 1000: it can read the connection
 # tokens (config.yml) and the shared caches, and reach what any pod reaches. It holds no other
-# credential (no Forgejo admin token, no Keycloak secret, no Kubernetes token). Each job gets its own
-# workdir under /work/act, which the runner deletes when the job ends; recreating the pod clears the
-# rest. Security model and accepted risk: the forge-bot + CI spec, "Security model, plainly".
+# credential (no Forgejo admin token, no Keycloak secret, no Kubernetes token).
+#
+# What persists, all on the forgejo-runner-work PVC:
+#   /work/act/<rand>   one job's workdir; the runner deletes it when the job ends (not if it is killed)
+#   /work/home, /work/tmp   HOME and TMPDIR, which every job inherits: shared between the jobs of one
+#                           pod lifetime (a job can leave ~/.gitconfig or go env behind for the next)
+#   /work/cache        actions cache, Go build/module caches: kept until the PVC is deleted
+#   /work/.runner      registration file; not written while config.yml declares the connection
+# The start command wipes /work/act, /work/home and /work/tmp, so `kubectl rollout restart` clears
+# every job's state except the caches. Clearing the caches too: scale to 0, delete the PVC (S4).
+# Security model and accepted risk: the forge-bot + CI spec, "Security model, plainly".
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -51,7 +59,7 @@ spec:
           command:
             - sh
             - -c
-            - mkdir -p /work/act /work/cache /work/home /work/tmp && exec forgejo-runner daemon --config /etc/forgejo-runner/config.yml
+            - rm -rf /work/home /work/tmp /work/act && mkdir -p /work/act /work/cache /work/home /work/tmp && exec forgejo-runner daemon --config /etc/forgejo-runner/config.yml
           env:
             - name: HOME
               value: /work/home

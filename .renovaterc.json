@@ -83,6 +83,12 @@
       "description": "Our own forward-auth validator (images/mcp-jwt-auth) — it IS the authorization decision for the MCP endpoint, so a bump is an auth change. The Deployment pins the sha- tag the workflow published; bump it deliberately after reading the diff, never automatically."
     },
     {
+      "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["ghcr.io/christopherjmiller/forgejo-runner"],
+      "automerge": false,
+      "description": "Our own Forgejo Actions runner (images/forgejo-runner, cluster/forgejo-runner). It runs every CI job for git.realliance.net in host mode, and every job can read the runner's connection tokens, so a new image is a change to the CI trust boundary. :automergeDigest would otherwise deploy a re-pushed sha- tag unseen (the workflow can be re-run on the same commit). Read the Dockerfile diff and the workflow's smoke test, then re-pin by hand."
+    },
+    {
       "matchManagers": ["gomod", "dockerfile"],
       "matchFileNames": ["images/mcp-jwt-auth/**"],
       "groupName": "mcp-jwt-auth deps",
