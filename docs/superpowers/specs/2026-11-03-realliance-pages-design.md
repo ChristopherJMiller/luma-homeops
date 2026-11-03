@@ -44,6 +44,15 @@ site and **pushes the output to the `pages` branch**. The pages server only ever
 
 ## Constraints and facts
 
+> **Amendment (2026-11-03, after approval):** `realliance.page` is in the **same** Cloudflare account
+> ("Realliance") as `realliance.net`, and Chris extended the existing token to edit it. So pages uses the
+> existing pattern for every zone, and the "second account" items below are superseded:
+> - **DNS:** add `realliance.page` to `cloudflare/dns/` `local.zones` (apex A + `*` wildcard, DNS-only,
+>   like `realliance.net`), and add it to `cloudflareddns` `CF_HOSTS`. No CNAMEs, no second state.
+> - **TLS:** add `realliance.page` and `*.realliance.page` to the one `traefik/wildcard-tls`
+>   Certificate (existing issuer and token). Pages Ingresses carry no `spec.tls`, like every other app;
+>   no separate certificate.
+
 - **Server: git-pages** (codeberg.org/git-pages/git-pages), pinned to a release ≥ 2 weeks old (v0.10.1 was
   2026-10-28; pre-1.0, breaking changes and three security-fix releases in 2026 → pin by digest, read the
   changelog on every bump, Renovate never automerges it). It is the only maintained server found that
