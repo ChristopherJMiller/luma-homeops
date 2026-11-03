@@ -86,11 +86,17 @@ that step 2 sticks.
 
 ### Gate before the first hidden org
 
-Both preconditions are met (2026-11-03). The group→team map left this public repo: it lives in
-Forgejo's database, and forge-bot's `teams.yaml` in the inventory takes it over. The inventory moved
-from `realliance/forge` to `realliance-ops/forge`, an org with the Owners team only, so `realliance`
-members can't read it and maintainers can't edit its branch protection. What remains: keep every
-hidden org's name out of every public repo, including this one.
+On Forgejo both preconditions are met (2026-11-03). The group→team map left this public repo: it
+lives in Forgejo's database, and forge-bot's `teams.yaml` in the inventory takes it over. The
+inventory moved from `realliance/forge` to `realliance-ops/forge`, an org with the Owners team only,
+so `realliance` members can't read it and maintainers can't edit its branch protection.
+
+**Still open — the GitHub mirror.** The inventory is push-mirrored to the private GitHub repo
+`realliance/forge`, and the GitHub `realliance` org's base permission is **read**, so every GitHub
+org member can read it (and `teams.yaml` will name hidden orgs). Before the first hidden org, either
+set that base permission to none (granting teams explicit repo access), or move the mirror out of
+that org (decision for Chris). Always: keep every hidden org's name out of every public repo,
+including this one.
 
 ## Mail
 
