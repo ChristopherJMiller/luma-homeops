@@ -26,6 +26,17 @@ repos:
         entry: scripts/check-kustomizations.sh
         pass_filenames: false
         files: ^cluster/.*\.(yaml|yml)$
+      # The NetworkPolicy enforcer's fixed values (args, image pin, the vendored
+      # upstream sha256, monitoring wiring) and every policy rule from the design
+      # (docs/superpowers/specs/2026-11-03-networkpolicy-enforcement-design.md).
+      # Any cluster/ change runs it: a component or a namespace can change what
+      # a policy selects without touching the policy's own file.
+      - id: netpol-manifests
+        name: NetworkPolicy enforcer and policy static tests
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_netpol_manifests.py
+        pass_filenames: false
+        files: ^(cluster/.*|scripts/test_netpol_manifests\.py)$
       # Dex client ids starting `mcp-` are reserved for the MCP facade, which
       # creates and deletes them itself (dynamic client registration). A static
       # client with that prefix would be adopted or swept by it. `idEnv` is
@@ -76,6 +87,8 @@ repos:
             # stripping it can make the patch unapplyable.
             |(patches|images)/.*\.patch
             |cluster/home-assistant/(packages|blueprints|dashboards|themes)/.*\.yaml
+            # Vendored byte-identical from upstream v1.1.3; a test checks its sha256.
+            |cluster/kube-network-policies/upstream-install\.yaml
           )$
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.0.1

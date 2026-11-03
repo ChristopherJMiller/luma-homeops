@@ -1,0 +1,50 @@
+---
+# Strategic-merge patch over upstream's DaemonSet (upstream-install.yaml).
+# Every value here is fixed by the design, §6.1; scripts/test_netpol_manifests.py
+# asserts them on the rendered output.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kube-network-policies
+  namespace: kube-system
+spec:
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1 # one node at a time (S5); each restart is a short fail-open gap
+  template:
+    spec:
+      hostNetwork: true
+      priorityClassName: system-node-critical # memory is ~84% requested; this must never be preempted
+      nodeSelector:
+        kubernetes.io/hostname: bottom # A3a only; Task 4 removes this line
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: kube-network-policies
+          image: registry.k8s.io/networking/kube-network-policies:v1.1.3@sha256:d9350ce205a63ba85c67795191304cef0318d084422ca44da49c4655eeba300d
+          args:
+            - /bin/netpol
+            - --hostname-override=$(MY_NODE_NAME)
+            - --v=1 # Luma §13.3: keep router syslog and Azure quiet
+            - --log-verdicts=deny # one line per denied packet (v1.1.3+)
+            - --fail-open=true # explicit; see §3.4 item 7
+            - --nfqueue-id=98
+            - --metrics-bind-address=:9080
+            - --disable-nri=true # NRI is off on Talos; turn this off again if NRI is ever enabled
+          ports:
+            - name: metrics
+              containerPort: 9080
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          # Drop upstream's /var/run/nri hostPath (absent on Talos). Keep /var/run/netns.
+          volumeMounts:
+            - mountPath: /var/run/nri
+              $patch: delete
+      volumes:
+        - name: nri-plugin
+          $patch: delete

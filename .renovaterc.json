@@ -59,6 +59,19 @@
       "description": "oauth2-proxy gates every admin host; a bad bump locks everyone out (and it is what replaced authentik, 2026-09-23). Read the release notes, then merge by hand."
     },
     {
+      "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["registry.k8s.io/networking/kube-network-policies"],
+      "groupName": "kube-network-policies",
+      "groupSlug": "kube-network-policies",
+      "automerge": false,
+      "description": "The NetworkPolicy enforcer: every bump, digest included, changes the datapath on every node. Read the release notes; after merge re-run scripts/netpol-verify.sh canary (docs/networkpolicy.md). Never below v1.1.1."
+    },
+    {
+      "matchFileNames": ["cluster/kube-network-policies/upstream-install.yaml"],
+      "enabled": false,
+      "description": "Vendored byte-identical from upstream v1.1.3; its image line (v1.1.2) is overridden by daemonset-patch.yaml."
+    },
+    {
       "matchManagers": ["kubernetes", "dockerfile"],
       "matchPackageNames": ["ghcr.io/gramps-project/grampsweb"],
       "automerge": false,

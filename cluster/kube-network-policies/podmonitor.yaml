@@ -1,0 +1,22 @@
+---
+# Scrapes each enforcer agent. The pods are hostNetwork, so the target is
+# <node IP>:9080. Prometheus selects PodMonitors by `release: prometheus` only;
+# without it this is silently never scraped.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: kube-network-policies
+  namespace: kube-system
+  labels:
+    release: prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - kube-system
+  selector:
+    matchLabels:
+      app: kube-network-policies # upstream's pod template label (upstream-install.yaml)
+  podMetricsEndpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics

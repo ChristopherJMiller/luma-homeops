@@ -1,0 +1,50 @@
+---
+# Alerts for the NetworkPolicy enforcer (design §6.1). A PrometheusRule with
+# `release: prometheus`, not a ConfigMap: ConfigMap rules never load here
+# (scripts/check-prometheus-rules.sh). NetpolCanaryFailing is not in this file:
+# it ships with the canary's policies, so the canary's no-policy baseline window
+# cannot fire it.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kube-network-policies
+  namespace: prometheus
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: kube-network-policies
+      rules:
+        - alert: KubeNetworkPoliciesAgentNotReady
+          # absent(): the DaemonSet is gone, so no node enforces anything.
+          expr: kube_daemonset_status_number_ready{namespace="kube-system",daemonset="kube-network-policies"} < kube_daemonset_status_desired_number_scheduled{namespace="kube-system",daemonset="kube-network-policies"} or absent(kube_daemonset_status_desired_number_scheduled{namespace="kube-system",daemonset="kube-network-policies"})
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: kube-network-policies agent not Ready on every node
+            description: >-
+              Fewer kube-network-policies agents are Ready than scheduled, or the
+              DaemonSet is gone. Policed pods on those nodes are unenforced (fail-open).
+              See docs/networkpolicy.md.
+        - alert: KubeNetworkPoliciesQueueDrops
+          # Gauges that mirror kernel counters (/proc/net/netfilter/nfnetlink_queue);
+          # increase() absorbs the reset when the agent rebinds the queue.
+          expr: increase(kube_network_policies_nfqueue_queue_dropped[10m]) > 0 or increase(kube_network_policies_nfqueue_user_dropped[10m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: kube-network-policies dropped queued packets on {{ $labels.instance }}
+            description: >-
+              The kernel or netlink dropped packets queued for a policy verdict: the
+              agent is not keeping up. Dropped packets are lost, not passed.
+              See docs/networkpolicy.md.
+        - alert: KubeNetworkPoliciesVerdictLogDropped
+          expr: increase(kube_network_policies_verdict_log_dropped[10m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: kube-network-policies dropped deny-log lines on {{ $labels.instance }}
+            description: >-
+              The verdict log buffer was full, so some denied packets were not logged.
+              Verdicts are unaffected; the deny log is incomplete.

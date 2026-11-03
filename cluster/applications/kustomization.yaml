@@ -19,6 +19,7 @@ resources:
   - galaxy-site.yaml
   - immich.yaml
   - immich-release.yaml
+  - kube-network-policies.yaml
   - forgejo-release.yaml
   - forgejo-runner.yaml
   - home-assistant.yaml

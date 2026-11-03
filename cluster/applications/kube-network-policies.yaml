@@ -1,0 +1,32 @@
+---
+# kube-network-policies: the NetworkPolicy enforcer, a DaemonSet in kube-system
+# beside Talos's flannel. Runbook: docs/networkpolicy.md.
+# Design: docs/superpowers/specs/2026-11-03-networkpolicy-enforcement-design.md.
+#
+# Roll back by rendering nothing (cluster/kube-network-policies/kustomization.yaml
+# -> `resources: []`, no patches; allowEmpty lets Argo prune it all), never by
+# deleting this file: there is no resources-finalizer, so the root app would
+# orphan the DaemonSet and leave it running.
+#
+# No CreateNamespace: kube-system is never Argo's to create or prune.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kube-network-policies
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/kube-network-policies
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kube-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - ServerSideApply=true
+      - PrunePropagationPolicy=foreground

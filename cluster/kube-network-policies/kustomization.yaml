@@ -1,0 +1,30 @@
+---
+# kube-network-policies: the NetworkPolicy enforcer (nftables + NFQUEUE), beside
+# the Talos-managed flannel. It judges only packets to or from local pods that
+# some NetworkPolicy selects; with no policy it queues nothing.
+# Design: docs/superpowers/specs/2026-11-03-networkpolicy-enforcement-design.md §6.1.
+# Runbook: docs/networkpolicy.md (break-glass: spec §6.5).
+#
+# upstream-install.yaml is upstream's install.yaml, vendored byte-identical:
+#   https://raw.githubusercontent.com/kubernetes-sigs/kube-network-policies/v1.1.3/install.yaml
+#   tag v1.1.3 (tag object 5478b9bf35e6ee70d4f836aa35652fe10f1199db),
+#   commit d3fc697c1acaa0c8872c262ff3e04d8299eac6b3,
+#   sha256 a40594785fce33ded02582117f3b78123af53c62f3b73d514f62c5541974984a.
+# scripts/test_netpol_manifests.py checks the sha256. Never edit the file;
+# re-vendor it from a new tag and move the sha in the test.
+#
+# WARNING: upstream's own image line in that file still says v1.1.2. The image
+# that runs is the digest pin in daemonset-patch.yaml, and Renovate is off for
+# the vendored file (.renovaterc.json).
+#
+# No kustomization-level `namespace:`: the PrometheusRule lives in `prometheus`.
+# Roll back by rendering nothing (`resources: []`, no patches), never by deleting
+# cluster/applications/kube-network-policies.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - upstream-install.yaml
+  - podmonitor.yaml
+  - prometheusrule.yaml
+patches:
+  - path: daemonset-patch.yaml
