@@ -58,6 +58,9 @@ configMapGenerator:
       - custom/public/assets/css/theme-catppuccin-latte-yellow.css
     options:
       disableNameSuffixHash: true
+      annotations:
+        # ~620 KB: client-side apply's last-applied annotation would exceed the 256 KB cap
+        argocd.argoproj.io/sync-options: ServerSideApply=true
   - name: forgejo-themes-2
     files:
       - custom/public/assets/css/theme-catppuccin-blue-auto.css
@@ -104,6 +107,9 @@ configMapGenerator:
       - custom/public/assets/css/theme-catppuccin-yellow-auto.css
     options:
       disableNameSuffixHash: true
+      annotations:
+        # ~620 KB: client-side apply's last-applied annotation would exceed the 256 KB cap
+        argocd.argoproj.io/sync-options: ServerSideApply=true
 patches:
   - target: {kind: SealedSecret, name: patroni-restapi}
     patch: |- # fail-closed dependency of every Spilo pod (D7): never prune it
