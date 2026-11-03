@@ -4,6 +4,9 @@ argo-cd:
     domain: ci.chrismiller.xyz
     addPrometheusAnnotations: true
     statusbadge.enabled: true
+    # netpol plan A2: off until B4 (Task 12). Argo is the rollback path while enforcement rolls out.
+    networkPolicy:
+      create: false
   configs:
     repositories:
       luma-homeops:
