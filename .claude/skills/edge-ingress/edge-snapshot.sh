@@ -14,8 +14,10 @@ for h in $hosts; do
   case $h in *.net|*.xyz|*.rs|*.art|*.page) fq=$h;; *) fq=$h.chrismiller.xyz;; esac
   for path in / /share/; do
     [ "$path" = /share/ ] && [ "$fq" != share.chrismiller.xyz ] && continue
-    out=$(curl -sS -o /dev/null --max-time 15 --resolve "$fq:443:192.168.0.7" \
-      -w '%{http_code} loc=%{redirect_url} ct=%{content_type}' "https://$fq$path" 2>&1 | sed 's/[?&]state=[^ &]*//; s/rd=[^ &]*/rd=…/')
+    # One line per row whatever happens: a curl failure collapses to "000 err=<exit>".
+    raw=$(curl -sS -o /dev/null --max-time 15 --resolve "$fq:443:192.168.0.7" \
+      -w '%{http_code} loc=%{redirect_url} ct=%{content_type}' "https://$fq$path" 2>/dev/null); rc=$?
+    if [ "$rc" -ne 0 ]; then out="000 err=$rc"; else out=$(printf '%s' "$raw" | sed 's/[?&]state=[^ &]*//; s/rd=[^ &]*/rd=…/'); fi
     hdr=$(curl -sSI --max-time 15 --resolve "$fq:443:192.168.0.7" "https://$fq$path" 2>/dev/null | grep -iE '^(www-authenticate|content-security-policy|access-control-allow-origin|set-cookie: word-arena)' | cut -c1-60 | sort | tr '\n' '|')
     cn=$(echo | openssl s_client -connect 192.168.0.7:443 -servername "$fq" 2>/dev/null | openssl x509 -noout -subject 2>/dev/null | sed 's/.*CN=//')
     printf '%-28s %-8s %s hdr=[%s] cert=%s\n' "$fq$path" "" "$out" "$hdr" "$cn"
@@ -36,7 +38,8 @@ while read -r method fq path; do
     esac
   fi
   hf=$(mktemp); bf=$(mktemp)
-  code=$(curl "${args[@]}" -D "$hf" -o "$bf" -w '%{http_code}|%{redirect_url}' "https://$fq$path" 2>&1)
+  code=$(curl "${args[@]}" -D "$hf" -o "$bf" -w '%{http_code}|%{redirect_url}' "https://$fq$path" 2>/dev/null); rc=$?
+  if [ "$rc" -ne 0 ]; then printf '%s %s%s 000 err=%s\n' "$method" "$fq" "$path" "$rc"; rm -f "$hf" "$bf"; continue; fi
   status=${code%%|*}
   loc=$(printf '%s' "${code#*|}" | sed 's/[?&]state=[^ &]*//')
   wa=$(grep -i '^www-authenticate:' "$hf" | tr -d '\r' | sed 's/^[^:]*: *//')
