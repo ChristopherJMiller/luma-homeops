@@ -162,3 +162,4 @@ Gate G after (18:36–18:37Z): identical to before, apart from the new app (59 a
 - The edge diff is empty after the `code_challenge|state|nonce` normalisation; the `ci.chrismiller.xyz` row is included.
 
 No rollback trigger fired, and break-glass was not used.
+- 2026-11-03 (realliance-pages Task 1): the edge snapshot now has 4 more hosts and 2 more probes. This plan's next Gate G must re-baseline first, since an old before-file no longer lines up.
