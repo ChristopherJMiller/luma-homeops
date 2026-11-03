@@ -1,0 +1,15 @@
+---
+# The runner's whole writable state: per-job workdirs (act/), the built-in actions cache and the Go
+# caches (cache/), HOME and TMPDIR. SSD pool (discard), never the SMR pool; no big emptyDir on the
+# etcd NVMe. Deleting it (with the pod scaled down) clears every cache.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-runner-work
+  namespace: forgejo-runner
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: rook-ceph-block-ssd
+  resources:
+    requests:
+      storage: 15Gi

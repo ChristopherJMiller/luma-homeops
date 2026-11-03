@@ -20,6 +20,7 @@ resources:
   - immich.yaml
   - immich-release.yaml
   - forgejo-release.yaml
+  - forgejo-runner.yaml
   - home-assistant.yaml
   - home-assistant-release.yaml
   - home-assistant-mosquitto.yaml

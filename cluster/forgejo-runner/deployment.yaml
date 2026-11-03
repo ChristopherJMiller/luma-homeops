@@ -1,0 +1,94 @@
+---
+# forgejo-runner daemon, host mode. Every job runs IN THIS POD as uid 1000: it can read the connection
+# tokens (config.yml) and the shared caches, and reach what any pod reaches. It holds no other
+# credential (no Forgejo admin token, no Keycloak secret, no Kubernetes token). Each job gets its own
+# workdir under /work/act, which the runner deletes when the job ends; recreating the pod clears the
+# rest. Security model and accepted risk: the forge-bot + CI spec, "Security model, plainly".
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forgejo-runner
+  namespace: forgejo-runner
+  labels:
+    app.kubernetes.io/name: forgejo-runner
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # one RWO work volume
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forgejo-runner
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forgejo-runner
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch # don't re-chown the whole cache on every start
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        nodeAffinity:
+          # Not `top`: it runs hottest (#2603), and CI is the most CPU-hungry thing here.
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values: [top]
+      containers:
+        - name: runner
+          # images/forgejo-runner (forgejo-runner v13.2.1, Go, ko, Node, git, gcc), built by GitHub
+          # Actions. Renovate bumps the Dockerfile; this pin is a second, manual commit.
+          image: ghcr.io/christopherjmiller/forgejo-runner:sha-6b269ab@sha256:3bb2fca689b0c986039be061a4201580488c30bcdcb476815f80d737f97b76e9
+          command:
+            - sh
+            - -c
+            - mkdir -p /work/act /work/cache /work/home /work/tmp && exec forgejo-runner daemon --config /etc/forgejo-runner/config.yml
+          env:
+            - name: HOME
+              value: /work/home
+            - name: TMPDIR
+              value: /work/tmp
+            - name: GOMAXPROCS
+              value: "2"
+            - name: GOFLAGS
+              value: -p=2
+            - name: GOCACHE
+              value: /work/cache/go-build
+            - name: GOMODCACHE
+              value: /work/cache/go-mod
+            - name: GOPATH
+              value: /work/cache/gopath
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 250m
+              memory: 768Mi
+            limits:
+              cpu: "2"
+              memory: 3Gi
+          volumeMounts:
+            - name: work
+              mountPath: /work
+            - name: config
+              mountPath: /etc/forgejo-runner
+              readOnly: true
+      volumes:
+        - name: work
+          persistentVolumeClaim:
+            claimName: forgejo-runner-work
+        - name: config
+          secret:
+            secretName: forgejo-runner-config # SealedSecret runner-config.yaml

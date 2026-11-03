@@ -211,6 +211,13 @@ spec:
               INITIAL_COMMIT: always
             cron.git_gc_repos:
               ENABLED: false # full repacks are the one bulk write repos make on the HDD pool
+            # Forgejo Actions. Job logs and artifacts go to B2 through the default [storage] above
+            # (actions_log/, actions_artifacts/ in realliance-forge-objects). The one runner is
+            # cluster/forgejo-runner (host mode, label `galaxy`), registered per repo: an allowlist.
+            actions:
+              ENABLED: true
+              DEFAULT_ACTIONS_URL: https://github.com # `uses: actions/x@<sha>` resolves on GitHub
+              ARTIFACT_RETENTION_DAYS: 30
   destination:
     server: https://kubernetes.default.svc
     namespace: forgejo

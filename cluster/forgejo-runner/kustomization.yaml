@@ -1,0 +1,13 @@
+---
+# Forgejo Actions runner for git.realliance.net: forgejo-runner v13.2.1 in HOST mode, label `galaxy`.
+# Jobs run inside this pod as uid 1000, with no Kubernetes token and no Docker. Registered per repo
+# (an allowlist; v1: realliance/forge-bot only): one server.connections entry per registration in
+# the sealed config.yml. Spec: docs/superpowers/specs/2026-11-02-forge-bot-and-ci-design.md
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: forgejo-runner
+resources:
+  - namespace.yaml
+  - pvc.yaml
+  - runner-config.yaml
+  - deployment.yaml
