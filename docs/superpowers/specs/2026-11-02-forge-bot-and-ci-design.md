@@ -190,6 +190,11 @@ My calls on the jobs:
   `enabled: false`, forge-bot must check `attack-detection/brute-force/users/{id}` and treat the
   lock as enabled. Otherwise anyone could get someone prohibited by failing their password ten
   times.
+  *Amendment 2026-11-03 (forge-bot Task 10 re-review, Keycloak 26.8.1 source):* a temporary lock
+  never sets `enabled=false` on 26.8.1, so the condition never holds and forge-bot does **not**
+  consult brute-force state: `HasAccess = enabled && in /apps/forgejo`. An unconditional
+  `enabled || temporarilyLocked` would let a *disabled* user keep a lock window open (wrong password
+  every <=15 min) and regain Forgejo access. Re-check this on every Keycloak minor upgrade.
 
 **The inventory moves to an Owners-only org** (Chris's answer 2; the workstream steps are my
 calls). The new org is **`realliance-ops`**, with an Owners team only (`chris`, `connorjc`) and no
