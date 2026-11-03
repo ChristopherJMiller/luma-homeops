@@ -111,19 +111,16 @@ spec:
             existingSecret: forgejo-admin
             email: forgejo-admin@realliance.net
             passwordMode: keepUpdated
-          oauth:
-            - name: realliance
-              provider: openidConnect
-              existingSecret: forgejo-oidc
-              autoDiscoverUrl: https://sso.realliance.net/realms/realliance/.well-known/openid-configuration
-              groupClaimName: groups
-              adminGroup: forgejo-admins
-              # claim group -> {org: [teams]}. Non-Owners teams only (see the header).
-              groupTeamMap: '{"realliance":{"realliance":["members"]},"realliance-maintainers":{"realliance":["maintainers"]}}'
-              # Flag keys must be spelled as in the chart's gitea.oauth_settings flag list; any other
-              # boolean key renders as `--key "true"` and breaks the init script.
-              groupTeamMapRemoval: true
-              skip-local-2fa: true # MFA happens at the SSO
+          # The SSO login source "realliance" lives in Forgejo's DATABASE, not here. The chart
+          # re-applies gitea.oauth on every pod start and REFUSES TO START if the SSO's discovery URL
+          # does not answer — an SSO outage plus any Forgejo restart took the whole forge down on
+          # 2026-11-03. Source settings (change with `forgejo admin auth update-oauth --id 1 …` on the
+          # pod, see docs/forgejo.md): provider openidConnect, key forgejo (secret: Secret forgejo-oidc),
+          # discovery https://sso.realliance.net/realms/realliance/.well-known/openid-configuration,
+          # group claim `groups`, admin group forgejo-admins, group-team-map with removal (realliance ->
+          # realliance/members, realliance-maintainers -> realliance/maintainers; never Owners),
+          # skip-local-2fa.
+          oauth: []
           additionalConfigSources:
             - secret:
                 secretName: forgejo-app-ini
