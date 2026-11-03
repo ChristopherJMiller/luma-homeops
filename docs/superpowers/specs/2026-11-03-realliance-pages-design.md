@@ -23,7 +23,7 @@ site and **pushes the output to the `pages` branch**. The pages server only ever
 3. **Publishing:** branch-serving only, branch name `pages`. No upload API in v1.
 4. **Who:** anyone on the forge, for any repo they own (users and orgs). No opt-in for public repos.
 5. **Public repos only in v1.** git-pages cannot clone private repos, so a private repo publishes by having its CI push the built site to a separate public repo (e.g. `alice/site-pages`). Proper private-repo publishing comes with the upload flow, once runners exist (Chris, after the builder check).
-6. **Quota:** 500 MB per site, enforced by monitoring plus Owner takedown (git-pages has no size limit; Chris, after the builder check).
+6. **Quota:** git-pages' own `max-site-size` hard cap at its **128 MB** default: a publish over it is refused and the previous version keeps serving (Chris, after the plan found the setting; supersedes 500 MB + monitoring).
 7. **Out of v1:** private (SSO-gated) pages, custom domains, PR previews, uploads, and the shared runner.
 
 ## Goals
@@ -53,7 +53,7 @@ site and **pushes the output to the `pages` branch**. The pages server only ever
 >   Certificate (existing issuer and token). Pages Ingresses carry no `spec.tls`, like every other app;
 >   no separate certificate.
 
-- **Server: git-pages** (codeberg.org/git-pages/git-pages), pinned to a release ≥ 2 weeks old (v0.10.1 was
+- **Server: git-pages** (codeberg.org/git-pages/git-pages), pinned to a release by digest — **0.10.1** (security release; Chris waived the 2-week rule for it, 2026-11-03), not (v0.10.1 was
   2026-10-28; pre-1.0, breaking changes and three security-fix releases in 2026 → pin by digest, read the
   changelog on every bump, Renovate never automerges it). It is the only maintained server found that
   serves branches via a Forgejo webhook and has a `[[wildcard]]` mode for `<owner>.<domain>/<repo>`; its
