@@ -12,13 +12,11 @@
 #                                               straight from B2 (SERVE_DIRECT) so downloads skip
 #                                               the cluster and the home uplink
 #
-# Sign-in is Realliance SSO only (auth source `realliance`); the SSO's /apps/forgejo group decides
-# who may sign in at all. Admin status (forgejo-admins) and team membership (groupTeamMap) sync at
-# each sign-in, never between sign-ins: offboarding is the two-step runbook in docs/forgejo.md.
-#
-# !! groupTeamMap is public here. That is fine ONLY while every org it names is public. Before
-# !! the first hidden org, move the map out of this file (docs/forgejo.md, "hidden-org gate").
-# !! Never map an Owners team: Forgejo refuses to remove a last owner and the sign-in fails.
+# Sign-in is Realliance SSO only; the SSO's /apps/forgejo group decides who may sign in at all.
+# The login source `realliance` (with its admin group and group->team map) lives in Forgejo's
+# DATABASE, not in this public file — see `gitea.oauth` below. Admin status and team membership
+# sync at each sign-in, never between sign-ins: offboarding is the two-step runbook in
+# docs/forgejo.md until forge-bot takes over (teams.yaml in the private realliance/forge).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
