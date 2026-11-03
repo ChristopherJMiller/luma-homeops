@@ -8,8 +8,8 @@ Keycloak on the CrownCloud VPS, repos `realliance/sso*`).
 - Plan + ledger: `docs/superpowers/plans/2026-11-02-realliance-forge.md`
 - Manifests: `cluster/forgejo/` (Application `forgejo`: namespace, volumes, Postgres, secrets,
   backups) and `cluster/applications/forgejo-release.yaml` (the Helm release, chart 17.3.2)
-- Structure (orgs, teams, owners, critical repos): `git.realliance.net/realliance/forge`
-  (OpenTofu, private; local clone `~/Repos/realliance-forge`)
+- Structure (orgs, teams, owners, critical repos): `git.realliance.net/realliance-ops/forge`
+  (OpenTofu, private, in the Owners-only org `realliance-ops`; local clone `~/Repos/realliance-forge`)
 - Acceptance suite: `~/Repos/realliance-sso` `tests/forge/` — external checks only (HTTP, SSH, B2,
   APIs), so either operator can run it: `nix develop --command pytest tests/forge -q`
 
@@ -50,8 +50,9 @@ Realliance SSO decides everything; never grant access in Forgejo by hand.
   effect at their next sign-in. **Taking away** may never take effect on its own — SSH keys and
   tokens never trigger a sync, and a session stays alive while it is used — so demotions are two
   steps, like removals (below).
-- **Owners** of an org are declared in `realliance/forge` (`teams.tf`, `local.owners`) and are
-  never in the group→team map (Forgejo refuses to remove a last owner, and the sign-in would fail).
+- **Owners** of an org are declared in `realliance-ops/forge` (`teams.tf`, `local.owners` and
+  `local.ops_owners`) and are never in the group→team map (Forgejo refuses to remove a last owner,
+  and the sign-in would fail).
 - Members and maintainers **cannot delete or transfer** repos; only Owners can. Org creation is
   admin-only (orgs are code).
 - **Email:** Forgejo keeps its own copy from the first sign-in. If someone changes their email in
@@ -85,16 +86,11 @@ that step 2 sticks.
 
 ### Gate before the first hidden org
 
-The group→team map (`groupTeamMap` in `forgejo-release.yaml`) is public config. It may name only
-public orgs. **Before creating any hidden org**, move the map out of this public repo (a
-SealedSecret applied by a PostSync Job, or build forge-sync) — and keep the hidden org's name out
-of every public repo, including this one.
-
-**Also before then — and before anyone but Chris gets `/realliance-maintainers`:** the inventory
-`realliance/forge` sits in the `realliance` org, whose `members` team reads every repo (it would
-show hidden org names to every member) and whose `maintainers` are repo admins (they could edit its
-branch protection). Merges to its `main` are already Owners-only (merge + approval whitelists).
-Move the inventory to an Owners-only org first (decision for Chris).
+Both preconditions are met (2026-11-03). The group→team map left this public repo: it lives in
+Forgejo's database, and forge-bot's `teams.yaml` in the inventory takes it over. The inventory moved
+from `realliance/forge` to `realliance-ops/forge`, an org with the Owners team only, so `realliance`
+members can't read it and maintainers can't edit its branch protection. What remains: keep every
+hidden org's name out of every public repo, including this one.
 
 ## Mail
 
@@ -165,10 +161,10 @@ The fixture is `realliance/restore-drill-fixture` (one 1 MiB LFS object) — kee
 
 ## Changing the structure
 
-Orgs, teams, Owners and critical repos: PR to `realliance/forge` (signed commits; direct pushes to
-`main` are blocked; only Owners may merge or approve; fast-forward is the only merge style, so the
+Orgs, teams, Owners and critical repos: PR to `realliance-ops/forge` (signed commits; direct pushes
+to `main` are blocked; only Owners may merge or approve; fast-forward is the only merge style, so the
 signed commits land as they are), then an operator applies (README there). From a laptop:
-`fj -H git.realliance.net pr merge realliance/forge#<n> -d`.
+`fj -H git.realliance.net pr merge realliance-ops/forge#<n> -d`.
 
 **Forgejo's signing key** "Realliance Forge <git@realliance.net>" (ID `50ACEA5F43099C00`; private
 key in `sso-secrets` `forge/signing-key.asc`, sealed as `forgejo-signing`) signs merges and web
@@ -181,9 +177,10 @@ browser. It needs the public OAuth app "forgejo-cli (fj)" (owned by `forgejo-adm
 `git.realliance.net 41ec7227-eca9-435c-a904-1785bcae60b9` (a public client id, not a secret). The provider cannot import orgs, so
 orgs are always created by that repo. Personal and everyday repos are created freely.
 
-`realliance/forge` is mirrored to `github.com/realliance/forge` (private) by a Forgejo SSH push
+`realliance-ops/forge` is mirrored to `github.com/realliance/forge` (private) by a Forgejo SSH push
 mirror whose key is a write deploy key on that one GitHub repo (no token). The provider has no
-push-mirror resource; it was set up by hand at bootstrap.
+push-mirror resource; it is set up by hand, last re-created on 2026-11-03 after the move (GitHub
+deploy key `forgejo-ops`).
 
 ## Template overrides (custom/)
 

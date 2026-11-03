@@ -79,4 +79,4 @@ gitea:
     mailer:
       ENABLED: false
     mirror:
-      ENABLED: false # the restored DB holds realliance/forge's GitHub push mirror: never fire it
+      ENABLED: false # the restored DB holds realliance-ops/forge's GitHub push mirror: never fire it

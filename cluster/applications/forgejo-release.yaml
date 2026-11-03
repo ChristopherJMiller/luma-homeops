@@ -16,7 +16,7 @@
 # The login source `realliance` (with its admin group and group->team map) lives in Forgejo's
 # DATABASE, not in this public file — see `gitea.oauth` below. Admin status and team membership
 # sync at each sign-in, never between sign-ins: offboarding is the two-step runbook in
-# docs/forgejo.md until forge-bot takes over (teams.yaml in the private realliance/forge).
+# docs/forgejo.md until forge-bot takes over (teams.yaml in the private realliance-ops/forge).
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
