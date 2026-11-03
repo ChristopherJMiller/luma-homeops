@@ -15,7 +15,7 @@
 
 Proof of orphan: no Argo app tracks a NetworkPolicy in `metallb-system`; 0 pods with `instance=metallb-release`; 2 policies present.
 
-Objects as deleted (`metadata.managedFields` stripped for readability):
+Objects as deleted, with server-set fields (uid, resourceVersion, creationTimestamp, generation) removed so `kubectl apply -f` can re-create them:
 
 ```yaml
 apiVersion: v1
@@ -23,8 +23,6 @@ items:
   - apiVersion: networking.k8s.io/v1
     kind: NetworkPolicy
     metadata:
-      creationTimestamp: "2024-10-06T22:01:01Z"
-      generation: 1
       labels:
         app.kubernetes.io/component: controller
         app.kubernetes.io/instance: metallb-release
@@ -35,8 +33,6 @@ items:
         helm.sh/chart: metallb-6.3.16
       name: metallb-release-controller
       namespace: metallb-system
-      resourceVersion: "21524148"
-      uid: b0770096-9deb-418a-a6ff-b14e77758ae2
     spec:
       egress:
         - {}
@@ -57,8 +53,6 @@ items:
   - apiVersion: networking.k8s.io/v1
     kind: NetworkPolicy
     metadata:
-      creationTimestamp: "2024-10-06T22:01:01Z"
-      generation: 1
       labels:
         app.kubernetes.io/component: speaker
         app.kubernetes.io/instance: metallb-release
@@ -69,8 +63,6 @@ items:
         helm.sh/chart: metallb-6.3.16
       name: metallb-release-speaker
       namespace: metallb-system
-      resourceVersion: "21524149"
-      uid: 8d0dc36b-ea73-4335-ad32-4576a6b91af8
     spec:
       egress:
         - {}
@@ -90,7 +82,6 @@ items:
         - Egress
 kind: List
 metadata:
-  resourceVersion: ""
 ```
 
 After the delete: `metallb-system` has no NetworkPolicies. TCP checks ok for .6:22, .7:443, .8:1883, .230:2049, .231:5000; `wg-gateway` LB IP `192.168.0.232`.
