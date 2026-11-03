@@ -383,3 +383,22 @@ def test_podmonitor_selects_enforcer_pods():
 
     ports = {p["name"] for c in ds["spec"]["template"]["spec"]["containers"] for p in c.get("ports", [])}
     assert {e["port"] for e in pm["spec"]["podMetricsEndpoints"]} <= ports
+
+
+def test_canary_matrix_bmcs_match_ipmi_scrapeconfig():
+    """Every BMC the canary expects to be dropped is a BMC we scrape (D13): drift fails loudly.
+
+    The matrix rows for port 443 whose note says BMC are the dropped-BMC rows; their IPs are
+    copied from cluster/ipmi-exporter/scrapeconfig.yaml.
+    """
+    sc = yaml.safe_load((REPO / "cluster/ipmi-exporter/scrapeconfig.yaml").read_text())
+    scraped = {t for cfg in sc["spec"]["staticConfigs"] for t in cfg["targets"]}
+    assert scraped, "scrapeconfig has no targets"
+
+    bmcs = set()
+    for raw in (REPO / "cluster/netpol-canary/matrix.txt").read_text().splitlines():
+        row = raw.split()
+        if row and not row[0].startswith("#") and "BMC" in row[5:]:
+            bmcs.add(row[2])
+    assert bmcs, "matrix has no BMC rows"
+    assert bmcs == scraped, f"matrix BMCs {sorted(bmcs)} != scraped {sorted(scraped)}"

@@ -53,7 +53,7 @@ repos:
         language: system
         entry: python -m pytest -q -p no:cacheprovider scripts/test_netpol_verify.py
         pass_filenames: false
-        files: ^scripts/(netpol-verify\.sh|test_netpol_verify\.py)$
+        files: ^(scripts/(netpol-verify\.sh|test_netpol_verify\.py|netpol-connect\.js)|cluster/netpol-canary/(probe\.sh|matrix\.txt))$
       # Dex client ids starting `mcp-` are reserved for the MCP facade, which
       # creates and deletes them itself (dynamic client registration). A static
       # client with that prefix would be adopted or swept by it. `idEnv` is

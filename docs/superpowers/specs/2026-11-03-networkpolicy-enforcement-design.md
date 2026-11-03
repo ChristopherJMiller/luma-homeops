@@ -151,6 +151,8 @@ cluster's addresses. They decide every policy below.
    connections opened before the agent started could be dropped
    ([v1.1.3 notes](https://github.com/kubernetes-sigs/kube-network-policies/releases/tag/v1.1.3), #418).
 
+Amendment 2026-11-03: v1.1.3 also hooks `input` for pod→own-node (ct state new, saddr in the managed pod set, after `iifname lo accept`); see [pkg/dataplane/controller.go L887-L930 at v1.1.3](https://github.com/kubernetes-sigs/kube-network-policies/blob/v1.1.3/pkg/dataplane/controller.go#L887-L930). The canary row `$HOST_IP:50000` relies on it.
+
 ### 3.5 Traffic that needs care when a namespace adopts policy
 
 | Flow | As seen by the enforcer | Rule |

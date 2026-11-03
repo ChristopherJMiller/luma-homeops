@@ -1,0 +1,38 @@
+# NetworkPolicy canary target matrix (design §6.4). Read by probe.sh; selftest and
+# scripts/test_netpol_manifests.py pin its shape.
+#
+# Columns, whitespace-separated:  expect scope host port backend note...
+#   expect   dns      the name resolves (port is unused); judged "open" in both modes
+#            open     a TCP connect must succeed
+#            dropped  the packet must be dropped: enforced = timeout; a refusal (RST)
+#                     means it got through, so it FAILs. baseline = open or refused,
+#                     which proves the target is alive before any policy exists.
+#   scope    all      the canary and the forgejo-runner (probe.sh SCOPE=runner)
+#            canary   canary only (the echo server lives in netpol-canary)
+#   backend  "-", or ns/service whose EndpointSlice IPs are the post-DNAT destination
+#            that deny logs show (design §3.4 item 1).
+# Variables: $HOST_IP is the probe pod's node; $WAN_IP is git.realliance.net's A
+# record, resolved on every run. A selected row with the variable unset is an error.
+# BMC IPs are copied from cluster/ipmi-exporter/scrapeconfig.yaml; a test keeps them in step.
+
+dns     all     kubernetes.default.svc.cluster.local  53     -  cluster DNS (CoreDNS)
+open    canary  netpol-echo.netpol-canary.svc.cluster.local  9376  -  echo server, same namespace
+dropped canary  netpol-echo.netpol-canary.svc.cluster.local  9377  netpol-canary/netpol-echo  echo server, port the policy does not allow
+open    all     git.realliance.net  443  -  forge via the WAN /25 and NAT reflection
+open    all     1.1.1.1             443  -  public internet
+dropped all     192.168.0.117  443    -  BMC (top/middle, unmapped, #2603)
+dropped all     192.168.0.119  443    -  BMC (top/middle, unmapped, #2603)
+dropped all     192.168.0.151  443    -  BMC (bottom)
+dropped all     192.168.0.2    80     -  KVM
+dropped all     192.168.0.2    443    -  KVM
+dropped all     192.168.0.1    22     -  router SSH
+dropped all     10.96.0.1      443    default/kubernetes  API server ClusterIP
+dropped all     192.168.0.240  6443   -  API server on a node
+dropped all     forgejo-http.forgejo.svc.cluster.local  3000  forgejo/forgejo-http  Forgejo ClusterIP
+dropped all     192.168.0.7    443    traefik/traefik  Traefik LB
+dropped all     192.168.0.8    1883   home-assistant/mosquitto  mosquitto LB
+dropped all     192.168.0.230  2049   rook/rook-ceph-nfs-satellites-lb  CephNFS LB
+dropped all     192.168.0.231  5000   registry/registry  registry LB
+dropped all     192.168.0.240  50000  -  Talos apid on a node
+dropped all     $HOST_IP       50000  -  Talos apid on the probe's own node (nftables input chain, v1.1.3)
+dropped all     $WAN_IP        8585   -  zigbee2mqtt through the WAN address (router input)

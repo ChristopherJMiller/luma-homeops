@@ -201,3 +201,10 @@ def test_no_agent_pods_is_exit_2(tmp_path):
     r = idle(fixtures(tmp_path, ds_doc=ds(0, 0), pods=[]))
     assert r.returncode == 2, r.stdout + r.stderr
     assert "no kube-network-policies agent pods" in r.stderr
+
+
+def test_selftest_passes():
+    """Offline: probe.sh, matrix.txt, deny_match and netpol-connect.js (needs node and bash from the dev shell)."""
+    r = subprocess.run([str(SCRIPT), "selftest"], capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "selftest: PASS" in r.stdout
