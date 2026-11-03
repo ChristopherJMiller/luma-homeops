@@ -6,7 +6,7 @@
 
 **Architecture:** git-pages (one replica, state in a private Realliance B2 bucket) serves every site behind Traefik. Traefik routes only `GET`/`HEAD` for `*.realliance.page` and uses the one shared wildcard certificate, which gains two SANs. A git-pages webhook must be POSTed to the *site's own URL*, so one Forgejo system webhook cannot reach it directly. Instead it goes to `pages-relay`, a ~200-line stdlib Go service in `images/pages-relay/`. The relay verifies the HMAC, maps the push to `Host: <owner>.realliance.page` + `/<repo>/`, and forwards it to git-pages in-cluster. git-pages then re-derives the clone URL from that host and refetches the repo from the forge itself. DNS is the existing `cloudflare/dns/` module plus one zone.
 
-**Tech Stack:** git-pages 0.9.1 (Go, S3 backend), Traefik v3 IngressRoute + Middleware CRDs, cert-manager v1.21.3 (`letsencrypt-prod`), Terraform `cloudflare/cloudflare ~> 5.0` (`cloudflare/dns/`), OpenTofu `Backblaze/b2` 0.14.1 (`realliance/sso` `b2/`), Forgejo 15.0.11 (chart 17.3.2), Argo CD, SealedSecrets, kube-prometheus-stack (ServiceMonitor, PrometheusRule), Go 1.26 stdlib, pytest + PyYAML + tomllib, GitHub Actions → GHCR.
+**Tech Stack:** git-pages 0.10.1 (Go, S3 backend), Traefik v3 IngressRoute + Middleware CRDs, cert-manager v1.21.3 (`letsencrypt-prod`), Terraform `cloudflare/cloudflare ~> 5.0` (`cloudflare/dns/`), OpenTofu `Backblaze/b2` 0.14.1 (`realliance/sso` `b2/`), Forgejo 15.0.11 (chart 17.3.2), Argo CD, SealedSecrets, kube-prometheus-stack (ServiceMonitor, PrometheusRule), Go 1.26 stdlib, pytest + PyYAML + tomllib, GitHub Actions → GHCR.
 
 **Spec:** `docs/superpowers/specs/2026-11-03-realliance-pages-design.md` (approved at 4addf3b9; amendment 9556a2d8, "same Cloudflare account"). The amendment overrides the spec's second-token, CNAME and separate-certificate text. Research: `.superpowers/pages-research/servers.md`.
 
@@ -16,9 +16,8 @@
 
 | What | Value | Source / note |
 |---|---|---|
-| git-pages | `codeberg.org/git-pages/git-pages:0.9.1@sha256:bbcdd603ef3d3dc66aa254479b255674e51286921c02e9f6569dc188f8756594` | OCI index (amd64 `sha256:c730c854daddab33dacc7958fb227bc1104e8070e50641a1bacc25f39e27692e`, config `created` 2026-05-31T14:35:36Z). This is the newest release ≥ 14 days old: v0.10.0 (2026-10-25) and v0.10.1 (2026-10-28) are too new. Registry tags carry no `v`. The image runs as root by default and has `CMD ["git-pages"]`, `WORKDIR /app`, busybox userland. |
-| git-pages bump target (Task 12, not before 2026-11-11) | `0.10.1@sha256:882733e3fc4b5cde8cb3f83b786f8b85854c9ad951662b64fca23cbd34f79dc9` | Re-resolve on the day. |
-| Relay builder stage | `golang:1.26-alpine@sha256:f85330846cde1e57ca9ec309382da3b8e6ae3ab943d2739500e08c86393a21b1` | The same builder git-pages 0.9.1 pins. Old enough. |
+| git-pages | `codeberg.org/git-pages/git-pages:0.10.1@sha256:882733e3fc4b5cde8cb3f83b786f8b85854c9ad951662b64fca23cbd34f79dc9` | OCI index, 2026-10-28; pin-age rule waived by Chris (security release). |
+| Relay builder stage | `golang:1.26-alpine@sha256:f85330846cde1e57ca9ec309382da3b8e6ae3ab943d2739500e08c86393a21b1` | A golang builder stage, pinned by digest. Old enough. |
 | Relay runtime | `gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab` | uid 65532. The reproducible build has an epoch `created`, so its age cannot be read; this follows the mcp-jwt-auth precedent. |
 | Relay image | `ghcr.io/christopherjmiller/pages-relay:sha-<7>@sha256:<64>` | Set in Task 4. Our own image is exempt from the age rule; its bases are not. |
 
@@ -28,7 +27,7 @@ Re-check a Codeberg digest: get an anonymous token from `https://codeberg.org/v2
 
 - Domain **`realliance.page`**. Sites: `https://<owner>.realliance.page/<repo>/`. Root site: repo **`<owner>/pages`**. Branch **`pages`** only, for project and root sites (`index-repo-branch = "pages"`).
 - **Public repos only** in v1. A private repo publishes by having CI push to a separate public repo. Hidden orgs' repos are private, so they publish nothing.
-- **Quota 500 MB per site** (enforcement: Decision D3).
+- **Quota: `max-site-size` hard cap at the 128 MB default** (Chris; enforcement: Decision D3).
 - **No `Set-Cookie`** from `realliance.page`. Always send `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Strict-Transport-Security: max-age=31536000` with **no** `includeSubDomains`/`preload` until the PSL entry. (`.page` is HSTS-preloaded TLD-wide anyway.)
 - **`www.realliance.page` and the apex redirect to `https://realliance.realliance.page/`.** Owners whose name is not one valid DNS label (dots, underscores, > 63 chars), and the owner `www`, get no site. Names are lower-cased.
 - DNS (amendment): `realliance.page` joins `local.zones` in `cloudflare/dns/records.tf` (`proxied = false`) and `CF_HOSTS` in `cluster/dns/cloudflareddns-config.yaml`. Same token, same state, no CNAMEs. `./cloudflare/dns/tf.sh plan` must end empty.
@@ -66,10 +65,10 @@ Re-check a Codeberg digest: get an anonymous token from `https://codeberg.org/v2
 
 ## Decisions this plan makes (spec gaps and contradictions)
 
-- **D1. Relay, not a direct system webhook.** git-pages selects the site of a webhook POST from the request's Host and path (`src/pages.go` `postPage` → `getWebRoot`), and the README says the URL "must be the root URL of the site". A Forgejo webhook has one fixed URL. So the spec's fallback applies, and the plan picks the relay over per-repo hooks: forge-bot's "repo defaults" job is deferred, and repo admins can delete per-repo hooks. Task 4 Step 1 re-confirms this before any code is written.
+- **D1. Relay, not a direct system webhook.** git-pages selects the site of a webhook POST from the request's Host and path (`src/pages.go` `postPage` → `GetSite`), and the README says the URL "must be the root URL of the site". A Forgejo webhook has one fixed URL. So the spec's fallback applies, and the plan picks the relay over per-repo hooks: forge-bot's "repo defaults" job is deferred, and repo admins can delete per-repo hooks. Task 4 Step 1 re-confirms this before any code is written.
 - **D2. No POST through Traefik at all.** The relay reaches git-pages by its Service. Forgejo's webhook would hairpin through the router and arrive with a router or node source IP, so a "pod network only" allow-list could not work anyway. `*.realliance.page` routes match `Method(GET) || Method(HEAD)` only; every other method gets Traefik's 404, from everyone. This is tighter than the spec. Traefik has no method middleware, so the "POST restriction" is the router matcher, and its static test pins it.
-- **D3. 500 MB is a hard cap in git-pages.** The spec's builder check says git-pages has no size limit; that is wrong. `[limits].max-site-size` exists, defaults to **128 MB**, and is enforced on fetch and on manifest size. If unset, sites would silently cap at 128 MB. The plan sets `max-site-size = "500MB"`. A push past it is refused and the site keeps its last content. The "quota alert" becomes `PagesSiteUpdateFailing`, and no per-site size exporter is built: blobs are content-addressed and shared, so there is no per-site B2 prefix to measure. Acceptance 5 becomes: "a publish that would pass 500 MB is refused, the site is unchanged, and the alert fires".
-- **D4. Pin 0.9.1 now, and bump to 0.10.1 in Task 12 on or after 2026-11-11.** The ≥ 2-week rule forces 0.9.1. 0.10.1's security fix (Forgejo redirects) mostly concerns forge-authorized uploads, which stay off. In 0.9.1, a forged in-cluster POST naming a renamed or transferred repo could follow the redirect. Only pods that can reach the git-pages Service can send one, and NetworkPolicy adoption later narrows that.
+- **D3. The quota is a hard cap in git-pages (128 MB, its default — Chris 2026-11-03).** The spec's builder check says git-pages has no size limit; that is wrong. `[limits].max-site-size` exists, defaults to **128 MB**, and is enforced on fetch and on manifest size. If unset, sites would silently cap at 128 MB. The plan sets `max-site-size = "128MB"`. A push past it is refused and the site keeps its last content. The "quota alert" becomes `PagesSiteUpdateFailing`, and no per-site size exporter is built: blobs are content-addressed and shared, so there is no per-site B2 prefix to measure. Acceptance 5 becomes: "a publish that would pass 128 MB is refused, the site is unchanged, and the alert fires".
+- **D4. Pin 0.10.1 from the start.** Chris waived the 2-week pin-age rule for this security release (2026-11-03); Task 5 ships it with `[server].proxy`; Task 12 is docs only.
 - **D5. B2 key without `deleteFiles`.** git-pages calls S3 `RemoveObject` without a version (staged manifest on every commit, site delete, unfreeze). On B2 that only *hides* the file, and the forge suite already proved a hide works without `deleteFiles` (`test_forge_objects_key_hides_but_cannot_destroy`). The key gets `listBuckets` (BucketExists → HeadBucket), `listFiles`, `readFiles` and `writeFiles`. A lifecycle rule purges hidden versions after 1 day, since the state is rebuildable. If the first publish logs a RemoveObject `AccessDenied`, add `deleteFiles` and ledger the ruling (Task 6 Step 7).
 - **D6. IngressRoute, not Ingress,** for `realliance.page`, because an Ingress cannot match methods. The routes carry no `tls` block: the websecure entrypoint has `http.tls=true` and the default TLSStore serves `wildcard-tls`, like every Ingress. The public route also excludes `/.git-pages/*` except `/.git-pages/health`. This blocks on-demand `archive.tar` (a CPU and uplink amplifier) and manifest enumeration.
 - **D7. git-pages config choices:**
@@ -77,7 +76,7 @@ Re-check a Codeberg digest: get an anonymous token from `https://codeberg.org/v2
   - `features = []`, so `codeberg-pages-compat` is off;
   - `allowed-repository-url-prefixes = ["https://git.realliance.net/"]`;
   - `allowed-custom-headers` = COOP, COEP, CORP, CSP, `Access-Control-Allow-Origin`, `Permissions-Policy`, `X-Frame-Options`, `X-Robots-Tag`, and never `Set-Cookie`, HSTS, nosniff or Referrer-Policy;
-  - `concurrent-uploads = 16` and `update-timeout = "5m"`, to bound memory and fit 500 MB over the uplink;
+  - `concurrent-uploads = 16` and `update-timeout = "5m"`, to bound memory and fit 128 MB over the uplink;
   - blob cache 64 MB.
 - **D8. Unpublish is Owner-only, and the relay tells Owners.** git-pages can only delete a site through DNS-challenge or forge auth (both off) or its admin CLI. Deleting the `pages` branch or the repo therefore leaves the site up. The relay counts these as `unpublish_requested`, and `PagesTakedownRequested` asks an Owner to run the takedown. Making a repo private sends no webhook event; that is documented.
 - **D9. The relay never logs or labels a private repo's names.** Hidden orgs' repos are private, and logs ship off-site.
@@ -326,7 +325,7 @@ def test_actions_token_pushes_pages(...):             # builder check, see Task 
 - Every other outcome → 200 with `ignored: <outcome>` or the unpublish notice.
 - Log one slog JSON line per event: `outcome`, and `host`/`path` only for public repos (D9).
 
-- [ ] **Step 1: Re-confirm D1 before writing code.** Run: `grep -n 'getWebRoot\|Repository.CloneURL' $SCRATCH/gp-0.9.1/src/pages.go` (shallow clone of tag `v0.9.1` with `GIT_CONFIG_GLOBAL=/dev/null`). Expected: `postPage` calls `getWebRoot(r)` (Host + path) and reads only `ref` and `repository.clone_url` from the body. Ledger: "D1 confirmed: relay". If git-pages ever routes by payload, stop and re-plan.
+- [ ] **Step 1: Re-confirm D1 before writing code.** Run: `grep -n 'GetSite\|Repository.CloneURL' $SCRATCH/gp-0.10.1/src/pages.go` (shallow clone of tag `v0.10.1` with `GIT_CONFIG_GLOBAL=/dev/null`). Expected: `postPage` calls `GetSite(r)` (Host + path; 0.10.1 replaced `getWebRoot`) and reads only `ref` and `repository.clone_url` from the body. Ledger: "D1 confirmed: relay". If git-pages ever routes by payload, stop and re-plan.
 - [ ] **Step 2: Write the failing tests** in `relay_test.go`:
   - `TestRouteLowercases`: owner `Test-Ab12`, repo `My-Site` → `{test-ab12.realliance.page, /my-site/}`, `forwarded`. Repo `Pages` → path `/`.
   - `TestRouteRejectsNames` (table → `ignored_name`): owner `a.b`, `a_b`, 64×`a`, `www`, `-x`, `x-`; repo `.profile`. Also clone URL `https://evil.example/a/b.git` → `bad_request`.
@@ -367,7 +366,7 @@ def test_actions_token_pushes_pages(...):             # builder check, see Task 
 - [ ] **Step 1: Write the failing static tests** in `scripts/test_pages_manifests.py`. The docstring names the spec and states "never reads `*.secret.*`".
 
 ```python
-GIT_PAGES_IMAGE = "codeberg.org/git-pages/git-pages:0.9.1@sha256:bbcdd603ef3d3dc66aa254479b255674e51286921c02e9f6569dc188f8756594"
+GIT_PAGES_IMAGE = "codeberg.org/git-pages/git-pages:0.10.1@sha256:882733e3fc4b5cde8cb3f83b786f8b85854c9ad951662b64fca23cbd34f79dc9"
 RELAY_IMAGE_RE = r"^ghcr\.io/christopherjmiller/pages-relay:sha-[0-9a-f]{7}@sha256:[0-9a-f]{64}$"
 
 def test_app_registered():        # applications/pages.yaml: path cluster/pages, ns pages, prune+selfHeal+allowEmpty,
@@ -383,9 +382,9 @@ def test_git_pages_config():      # tomllib of the generated ConfigMap's config.
     w = cfg["wildcard"]
     assert w == [{"domain": "realliance.page", "clone-url": "https://git.realliance.net/<user>/<project>.git",
                   "index-repo": "pages", "index-repo-branch": "pages"}]          # no "authorization" (D7)
-    assert cfg["features"] == [] and cfg["server"] == {"pages": "tcp/:3000", "caddy": "-", "metrics": "tcp/:3002"}
+    assert cfg["features"] == [] and cfg["server"] == {"pages": "tcp/:3000", "proxy": "-", "metrics": "tcp/:3002"}
     L = cfg["limits"]
-    assert L["max-site-size"] == "500MB" and L["allowed-repository-url-prefixes"] == ["https://git.realliance.net/"]
+    assert L["max-site-size"] == "128MB" and L["allowed-repository-url-prefixes"] == ["https://git.realliance.net/"]
     assert not L["allow-basic-auth"] and "set-cookie" not in {h.lower() for h in L["allowed-custom-headers"]}
     assert set(L["allowed-custom-headers"]) == ALLOWED_HEADERS                 # D7 list, exact
     assert cfg["storage"]["s3"]["bucket"] == "realliance-pages" and "secret-access-key" not in cfg["storage"]["s3"]
@@ -411,7 +410,7 @@ log-format = "json"
 features = []
 [server]
 pages = "tcp/:3000"
-caddy = "-"
+proxy = "-"
 metrics = "tcp/:3002"
 [[wildcard]]
 domain = "realliance.page"
@@ -427,7 +426,7 @@ bucket = "realliance-pages"
 [storage.s3.blob-cache]
 max-size = "64MB"
 [limits]
-max-site-size = "500MB"
+max-site-size = "128MB"
 update-timeout = "5m"
 concurrent-uploads = 16
 allowed-repository-url-prefixes = ["https://git.realliance.net/"]
@@ -439,7 +438,7 @@ allow-basic-auth = false
   - `pages-relay.yaml`: a Deployment and a Service `pages-relay` (port `http` 8080). Probes `httpGet /healthz`.
   - `monitoring.yaml`: two ServiceMonitors (`release: prometheus`), for git-pages port `metrics` and pages-relay port `http` `/metrics`, plus PrometheusRule `pages-alerts` (`release: prometheus`, all `severity: warning`):
     - `PagesDown`: `up{namespace="pages"} == 0 or absent(up{namespace="pages",job="git-pages"}) or absent(up{namespace="pages",job="pages-relay"})`, `for: 10m`.
-    - `PagesSiteUpdateFailing`: `(sum by (cause) (increase(git_pages_site_update_error[30m])) > 0) or (sum by (cause) (git_pages_site_update_error unless git_pages_site_update_error offset 30m) > 0)`. Annotation: often the 500 MB cap; see `kubectl -n pages logs deploy/git-pages`.
+    - `PagesSiteUpdateFailing`: `(sum by (cause) (increase(git_pages_site_update_error[30m])) > 0) or (sum by (cause) (git_pages_site_update_error unless git_pages_site_update_error offset 30m) > 0)`. Annotation: often the 128 MB cap; see `kubectl -n pages logs deploy/git-pages`.
     - `PagesRelayUpstreamError`: `increase(pages_relay_events_total{outcome="upstream_error"}[30m]) > 0`.
     - `PagesBadSignatures`: `increase(pages_relay_events_total{outcome="bad_signature"}[30m]) > 0`.
     - `PagesTakedownRequested`: `increase(pages_relay_events_total{outcome="unpublish_requested"}[6h]) > 0`. Annotation points to `docs/pages.md` § Takedown.
@@ -615,7 +614,7 @@ def test_nothing_else_routes_realliance_page(): # no networking.k8s.io Ingress h
     - Forgejo Actions sample workflow (per the Task 10 Step 4 ruling) and GitHub Actions variant (Forgejo token as a GitHub secret; caveat: Forgejo tokens are not repo-scoped);
     - pull-mirror behaviour (per the Task 10 Step 3 ruling).
   - **Private-repo opt-in:** CI pushes to a public `<name>-pages` repo.
-  - **Quota:** the 500 MB cap; how a refused publish looks (`202` in the delivery, `PagesSiteUpdateFailing`).
+  - **Quota:** the 128 MB cap; how a refused publish looks (`202` in the delivery, `PagesSiteUpdateFailing`).
   - **Takedown:**
     1. `kubectl -n pages exec deploy/git-pages -- sh -c 'head -c 10240 /dev/zero > /tmp/empty.tar && git-pages -config /etc/git-pages/config.toml -update-site <owner>.realliance.page[/<repo>] /tmp/empty.tar'`.
     2. `-freeze-domain <owner>.realliance.page` to stop republishing. Freeze *after* deleting: a frozen domain refuses deletes too.
@@ -628,20 +627,9 @@ def test_nothing_else_routes_realliance_page(): # no networking.k8s.io Ingress h
 - [ ] **Step 2: Verify.** Run: `grep -rn 'realliance.page' CLAUDE.md docs/forgejo.md cloudflare/dns/README.md .claude/skills/*/SKILL.md | wc -l`. Expected: ≥ 5. Run `grep -rnE 'secret|token' docs/pages.md`. Expected: names only, no values.
 - [ ] **Step 3: Commit and push** (docs-only): `docs: Realliance Pages runbook (pages Task 11)`.
 
-### Task 12: Bump git-pages to 0.10.1 (not before 2026-11-11)
+### Task 12: (folded into Task 5) git-pages 0.10.1 notes
 
-**Files:**
-- Modify: `cluster/pages/git-pages.yaml`, `cluster/pages/config.toml`, `scripts/test_pages_manifests.py`
-
-- [ ] **Step 1: Re-resolve the version.** On or after 2026-11-11, take the newest release ≥ 14 days old (0.10.1, unless a later one qualifies) and re-resolve its digest. Read every release note from 0.10.0 on. Ledger the breaking items:
-  - `[server].caddy` → `[server].proxy`;
-  - SIGHUP is gone;
-  - `_headers`/`_redirects` paths on project sites must start with the project path;
-  - Forgejo redirects are no longer followed.
-- [ ] **Step 2: Update the failing test.** Change `GIT_PAGES_IMAGE` and `server == {"pages": "tcp/:3000", "proxy": "-", "metrics": "tcp/:3002"}`. Run. Expected: FAIL.
-- [ ] **Step 3: Implement.** Change the image and the config key. Run. Expected: PASS. Commit.
-- [ ] **Step 4: Gate G, then STOP — ask Chris.** Expected after the push: pod Ready, and `pytest tests/forge/test_forge_pages.py -m "not slow"` all PASS.
-- [ ] **Step 5: Docs.** Tell site authors about the `_headers`/`_redirects` change (docs/pages.md changelog note).
+Chris waived the pin-age rule on 2026-11-03, so Task 5 ships 0.10.1 with `[server].proxy`. This task is now docs only: read the 0.10.0 and 0.10.1 release notes, ledger the breaking items (`caddy` → `proxy`; SIGHUP gone; project-site `_headers`/`_redirects` paths start with the project path; Forgejo redirects are not followed; `-delete-site` exists for takedown; sites are cached ~60 s, so tests poll), and add the `_headers`/`_redirects` note to `docs/pages.md`. No cluster change, no STOP.
 
 ### Task 13: Public Suffix List (last, gated)
 
