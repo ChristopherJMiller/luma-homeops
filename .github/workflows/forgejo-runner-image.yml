@@ -1,0 +1,85 @@
+---
+name: forgejo-runner image
+
+# Forgejo Actions runner for git.realliance.net (images/forgejo-runner), host-mode
+# toolchain: Go, ko, Node, git, gcc. Built here because the forge cannot build
+# anything until a runner exists. Tags :sha-<short> (immutable, what the
+# Deployment pins) and :latest.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - images/forgejo-runner/**
+      - .github/workflows/forgejo-runner-image.yml
+  pull_request:
+    paths:
+      - images/forgejo-runner/**
+      - .github/workflows/forgejo-runner-image.yml
+  workflow_dispatch:
+
+concurrency:
+  group: forgejo-runner-image-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository_owner }}/forgejo-runner
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: images/forgejo-runner
+          # amd64 only: every galaxy node is x86_64.
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Runs the published image: the toolchain the forge CI jobs rely on must
+      # be present and the runner must be an unprivileged user without Docker/Nix.
+      - name: Smoke test the toolchain
+        if: github.event_name != 'pull_request'
+        run: |
+          set -eux
+          img="$(echo '${{ steps.meta.outputs.tags }}' | head -1)"
+          docker run --rm --entrypoint sh "$img" -c '
+            set -eux
+            forgejo-runner --version | grep -F 13.2.1
+            go version | grep -F go1.26.
+            node --version | grep -E "^v24\."
+            ko version
+            gcc --version >/dev/null
+            test "$(id -u)" = 1000
+            ! command -v docker && ! command -v nix'
