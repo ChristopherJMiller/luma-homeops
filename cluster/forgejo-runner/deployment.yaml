@@ -51,6 +51,14 @@ spec:
                   - key: kubernetes.io/hostname
                     operator: NotIn
                     values: [top]
+            # Then `middle`: it has the most memory-request headroom (2026-11-03: top 85 %,
+            # middle 82 %, bottom 89 % with the runner; NodeMemoryRequestsHigh fires > 90 %).
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [middle]
       containers:
         - name: runner
           # images/forgejo-runner (forgejo-runner v13.2.1, Go, ko, Node, git, gcc), built by GitHub
