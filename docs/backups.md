@@ -377,6 +377,11 @@ repo is ever left locked by a killed job: `restic unlock`.
 - `BackupCronJobNeverSucceeded` — exists 48 h without a success
 - `BackupJobFailed` — any failed run, incl. maintenance and canaries
 
+Covered CronJobs: restic-*, family-backup/-canary, archive-backup/-canary, immich-backup,
+forgejo-dump and every operator `logical-backup-*`. Adding a backup CronJob means adding it to all
+three regexes and to `scripts/test-backup-alerts.sh` (promtool unit test:
+`nix shell nixpkgs#prometheus.cli nixpkgs#yq-go --command scripts/test-backup-alerts.sh`).
+
 Severity `warning` → Discord `homelab-default`, weekdays 09:00–22:00. A
 backup that breaks on Saturday night shows up Monday morning; that is the
 intended trade.

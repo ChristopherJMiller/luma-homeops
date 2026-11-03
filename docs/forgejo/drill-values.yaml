@@ -8,6 +8,7 @@ strategy:
   type: Recreate
 image:
   rootless: true
+  digest: sha256:3cd6bc2b74c87cbde0a0fd527c9665cb416f5a0540dee54fe5afb3fa2df9f40c # same image as production (cluster/applications/forgejo-release.yaml)
 persistence:
   enabled: true
   create: false

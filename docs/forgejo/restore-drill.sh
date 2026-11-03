@@ -136,8 +136,8 @@ cmd_up() {
   log "forgejo database: $tables tables"
 
   log "loading repos/ and data/ into the drill volumes"
-  local image; image=$(kubectl -n forgejo get pods -l app.kubernetes.io/name=forgejo \
-    -o jsonpath='{.items[0].status.containerStatuses[0].imageID}')
+  # Pinned, not read from the production pod: a real restore runs when production is gone.
+  local image=code.forgejo.org/forgejo/forgejo:15.0.11-rootless@sha256:3cd6bc2b74c87cbde0a0fd527c9665cb416f5a0540dee54fe5afb3fa2df9f40c
   kubectl -n "$NS" apply -f - >/dev/null <<EOF
 apiVersion: v1
 kind: Pod
@@ -147,7 +147,7 @@ spec:
   securityContext: {runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000, runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
   containers:
     - name: loader
-      image: ${image#docker-pullable://}
+      image: $image
       command: [sleep, "3600"]
       securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
       volumeMounts: [{name: data, mountPath: /data}, {name: repos, mountPath: /repos}]

@@ -39,6 +39,8 @@ spec:
           type: Recreate # one RWO repos volume
         image:
           rootless: true
+          # 15.0.11-rootless, pinned by digest (the chart derives the tag from appVersion; bump both together)
+          digest: sha256:3cd6bc2b74c87cbde0a0fd527c9665cb416f5a0540dee54fe5afb3fa2df9f40c
         resources:
           requests:
             cpu: 100m

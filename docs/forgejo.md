@@ -46,8 +46,10 @@ Realliance SSO decides everything; never grant access in Forgejo by hand.
 
 - Usernames come from the SSO (`preferred_username`). An SSO username equal to an existing org or
   user is refused (`ACCOUNT_LINKING=disabled`) — no silent linking.
-- Admin status and team membership sync **at each sign-in**, never in between. A group change
-  takes effect the next time the person signs in (sessions last 7 days).
+- Admin status and team membership sync **at each sign-in**, never in between. Granting takes
+  effect at their next sign-in. **Taking away** may never take effect on its own — SSH keys and
+  tokens never trigger a sync, and a session stays alive while it is used — so demotions are two
+  steps, like removals (below).
 - **Owners** of an org are declared in `realliance/forge` (`teams.tf`, `local.owners`) and are
   never in the group→team map (Forgejo refuses to remove a last owner, and the sign-in would fail).
 - Members and maintainers **cannot delete or transfer** repos; only Owners can. Org creation is
@@ -71,12 +73,28 @@ Reversing both restores everything. Until step 2 is done, access lingers — tha
 `tests/forge/test_forge_access.py::test_offboarding_blocks_web_token_and_ssh_and_is_reversible`
 proves the procedure.
 
+### Taking away admin or a team (two steps)
+
+1. SSO: remove the group (`/forgejo-admins`, `/realliance`, `/realliance-maintainers`) in
+   `realliance/sso-people`, merge.
+2. Forgejo: untick **Administrator** on the user (Site Administration → User Accounts), and/or
+   remove them from the team (org → Teams). Their next sign-in agrees with this and changes nothing.
+
+`test_demotion_needs_the_forgejo_side_step` proves step 1 alone leaves the access in place and
+that step 2 sticks.
+
 ### Gate before the first hidden org
 
 The group→team map (`groupTeamMap` in `forgejo-release.yaml`) is public config. It may name only
 public orgs. **Before creating any hidden org**, move the map out of this public repo (a
 SealedSecret applied by a PostSync Job, or build forge-sync) — and keep the hidden org's name out
 of every public repo, including this one.
+
+**Also before then — and before anyone but Chris gets `/realliance-maintainers`:** the inventory
+`realliance/forge` sits in the `realliance` org, whose `members` team reads every repo (it would
+show hidden org names to every member) and whose `maintainers` are repo admins (they could edit its
+branch protection). Merges to its `main` are already Owners-only (merge + approval whitelists).
+Move the inventory to an Owners-only org first (decision for Chris).
 
 ## Mail
 
@@ -100,7 +118,7 @@ If the SSO is down: existing sessions (7 days), tokens and SSH keep working; nob
 
 ## Backups and restore
 
-| What | When | Where (Realliance B2, object-locked 30 days, write-only keys) |
+| What | When | Where (Realliance B2, object-locked 30 days, no-delete keys) |
 |---|---|---|
 | `pg_dumpall` of `acid-forgejo` (operator logical backup) | 00:30 | `realliance-forge-backups/spilo/acid-forgejo/…` |
 | `forgejo dump` — repos, DB (postgres SQL), `app.ini`, `custom/`, `data/` (no LFS/attachments/packages/archives/indexes) | 01:30, CronJob `forgejo-dump` | `realliance-forge-backups/dump/forgejo-<UTC>.tar.gz` |
@@ -111,13 +129,32 @@ The namespace's `logical-backup-s3` secret points the operator's CronJob at the 
 out of the running pod (`kubectl exec … forgejo dump --file -` → `rclone rcat`), so it writes
 nothing to a volume. App secrets (`SECRET_KEY`, `INTERNAL_TOKEN`, JWT secrets) have canonical
 copies in `sso-secrets` `forge/secrets.env`: a restore on a new host needs them (they decrypt stored
-2FA and OAuth secrets) — never rotate them.
+2FA and OAuth secrets) — never rotate them. Every dump carries `app.ini` **in plaintext**, i.e. those
+secrets plus the objects key and the Resend key: read access to `realliance-forge-backups` (the
+forge backup key, the Realliance master key) is read access to all of the forge's secrets.
 
 **Restoring:** repos, `data/` (SSH host key, avatars) and `app.ini` come from the newest `dump/`
 archive; the **database comes from the `spilo/` pg_dumpall**, loaded the way
 `docs/backups/pg-restore.sh` does it (keep the target's role passwords, load with errors allowed,
 re-apply the passwords). The `forgejo-db.sql` inside a `forgejo dump` is a convenience copy only:
 it creates tables in an order that ignores Forgejo 15's foreign keys and does not load as-is.
+
+**A real restore** (production lost, or onto a new host), in order:
+
+1. Argo: let `forgejo` (plumbing) create the namespace, volumes and an empty `acid-forgejo`; keep
+   `forgejo-release` at 0 replicas (`kubectl -n forgejo scale deploy/forgejo --replicas=0`, S2
+   exception — revert by letting Argo re-sync).
+2. Database: newest `spilo/acid-forgejo/…/*.sql.gz` into `acid-forgejo`, the pg-restore.sh way.
+3. Volumes: from the newest `dump/forgejo-*.tar.gz` (whose time is close to the DB dump's) —
+   `repos/` → `forgejo-repos`, `data/` → `forgejo-data`, `app.ini` → `forgejo-data:gitea/conf/app.ini`
+   (owner uid 1000), via a helper pod running the pinned Forgejo image — exactly what
+   `restore-drill.sh up` does into `forgejo-drill`.
+4. Scale Forgejo back to 1 (Argo), then on the pod:
+   `forgejo admin regenerate hooks` and `forgejo doctor check --all`.
+5. Check: sign in, `git ls-remote` a few repos, fetch an LFS object, compare the SSH host key.
+
+On a brand-new host without galaxy, the same artefacts suffice: the Realliance B2 buckets, the
+chart values in `cluster/applications/forgejo-release.yaml` and the app secrets in `sso-secrets`.
 
 Restore drill: `docs/forgejo/restore-drill.sh fixture|up|check|down` — restores the newest backups
 into namespace `forgejo-drill` (read-only key on the live objects bucket, no mail, no mirrors) and
@@ -129,7 +166,8 @@ The fixture is `realliance/restore-drill-fixture` (one 1 MiB LFS object) — kee
 ## Changing the structure
 
 Orgs, teams, Owners and critical repos: PR to `realliance/forge` (signed commits; direct pushes to
-`main` are blocked), then an operator applies (README there). The provider cannot import orgs, so
+`main` are blocked; only Owners may merge or approve), merged **fast-forward only** — Forgejo has no
+signing key, so a merge commit would be unsigned and refused — then an operator applies (README there). The provider cannot import orgs, so
 orgs are always created by that repo. Personal and everyday repos are created freely.
 
 `realliance/forge` is mirrored to `github.com/realliance/forge` (private) by a Forgejo SSH push

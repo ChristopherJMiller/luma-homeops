@@ -5,7 +5,8 @@
 # Names deliberately avoid Volume/Storage/Ceph so they route to
 # homelab-default (Discord, weekday hours) rather than the storage route.
 # Covers: restic-* (config tier + maintenance + canary), family-backup,
-# family-canary, and the operator-generated logical-backup-* CronJobs.
+# family-canary, immich-backup, forgejo-dump (Realliance forge repos), and the
+# operator-generated logical-backup-* CronJobs.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -23,7 +24,7 @@ spec:
         - alert: BackupCronJobStale
           # No successful run in 36h for a nightly job.
           expr: |
-            (time() - kube_cronjob_status_last_successful_time{cronjob=~"restic-(home-assistant|plex|gonic|satellites)|family-backup|archive-backup|immich-backup|logical-backup-.*"}) > 36 * 3600
+            (time() - kube_cronjob_status_last_successful_time{cronjob=~"restic-(home-assistant|plex|gonic|satellites)|family-backup|archive-backup|immich-backup|forgejo-dump|logical-backup-.*"}) > 36 * 3600
           for: 1h
           labels:
             severity: warning
@@ -34,7 +35,7 @@ spec:
           # Exists but has never completed — a freshly broken deploy, or a
           # job that can never schedule (e.g. RWO affinity with the app at 0).
           expr: |
-            kube_cronjob_info{cronjob=~"restic-(home-assistant|plex|gonic|satellites)|family-backup|archive-backup|immich-backup|logical-backup-.*"}
+            kube_cronjob_info{cronjob=~"restic-(home-assistant|plex|gonic|satellites)|family-backup|archive-backup|immich-backup|forgejo-dump|logical-backup-.*"}
               unless on (namespace, cronjob) kube_cronjob_status_last_successful_time
           for: 48h
           labels:
@@ -50,7 +51,7 @@ spec:
           # attempts, so a run that succeeds on retry kept this firing until
           # the Job aged out of history — 3 days for acid-ha on 2026-10-05.
           expr: |
-            kube_job_failed{condition="true",job_name=~"(restic-.*|family-backup|family-canary|archive-backup|archive-canary|immich-backup|logical-backup-.*)-[0-9]+"} == 1
+            kube_job_failed{condition="true",job_name=~"(restic-.*|family-backup|family-canary|archive-backup|archive-canary|immich-backup|forgejo-dump|logical-backup-.*)-[0-9]+"} == 1
           for: 10m
           labels:
             severity: warning
