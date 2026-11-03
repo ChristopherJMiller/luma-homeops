@@ -12,6 +12,7 @@ Every off-site copy is readable from a laptop with nothing from the cluster.
 | Config volumes | HA persist, Plex config, gonic data+playlists, CephFS `/satellites` | restic, one repo, host = volume | `galaxy-cluster-backups/restic/config` | nightly 01:00–02:00 |
 | Immich uploads | `immich-uploads` — phone photos | rclone mirror | `galaxy-family/immich/current/…` | nightly 04:30 |
 | Gramps media | `galaxy-family/gramps/…` — scans attached to the family tree | **none — B2 is the primary store**, not a copy | `galaxy-family/gramps/…` | n/a |
+| Realliance forge | `acid-forgejo` + every Forgejo repo, `data/`, `app.ini` — in the **Realliance** B2 account, not galaxy's (either Realliance operator can restore). LFS/packages/attachments already live in `realliance-forge-objects` | operator `pg_dumpall` (namespace `logical-backup-s3` overrides the bucket) + CronJob `forgejo-dump` (`forgejo dump` streamed via `kubectl exec`) | `realliance-forge-backups/spilo/acid-forgejo/…`, `realliance-forge-backups/dump/forgejo-<ts>.tar.gz` (object-locked 30 d) | nightly 00:30 + 01:30 |
 
 Immich's uploads and the family tree are the genuinely *new* irreplaceable data
 this cluster produces; the family archive is read-only and already mirrored, and
@@ -391,6 +392,7 @@ intended trade.
 | 2026-09-22 | Family | first full nightly mirror (8 h at the 10 MB/s cap), then counted both sides and ran the canary against the live bucket | volume 4,943 files / 327.4 GiB = `current/` 4,943 files / 327.44 GiB, `deleted/` empty, canary sha1 OK |
 | 2026-10-12 | Archive | `/archive` ingest (42,063 files, ~34 GiB, rsync over NFS at 6 MB/s; tiny files run ~7/s because each commits to SMR) verified by hash multiset from inside the cluster; MIN_FILES gate test; first full mirror by hand; canary | in-cluster hashes == local; gate refused (exit 2, bucket untouched); mirror complete in 1 h 51 m with one transient `BadDigest` that the retry fixed; `verify-local-in-b2.sh`: every archived file present by MD5; canary md5 OK |
 | 2026-10-13 | Archive + Family | second pass from rowlett: ~/Documents/FinalArchDocuments (→ /archive/Backups/Arch Documents (2023)), ~/Documents/mc (→ /archive/Minecraft/Fabric 1.20.1 Server (2024)), ~/Music/Music (merged into /archive/Music), ~/Pictures/Pictures (family folders → /family + 3 Immich albums; rest → /archive/Pictures); ~204k files over NFS in 15 h, then mirrored | `verify-local-in-b2.sh`: 203,646 checked, only the 33,391 deliberately skipped Unity `Library/` files absent; restore drill 7/7; local copies deleted |
+| 2026-11-02 | Realliance forge | `docs/forgejo/restore-drill.sh up --fresh` (both backup jobs run, then pg_dumpall + newest `forgejo dump` into namespace `forgejo-drill`, read-only objects key) and `check` | drill PASSED: `realliance/forge` and the fixture repo heads equal production, LFS object served from B2 matches its oid, SSH host key identical; restore ~90 s. `forgejo dump`'s own SQL does not load (FK order) — the DB comes from pg_dumpall |
 
 ## History / why it looks like this
 

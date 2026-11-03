@@ -1,0 +1,81 @@
+---
+# forgejo-helm 17.3.2 values for the restore drill (docs/forgejo/restore-drill.sh). The same shape
+# as cluster/applications/forgejo-release.yaml, minus everything that reaches outside: no Ingress,
+# no LoadBalancer, no SSO source, no mail, no mirrors, and a READ-ONLY key on the live objects bucket.
+test:
+  enabled: false
+strategy:
+  type: Recreate
+image:
+  rootless: true
+persistence:
+  enabled: true
+  create: false
+  claimName: forgejo-drill-data
+extraVolumes:
+  - name: repos
+    persistentVolumeClaim:
+      claimName: forgejo-drill-repos
+extraContainerVolumeMounts:
+  - name: repos
+    mountPath: /repos
+ingress:
+  enabled: false
+service:
+  ssh:
+    type: ClusterIP
+    port: 22
+gitea:
+  admin:
+    existingSecret:
+    username: ''
+    password: ''
+  oauth: []
+  additionalConfigSources:
+    - secret:
+        secretName: forgejo-drill-ini # [storage] with the read-only objects key
+  additionalConfigFromEnvs:
+    - name: FORGEJO__DATABASE__PASSWD
+      valueFrom:
+        secretKeyRef:
+          name: forgejo.acid-forgejo-drill.credentials.postgresql.acid.zalan.do
+          key: password
+  config:
+    APP_NAME: Realliance Forge (restore drill)
+    server:
+      ROOT_URL: http://localhost:3000/
+      DOMAIN: localhost
+      SSH_DOMAIN: localhost
+      SSH_PORT: 2222
+      SSH_LISTEN_PORT: 2222
+      LFS_START_SERVER: true
+    database:
+      DB_TYPE: postgres
+      HOST: acid-forgejo-drill:5432
+      NAME: forgejo
+      USER: forgejo
+      SSL_MODE: require
+    repository:
+      ROOT: /repos
+    session:
+      PROVIDER: db
+    queue:
+      TYPE: level
+    cache:
+      ADAPTER: twoqueue
+    storage:
+      STORAGE_TYPE: minio
+      MINIO_ENDPOINT: s3.us-east-005.backblazeb2.com
+      MINIO_LOCATION: us-east-005
+      MINIO_BUCKET: realliance-forge-objects
+      MINIO_USE_SSL: true
+      MINIO_CHECKSUM_ALGORITHM: md5
+      SERVE_DIRECT: true
+    avatar:
+      STORAGE_TYPE: local
+    repo-avatar:
+      STORAGE_TYPE: local
+    mailer:
+      ENABLED: false
+    mirror:
+      ENABLED: false # the restored DB holds realliance/forge's GitHub push mirror: never fire it

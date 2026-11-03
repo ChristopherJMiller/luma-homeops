@@ -1,0 +1,50 @@
+---
+# Restore drill (docs/forgejo/restore-drill.sh): volumes and a fresh Postgres in namespace
+# forgejo-drill. NOT Argo-managed — applied by the script, deleted by `restore-drill.sh down`.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-drill-data
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: rook-ceph-block-ssd
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-drill-repos
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: rook-ceph-block
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: acid.zalan.do/v1
+kind: postgresql
+metadata:
+  name: acid-forgejo-drill
+  labels:
+    app: postgresql
+    cluster: acid-forgejo-drill
+spec:
+  teamId: acid
+  numberOfInstances: 1
+  databases:
+    forgejo: forgejo
+  users:
+    forgejo: []
+  postgresql:
+    version: '16'
+  volume:
+    size: 5Gi
+    storageClass: rook-ceph-block-ssd
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      memory: 512Mi

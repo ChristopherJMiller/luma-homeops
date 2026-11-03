@@ -113,7 +113,18 @@ nothing to a volume. App secrets (`SECRET_KEY`, `INTERNAL_TOKEN`, JWT secrets) h
 copies in `sso-secrets` `forge/secrets.env`: a restore on a new host needs them (they decrypt stored
 2FA and OAuth secrets) — never rotate them.
 
-Restore drill: `docs/forgejo/restore-drill.sh` (see its header and the result recorded below).
+**Restoring:** repos, `data/` (SSH host key, avatars) and `app.ini` come from the newest `dump/`
+archive; the **database comes from the `spilo/` pg_dumpall**, loaded the way
+`docs/backups/pg-restore.sh` does it (keep the target's role passwords, load with errors allowed,
+re-apply the passwords). The `forgejo-db.sql` inside a `forgejo dump` is a convenience copy only:
+it creates tables in an order that ignores Forgejo 15's foreign keys and does not load as-is.
+
+Restore drill: `docs/forgejo/restore-drill.sh fixture|up|check|down` — restores the newest backups
+into namespace `forgejo-drill` (read-only key on the live objects bucket, no mail, no mirrors) and
+compares it with production (repo heads, an LFS object served from B2, the SSH host key).
+
+**Drill 2026-11-02: PASSED** (`up --fresh` then `check`; restore ~90 s; log in `docs/backups.md`).
+The fixture is `realliance/restore-drill-fixture` (one 1 MiB LFS object) — keep it.
 
 ## Changing the structure
 
