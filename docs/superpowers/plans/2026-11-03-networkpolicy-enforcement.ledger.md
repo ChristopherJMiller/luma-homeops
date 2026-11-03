@@ -86,3 +86,12 @@ metadata:
 
 After the delete: `metallb-system` has no NetworkPolicies. TCP checks ok for .6:22, .7:443, .8:1883, .230:2049, .231:5000; `wg-gateway` LB IP `192.168.0.232`.
 Gate G after: nodes 3 Ready; Ceph HEALTH_WARN, 145 active+clean; Argo only `rook`/`rook-cluster` Degraded; no bad pods; netpols now 5 in `argo-cd` only; edge diff empty once per-request OAuth PKCE/state values are normalised.
+
+## A2 — Argo's chart policies off (2026-11-03)
+
+Chris pre-approved A2 on 2026-11-03, conditional on render check 5 before and 0 after, and Gate G before matching the Task 1 baseline. Both held.
+Render check (temp copy of chart, `helm template`): 5 NetworkPolicies before, 0 after.
+Commit `47eb70d8` adds `argo-cd.global.networkPolicy.create: false` in `cluster/argo-cd/values.yaml`; pushed 10:22 local.
+Gate G before: 3 nodes Ready; Ceph HEALTH_WARN (warn codes MDS_CLIENT_RECALL plus the muted AUTH_INSECURE_*), 145/145 active+clean; Argo only `rook`/`rook-cluster` Degraded; no bad pods; 5 netpols, all `argo-cd`. `scripts/ceph-gate.sh` latency check read 1278 ms (>= 1000 ms), which is the SMR slow-op noise, not a PG state change.
+Sync: `argo-cd` reached Synced/Healthy at the new sha within 10 s of the wait starting.
+Gate G after: `kubectl get netpol -A` prints `No resources found`; same nodes, Ceph and Argo state as before (ceph-gate latency 1238 ms); no bad pods; edge diff empty (PKCE/state/nonce normalised), `ci.chrismiller.xyz` row included.
