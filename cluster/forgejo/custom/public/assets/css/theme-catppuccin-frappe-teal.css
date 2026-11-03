@@ -1,0 +1,873 @@
+:root {
+  color-scheme: dark;
+  --is-dark-theme: true;
+  accent-color: #81c8be;
+  --color-primary: #81c8be;
+  --color-primary-contrast: #232634;
+  --color-primary-hover: rgb(111.2486187845, 192.2513812155, 180.8425414365);
+  --color-primary-dark-1: rgb(118.3491712707, 195.3508287293, 184.5055248619);
+  --color-primary-dark-2: rgb(107.6983425414, 190.7016574586, 179.0110497238);
+  --color-primary-dark-3: rgb(97.0475138122, 186.0524861878, 173.5165745856);
+  --color-primary-dark-4: rgb(86.3966850829, 181.4033149171, 168.0220994475);
+  --color-primary-dark-5: rgb(76.726519337, 175.773480663, 161.8232044199);
+  --color-primary-dark-6: rgb(72.0773480663, 165.1226519337, 152.017679558);
+  --color-primary-dark-7: rgb(67.4281767956, 154.4718232044, 142.2121546961);
+  --color-primary-light-1: rgb(139.6508287293, 204.6491712707, 195.4944751381);
+  --color-primary-light-2: rgb(150.3016574586, 209.2983425414, 200.9889502762);
+  --color-primary-light-3: rgb(160.9524861878, 213.9475138122, 206.4834254144);
+  --color-primary-light-4: rgb(171.6033149171, 218.5966850829, 211.9779005525);
+  --color-primary-light-5: rgb(182.2541436464, 223.2458563536, 217.4723756906);
+  --color-primary-light-6: rgb(192.9049723757, 227.8950276243, 222.9668508287);
+  --color-primary-light-7: rgb(203.555801105, 232.544198895, 228.4613259669);
+  --color-primary-alpha-10: rgba(129, 200, 190, 0.1);
+  --color-primary-alpha-20: rgba(129, 200, 190, 0.2);
+  --color-primary-alpha-30: rgba(129, 200, 190, 0.3);
+  --color-primary-alpha-40: rgba(129, 200, 190, 0.4);
+  --color-primary-alpha-50: rgba(129, 200, 190, 0.5);
+  --color-primary-alpha-60: rgba(129, 200, 190, 0.6);
+  --color-primary-alpha-70: rgba(129, 200, 190, 0.7);
+  --color-primary-alpha-80: rgba(129, 200, 190, 0.8);
+  --color-primary-alpha-90: rgba(129, 200, 190, 0.9);
+  --color-secondary: #51576d;
+  --color-secondary-dark-1: rgb(71.4577922078, 75.8551948052, 97.8422077922);
+  --color-secondary-dark-2: rgb(77.9155844156, 82.7103896104, 106.6844155844);
+  --color-secondary-dark-3: rgb(84.3733766234, 89.5655844156, 115.5266233766);
+  --color-secondary-dark-4: rgb(90.8311688312, 96.4207792208, 124.3688311688);
+  --color-secondary-dark-5: rgb(97.288961039, 103.275974026, 133.211038961);
+  --color-secondary-dark-6: rgb(103.7467532468, 110.1311688312, 142.0532467532);
+  --color-secondary-dark-7: rgb(111.1551948052, 117.6201298701, 149.9448051948);
+  --color-secondary-dark-8: rgb(119.9974025974, 126.0649350649, 156.4025974026);
+  --color-secondary-dark-9: rgb(128.8396103896, 134.5097402597, 162.8603896104);
+  --color-secondary-dark-10: rgb(137.6818181818, 142.9545454545, 169.3181818182);
+  --color-secondary-dark-11: rgb(146.524025974, 151.3993506494, 175.775974026);
+  --color-secondary-dark-12: rgb(155.3662337662, 159.8441558442, 182.2337662338);
+  --color-secondary-dark-13: rgb(164.2084415584, 168.288961039, 188.6915584416);
+  --color-secondary-light-1: rgb(58.5422077922, 62.1448051948, 80.1577922078);
+  --color-secondary-light-2: rgb(52.0844155844, 55.2896103896, 71.3155844156);
+  --color-secondary-light-3: rgb(45.6266233766, 48.4344155844, 62.4733766234);
+  --color-secondary-light-4: rgb(39.1688311688, 41.5792207792, 53.6311688312);
+  --color-secondary-alpha-10: rgba(65, 69, 89, 0.1);
+  --color-secondary-alpha-20: rgba(65, 69, 89, 0.2);
+  --color-secondary-alpha-30: rgba(65, 69, 89, 0.3);
+  --color-secondary-alpha-40: rgba(65, 69, 89, 0.4);
+  --color-secondary-alpha-50: rgba(65, 69, 89, 0.5);
+  --color-secondary-alpha-60: rgba(65, 69, 89, 0.6);
+  --color-secondary-alpha-70: rgba(65, 69, 89, 0.7);
+  --color-secondary-alpha-80: rgba(65, 69, 89, 0.8);
+  --color-secondary-alpha-90: rgba(65, 69, 89, 0.9);
+  /* colors */
+  --color-red: #e78284;
+  --color-orange: #ef9f76;
+  --color-yellow: #e5c890;
+  --color-olive: #a6d189;
+  --color-green: #a6d189;
+  --color-teal: #81c8be;
+  --color-blue: #8caaee;
+  --color-violet: #babbf1;
+  --color-purple: #ca9ee6;
+  --color-pink: #f4b8e4;
+  --color-brown: #eebebe;
+  --color-grey: #949cbb;
+  --color-black: #292c3c;
+  /* light variants - produced via Sass scale-color(color, $lightness: -10%) */
+  --color-red-light: rgb(222.7852348993, 87.2147651007, 89.8993288591);
+  --color-orange-light: rgb(233.6666666667, 127, 72.3333333333);
+  --color-yellow-light: rgb(219.3211678832, 179.5255474453, 102.6788321168);
+  --color-olive-light: rgb(138.3231707317, 194.6951219512, 100.3048780488);
+  --color-green-light: rgb(138.3231707317, 194.6951219512, 100.3048780488);
+  --color-teal-light: rgb(93.4972375691, 184.5027624309, 171.6850828729);
+  --color-blue-light: rgb(95.5681818182, 137.1590909091, 231.4318181818);
+  --color-violet-light: rgb(143.6024096386, 145.2168674699, 232.3975903614);
+  --color-purple-light: rgb(179.8442622951, 117.4508196721, 219.5491803279);
+  --color-pink-light: rgb(237.1585365854, 139.8414634146, 211.2073170732);
+  --color-brown-light: rgb(227.4268292683, 149.5731707317, 149.5731707317);
+  --color-grey-light: rgb(116.8171428571, 127.1485714286, 167.1828571429);
+  --color-black-light: rgb(20.297029703, 21.7821782178, 29.702970297);
+  /* dark 1 variants - produced via Sass scale-color(color, $lightness: -10%) */
+  --color-red-dark-1: rgb(222.7852348993, 87.2147651007, 89.8993288591);
+  --color-orange-dark-1: rgb(233.6666666667, 127, 72.3333333333);
+  --color-yellow-dark-1: rgb(219.3211678832, 179.5255474453, 102.6788321168);
+  --color-olive-dark-1: rgb(138.3231707317, 194.6951219512, 100.3048780488);
+  --color-green-dark-1: rgb(138.3231707317, 194.6951219512, 100.3048780488);
+  --color-teal-dark-1: rgb(93.4972375691, 184.5027624309, 171.6850828729);
+  --color-blue-dark-1: rgb(95.5681818182, 137.1590909091, 231.4318181818);
+  --color-violet-dark-1: rgb(143.6024096386, 145.2168674699, 232.3975903614);
+  --color-purple-dark-1: rgb(179.8442622951, 117.4508196721, 219.5491803279);
+  --color-pink-dark-1: rgb(237.1585365854, 139.8414634146, 211.2073170732);
+  --color-brown-dark-1: rgb(227.4268292683, 149.5731707317, 149.5731707317);
+  --color-black-dark-1: rgb(20.297029703, 21.7821782178, 29.702970297);
+  /* dark 2 variants - produced via Sass scale-color(color, $lightness: -20%) */
+  --color-red-dark-2: rgb(214.5704697987, 44.4295302013, 47.7986577181);
+  --color-orange-dark-2: rgb(228.3333333333, 95, 26.6666666667);
+  --color-yellow-dark-2: rgb(209.6423357664, 159.0510948905, 61.3576642336);
+  --color-olive-dark-2: rgb(111.5853658537, 175.5609756098, 68.4390243902);
+  --color-green-dark-2: rgb(111.5853658537, 175.5609756098, 68.4390243902);
+  --color-teal-dark-2: rgb(68.9779005525, 158.0220994475, 145.4806629834);
+  --color-blue-dark-2: rgb(51.1363636364, 104.3181818182, 224.8636363636);
+  --color-violet-dark-2: rgb(101.2048192771, 103.4337349398, 223.7951807229);
+  --color-purple-dark-2: rgb(157.6885245902, 76.9016393443, 209.0983606557);
+  --color-pink-dark-2: rgb(230.3170731707, 95.6829268293, 194.4146341463);
+  --color-brown-dark-2: rgb(216.8536585366, 109.1463414634, 109.1463414634);
+  --color-black-dark-2: hsl(230.5263157895, 18.8118811881%, -0.1960784314%);
+  /* other colors */
+  --color-gold: #f2d5cf;
+  --color-white: #c6d0f5;
+  --color-diff-removed-word-bg: rgba(231, 130, 132, 0.15);
+  --color-diff-added-word-bg: rgba(166, 209, 137, 0.15);
+  --color-diff-removed-row-bg: rgba(231, 130, 132, 0.07);
+  --color-diff-moved-row-bg: rgba(229, 200, 144, 0.07);
+  --color-diff-added-row-bg: rgba(166, 209, 137, 0.07);
+  --color-diff-removed-row-border: rgba(231, 130, 132, 0.07);
+  --color-diff-moved-row-border: rgba(229, 200, 144, 0.07);
+  --color-diff-added-row-border: rgba(166, 209, 137, 0.07);
+  --color-diff-inactive: #949cbb;
+  --color-error-border: #e78284;
+  --color-error-bg: #e78284;
+  --color-error-bg-active: rgb(226.8926174497, 108.6073825503, 110.9496644295);
+  --color-error-bg-hover: rgb(222.7852348993, 87.2147651007, 89.8993288591);
+  --color-error-text: #232634;
+  --color-success-border: rgb(138.3231707317, 194.6951219512, 100.3048780488);
+  --color-success-bg: #a6d189;
+  --color-success-text: #232634;
+  --color-warning-border: rgb(219.3211678832, 179.5255474453, 102.6788321168);
+  --color-warning-bg: #e5c890;
+  --color-warning-text: #232634;
+  --color-info-border: rgb(95.5681818182, 137.1590909091, 231.4318181818);
+  --color-info-bg: #232634;
+  --color-info-text: #c6d0f5;
+  --color-red-badge: rgb(222.7852348993, 87.2147651007, 89.8993288591);
+  --color-red-badge-bg: #232634;
+  --color-red-badge-hover-bg: rgb(226.8926174497, 108.6073825503, 110.9496644295);
+  --color-green-badge: #a6d189;
+  --color-green-badge-bg: #a6d189;
+  --color-green-badge-hover-bg: rgb(152.1615853659, 201.8475609756, 118.6524390244);
+  --color-yellow-badge: #e5c890;
+  --color-yellow-badge-bg: #232634;
+  --color-yellow-badge-hover-bg: rgb(224.1605839416, 189.7627737226, 123.3394160584);
+  --color-orange-badge: #ef9f76;
+  --color-orange-badge-bg: #232634;
+  --color-orange-badge-hover-bg: rgb(236.3333333333, 143, 95.1666666667);
+  --color-git: #ef9f76;
+  --color-highlight-bg: rgba(229, 200, 144, 0.15);
+  /* target-based colors */
+  --color-body: #232634;
+  --color-box-header: #292c3c;
+  --color-box-body: #292c3c;
+  --color-box-body-highlight: #414559;
+  --color-text-dark: #a5adce;
+  --color-text: #c6d0f5;
+  --color-text-light: #b5bfe2;
+  --color-text-light-1: #b5bfe2;
+  --color-text-light-2: #b5bfe2;
+  --color-text-light-3: #b5bfe2;
+  --color-footer: #292c3c;
+  --color-timeline: #414559;
+  --color-input-text: #c6d0f5;
+  --color-input-background: #414559;
+  --color-input-toggle-background: #414559;
+  --color-input-border: #51576d;
+  --color-input-border-hover: #626880;
+  --color-nav-bg: #292c3c;
+  --color-nav-hover-bg: var(--color-hover);
+  --color-navbar: #292c3c;
+  --color-navbar-transparent: rgba(35, 38, 52, 0);
+  --color-light: rgba(98, 104, 128, 0.3);
+  --color-light-mimic-enabled: rgba(
+    0,
+    0,
+    0,
+    calc(40 / 255 * 222 / 255 / var(--opacity-disabled))
+  );
+  --color-light-border: #626880;
+  --color-hover: rgba(115, 121, 148, 0.2);
+  --color-active: rgba(198, 208, 245, 0.1);
+  --color-menu: #414559;
+  --color-card: #414559;
+  --color-markup-table-row: rgba(198, 208, 245, 0.02);
+  --color-markup-code-block: rgba(198, 208, 245, 0.05);
+  --color-markup-code-inline: #414559;
+  --color-button: #414559;
+  --color-code-bg: #303446;
+  --color-code-sidebar-bg: #414559;
+  --color-shadow: rgba(35, 38, 52, 0.1);
+  --color-tooltip-bg: #414559;
+  --color-tooltip-text: var(--color-text);
+  --color-secondary-bg: #414559;
+  --color-text-focus: #c6d0f5;
+  --color-expand-button: #626880;
+  --color-placeholder-text: #a5adce;
+  --color-editor-line-highlight: var(--color-primary-light-5);
+  --color-project-board-bg: var(--color-secondary-light-2);
+  /* gitea source code: */
+  /* should ideally be --color-text-dark, see go-gitea/gitea#15651 */
+  --color-caret: var(--color-text);
+  --color-reaction-bg: rgba(198, 208, 245, 0.07);
+  --color-reaction-active-bg: var(--color-primary-alpha-40);
+  --color-header-wrapper: #292c3c;
+  --color-header-wrapper-transparent: rgba(41, 44, 60, 0);
+  --color-label-text: #232634;
+  --color-label-bg: #81c8be;
+  --color-label-hover-bg: rgb(107.6983425414, 190.7016574586, 179.0110497238);
+  --color-label-active-bg: rgb(118.3491712707, 195.3508287293, 184.5055248619);
+  --color-accent: var(--color-primary-light-1);
+  --color-small-accent: var(--color-primary-light-5);
+  --color-active-line: #51576d;
+}
+
+/* invert emojis that are hard to read otherwise */
+.emoji[aria-label="check mark"],
+.emoji[aria-label="currency exchange"],
+.emoji[aria-label="TOP arrow"],
+.emoji[aria-label="END arrow"],
+.emoji[aria-label="ON! arrow"],
+.emoji[aria-label="SOON arrow"],
+.emoji[aria-label="heavy dollar sign"],
+.emoji[aria-label=copyright],
+.emoji[aria-label=registered],
+.emoji[aria-label="trade mark"],
+.emoji[aria-label=multiply],
+.emoji[aria-label=plus],
+.emoji[aria-label=minus],
+.emoji[aria-label=divide],
+.emoji[aria-label="curly loop"],
+.emoji[aria-label="double curly loop"],
+.emoji[aria-label="wavy dash"],
+.emoji[aria-label="paw prints"],
+.emoji[aria-label="musical note"],
+.emoji[aria-label="musical notes"] {
+  filter: invert(100%) hue-rotate(180deg);
+}
+
+.ui.ui.ui.button:not(.inverted, .basic).primary, .ui.ui.ui.button:not(.inverted, .basic).green, .ui.ui.ui.button:not(.inverted, .basic).red, .ui.ui.ui.button:not(.inverted, .basic).teal,
+.ui.ui.ui.label:not(.inverted, .basic).primary,
+.ui.ui.ui.label:not(.inverted, .basic).green,
+.ui.ui.ui.label:not(.inverted, .basic).red,
+.ui.ui.ui.label:not(.inverted, .basic).teal {
+  color: #232634;
+}
+.ui.ui.ui.button:not(.inverted, .basic).primary:hover, .ui.ui.ui.button:not(.inverted, .basic).green:hover, .ui.ui.ui.button:not(.inverted, .basic).red:hover, .ui.ui.ui.button:not(.inverted, .basic).teal:hover,
+.ui.ui.ui.label:not(.inverted, .basic).primary:hover,
+.ui.ui.ui.label:not(.inverted, .basic).green:hover,
+.ui.ui.ui.label:not(.inverted, .basic).red:hover,
+.ui.ui.ui.label:not(.inverted, .basic).teal:hover {
+  color: #303446;
+}
+
+.ui.basic.modal {
+  background-color: #303446;
+}
+
+.ui.commit-header-row .svg.gitea-lock ~ a {
+  color: #232634;
+}
+
+.ui.negative.message .header {
+  color: var(--color-error-text);
+}
+
+.ui.sha.isSigned.isVerified .shortsha {
+  color: #232634;
+}
+.ui.sha.isSigned.isVerified svg.gitea-lock {
+  fill: #232634;
+}
+
+.ui.basic.modal,
+.ui.basic.modal > .header,
+.ui.inverted.button {
+  color: #c6d0f5 !important;
+}
+
+#repo-topics,
+#topic_edit > .ui.selection.dropdown {
+  color: var(--color-label-text) !important;
+}
+
+blockquote.attention-tip {
+  border-left-color: var(--color-success-bg);
+}
+blockquote.attention-warning {
+  border-left-color: var(--color-warning-bg);
+}
+
+svg.attention-tip,
+strong.attention-tip {
+  color: var(--color-success-bg);
+}
+svg.attention-warning,
+strong.attention-warning {
+  color: var(--color-warning-bg);
+}
+
+.inline-code-block {
+  color: #232634;
+}
+
+::selection {
+  background: rgba(129, 200, 190, 0.3) !important;
+}
+
+/* NameBuiltinPseudo */
+.chroma .bp {
+  color: #ef9f76;
+}
+
+/* Comment */
+.chroma .c {
+  color: #737994;
+}
+
+/* CommentSingle */
+.chroma .c1 {
+  color: #737994;
+}
+
+/* CommentHashbang */
+.chroma .ch {
+  color: #737994;
+}
+
+/* CommentMultiline */
+.chroma .cm {
+  color: #737994;
+}
+
+/* CommentPreproc */
+.chroma .cp {
+  color: #8caaee;
+}
+
+/* CommentPreprocFile */
+.chroma .cpf {
+  color: #8caaee;
+}
+
+/* CommentSpecial */
+.chroma .cs {
+  color: #737994;
+}
+
+/* LiteralStringDelimiter */
+.chroma .dl {
+  color: #8caaee;
+}
+
+/* NameFunctionMagic */
+/* Generic */
+/* GenericDeleted */
+.chroma .gd {
+  color: #c6d0f5;
+  background-color: rgba(231, 130, 132, 0.15);
+}
+
+/* GenericEmph */
+.chroma .ge {
+  font-style: italic;
+}
+
+/* GenericHeading */
+.chroma .gh {
+  color: #99d1db;
+}
+
+/* GenericInserted */
+.chroma .gi {
+  color: #c6d0f5;
+  background-color: rgba(166, 209, 137, 0.15);
+}
+
+/* GenericUnderline */
+/* GenericOutput */
+.chroma .go {
+  color: #ef9f76;
+}
+
+/* GenericPrompt */
+.chroma .gp {
+  color: #737994;
+  font-weight: bold;
+}
+
+/* GenericError */
+.chroma .gr {
+  color: #ea999c;
+}
+
+/* GenericStrong */
+.chroma .gs {
+  font-weight: bold;
+}
+
+/* GenericTraceback */
+.chroma .gt {
+  color: #ea999c;
+}
+
+/* GenericSubheading */
+.chroma .gu {
+  color: #99d1db;
+}
+
+/* LiteralNumberIntegerLong */
+.chroma .il {
+  color: #ef9f76;
+}
+
+/* Keyword */
+.chroma .k {
+  color: #ca9ee6;
+}
+
+/* KeywordConstant */
+.chroma .kc {
+  color: #e5c890;
+}
+
+/* KeywordDeclaration */
+.chroma .kd {
+  color: #ca9ee6;
+}
+
+/* KeywordNamespace */
+.chroma .kn {
+  color: #e5c890;
+}
+
+/* KeywordPseudo */
+.chroma .kp {
+  color: #ca9ee6;
+  font-weight: bold;
+}
+
+/* KeywordReserved */
+.chroma .kr {
+  color: #ca9ee6;
+}
+
+/* KeywordType */
+.chroma .kt {
+  color: #e5c890;
+}
+
+/* Literal */
+/* LiteralDate */
+/* LiteralNumber */
+.chroma .m {
+  color: #ef9f76;
+}
+
+/* LiteralNumberBin */
+.chroma .mb {
+  color: #ef9f76;
+}
+
+/* LiteralNumberFloat */
+.chroma .mf {
+  color: #ef9f76;
+}
+
+/* LiteralNumberHex */
+.chroma .mh {
+  color: #ef9f76;
+}
+
+/* LiteralNumberInteger */
+.chroma .mi {
+  color: #ef9f76;
+}
+
+/* LiteralNumberOct */
+.chroma .mo {
+  color: #ef9f76;
+}
+
+/* Name */
+.chroma .n {
+  color: #babbf1;
+}
+
+/* NameAttribute */
+.chroma .na {
+  color: #e5c890;
+}
+
+/* NameBuiltin */
+.chroma .nb {
+  color: #ef9f76;
+}
+
+/* NameClass */
+.chroma .nc {
+  color: #e5c890;
+}
+
+/* NameDecorator */
+.chroma .nd {
+  color: #f4b8e4;
+}
+
+/* NameException */
+.chroma .ne {
+  color: #ea999c;
+}
+
+/* NameFunction */
+.chroma .nf {
+  color: #8caaee;
+}
+
+/* NameEntity */
+.chroma .ni {
+  color: #f4b8e4;
+}
+
+/* NameLabel */
+.chroma .nl {
+  color: #e5c890;
+}
+
+/* NameNamespace */
+.chroma .nn {
+  color: #e5c890;
+}
+
+/* NameConstant */
+.chroma .no {
+  color: #e5c890;
+}
+
+/* NameTag */
+.chroma .nt {
+  color: #ca9ee6;
+}
+
+/* NameVariable */
+.chroma .nv {
+  color: #ef9f76;
+}
+
+/* NameOther */
+.chroma .nx {
+  color: #ef9f76;
+}
+
+/* Operator */
+.chroma .o {
+  color: #99d1db;
+}
+
+/* OperatorWord */
+.chroma .ow {
+  color: #99d1db;
+  font-weight: bold;
+}
+
+/* Punctuation */
+.chroma .p {
+  color: #949cbb;
+}
+
+/* NameProperty */
+/* LiteralString */
+.chroma .s {
+  color: #a6d189;
+}
+
+/* LiteralStringSingle */
+.chroma .s1 {
+  color: #a6d189;
+}
+
+/* LiteralStringDouble */
+.chroma .s2 {
+  color: #a6d189;
+}
+
+/* LiteralStringAffix */
+.chroma .sa {
+  color: #a6d189;
+}
+
+/* LiteralStringBacktick */
+.chroma .sb {
+  color: #a6d189;
+}
+
+/* LiteralStringChar */
+.chroma .sc {
+  color: #a6d189;
+}
+
+/* LiteralStringDoc */
+.chroma .sd {
+  color: #a6d189;
+}
+
+/* LiteralStringEscape */
+.chroma .se {
+  color: #8caaee;
+}
+
+/* LiteralStringHeredoc */
+.chroma .sh {
+  color: #a6d189;
+}
+
+/* LiteralStringInterpol */
+.chroma .si {
+  color: #a6d189;
+}
+
+/* LiteralStringRegex */
+.chroma .sr {
+  color: #8caaee;
+}
+
+/* LiteralStringSymbol */
+.chroma .ss {
+  color: #a6d189;
+}
+
+/* LiteralStringOther */
+.chroma .sx {
+  color: #a6d189;
+}
+
+/* NameVariableClass */
+.chroma .vc {
+  color: #e5c890;
+}
+
+/* NameVariableGlobal */
+.chroma .vg {
+  color: #ef9f76;
+}
+
+/* NameVariableInstance */
+.chroma .vi {
+  color: #e5c890;
+}
+
+/* NameVariableMagic */
+/* TextWhitespace */
+.chroma .w {
+  color: #414559;
+}
+
+.CodeMirror .cm-property,
+.CodeMirror.cm-s-default .cm-property,
+.CodeMirror.cm-s-paper .cm-property {
+  color: #c6d0f5;
+}
+.CodeMirror .cm-header,
+.CodeMirror.cm-s-default .cm-header,
+.CodeMirror.cm-s-paper .cm-header {
+  color: #c6d0f5;
+}
+.CodeMirror .cm-quote,
+.CodeMirror.cm-s-default .cm-quote,
+.CodeMirror.cm-s-paper .cm-quote {
+  color: #a6d189;
+}
+.CodeMirror .cm-keyword,
+.CodeMirror.cm-s-default .cm-keyword,
+.CodeMirror.cm-s-paper .cm-keyword {
+  color: #ca9ee6;
+}
+.CodeMirror .cm-atom,
+.CodeMirror.cm-s-default .cm-atom,
+.CodeMirror.cm-s-paper .cm-atom {
+  color: #e78284;
+}
+.CodeMirror .cm-number,
+.CodeMirror.cm-s-default .cm-number,
+.CodeMirror.cm-s-paper .cm-number {
+  color: #ef9f76;
+}
+.CodeMirror .cm-def,
+.CodeMirror.cm-s-default .cm-def,
+.CodeMirror.cm-s-paper .cm-def {
+  color: #c6d0f5;
+}
+.CodeMirror .cm-variable-2,
+.CodeMirror.cm-s-default .cm-variable-2,
+.CodeMirror.cm-s-paper .cm-variable-2 {
+  color: #99d1db;
+}
+.CodeMirror .cm-variable-3,
+.CodeMirror.cm-s-default .cm-variable-3,
+.CodeMirror.cm-s-paper .cm-variable-3 {
+  color: #81c8be;
+}
+.CodeMirror .cm-comment,
+.CodeMirror.cm-s-default .cm-comment,
+.CodeMirror.cm-s-paper .cm-comment {
+  color: #626880;
+}
+.CodeMirror .cm-string,
+.CodeMirror.cm-s-default .cm-string,
+.CodeMirror.cm-s-paper .cm-string {
+  color: #a6d189;
+}
+.CodeMirror .cm-string-2,
+.CodeMirror.cm-s-default .cm-string-2,
+.CodeMirror.cm-s-paper .cm-string-2 {
+  color: #a6d189;
+}
+.CodeMirror .cm-meta,
+.CodeMirror.cm-s-default .cm-meta,
+.CodeMirror.cm-s-paper .cm-meta {
+  color: #ef9f76;
+}
+.CodeMirror .cm-qualifier,
+.CodeMirror.cm-s-default .cm-qualifier,
+.CodeMirror.cm-s-paper .cm-qualifier {
+  color: #ef9f76;
+}
+.CodeMirror .cm-builtin,
+.CodeMirror.cm-s-default .cm-builtin,
+.CodeMirror.cm-s-paper .cm-builtin {
+  color: #ef9f76;
+}
+.CodeMirror .cm-bracket,
+.CodeMirror.cm-s-default .cm-bracket,
+.CodeMirror.cm-s-paper .cm-bracket {
+  color: #c6d0f5;
+}
+.CodeMirror .cm-tag,
+.CodeMirror.cm-s-default .cm-tag,
+.CodeMirror.cm-s-paper .cm-tag {
+  color: #e5c890;
+}
+.CodeMirror .cm-attribute,
+.CodeMirror.cm-s-default .cm-attribute,
+.CodeMirror.cm-s-paper .cm-attribute {
+  color: #e5c890;
+}
+.CodeMirror .cm-hr,
+.CodeMirror.cm-s-default .cm-hr,
+.CodeMirror.cm-s-paper .cm-hr {
+  color: #949cbb;
+}
+.CodeMirror .cm-url,
+.CodeMirror.cm-s-default .cm-url,
+.CodeMirror.cm-s-paper .cm-url {
+  color: #8caaee;
+}
+.CodeMirror .cm-link,
+.CodeMirror.cm-s-default .cm-link,
+.CodeMirror.cm-s-paper .cm-link {
+  color: #8caaee;
+}
+.CodeMirror .cm-error,
+.CodeMirror.cm-s-default .cm-error,
+.CodeMirror.cm-s-paper .cm-error {
+  color: #e78284;
+}
+
+.monaco-editor .selected-text {
+  background-color: #414559 !important;
+}
+.monaco-editor .margin-view-overlays .line-numbers {
+  color: #a5adce !important;
+}
+.monaco-editor .line-numbers.active-line-number {
+  color: #81c8be !important;
+}
+.monaco-editor .view-overlays .current-line,
+.monaco-editor .margin-view-overlays .current-line-margin {
+  background-color: rgb(58.88, 62.88, 82.16) !important;
+}
+.monaco-editor .mtk1 {
+  color: #c6d0f5 !important;
+}
+.monaco-editor .mtk2 {
+  color: #ff69b4 !important;
+}
+.monaco-editor .mtk3 {
+  color: #ef9f76 !important;
+}
+.monaco-editor .mtk4 {
+  color: #81c8be !important;
+}
+.monaco-editor .mtk5 {
+  color: #c6d0f5 !important;
+}
+.monaco-editor .mtk6 {
+  color: #ca9ee6 !important;
+}
+.monaco-editor .mtk7 {
+  color: #ef9f76 !important;
+}
+.monaco-editor .mtk8 {
+  color: #949cbb !important;
+}
+.monaco-editor .mtk9 {
+  color: #ca9ee6 !important;
+}
+.monaco-editor .mtk10 {
+  color: #a5adce !important;
+}
+.monaco-editor .mtk11 {
+  color: #81c8be !important;
+}
+.monaco-editor .mtk12 {
+  color: #81c8be !important;
+}
+.monaco-editor .mtk13 {
+  color: #ff69b4 !important;
+}
+.monaco-editor .mtk14 {
+  color: #ff69b4 !important;
+}
+.monaco-editor .mtk15 {
+  color: #ca9ee6 !important;
+}
+.monaco-editor .mtk16 {
+  color: #949cbb !important;
+}
+.monaco-editor .mtk17 {
+  color: #ff69b4 !important;
+}
+.monaco-editor .mtk18 {
+  color: #ff69b4 !important;
+}
+.monaco-editor .mtk19 {
+  color: #81c8be !important;
+}
+.monaco-editor .mtk20 {
+  color: #ff69b4 !important;
+}
+.monaco-editor .mtk21 {
+  color: #a6d189 !important;
+}
+.monaco-editor .mtk22 {
+  color: #ff69b4 !important;
+}
+.monaco-editor .mtk23 {
+  color: #8caaee !important;
+}
+.monaco-editor .mtk24 {
+  color: #ef9f76 !important;
+}
+.monaco-editor .mtk25 {
+  color: #f4b8e4 !important;
+}
+.monaco-editor .bracket-highlighting-0 {
+  color: rgb(217.8, 161.2, 177.2) !important;
+}
+.monaco-editor .bracket-highlighting-1 {
+  color: rgb(222.6, 178.6, 168.8) !important;
+}
+.monaco-editor .bracket-highlighting-2 {
+  color: rgb(216.6, 203.2, 184.4) !important;
+}
+.monaco-editor .bracket-highlighting-3 {
+  color: rgb(178.8, 208.6, 180.2) !important;
+}
+.monaco-editor .bracket-highlighting-4 {
+  color: rgb(163.2, 185.2, 240.8) !important;
+}
+.monaco-editor .bracket-highlighting-5 {
+  color: rgb(200.4, 178, 236) !important;
+}

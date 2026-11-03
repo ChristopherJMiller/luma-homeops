@@ -1,0 +1,2 @@
+@import "./theme-catppuccin-latte-sky.css" (prefers-color-scheme: light);
+@import "./theme-catppuccin-mocha-sky.css" (prefers-color-scheme: dark);

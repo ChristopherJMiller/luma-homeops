@@ -96,6 +96,8 @@ repos:
             # context line for an empty source line is a single space, and
             # stripping it can make the patch unapplyable.
             |(patches|images)/.*\.patch
+            # Vendored upstream CSS (catppuccin/gitea): kept byte-identical to the release.
+            |cluster/forgejo/custom/public/assets/css/.*\.css
           )$
       - id: fix-byte-order-marker
         name: Fix UTF-8 byte order marker
@@ -110,4 +112,5 @@ repos:
             # context line for an empty source line is a single space, and
             # stripping it can make the patch unapplyable.
             |(patches|images)/.*\.patch
+            |cluster/forgejo/custom/public/assets/css/.*\.css
           )$

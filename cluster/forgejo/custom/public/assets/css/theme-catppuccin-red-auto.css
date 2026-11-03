@@ -1,0 +1,2 @@
+@import "./theme-catppuccin-latte-red.css" (prefers-color-scheme: light);
+@import "./theme-catppuccin-mocha-red.css" (prefers-color-scheme: dark);

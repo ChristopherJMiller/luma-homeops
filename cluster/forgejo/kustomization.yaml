@@ -25,6 +25,85 @@ configMapGenerator:
       - user-settings-navbar.tmpl=custom/templates/user/settings/navbar.tmpl
     options:
       disableNameSuffixHash: true # referenced by name from the other Application
+  # Catppuccin themes (custom/public/CATPPUCCIN.md): two maps because one ConfigMap is capped at 1 MiB.
+  - name: forgejo-themes-1
+    files:
+      - custom/public/assets/css/theme-catppuccin-frappe-blue.css
+      - custom/public/assets/css/theme-catppuccin-frappe-flamingo.css
+      - custom/public/assets/css/theme-catppuccin-frappe-green.css
+      - custom/public/assets/css/theme-catppuccin-frappe-lavender.css
+      - custom/public/assets/css/theme-catppuccin-frappe-maroon.css
+      - custom/public/assets/css/theme-catppuccin-frappe-mauve.css
+      - custom/public/assets/css/theme-catppuccin-frappe-peach.css
+      - custom/public/assets/css/theme-catppuccin-frappe-pink.css
+      - custom/public/assets/css/theme-catppuccin-frappe-red.css
+      - custom/public/assets/css/theme-catppuccin-frappe-rosewater.css
+      - custom/public/assets/css/theme-catppuccin-frappe-sapphire.css
+      - custom/public/assets/css/theme-catppuccin-frappe-sky.css
+      - custom/public/assets/css/theme-catppuccin-frappe-teal.css
+      - custom/public/assets/css/theme-catppuccin-frappe-yellow.css
+      - custom/public/assets/css/theme-catppuccin-latte-blue.css
+      - custom/public/assets/css/theme-catppuccin-latte-flamingo.css
+      - custom/public/assets/css/theme-catppuccin-latte-green.css
+      - custom/public/assets/css/theme-catppuccin-latte-lavender.css
+      - custom/public/assets/css/theme-catppuccin-latte-maroon.css
+      - custom/public/assets/css/theme-catppuccin-latte-mauve.css
+      - custom/public/assets/css/theme-catppuccin-latte-peach.css
+      - custom/public/assets/css/theme-catppuccin-latte-pink.css
+      - custom/public/assets/css/theme-catppuccin-latte-red.css
+      - custom/public/assets/css/theme-catppuccin-latte-rosewater.css
+      - custom/public/assets/css/theme-catppuccin-latte-sapphire.css
+      - custom/public/assets/css/theme-catppuccin-latte-sky.css
+      - custom/public/assets/css/theme-catppuccin-latte-teal.css
+      - custom/public/assets/css/theme-catppuccin-latte-yellow.css
+    options:
+      disableNameSuffixHash: true
+  - name: forgejo-themes-2
+    files:
+      - custom/public/assets/css/theme-catppuccin-blue-auto.css
+      - custom/public/assets/css/theme-catppuccin-flamingo-auto.css
+      - custom/public/assets/css/theme-catppuccin-green-auto.css
+      - custom/public/assets/css/theme-catppuccin-lavender-auto.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-blue.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-flamingo.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-green.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-lavender.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-maroon.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-mauve.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-peach.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-pink.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-red.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-rosewater.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-sapphire.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-sky.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-teal.css
+      - custom/public/assets/css/theme-catppuccin-macchiato-yellow.css
+      - custom/public/assets/css/theme-catppuccin-maroon-auto.css
+      - custom/public/assets/css/theme-catppuccin-mauve-auto.css
+      - custom/public/assets/css/theme-catppuccin-mocha-blue.css
+      - custom/public/assets/css/theme-catppuccin-mocha-flamingo.css
+      - custom/public/assets/css/theme-catppuccin-mocha-green.css
+      - custom/public/assets/css/theme-catppuccin-mocha-lavender.css
+      - custom/public/assets/css/theme-catppuccin-mocha-maroon.css
+      - custom/public/assets/css/theme-catppuccin-mocha-mauve.css
+      - custom/public/assets/css/theme-catppuccin-mocha-peach.css
+      - custom/public/assets/css/theme-catppuccin-mocha-pink.css
+      - custom/public/assets/css/theme-catppuccin-mocha-red.css
+      - custom/public/assets/css/theme-catppuccin-mocha-rosewater.css
+      - custom/public/assets/css/theme-catppuccin-mocha-sapphire.css
+      - custom/public/assets/css/theme-catppuccin-mocha-sky.css
+      - custom/public/assets/css/theme-catppuccin-mocha-teal.css
+      - custom/public/assets/css/theme-catppuccin-mocha-yellow.css
+      - custom/public/assets/css/theme-catppuccin-peach-auto.css
+      - custom/public/assets/css/theme-catppuccin-pink-auto.css
+      - custom/public/assets/css/theme-catppuccin-red-auto.css
+      - custom/public/assets/css/theme-catppuccin-rosewater-auto.css
+      - custom/public/assets/css/theme-catppuccin-sapphire-auto.css
+      - custom/public/assets/css/theme-catppuccin-sky-auto.css
+      - custom/public/assets/css/theme-catppuccin-teal-auto.css
+      - custom/public/assets/css/theme-catppuccin-yellow-auto.css
+    options:
+      disableNameSuffixHash: true
 patches:
   - target: {kind: SealedSecret, name: patroni-restapi}
     patch: |- # fail-closed dependency of every Spilo pod (D7): never prune it
