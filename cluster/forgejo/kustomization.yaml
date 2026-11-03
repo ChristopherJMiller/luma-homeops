@@ -18,6 +18,13 @@ resources:
   - backup-rbac.yaml
   - backup-b2.yaml
   - backup-cronjob.yaml
+configMapGenerator:
+  # Forgejo custom/ template overrides, mounted by the Helm release (forgejo-release.yaml).
+  - name: forgejo-custom-templates
+    files:
+      - user-settings-navbar.tmpl=custom/templates/user/settings/navbar.tmpl
+    options:
+      disableNameSuffixHash: true # referenced by name from the other Application
 patches:
   - target: {kind: SealedSecret, name: patroni-restapi}
     patch: |- # fail-closed dependency of every Spilo pod (D7): never prune it

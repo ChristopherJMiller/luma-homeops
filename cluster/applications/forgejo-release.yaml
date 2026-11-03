@@ -56,9 +56,18 @@ spec:
           - name: repos
             persistentVolumeClaim:
               claimName: forgejo-repos
+          - name: custom-templates # ConfigMap from cluster/forgejo (kustomize configMapGenerator)
+            configMap:
+              name: forgejo-custom-templates
         extraContainerVolumeMounts:
           - name: repos
             mountPath: /repos
+          # Template overrides under $GITEA_CUSTOM (/data/gitea). Forgejo reads them at start:
+          # after editing one, bump gitea.podAnnotations realliance/templates-rev to restart.
+          - name: custom-templates
+            mountPath: /data/gitea/templates/user/settings/navbar.tmpl
+            subPath: user-settings-navbar.tmpl
+            readOnly: true
 
         # Forgejo's own GPG key "Realliance Forge <git@realliance.net>" (ID 50ACEA5F43099C00). Without
         # it Forgejo refuses every merge into a branch that requires signed commits ("won't sign: nokey").
@@ -86,6 +95,8 @@ spec:
               metallb.universe.tf/loadBalancerIPs: 192.168.0.6
 
         gitea:
+          podAnnotations:
+            realliance/templates-rev: "1" # bump when cluster/forgejo/custom/templates changes
           admin:
             # Break-glass only: the internal sign-in form is off, so this account is used through
             # `forgejo admin user …` on the pod. Password: sso-secrets forge/secrets.env.

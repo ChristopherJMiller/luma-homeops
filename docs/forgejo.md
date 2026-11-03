@@ -184,3 +184,19 @@ orgs are always created by that repo. Personal and everyday repos are created fr
 `realliance/forge` is mirrored to `github.com/realliance/forge` (private) by a Forgejo SSH push
 mirror whose key is a write deploy key on that one GitHub repo (no token). The provider has no
 push-mirror resource; it was set up by hand at bootstrap.
+
+## Template overrides (custom/)
+
+Forgejo has no plugin API; small UI changes are copies of upstream templates under
+`cluster/forgejo/custom/templates/`, shipped as ConfigMap `forgejo-custom-templates` and mounted
+into `$GITEA_CUSTOM/templates/` (see `extraContainerVolumeMounts` in `forgejo-release.yaml`).
+
+| Override | Upstream file | Change |
+|---|---|---|
+| `user-settings-navbar.tmpl` | `templates/user/settings/navbar.tmpl` (15.0.11) | "Realliance account ↗" link to the SSO account page, top of the settings menu |
+
+**On every Forgejo upgrade:** re-diff each override against the new upstream file
+(`curl -sL https://codeberg.org/forgejo/forgejo/raw/tag/v<version>/templates/user/settings/navbar.tmpl | diff - <(tail -n +4 cluster/forgejo/custom/templates/user/settings/navbar.tmpl)`
+should show only the added lines), carry the change over, and bump `realliance/templates-rev`
+(Forgejo reads templates at start). `tests/forge/test_forge_signin.py::test_settings_link_to_realliance_account`
+catches a lost override.
