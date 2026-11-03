@@ -5,7 +5,7 @@
 #   docs/forgejo/restore-drill.sh up [--fresh|dump-key]  # forgejo-drill from the newest (or given) dump/
 #                                                 # object; --fresh first runs both backup jobs now
 #   docs/forgejo/restore-drill.sh check           # drill vs production: repo heads, LFS from B2, SSH host key
-#   docs/forgejo/restore-drill.sh down            # delete forgejo-drill and its volumes (asks first)
+#   docs/forgejo/restore-drill.sh down            # delete forgejo-drill, its PVs and RBD images (asks first)
 #
 # The restore uses only what a new host would have: the nightly `forgejo dump` in the Realliance
 # backups bucket, the read-only objects key, and this chart. It runs from an operator laptop with
@@ -201,11 +201,21 @@ cmd_check() {
 }
 
 cmd_down() {
-  read -r -p "Delete namespace $NS and its volumes (PVs are Retain; they are deleted too)? [y/N] " ok
+  read -r -p "Delete namespace $NS, its PVs and their Ceph RBD images (PVs are Retain)? [y/N] " ok
   [ "$ok" = y ] || { log "left as is"; return; }
-  local pvs; pvs=$(kubectl get pv -o json | jq -r --arg ns "$NS" '.items[] | select(.spec.claimRef.namespace==$ns) | .metadata.name')
+  # pool/image of each drill volume, read from the PV before it goes (Retain leaves the image behind)
+  local vols; vols=$(kubectl get pv -o json | jq -r --arg ns "$NS" '.items[] | select(.spec.claimRef.namespace==$ns)
+    | "\(.metadata.name) \(.spec.csi.volumeAttributes.pool)/\(.spec.csi.volumeAttributes.imageName)"')
   kubectl delete namespace "$NS" --wait=true
-  for pv in $pvs; do kubectl delete pv "$pv"; done
+  local pv img
+  while read -r pv img; do
+    [ -n "$pv" ] || continue
+    kubectl delete pv "$pv"
+    # remove the image only if its CSI metadata names this PV and nothing has it open
+    kubectl -n rook exec deploy/rook-ceph-tools -- sh -c "p=${img%%/*}; i=${img#*/};
+      rbd image-meta list -p \$p \$i 2>/dev/null | grep -q '$pv' && rbd status -p \$p \$i | grep -q 'Watchers: none' &&
+      rbd rm -p \$p \$i --no-progress && echo 'removed $img' || echo 'SKIP $img (metadata/watchers check failed)'"
+  done <<<"$vols"
 }
 
 case "${1:-}" in
