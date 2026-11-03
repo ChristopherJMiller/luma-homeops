@@ -64,7 +64,12 @@
       "groupName": "kube-network-policies",
       "groupSlug": "kube-network-policies",
       "automerge": false,
-      "description": "The NetworkPolicy enforcer: every bump, digest included, changes the datapath on every node. Read the release notes; after merge re-run scripts/netpol-verify.sh canary (docs/networkpolicy.md). Never below v1.1.1."
+      "description": "The NetworkPolicy enforcer: every bump, digest included, changes the datapath on every node. Read the release notes; after merge re-run scripts/netpol-verify.sh canary (docs/networkpolicy.md). Never below v1.1.1.",
+      "prBodyNotes": [
+        "**NetworkPolicy enforcer: this bump changes the datapath on every node. Never automerge, never below v1.1.1.**",
+        "Before merging: (1) read the release notes for every version in the range; (2) re-vendor `cluster/kube-network-policies/upstream-install.yaml` (install.yaml) from the new tag (`curl -sSfL https://raw.githubusercontent.com/kubernetes-sigs/kube-network-policies/<tag>/install.yaml`), diff it for RBAC, args and volume changes, and move `UPSTREAM_SHA256` in `scripts/test_netpol_manifests.py`. This PR only moves the image, and the tests still pass with the old RBAC.",
+        "After merge: run the canary, `scripts/netpol-verify.sh canary` (docs/networkpolicy.md), on every node."
+      ]
     },
     {
       "matchFileNames": ["cluster/kube-network-policies/upstream-install.yaml"],

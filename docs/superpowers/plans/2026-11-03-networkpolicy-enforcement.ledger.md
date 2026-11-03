@@ -101,6 +101,24 @@ Gate G after: `kubectl get netpol -A` prints `No resources found`; same nodes, C
 
 **A3a_start=2026-11-03T18:35:10Z** (agent Ready on `bottom`). Task 4 (A3b) starts no earlier than **2026-11-04T18:35:10Z**, gated on `scripts/netpol-verify.sh idle` PASS with restarts 0 and `packet_id=0`.
 
+**How to roll back (pre-approved; Global Constraints "render nothing").** Use one commit. Edit `cluster/kube-network-policies/kustomization.yaml` so that, below its header comment, it reads exactly:
+
+```yaml
+# netpol: rolled back (Global Constraints)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+```
+
+- **The edit:** add the marker line, replace the `resources:` list with `[]`, and delete the `patches:` block. Leave `upstream-install.yaml`, the other files and `cluster/applications/kube-network-policies.yaml` as they are. Never delete the Application.
+- **pre-commit accepts this state.** `netpol-manifests` asserts the empty render and an unchanged Application, keeps the sha check, and skips the deployed-state tests with a reason. This was proven in a scratch copy with the real hooks, with no commit (fix round 1).
+- **The marker is required.** `resources: []` without it fails on purpose, and the failure message names the marker.
+- **Push and verify.** Argo prunes all six objects (`allowEmpty: true`). Verify with `kubectl -n kube-system get ds kube-network-policies`, which should report NotFound.
+- **Leftover nftables table.** With `--fail-open=true` the agent leaves its nftables table on the node until the next reboot. Its set is empty and its rules are flagged `bypass`, so it is harmless (§6.5 step 3).
+- **Redeploy** with `git revert` of the rollback commit.
+
+Task 4 should also update the rollback comments in that kustomization and in the Application to name the marker. Task 4 edits `cluster/` anyway; fix round 1 left `cluster/` untouched.
+
 Pre-approved (Answers, Task 3). All three conditions held before the push.
 
 S1 (read-only, 18:25Z):

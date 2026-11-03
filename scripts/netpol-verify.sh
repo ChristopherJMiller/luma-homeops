@@ -4,12 +4,17 @@
 #
 #   scripts/netpol-verify.sh idle
 #
-# Exit 0 = pass, 1 = at least one FAIL, 2 = the check could not run or is
-# meaningless (no cluster access, no agent pods, or policies exist for `idle`).
-# Read-only; safe to run from Monitor.
+# Exit 0 = pass, 1 = at least one FAIL (an answer that does not parse is a FAIL
+# too, never a vacuous pass), 2 = the check could not run or is meaningless (no
+# cluster access, no agent pods, or policies exist for `idle`).
+# Read-only; safe to run from Monitor. scripts/test_netpol_verify.py tests it
+# against a stub kubectl (pre-commit hook `netpol-verify-selftest`).
 #
 # idle -- with zero NetworkPolicies the enforcer must judge nothing (§3.4 item 2,
-# §9.1). For each agent pod it requires:
+# §9.1). Coverage first: ds/kube-network-policies must have
+# desiredNumberScheduled == numberReady == the number of agent pods listed ==
+# the number of PASS rows, so a node whose agent was never created is a FAIL.
+# Then for each agent pod it requires:
 #   - Ready, 0 restarts;
 #   - nfqueue_queue_total{queue="98"} present: the queue is bound;
 #   - nfqueue_packet_id{queue="98"} == 0: the kernel has queued no packet since
@@ -33,7 +38,12 @@ FLAGS=(fail-open=true log-verdicts=deny disable-nri=true nfqueue-id=98 metrics-b
 
 usage() { echo "usage: $0 idle" >&2; exit 2; }
 die() { echo "ERROR: $*" >&2; exit 2; }
+# The cluster answered, but not with what we can judge: a FAIL, not "could not run".
+parse_fail() { echo "FAIL parse: $*"; echo "idle: FAIL (unparseable answer)"; exit 1; }
+count_or_fail() { [[ "$2" =~ ^[0-9]+$ ]] || parse_fail "$1 is '$2', not a count"; }
 kc() { timeout 60 kubectl --request-timeout=50s "$@"; }
+# Length of a list response's .items; errors (so the caller FAILs) when .items is not an array.
+items_len() { jq 'if (.items | type) == "array" then .items | length else error("no .items array") end' "$1" 2>/dev/null; }
 
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 
@@ -46,24 +56,32 @@ metric() {
 is_zero() { awk -v x="$1" 'BEGIN { exit !(x + 0 == 0) }'; }
 
 idle() {
-  local n_np n fail=0
+  local n_np n desired ds_ready rows pass=0 failed=0 fail=0
   kc get networkpolicies -A -o json > "$tmp/np.json" 2>/dev/null || die "cannot list NetworkPolicies; is KUBECONFIG right?"
-  n_np=$(jq '.items | length' "$tmp/np.json")
+  n_np=$(items_len "$tmp/np.json"); count_or_fail "the NetworkPolicy count" "$n_np"
   [ "$n_np" -eq 0 ] || die "policies exist: idle check meaningless ($n_np NetworkPolicies)"
 
   kc -n "$NS" get pods -l "$SELECTOR" -o json > "$tmp/pods.json" 2>/dev/null || die "cannot list pods in $NS"
-  n=$(jq '.items | length' "$tmp/pods.json")
+  n=$(items_len "$tmp/pods.json"); count_or_fail "the agent pod count" "$n"
   [ "$n" -gt 0 ] || die "no kube-network-policies agent pods"
+
+  kc -n "$NS" get daemonset kube-network-policies -o json > "$tmp/ds.json" 2>/dev/null || die "cannot read ds/kube-network-policies in $NS"
+  desired=$(jq -r '.status.desiredNumberScheduled' "$tmp/ds.json" 2>/dev/null); count_or_fail "desiredNumberScheduled" "$desired"
+  ds_ready=$(jq -r '.status.numberReady' "$tmp/ds.json" 2>/dev/null); count_or_fail "numberReady" "$ds_ready"
 
   # name node ready restarts
   jq -r '.items[] | [ .metadata.name, (.spec.nodeName // "-"),
       ([.status.conditions[]? | select(.type == "Ready") | .status][0] // "False"),
-      ([.status.containerStatuses[]?.restartCount] | add // 0) ] | @tsv' "$tmp/pods.json" > "$tmp/pods.tsv"
+      ([.status.containerStatuses[]?.restartCount] | add // 0) ] | @tsv' "$tmp/pods.json" > "$tmp/pods.tsv" 2>/dev/null \
+    || parse_fail "the agent pod list"
+  rows=$(wc -l < "$tmp/pods.tsv")
+  [ "$rows" -eq "$n" ] || parse_fail "$rows pod rows for $n pods"
 
   while IFS=$'\t' read -r pod node ready restarts; do
     local why=() m="$tmp/$pod.metrics" log="$tmp/$pod.log" v f total drops pid="?" packets="?" fl="?"
     [ "$ready" = True ] || why+=("not-ready")
-    [ "$restarts" -eq 0 ] || why+=("restarts=$restarts")
+    if [[ ! "$restarts" =~ ^[0-9]+$ ]]; then why+=("restarts-unparseable=$restarts")
+    elif [ "$restarts" -ne 0 ]; then why+=("restarts=$restarts"); fi
 
     if kc get --raw "/api/v1/namespaces/$NS/pods/$pod:9080/proxy/metrics" > "$m" 2>/dev/null; then
       total=$(metric "$m" kube_network_policies_nfqueue_queue_total "queue=$QUEUE")
@@ -98,11 +116,23 @@ idle() {
 
     if [ "${#why[@]}" -eq 0 ]; then
       echo "PASS $node $pod packet_id=$pid packets=$packets restarts=$restarts flags=$fl"
+      pass=$((pass + 1))
     else
       echo "FAIL $node $pod ${why[*]}"
-      fail=1
+      failed=$((failed + 1))
     fi
   done < "$tmp/pods.tsv"
+
+  # Coverage: every scheduled agent is Ready, listed and judged, and every row PASSed.
+  if [ "$desired" -ne "$n" ] || [ "$ds_ready" -ne "$n" ]; then
+    echo "FAIL coverage desiredNumberScheduled=$desired numberReady=$ds_ready pods=$n"
+    fail=1
+  fi
+  if [ $((pass + failed)) -ne "$n" ]; then
+    echo "FAIL coverage judged=$((pass + failed)) pods=$n"
+    fail=1
+  fi
+  [ "$failed" -eq 0 ] && [ "$pass" -eq "$n" ] && [ "$pass" -eq "$desired" ] || fail=1
 
   if [ "$fail" -eq 0 ]; then
     echo "idle: PASS ($n agents, 0 NetworkPolicies)"
