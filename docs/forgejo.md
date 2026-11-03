@@ -93,9 +93,10 @@ so `realliance` members can't read it and maintainers can't edit its branch prot
 
 **Still open — the GitHub mirror.** The inventory is push-mirrored to the private GitHub repo
 `realliance/forge`, and the GitHub `realliance` org's base permission is **read**, so every GitHub
-org member can read it (and `teams.yaml` will name hidden orgs). Before the first hidden org, either
-set that base permission to none (granting teams explicit repo access), or move the mirror out of
-that org (decision for Chris). Always: keep every hidden org's name out of every public repo,
+org member can read it (and `teams.yaml` will name hidden orgs). **Decided (Chris, 2026-11-03):** GitHub mirroring maps each Forgejo org one-to-one to a configured
+GitHub org (the later forge-bot mirroring job), so `realliance-ops` mirrors into its own GitHub org,
+not `realliance`. Before the first hidden org, move the inventory's push mirror to that org; the
+`realliance` base permission stays as it is. Always: keep every hidden org's name out of every public repo,
 including this one.
 
 ## Mail

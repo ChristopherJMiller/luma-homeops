@@ -36,8 +36,9 @@ unprivileged runner on galaxy, publishing to the forge's own registry.
 
 ## Non-goals (each gets its own spec later)
 
-- **Later forge-bot jobs:** GitHub mirroring (using the GitHub username linked in the SSO), repo
-  defaults, a nightly `repos.yaml` snapshot, and the CI runner scaler.
+- **Later forge-bot jobs:** GitHub mirroring (using the GitHub username linked in the SSO; each Forgejo
+  org maps one-to-one to a configured GitHub org, e.g. `realliance-ops` to its own GitHub org — Chris,
+  2026-11-03), repo defaults, a nightly `repos.yaml` snapshot, and the CI runner scaler.
 - **The "forge CI" project:**
   - Azure small/medium/large runner VMs and their scaler (a warm-standby start/stop watcher, or
     KEDA + AKS), and ephemeral runners.
