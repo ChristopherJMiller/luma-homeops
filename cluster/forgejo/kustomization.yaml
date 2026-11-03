@@ -12,6 +12,7 @@ resources:
   - app-ini.yaml
   - oidc.yaml
   - admin.yaml
+  - signing.yaml
   - pvcs.yaml
   - psql.yaml
   - backup-rbac.yaml

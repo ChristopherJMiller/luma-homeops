@@ -60,6 +60,12 @@ spec:
           - name: repos
             mountPath: /repos
 
+        # Forgejo's own GPG key "Realliance Forge <git@realliance.net>" (ID 50ACEA5F43099C00). Without
+        # it Forgejo refuses every merge into a branch that requires signed commits ("won't sign: nokey").
+        signing:
+          enabled: true
+          existingSecret: forgejo-signing # key privateKey; canonical copy in sso-secrets forge/signing-key.asc
+
         ingress:
           enabled: true
           className: traefik
@@ -176,6 +182,15 @@ spec:
               SMTP_PORT: 465
               USER: resend
               FROM: Realliance Forge <git@realliance.net>
+            repository.signing:
+              SIGNING_KEY: 50ACEA5F43099C00
+              SIGNING_NAME: Realliance Forge
+              SIGNING_EMAIL: git@realliance.net
+              # Forgejo's defaults also demand Forgejo-local 2FA ("twofa"); MFA is enforced at the SSO
+              # instead, so these drop it and keep the rest.
+              MERGES: pubkey, basesigned, commitssigned
+              CRUD_ACTIONS: pubkey, parentsigned
+              INITIAL_COMMIT: always
             cron.git_gc_repos:
               ENABLED: false # full repacks are the one bulk write repos make on the HDD pool
   destination:
