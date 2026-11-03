@@ -166,8 +166,19 @@ The fixture is `realliance/restore-drill-fixture` (one 1 MiB LFS object) — kee
 ## Changing the structure
 
 Orgs, teams, Owners and critical repos: PR to `realliance/forge` (signed commits; direct pushes to
-`main` are blocked; only Owners may merge or approve), merged **fast-forward only** — Forgejo has no
-signing key, so a merge commit would be unsigned and refused — then an operator applies (README there). The provider cannot import orgs, so
+`main` are blocked; only Owners may merge or approve; fast-forward is the only merge style, so the
+signed commits land as they are), then an operator applies (README there). From a laptop:
+`fj -H git.realliance.net pr merge realliance/forge#<n> -d`.
+
+**Forgejo's signing key** "Realliance Forge <git@realliance.net>" (ID `50ACEA5F43099C00`; private
+key in `sso-secrets` `forge/signing-key.asc`, sealed as `forgejo-signing`) signs merges and web
+edits. Without it Forgejo refuses *every* merge into a branch that requires signed commits
+("won't sign: nokey"). `[repository.signing]` drops Forgejo's default 2FA condition — MFA is at the SSO.
+
+**`fj` (forgejo-cli) login:** `fj -H git.realliance.net auth login` signs in through the SSO in a
+browser. It needs the public OAuth app "forgejo-cli (fj)" (owned by `forgejo-admin`, redirect
+`http://127.0.0.1:26218/`) and this line in `~/.config/forgejo-cli/client_ids`:
+`git.realliance.net 41ec7227-eca9-435c-a904-1785bcae60b9` (a public client id, not a secret). The provider cannot import orgs, so
 orgs are always created by that repo. Personal and everyday repos are created freely.
 
 `realliance/forge` is mirrored to `github.com/realliance/forge` (private) by a Forgejo SSH push
