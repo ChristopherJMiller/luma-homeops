@@ -53,9 +53,9 @@ site and **pushes the output to the `pages` branch**. The pages server only ever
 >   Certificate (existing issuer and token). Pages Ingresses carry no `spec.tls`, like every other app;
 >   no separate certificate.
 
-- **Server: git-pages** (codeberg.org/git-pages/git-pages), pinned to a release by digest — **0.10.1** (security release; Chris waived the 2-week rule for it, 2026-11-03), not (v0.10.1 was
-  2026-10-28; pre-1.0, breaking changes and three security-fix releases in 2026 → pin by digest, read the
-  changelog on every bump, Renovate never automerges it). It is the only maintained server found that
+- **Server: git-pages** (codeberg.org/git-pages/git-pages), pinned by digest to **0.10.1** (2026-10-28, a security release; Chris waived the 2-week pin-age rule
+  for it on 2026-11-03). It is pre-1.0 with breaking changes and three security-fix releases in 2026, so
+  every bump reads the changelog and Renovate never automerges it. It is the only maintained server found that
   serves branches via a Forgejo webhook and has a `[[wildcard]]` mode for `<owner>.<domain>/<repo>`; its
   state can live in S3-compatible storage. Codeberg's older pages-server is in maintenance mode.
 - **TLS** terminates at Traefik with a dedicated wildcard certificate for `realliance.page` and
@@ -74,8 +74,8 @@ site and **pushes the output to the `pages` branch**. The pages server only ever
 - **Storage:** git-pages state in a new private B2 bucket in the Realliance B2 account (as the forge's
   objects), application key limited to that bucket, no `deleteFiles` unless git-pages needs it for
   site updates (the builder checks and states which). Never the SMR Ceph pool for site content.
-- **Quota:** a metric of each site's stored size (from git-pages if it exposes one, otherwise from its
-  B2 prefix) and an alert above 500 MB; an Owner asks the author to trim or takes the site down.
+- **Quota:** git-pages' `max-site-size` at its 128 MB default (decision 6). A publish over it is
+  refused and the previous version keeps serving; a failed update raises an alert.
 - **Headers:** no `Set-Cookie`; a conservative default set (`X-Content-Type-Options: nosniff`,
   `Referrer-Policy`, HSTS on `realliance.page` without `includeSubDomains` preload until the PSL entry).
   Sites may add their own headers only if git-pages supports it safely.
@@ -109,7 +109,7 @@ browsers pick it up over weeks to months.
 2. `alice/pages` serves `https://alice.realliance.page/`.
 3. A push to any other branch changes nothing.
 4. A private repo's `pages` branch publishes nothing.
-5. A site whose stored size passes 500 MB raises the quota alert.
+5. A publish over 128 MB is refused, the previous version keeps serving, and the update-failure alert fires.
 6. User B cannot make content appear on `alice.realliance.page` (no write access to Alice's repos ⇒ no
    site); verified, not assumed.
 7. No response from `*.realliance.page` carries `Set-Cookie`.
