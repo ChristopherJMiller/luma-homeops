@@ -40,3 +40,20 @@
   - G3: the edge snapshot has 46 lines (scratch `edge-t5-before.txt`). It is identical to Task 1's `edge-new.txt` once `cert=` is stripped and Dex values are normalised. The `realliance.page` rows still show `000 err=60`.
   - G4: no pods outside Running/Succeeded.
 - Cross-plan: no netpol Gate G window is open (that plan is paused until 2026-11-04T18:35Z), and forge-bot is in pre-T16 code review, so no apply or drill window is open.
+
+### Task 5 - deploy (Steps 9-10)
+
+- 2026-11-04: Chris approved the Task 5 STOP. `git pull --rebase` was a no-op (origin unchanged), and a fresh G1/G4 at 01:30:01Z was clean. Pushed ce1cc569 and 77ff5062 at 01:30:15Z.
+- At 01:30:42Z app `pages` was Synced/Healthy and both pods were Running 1/1 with 0 restarts, both on `bottom`. That is about 27 s from the push.
+  - Still 0 restarts at 5m20s.
+  - Idle use: git-pages 7Mi, relay 2Mi.
+- git-pages log: `memlimit: was 8.0 EB now 512.0 MB`, then `s3: enumerate manifests`, `existence: refreshed with 0 sites` and `serve: ready`. 0 lines match `error`, and B2 auth works.
+- `scripts/check-prometheus-rules.sh` exited 0. `pages-alerts` is loaded: all 6 rules have health ok and state inactive.
+- `up{namespace="pages"}` returns two series, git-pages (endpoint metrics) and pages-relay (endpoint http), both 1.
+- Memory requests after the deploy: top 86 %, middle 85 %, bottom 87 %. Other pods moved in the meantime, so bottom's figure is lower than before the deploy.
+- Gate G after (01:31:19Z):
+  - G1: 3 nodes Ready. Ceph HEALTH_OK, with 145 pgs active+clean (two of them scrubbing).
+  - G2: 60 apps (+`pages`, Synced/Healthy). Only `rook` is Degraded.
+  - G3: `edge-t5-after.txt` is identical to `edge-t5-before.txt` after normalisation.
+  - G4: no pods outside Running/Succeeded.
+- No rollback trigger fired.
