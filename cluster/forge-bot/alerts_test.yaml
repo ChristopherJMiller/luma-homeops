@@ -1,0 +1,289 @@
+# promtool unit tests for alerts.yaml. TestAlertRulesPromtool runs them when
+# promtool is on PATH:
+#   nix shell nixpkgs#prometheus.cli --command go test ./internal/metrics
+# Task 16 can run the same tests against the deployed PrometheusRule the way
+# luma-homeops scripts/test-backup-alerts.sh does (yq '.spec').
+rule_files:
+  - alerts.yaml
+evaluation_interval: 1m
+tests:
+  # a withholding finding for two cycles (10 min), then cleared: no alert
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_findings{job="teams",kind="group_unread"}'
+        values: '0 1x9 0x20'
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: ForgeBotJobWithheld
+        exp_alerts: []
+  # held for three cycles: fires once 11 min have passed
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_findings{job="teams",kind="group_unread"}'
+        values: '0 1x20'
+      - series: 'forge_bot_findings{job="access",kind="owners_unknown"}'
+        values: '0 1x20'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: ForgeBotJobWithheld
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: ForgeBotJobWithheld
+        exp_alerts:
+          - exp_labels: {severity: warning, job: teams, kind: group_unread}
+            exp_annotations:
+              summary: "forge-bot job teams plans nothing: group_unread (docs/forgejo.md#forge-bot)"
+      - eval_time: 12m
+        alertname: ForgeBotOwnersUnknown
+        exp_alerts:
+          - exp_labels: {severity: critical, job: access, kind: owners_unknown}
+            exp_annotations:
+              summary: "forge-bot sees no Owners, so access withholds every loss, offboarding included (docs/forgejo.md#forge-bot)"
+  # the breaker pages only for a job in apply
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_breaker_tripped{job="access"}'
+        values: '1x5'
+      - series: 'forge_bot_job_mode{job="access"}'
+        values: '2x5'
+      - series: 'forge_bot_breaker_tripped{job="admin"}'
+        values: '1x5'
+      - series: 'forge_bot_job_mode{job="admin"}'
+        values: '1x5'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ForgeBotBreakerTripped
+        exp_alerts:
+          - exp_labels: {severity: critical, job: access}
+            exp_annotations:
+              summary: "forge-bot held back a bulk change in access; acknowledge with allow_bulk_until or fix the SSO (docs/forgejo.md#forge-bot)"
+  # review M4: an Owner finding pages only from a job in apply; from dry-run
+  # it is a weekday warning under its own name, so no route can page it
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_findings{job="access",kind="owner_needs_action"}'
+        values: '1x5'
+      - series: 'forge_bot_job_mode{job="access"}'
+        values: '2x5'
+      - series: 'forge_bot_findings{job="admin",kind="owner_needs_action"}'
+        values: '1x5'
+      - series: 'forge_bot_job_mode{job="admin"}'
+        values: '1x5'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ForgeBotOwnerNeedsAction
+        exp_alerts:
+          - exp_labels: {severity: critical, job: access, mode: apply}
+            exp_annotations:
+              summary: "An Owner would be prohibited or demoted by access; forge-bot never does that itself (docs/forgejo.md#forge-bot)"
+      - eval_time: 1m
+        alertname: ForgeBotOwnerNeedsActionDryRun
+        exp_alerts:
+          - exp_labels: {severity: warning, job: admin, mode: dry-run}
+            exp_annotations:
+              summary: "In dry-run, admin would prohibit or demote an Owner; fix before it goes to apply (docs/forgejo.md#forge-bot)"
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_findings{job="admin",kind="owner_needs_action"}'
+        values: '1x5'
+      - series: 'forge_bot_job_mode{job="admin"}'
+        values: '1x5'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: ForgeBotOwnerNeedsAction
+        exp_alerts: []
+  # write_unaudited is one-shot: one cycle of 1 alerts, and stays up 30 min
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_findings{job="selfcheck",kind="write_unaudited"}'
+        values: '0x4 1x4 0x60'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: ForgeBotSelfCheckBlind
+        exp_alerts:
+          - exp_labels: {severity: warning, reason: write_unaudited, job: selfcheck, kind: write_unaudited}
+            exp_annotations:
+              summary: "A forge-bot picture write left no Keycloak admin event; the self-check may be blind (docs/forgejo.md#forge-bot)"
+      - eval_time: 45m
+        alertname: ForgeBotSelfCheckBlind
+        exp_alerts: []
+  # review I2: an hour of failed admin-event reads with a pending record:
+  # events_unread every cycle, write_unaudited once at +15 min, both alert
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_findings{job="selfcheck",kind="events_unread"}'
+        values: '1x60'
+      - series: 'forge_bot_findings{job="selfcheck",kind="write_unaudited"}'
+        values: '0x14 1x4 0x45'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: ForgeBotSelfCheckBlind
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: ForgeBotSelfCheckBlind
+        exp_alerts:
+          - exp_labels: {severity: warning, reason: events_unread, job: selfcheck, kind: events_unread}
+            exp_annotations:
+              summary: "forge-bot cannot read its own Keycloak admin events; unexpected SSO writes go unseen (docs/forgejo.md#forge-bot)"
+          - exp_labels: {severity: warning, reason: write_unaudited, job: selfcheck, kind: write_unaudited}
+            exp_annotations:
+              summary: "A forge-bot picture write left no Keycloak admin event; the self-check may be blind (docs/forgejo.md#forge-bot)"
+  # re-review N2: one failed read is never blind, even when the next cycle
+  # runs late and the gauge holds for 6 min (jitter extreme plus scrape lag)
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_findings{job="selfcheck",kind="events_unread"}'
+        values: '0 1x6 0x20'
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: ForgeBotSelfCheckBlind
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: ForgeBotSelfCheckBlind
+        exp_alerts: []
+  # two failed reads in a row hold the gauge at least 2 x 4m30s = 9 min
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_findings{job="selfcheck",kind="events_unread"}'
+        values: '0 1x9 0x20'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: ForgeBotSelfCheckBlind
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: ForgeBotSelfCheckBlind
+        exp_alerts:
+          - exp_labels: {severity: warning, reason: events_unread, job: selfcheck, kind: events_unread}
+            exp_annotations:
+              summary: "forge-bot cannot read its own Keycloak admin events; unexpected SSO writes go unseen (docs/forgejo.md#forge-bot)"
+  # an unexpected write fires at once; the counter starts at 0
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_unexpected_sso_writes_total'
+        values: '0 0 1 1 1 1'
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: ForgeBotUnexpectedSSOWrite
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "forge-bot's Keycloak client made a write that is not its own picture write (docs/forgejo.md#forge-bot)"
+  # review M5: a new pod whose first cycle saw the write: the counter's first
+  # sample is already 1, so increase() is 0; the cycle's finding still fires
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_unexpected_sso_writes_total'
+        values: '1x10'
+      - series: 'forge_bot_findings{job="selfcheck",kind="unexpected_sso_write"}'
+        values: '1x4 0x6'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: ForgeBotUnexpectedSSOWrite
+        exp_alerts:
+          - exp_labels: {severity: critical}
+            exp_annotations:
+              summary: "forge-bot's Keycloak client made a write that is not its own picture write (docs/forgejo.md#forge-bot)"
+  # review M7: three 5-min cycles of planned changes in apply fire NotConverging
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_planned_changes{job="access"}'
+        values: '0 1x14 0x10'
+      - series: 'forge_bot_job_mode{job="access"}'
+        values: '2x25'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: ForgeBotNotConverging
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: ForgeBotNotConverging
+        exp_alerts:
+          - exp_labels: {severity: warning, job: access}
+            exp_annotations:
+              summary: "forge-bot job access keeps planning changes it does not converge (docs/forgejo.md#forge-bot)"
+  # review M7: stale fires 30 min after the last complete cycle (here at t=0)
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_cycle_last_success_timestamp'
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: ForgeBotStale
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: ForgeBotStale
+        exp_alerts:
+          - exp_labels: {severity: warning, reason: last_success_old}
+            exp_annotations:
+              summary: "No forge-bot cycle with complete reads in 30 min (docs/forgejo.md#forge-bot)"
+  # never succeeded at all: also 30 min
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_read_ok{source="sso"}'
+        values: '0x40'
+    alert_rule_test:
+      - eval_time: 29m
+        alertname: ForgeBotStale
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: ForgeBotStale
+        exp_alerts:
+          - exp_labels: {severity: warning, reason: never_completed}
+            exp_annotations:
+              summary: "No forge-bot cycle with complete reads in 30 min (docs/forgejo.md#forge-bot)"
+      - eval_time: 19m
+        alertname: ReallianceSSOUnreadable
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: ReallianceSSOUnreadable
+        exp_alerts:
+          - exp_labels: {severity: critical, source: sso}
+            exp_annotations:
+              summary: "forge-bot cannot read Realliance SSO completely; no job writes (docs/forgejo.md#forge-bot)"
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_inventory_ok{check="teams"}'
+        values: '0x20'
+      - series: 'forge_bot_inventory_ok{check="signature"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: ForgeBotInventoryInvalid
+        exp_alerts:
+          - exp_labels: {severity: warning, check: teams}
+            exp_annotations:
+              summary: "The inventory's teams is invalid; the teams job or the override is skipped (docs/forgejo.md#forge-bot)"
+      - eval_time: 11m
+        alertname: ForgeBotInventoryUntrusted
+        exp_alerts: []
+  # final review M3: account-level skips persisting three cycles alert
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_findings{job="profile",kind="email_conflict"}'
+        values: '0 1x20'
+      - series: 'forge_bot_findings{job="access",kind="duplicate_login_name"}'
+        values: '0 1x9 0x10'
+    alert_rule_test:
+      - eval_time: 11m
+        alertname: ForgeBotAccountSkipped
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: ForgeBotAccountSkipped
+        exp_alerts:
+          - exp_labels: {severity: warning, job: profile, kind: email_conflict}
+            exp_annotations:
+              summary: "forge-bot job profile skips part of an account's sync: email_conflict (docs/forgejo.md#forge-bot)"
+  # concurrent_edit is raised once per raced write: any occurrence alerts
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_findings{job="avatar",kind="concurrent_edit"}'
+        values: '0x4 1x4 0x60'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: ForgeBotConcurrentEdit
+        exp_alerts:
+          - exp_labels: {severity: warning, job: avatar, kind: concurrent_edit}
+            exp_annotations:
+              summary: "A forge-bot picture write raced a profile change; check the profile was not overwritten (docs/forgejo.md#forge-bot)"
+      - eval_time: 45m
+        alertname: ForgeBotConcurrentEdit
+        exp_alerts: []

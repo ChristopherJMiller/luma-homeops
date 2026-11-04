@@ -1,0 +1,14 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: forge-bot-keycloak
+  namespace: forge-bot
+spec:
+  encryptedData:
+    keycloak-client-secret: AgCfHWNck954U6mOvwLNt8gsh81SrCf+synrkUnhpw1/LuF2HmLScSGlJQlzcMfFAext1C9gkKOpVNq3wle26aDc8VxyZZUagsKXYVQYLIB7KPDjWuzx0xE85Rxi4srbfFcOKp9v5ztTvLqrPdfbKbpZYpgl4xtb0hZ/H1+6doGmaxr6sSauAEn0w4YQMKswXdGfy4qGt2TDFsiXS8aHSYeSZT0x809aQ7quQQoC8eXz8TRy0H1wANVRKXAD8eWd7vmfpjOPb+cqr87DiuwJgnX+kS/Qr+7Qf+F0yhPN1IIwDv83WGthYtYqaGSpak98Dk6mgcakklbOk9AVVlhD6m5Tg6FA1BjJbVWYi3avfL2H9s6l3/33UQQusLbX//lVsh5FrhZT9CgLQUcaMQU/KiCi8H5LelmKQkqvDpurGgNRj0eINGmHBh+1O/tnXvOGdSFjsbGCVJCY5aea78zd69wK61JR8olEQCR/hdnF+N2af6yXzGdKiCgefb2Vhy0/66LPNiIuMOoljKb2UuTMDNvQlmm5TZGSdwZn7Wwz0T76pfGqstTDk+6lY2J8zQo2sM5a51NYENJ+0SPuihVUDOysYYPG8OIjjTPfK/gs0OJh/6o/WuEVhkJbqzVo6/bkpvdTj5B00X2Ywc8CNHYovq8LvZw37srKvyEXVizwRLdQSrA6LLRfDyMgSprLBjdNAlgqEfBb4FVZ5CzViXUsoTA71VFDm7WfZBmOIVo37tNIOI7eR+q7lNvt8TaNbe33EM0rMy/OHFeOZjyy7jZOnSeo
+  template:
+    metadata:
+      name: forge-bot-keycloak
+      namespace: forge-bot
+    type: Opaque

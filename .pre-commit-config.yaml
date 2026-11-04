@@ -60,6 +60,17 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_pages_manifests.py
         pass_filenames: false
         files: ^(cluster/(pages|traefik|dns|cert-manager|applications)/.*|cloudflare/dns/.*\.tf|images/pages-relay/relay\.go|scripts/test_pages_manifests\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
+      # forge-bot's alerts: the PrometheusRule is a copy of the pinned release's
+      # internal/metrics/alerts.yaml (scripts/sync-forge-bot-alerts.sh writes it).
+      # promtool lint, forge-bot's own promtool unit tests (alerts_test.yaml; its CI
+      # has no promtool), and both copies equal to the pinned commit's files. A
+      # re-pin in deployment.yaml without a re-sync fails here.
+      - id: forge-bot-alerts
+        name: forge-bot alert rules (promtool lint + unit tests, in sync with the pinned release)
+        language: system
+        entry: scripts/test-forge-bot-alerts.sh
+        pass_filenames: false
+        files: ^(cluster/forge-bot/(prometheusrule|alerts_test|deployment)\.yaml|scripts/(test|sync)-forge-bot-alerts\.sh)$
       # scripts/netpol-verify.sh against a stub kubectl: a partial pod list or an
       # unparseable answer must FAIL, never pass vacuously.
       - id: netpol-verify-selftest
@@ -118,6 +129,9 @@ repos:
             # stripping it can make the patch unapplyable.
             |(patches|images)/.*\.patch
             |cluster/home-assistant/(packages|blueprints|dashboards|themes)/.*\.yaml
+            # forge-bot's promtool tests, copied byte for byte from the pinned release;
+            # scripts/test-forge-bot-alerts.sh compares the bytes (yamlfmt would add ---).
+            |cluster/forge-bot/alerts_test\.yaml
             # Vendored byte-identical from upstream v1.1.3; a test checks its sha256.
             |cluster/kube-network-policies/upstream-install\.yaml
           )$

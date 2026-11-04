@@ -1,0 +1,14 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: forge-bot-forgejo
+  namespace: forge-bot
+spec:
+  encryptedData:
+    forgejo-token: AgDC/gFacZwYPbR18wvZl/s+ZsrkozttlTTnbYzNSVYuE4TCbi0FyUVFFYEkDV2CQn/Oi0QqqeP3psmI+TnZcUhdgDH3ftSkOX/ZYmtea1QBQDWgAJHvrqwUNKHZjRRN828V/MzPiXcQEvtxA8+vuenCRkiWEkuXQiLNJpWQXXuOv4gqjCJDlORADq/ykhsULhwTKwF8fJGKz3/nPsSzAnix4b1kVIj3gz3LMFxX0EGxUE1vQ4IAAsnEVib8dXcMcvSnux8xcCzsRDEzlJ44UfeStMkhyPnkJF9JsGS4yaHNgvpqvQlNIrOEBYZ83Nb0XHsDJneuhnfIvJ2EU8c4RxtzhQZMYGgmjTN1rU9R5I5Qc2nJ4EehNkrlevCI3fOorq0wP11s6iv6Fxr1S+TRhCrgWDYpHGsM9OHX1kj2NeA679D4lbAZYdJraD5s3yWe3fC9ahuqfdWZRizLB4d3+B/krjmaquSRbTjL+rQqDNmj6w0obvPQH+qsc1/ZBGsNsLjWtztmvkAQidU5wJlwYqIV/yyjyLsCTtWAd80AHSknVqQcNOKn0Y1EM9/gs9EnmBBpVJMmHTrwgGaya+7D5tlVT6Y22Blh8EGm3QVZBZK3nUpimnwfUYou0mdg6yyHHvN3EvIyqUqvvjX56Dv8lq8cgl5IUym6MA+oTBZx44eB/2HF0Wnh+GSAHjDhbpkiHICaTPY/bZvIp/SBWuaszE5Jp76GVWAJUIoU9zbFnjKFChd2ju75NEma
+  template:
+    metadata:
+      name: forge-bot-forgejo
+      namespace: forge-bot
+    type: Opaque

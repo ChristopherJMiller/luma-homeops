@@ -1,0 +1,128 @@
+---
+# forge-bot: reconciles the Realliance forge (Forgejo) with Realliance SSO (Keycloak) every
+# 5 min ± 30 s. Every job is in dry-run until config.yaml says otherwise. Code, README and alert
+# rules: git.realliance.net/realliance/forge-bot. Runbook: docs/forgejo.md#forge-bot.
+#
+# stdout is slog JSON plus the audit trail, and an email or name change carries the old and new
+# value, so it must reach private sinks only: fluent-bit ships it to the router's syslog and Azure
+# Log Analytics, both Chris's. No log or audit line carries a token or secret.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forge-bot
+  labels:
+    app.kubernetes.io/name: forge-bot
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # never two bots: cycles must not overlap, and the self-check counts its own writes
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forge-bot
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forge-bot
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # SIGTERM lets the write in flight finish (at most 25 s), then the HTTP server gets 5 s to
+      # shut down; 35 s leaves 5 s spare before the SIGKILL.
+      terminationGracePeriodSeconds: 35
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532 # distroless static-debian12:nonroot
+        runAsGroup: 65532
+        # The projected secrets are 0400 and owned by root; fsGroup makes kubelet give them group
+        # 65532 plus group read. Without it uid 65532 cannot read them (pre-flight #2).
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: forge-bot
+          # Built by forge-bot's CI from the reviewed release commit (v0.1.0 = 9be4857); an OCI
+          # manifest, amd64. A new image never deploys itself: re-pin here after review, and re-run
+          # scripts/sync-forge-bot-alerts.sh for the same commit.
+          image: git.realliance.net/realliance/forge-bot:sha-9be4857@sha256:6b42aa63fc579f46e79df488a29846ef9b1c7defcd0f425fa40d5e6745218827
+          args:
+            - --config=/etc/forge-bot/config/config.yaml
+          env:
+            # Soft heap limit for the Go GC, 3/4 of the memory limit (sizing below).
+            - name: GOMEMLIMIT
+              value: 192MiB
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          # /healthz is served only once the startup source check (every account on the SSO login
+          # source listed, each login_name a unique OIDC subject) has passed; that check exits the
+          # process on failure, and each request has a 30 s timeout. Allow it 5 min.
+          startupProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          # 503 after three intervals (15 min) without a cycle whose reads all completed.
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 2
+          # Memory, from the response caps in the code at 9be4857:
+          # - Steady state is tens of MiB: the largest real response is the single all-users SSO
+          #   read, about 2 KiB per user (well under 1 MiB for this realm). Request 32Mi.
+          # - Forgejo caps every body at 16 MiB and errors above it. Go 1.26's io.ReadAll holds
+          #   ~2.3x the body at its peak (growing chunks, then one exact-size copy), and decoding
+          #   adds ~2x more: ~70 MiB.
+          # - Keycloak reads at most 64 MiB (internal/keycloak maxBody) and truncates the rest,
+          #   which then fails to decode: a failed SSO read, so no job writes and
+          #   ReallianceSSOUnreadable fires. Reading 64 MiB peaks at ~150 MiB; a valid body that
+          #   size (~30,000 users) would decode at ~200 MiB.
+          # 256Mi lets each cap end as the designed read error instead of an OOM kill (final review
+          # M10), with GOMEMLIMIT making the GC work hard before the kernel does. Limits do not
+          # count toward the node's memory requests.
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 256Mi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/forge-bot/config
+              readOnly: true
+            - name: keyring
+              mountPath: /etc/forge-bot/keyring
+              readOnly: true
+            - name: secrets
+              mountPath: /etc/forge-bot/secrets
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: forge-bot-config # configMapGenerator: hash-suffixed, so a mode change restarts the pod
+        - name: keyring
+          configMap:
+            name: forge-bot-keyring # configMapGenerator: owners.asc + fingerprints.txt
+        - name: secrets
+          projected:
+            defaultMode: 256 # 0400
+            sources:
+              - secret:
+                  name: forge-bot-forgejo # SealedSecret forgejo-token.yaml
+                  items:
+                    - key: forgejo-token
+                      path: forgejo-token
+              - secret:
+                  name: forge-bot-keycloak # SealedSecret keycloak.yaml
+                  items:
+                    - key: keycloak-client-secret
+                      path: keycloak-client-secret

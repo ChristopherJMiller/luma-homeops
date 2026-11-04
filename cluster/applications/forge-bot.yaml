@@ -1,0 +1,26 @@
+---
+# forge-bot: reconciles the Realliance forge (Forgejo) with Realliance SSO every 5 min, every job
+# in dry-run until cluster/forge-bot/config.yaml moves it. Manifests in cluster/forge-bot; runbook
+# docs/forgejo.md#forge-bot.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forge-bot
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/forge-bot
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forge-bot
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

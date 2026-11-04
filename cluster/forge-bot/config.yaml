@@ -1,0 +1,40 @@
+---
+# forge-bot's configuration: the Config of internal/config, in snake_case; unknown keys are refused.
+# It becomes the hash-suffixed ConfigMap forge-bot-config, so any change here restarts the pod.
+# Public: no secret and no hidden org, team or group name. The two secrets are files the bot reads
+# from /etc/forge-bot/secrets (SealedSecrets forgejo-token.yaml and keycloak.yaml).
+# URLs are canonical (lower-case host, no default port): both clients pin the exact host.
+# Move one job at a time from dry-run to apply, and watch a cycle (docs/forgejo.md#forge-bot).
+sso:
+  url: https://sso.realliance.net
+  realm: realliance
+  client_id: forge-bot # master-realm service client
+  client_secret_file: /etc/forge-bot/secrets/keycloak-client-secret
+  access_group: /apps/forgejo
+  admin_group: /forgejo-admins
+forgejo:
+  # The in-cluster Service (Forgejo pods, TCP 3000), never the public name through the router.
+  url: http://forgejo-http.forgejo.svc.cluster.local:3000
+  public_url: https://git.realliance.net # only builds avatar URLs (<public_url>/<login>.png); never dialled
+  token_file: /etc/forge-bot/secrets/forgejo-token
+  source_id: 1 # the `realliance` OAuth2 login source (`forgejo admin auth list`, 2026-11-04)
+inventory:
+  repo: realliance-ops/forge
+  branch: main
+  keyring: /etc/forge-bot/keyring/owners.asc
+  fingerprints: /etc/forge-bot/keyring/fingerprints.txt
+interval: 5m
+jitter: 30s
+modes:
+  access: dry-run
+  admin: dry-run
+  teams: dry-run
+  profile: dry-run
+  avatar: dry-run
+limits:
+  # loss_fraction is deliberately absent so the code default, exactly 1/3, applies. A decimal such
+  # as 0.33 would lower the loss cap for 9 people from 3 to 2.
+  loss_people: 3
+  grants: 10
+  profile: 25
+listen: ":8080"

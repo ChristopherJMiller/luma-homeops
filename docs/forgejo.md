@@ -99,6 +99,34 @@ not `realliance`. Before the first hidden org, move the inventory's push mirror 
 `realliance` base permission stays as it is. Always: keep every hidden org's name out of every public repo,
 including this one.
 
+## forge-bot
+
+> **Stub.** The full runbook (each alert, mode changes, the bulk override, offboarding with
+> forge-bot) is written by the forge-bot plan's Task 19. The alert summaries link here.
+
+forge-bot reconciles Forgejo with the SSO every 5 min ± 30 s: login (`access`), site admin
+(`admin`), mapped teams (`teams`), email and name (`profile`) and the SSO picture (`avatar`).
+Code, README (what it writes, safety rules, metrics) and alert rules:
+`git.realliance.net/realliance/forge-bot`. Spec:
+`docs/superpowers/specs/2026-11-02-forge-bot-and-ci-design.md`.
+
+- **Manifests:** `cluster/forge-bot/` (Application `forge-bot`). `config.yaml` holds the job
+  modes; every job starts in `dry-run` (plan, audit, meter, write nothing). Move one job at a time
+  to `apply` and watch a cycle. A config change restarts the pod (hash-suffixed ConfigMap).
+- **Trust root:** `cluster/forge-bot/keyring/`: the Owners' public keys and their fingerprints.
+  Only an inventory head signed by one of them is trusted. It lives here, not in the inventory.
+- **Image:** pinned `sha-<7>@sha256:…` in `deployment.yaml`. CI builds every `main` push and
+  tag; nothing deploys until a reviewed re-pin. After a re-pin, run
+  `nix develop --command scripts/sync-forge-bot-alerts.sh` (the PrometheusRule is a copy of the
+  release's `internal/metrics/alerts.yaml`); the `forge-bot-alerts` pre-commit hook runs promtool
+  lint and forge-bot's own alert tests and fails until the copy matches the pinned commit.
+- **Logs:** stdout is the audit trail, with old and new emails and names. It goes only to the
+  private sinks (router syslog, Azure Log Analytics). Read it in a terminal; don't paste it.
+- **Network:** egress is DNS, the Forgejo pods on :3000 and TCP 443 to public addresses (the SSO
+  is behind Cloudflare). The policy is enforced only on nodes where the kube-network-policies
+  agent runs.
+- **Look:** `kubectl -n forge-bot logs deploy/forge-bot`; metrics `forge_bot_*` (README table).
+
 ## Mail
 
 Resend (realliance.net, sender `git@realliance.net`, its own sending-only key). **Notification mail

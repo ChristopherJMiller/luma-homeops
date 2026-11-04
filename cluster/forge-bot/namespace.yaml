@@ -1,0 +1,9 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forge-bot
+  labels:
+    # The forge plan's level (Global Constraints). The pod itself would also pass restricted:
+    # distroless, non-root, read-only root, every capability dropped, RuntimeDefault seccomp.
+    pod-security.kubernetes.io/enforce: baseline
