@@ -11,12 +11,16 @@ Runs as the `forge-fonts` pre-commit hook. The ConfigMaps are rendered with
   * every ConfigMap is under 1 MiB (the Kubernetes cap) and under the 256 KB last-applied
     limit unless it carries the ServerSideApply annotation;
   * fonts apply to every selectable theme: one stylesheet, loaded by custom/header.tmpl,
-    and none of the theme sheets sets a font-family of its own.
+    and none of the theme sheets sets a font-family of its own;
+  * the realliance/brand sync (scripts/sync-brand.sh): every content-hashed file is named after its
+    sha256, the shipped stylesheet is the hashed copy of realliance-fonts.css, and no stale copy is left.
 
 It opens only the paths named here and never reads `*.secret.*` files.
 """
 
 import base64
+import hashlib
+import json
 import posixpath
 import re
 import shutil
@@ -30,6 +34,8 @@ REPO = Path(__file__).resolve().parent.parent
 CUSTOM = REPO / "cluster/forgejo/custom"
 CSS = CUSTOM / "public/assets/css/realliance-fonts.css"
 HEADER = CUSTOM / "templates/custom/header.tmpl"
+LOCK = CUSTOM / "brand.lock.json"
+HASHED = re.compile(r"^(?P<base>.+)\.(?P<h>[0-9a-f]{8})\.(?P<ext>css|woff2|svg|png)$")
 RELEASE = REPO / "cluster/applications/forgejo-release.yaml"
 
 MIB = 1024 * 1024
@@ -37,7 +43,20 @@ LAST_APPLIED_CAP = 256 * 1024
 CDN_HOSTS = ("fonts.googleapis.com", "fonts.gstatic.com", "googleapis.com", "gstatic.com", "cdnjs", "jsdelivr", "unpkg.com", "bunny.net", "typekit")
 
 # Files that make up the customisation, besides the Catppuccin sheets (checked separately).
-OWN_TEXT_FILES = [CSS, HEADER, CUSTOM / "FONTS.md", REPO / "scripts/build-forge-fonts.sh"]
+OWN_TEXT_FILES = [CSS, HEADER, CUSTOM / "FONTS.md", REPO / "scripts/sync-brand.sh"]
+
+
+def shipped_css_name() -> str:
+    """The content-hashed copy of realliance-fonts.css that the <head> hook loads."""
+    m = re.search(r'\{\{AssetUrlPrefix\}\}/css/(realliance-fonts\.[0-9a-f]{8}\.css)', HEADER.read_text())
+    assert m, "header.tmpl must load the hashed realliance-fonts.<8 hex>.css"
+    return m.group(1)
+
+
+def hashed_logo(flavour: str) -> str:
+    names = [p.name for p in (CUSTOM / "public/assets/img").glob(f"logo-{flavour}.*.svg")]
+    assert len(names) == 1, f"want exactly one logo-{flavour}.<8 hex>.svg, found {names}"
+    return names[0]
 
 
 @pytest.fixture(scope="module")
@@ -70,8 +89,8 @@ def test_no_cdn_in_forge_customisation():
     files += [p for p in OWN_TEXT_FILES if p.is_file()]
     assert CSS.is_file() and HEADER.is_file(), "stylesheet and header template must exist"
     for p in set(files):
-        if p.name == "FONTS.md" or p.name == "build-forge-fonts.sh":
-            continue  # these name the hosts only to say we never use them
+        if p.name == "FONTS.md":
+            continue  # names the hosts only to say we never use them
         text = p.read_text(errors="replace").lower()
         for host in CDN_HOSTS:
             assert host not in text, f"{p.relative_to(REPO)} references {host}"
@@ -98,7 +117,7 @@ def test_every_font_face_src_ships(configmaps):
     vols = {v["name"]: v for v in values["extraVolumes"]}
     assert vols["fonts"]["configMap"]["name"] == "forgejo-fonts"
     assert {"configMap": {"name": "forgejo-font-css"}} in vols["themes"]["projected"]["sources"]
-    assert "realliance-fonts.css" in cm_files(configmaps["forgejo-font-css"])
+    assert shipped_css_name() in cm_files(configmaps["forgejo-font-css"])
     css_dir = "/data/gitea/public/assets/css"
     for face in faces:
         assert "font-display:swap" in face.replace(" ", ""), face
@@ -117,7 +136,7 @@ def test_preload_targets_a_shipped_body_font(configmaps):
     assert m, "header.tmpl must preload the body font (with crossorigin)"
     assert m.group(1) in cm_files(configmaps["forgejo-fonts"])
     assert m.group(1).startswith("atkinson-hyperlegible-Regular")
-    assert "{{AssetUrlPrefix}}/css/realliance-fonts.css" in text
+    assert shipped_css_name() in cm_files(configmaps["forgejo-font-css"])
 
 
 def test_header_template_is_mounted():
@@ -199,7 +218,8 @@ def test_attached_segment_radius_does_not_square_the_last_child():
 
 # --- Realliance logo (cluster/forgejo/custom/BRAND.md) ---
 IMG = CUSTOM / "public/assets/img"
-IMG_FILES = ["logo.svg", "logo-mocha.svg", "logo-latte.svg", "logo.png", "favicon.svg", "favicon.png", "apple-touch-icon.png"]
+FIXED_IMG = ["logo.svg", "logo.png", "favicon.svg", "favicon.png", "apple-touch-icon.png"]  # names Forgejo requests
+IMG_FILES = FIXED_IMG + [hashed_logo("mocha"), hashed_logo("latte")]  # + the baked logos, content-hashed
 PNG_SIZES = {"logo.png": (512, 512), "favicon.png": (180, 180), "apple-touch-icon.png": (180, 180)}
 
 
@@ -235,7 +255,44 @@ def test_logo_mounted_at_public_img():
 def test_fixed_themes_swap_to_baked_logos():
     css = CSS.read_text()
     assert "#navbar-logo img{width:auto}" in css
-    for flavour, f in (("latte", "logo-latte.svg"), ("light", "logo-latte.svg"), ("mocha", "logo-mocha.svg"), ("frappe", "logo-mocha.svg"), ("macchiato", "logo-mocha.svg"), ("dark", "logo-mocha.svg")):
-        assert re.search(rf'\[data-theme\*="{flavour}"\][^{{]*\{{content:url\("\.\./img/{f}"\)\}}', css), flavour
-    for f in ("logo-latte.svg", "logo-mocha.svg"):
+    latte, mocha = hashed_logo("latte"), hashed_logo("mocha")
+    for flavour, f in (("latte", latte), ("light", latte), ("mocha", mocha), ("frappe", mocha), ("macchiato", mocha), ("dark", mocha)):
+        assert re.search(rf'\[data-theme\*="{flavour}"\][^{{]*\{{content:url\("\.\./img/{re.escape(f)}"\)\}}', css), flavour
+    for f in (latte, mocha):
         assert (IMG / f).is_file()
+
+
+# --- realliance/brand sync (scripts/sync-brand.sh, cluster/forgejo/custom/brand.lock.json) ---
+ASSETS = CUSTOM / "public/assets"
+
+
+def test_hashed_names_match_their_content():
+    for d in ("css", "fonts", "img"):
+        for p in (ASSETS / d).iterdir():
+            m = HASHED.match(p.name)
+            if m:
+                assert hashlib.sha256(p.read_bytes()).hexdigest()[:8] == m["h"], f"{d}/{p.name}: name does not match its content"
+
+
+def test_shipped_stylesheet_is_the_hashed_copy_of_the_source():
+    assert (ASSETS / "css" / shipped_css_name()).read_bytes() == CSS.read_bytes(), (
+        "realliance-fonts.css changed without a new hashed copy: run scripts/sync-brand.sh <current tag>")
+
+
+def test_no_stale_hashed_copies(configmaps):
+    shipped = set()
+    for name in ("forgejo-font-css", "forgejo-fonts", "forgejo-img"):
+        shipped |= set(cm_files(configmaps[name]))
+    for d in ("css", "fonts", "img"):
+        for p in (ASSETS / d).iterdir():
+            if HASHED.match(p.name):
+                assert p.name in shipped, f"{d}/{p.name} is hashed but no ConfigMap ships it (stale: re-run sync-brand.sh)"
+
+
+def test_brand_lock_lists_what_ships():
+    lock = json.loads(LOCK.read_text())
+    assert re.fullmatch(r"v\d+\.\d+\.\d+", lock["tag"]) and re.fullmatch(r"[0-9a-f]{40}", lock["commit"])
+    for rel, f in lock["files"].items():
+        p = ASSETS / rel
+        assert p.is_file(), f"brand.lock.json lists {rel}, which is missing"
+        assert hashlib.sha256(p.read_bytes()).hexdigest() == f["sha256"], f"{rel} differs from what sync-brand.sh wrote for {lock['tag']}"

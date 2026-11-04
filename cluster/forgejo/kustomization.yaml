@@ -116,17 +116,17 @@ configMapGenerator:
   # their own. Together ~0.2 MiB, far under the 1 MiB ConfigMap cap, so one map each.
   - name: forgejo-font-css
     files:
-      - custom/public/assets/css/realliance-fonts.css
+      - custom/public/assets/css/realliance-fonts.d6f04a97.css
     options:
       disableNameSuffixHash: true
   - name: forgejo-fonts
     files:
-      - custom/public/assets/fonts/atkinson-hyperlegible-Regular.woff2
-      - custom/public/assets/fonts/atkinson-hyperlegible-Italic.woff2
-      - custom/public/assets/fonts/atkinson-hyperlegible-Bold.woff2
-      - custom/public/assets/fonts/atkinson-hyperlegible-BoldItalic.woff2
-      - custom/public/assets/fonts/fredoka-latin.woff2
-      - custom/public/assets/fonts/noto-sans-mono-latin.woff2
+      - custom/public/assets/fonts/atkinson-hyperlegible-Regular.6bfd7bdd.woff2
+      - custom/public/assets/fonts/atkinson-hyperlegible-Italic.2b0d2720.woff2
+      - custom/public/assets/fonts/atkinson-hyperlegible-Bold.88941f37.woff2
+      - custom/public/assets/fonts/atkinson-hyperlegible-BoldItalic.ab97d8a1.woff2
+      - custom/public/assets/fonts/fredoka-latin.ea2eb254.woff2
+      - custom/public/assets/fonts/noto-sans-mono-latin.c35407ae.woff2
       - custom/public/assets/fonts/OFL-atkinson-hyperlegible.txt
       - custom/public/assets/fonts/OFL-fredoka.txt
       - custom/public/assets/fonts/OFL-noto-sans-mono.txt
@@ -140,8 +140,8 @@ configMapGenerator:
   - name: forgejo-img
     files:
       - custom/public/assets/img/logo.svg
-      - custom/public/assets/img/logo-mocha.svg
-      - custom/public/assets/img/logo-latte.svg
+      - custom/public/assets/img/logo-mocha.efbf5c27.svg
+      - custom/public/assets/img/logo-latte.4d495f38.svg
       - custom/public/assets/img/logo.png
       - custom/public/assets/img/favicon.svg
       - custom/public/assets/img/favicon.png

@@ -27,26 +27,20 @@ Forgejo's own, after our face. `font-display: swap`.
 
 ## Sources and rebuild
 
-Source of every font: <https://github.com/google/fonts> at commit
-`2fe1e8c6b137fb13041a7cfca6fdcd8a910ea4dc` (2026-11-03), under `ofl/`. sha256 of each source file:
+The fonts come from the brand kit, **git.realliance.net/realliance/brand** (`fonts/sources.json`: google/fonts
+commit `2fe1e8c6b137fb13041a7cfca6fdcd8a910ea4dc`, every source pinned by sha256, fetched by Nix; byte-reproducible
+since `head.modified` is kept from the source). Never edit the woff2 files here: they are copies of the brand's
+`dist/fonts/`, under its content-hashed names (`fredoka-latin.<8 hex>.woff2`), so every change gets a new URL.
 
-| Source | sha256 |
-|--------|--------|
-| `atkinsonhyperlegible/AtkinsonHyperlegible-Regular.ttf` | `7fb917c89019896d0b52ee84b7cbb3304c18cb90b19a62f5e32712bd23e97669` |
-| `atkinsonhyperlegible/AtkinsonHyperlegible-Italic.ttf` | `021beda4d3c6edfc78872e436d74009f9a1bcb294331908fe5747c61d3dcc514` |
-| `atkinsonhyperlegible/AtkinsonHyperlegible-Bold.ttf` | `5a3b0c8cc8ca545155150b4512a1fa248298df121c50d6557e651e61fbdab92f` |
-| `atkinsonhyperlegible/AtkinsonHyperlegible-BoldItalic.ttf` | `7a46f1b0ef2f64b61065c1a6b5a11fcb9b019b44062d88ba121a083cc39e86bf` |
-| `atkinsonhyperlegible/OFL.txt` | `f32d22b3908fcad2c86a74000614ec22e6a7f66ea7e867e616026a27aebdc143` |
-| `fredoka/Fredoka[wdth,wght].ttf` | `2ba02e68b152868aef9ba28e24b3648c7d457fe6f25c761f2c2c53fb61a73fc8` |
-| `fredoka/OFL.txt` | `5c9e7eee5c6b25f4b05b8d53b2e470ea4962f9ced742d044a98f7d95d1375bab` |
-| `notosansmono/NotoSansMono[wdth,wght].ttf` | `2cb2adb378a8f574213e23df697050b83c54c27df465a2015552740b2769a081` |
-| `notosansmono/OFL.txt` | `cee9892f9f0cc8fe882c9e9537ee6a89621d86ee7ceaf70b02e2b2b1c25c061a` |
+```bash
+scripts/sync-brand.sh v0.1.0 [--rebuild]   # verify the signed tag, copy, re-point, prune
+```
 
-`scripts/build-forge-fonts.sh` re-downloads into a fresh temp dir, verifies those hashes, and runs
-`pyftsubset --unicodes=<latin set> --flavor=woff2 --layout-features='*'` (static Atkinson) and
-`fonttools varLib.instancer <ttf> wdth=100` then `pyftsubset` (variable Fredoka, Noto Sans Mono),
-through `nix shell` with fonttools + brotli. The variable fonts are not byte-reproducible (the instancer
-stamps `head.modified`); the glyph set and axes are. The committed woff2 files are authoritative.
+It also rewrites the `url()`s in `realliance-fonts.css` (the source; edit this one) and ships it as the hashed
+copy `realliance-fonts.<8 hex>.css`, which the `<head>` hook and the `forgejo-font-css` ConfigMap name. After
+editing `realliance-fonts.css` by hand, re-run the sync with the current tag (`brand.lock.json`) to re-hash it;
+`scripts/test_forge_fonts.py` fails until you do. The sync records the release in `brand.lock.json` and bumps
+`realliance/templates-rev` whenever it changes something, because the `<head>` hook is read at start.
 
 ## Upgrades
 

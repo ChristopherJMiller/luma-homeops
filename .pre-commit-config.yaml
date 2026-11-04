@@ -67,7 +67,7 @@ repos:
         language: system
         entry: python -m pytest -q -p no:cacheprovider scripts/test_forge_fonts.py
         pass_filenames: false
-        files: ^(cluster/forgejo/.*|cluster/applications/forgejo-release\.yaml|scripts/(test_forge_fonts\.py|build-forge-fonts\.sh)|\.pre-commit-config\.yaml)$
+        files: ^(cluster/forgejo/.*|cluster/applications/forgejo-release\.yaml|scripts/(test_forge_fonts\.py|sync-brand\.sh)|\.pre-commit-config\.yaml)$
       # scripts/netpol-verify.sh against a stub kubectl: a partial pod list or an
       # unparseable answer must FAIL, never pass vacuously.
       - id: netpol-verify-selftest
