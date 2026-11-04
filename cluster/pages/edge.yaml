@@ -1,0 +1,74 @@
+---
+# Realliance Pages, public edge (plan Task 9; decisions D2, D6, D12).
+# *.realliance.page goes through Traefik's websecure entrypoint to git-pages
+# :3000 and nothing else: the relay and git-pages' metrics port are never routed.
+# IngressRoute rather than Ingress because only a router matcher can restrict
+# methods (Traefik has no method middleware): every non-GET/HEAD request, from
+# anyone, gets Traefik's 404 and never reaches git-pages. The routes carry no
+# `tls`: the default TLSStore serves the shared wildcard-tls (it has the
+# realliance.page SANs since Task 8). No DNS record or Certificate here either.
+# Static tests: scripts/test_pages_manifests.py.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: pages-headers
+spec:
+  headers:
+    # A site must not be able to set cookies on the shared registrable domain.
+    customResponseHeaders:
+      Set-Cookie: ""
+      Server: ""
+    contentTypeNosniff: true
+    referrerPolicy: strict-origin-when-cross-origin
+    # Sites are other people's: no includeSubDomains, no preload.
+    stsSeconds: 31536000
+    stsIncludeSubdomains: false
+    stsPreload: false
+---
+# D12: a 302 that keeps the path; a 301 would be cached forever if a landing
+# page ever replaces it.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: pages-apex-redirect
+spec:
+  redirectRegex:
+    regex: ^https?://(?:www\.)?realliance\.page/(.*)$
+    replacement: https://realliance.realliance.page/${1}
+    permanent: false
+---
+# One owner label = one site host. /.git-pages/* is blocked (archive.tar is a CPU
+# and uplink amplifier, manifest.json enumerates) except /.git-pages/health.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pages-sites
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: HostRegexp(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.realliance\.page$`) && (Method(`GET`) || Method(`HEAD`)) && (!PathPrefix(`/.git-pages/`) || Path(`/.git-pages/health`))
+      priority: 10
+      middlewares:
+        - name: pages-headers
+      services:
+        - name: git-pages
+          port: 3000
+---
+# Apex and www outrank the wildcard route. The apex is not an owner site.
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: pages-apex
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      match: Host(`realliance.page`) || Host(`www.realliance.page`)
+      priority: 100
+      middlewares:
+        - name: pages-headers
+        - name: pages-apex-redirect
+      services:
+        - name: git-pages
+          port: 3000

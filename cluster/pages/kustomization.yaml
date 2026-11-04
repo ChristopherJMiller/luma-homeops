@@ -6,8 +6,8 @@
 # Plan: docs/superpowers/plans/2026-11-03-realliance-pages.md (Task 5).
 # Static tests: scripts/test_pages_manifests.py (pre-commit `pages-manifests`).
 #
-# Internal only until plan Task 9 adds the IngressRoutes: the relay reaches
-# git-pages by its Service and nothing here is published.
+# Public since plan Task 9 (edge.yaml): only git-pages :3000, GET/HEAD; the relay
+# and the metrics port are never routed.
 #
 # Secrets: *.secret.yaml are the git-crypt cleartext sources; only their sealed
 # siblings are listed here (./sign.sh).
@@ -25,6 +25,7 @@ resources:
   - git-pages.yaml
   - pages-relay.yaml
   - monitoring.yaml
+  - edge.yaml
 
 # Generated, so the ConfigMap name carries a content hash: git-pages reads its
 # config only at start (0.10.0 removed the SIGHUP reload), and a renamed

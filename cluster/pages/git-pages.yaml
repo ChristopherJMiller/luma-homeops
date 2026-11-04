@@ -54,8 +54,8 @@ spec:
               containerPort: 3000
             - name: metrics
               containerPort: 3002
-          # Listeners open before the S3 backend initialises; a backend failure
-          # exits the process, so the probes only need the ports.
+          # Both probes use the metrics listener, which answers only once the
+          # backend has started (/.git-pages/health is per-site, so not that).
           livenessProbe:
             httpGet:
               path: /metrics
@@ -64,8 +64,9 @@ spec:
             periodSeconds: 30
             timeoutSeconds: 5
           readinessProbe:
-            tcpSocket:
-              port: 3000
+            httpGet:
+              path: /metrics
+              port: 3002
             periodSeconds: 10
           securityContext:
             allowPrivilegeEscalation: false
@@ -95,8 +96,8 @@ spec:
           emptyDir:
             sizeLimit: 2Gi
 ---
-# git-pages.pages.svc.cluster.local:3000 (pages-relay's upstream; Traefik from
-# Task 9) and :3002 (Prometheus).
+# git-pages.pages.svc.cluster.local:3000 (pages-relay's upstream; Traefik, GET/HEAD only,
+# edge.yaml) and :3002 (Prometheus).
 apiVersion: v1
 kind: Service
 metadata:

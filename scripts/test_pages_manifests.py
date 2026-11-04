@@ -79,17 +79,22 @@ resources:
   - git-pages.yaml
   - pages-relay.yaml
   - monitoring.yaml
+  - edge.yaml
 configMapGenerator:
   - name: git-pages-config
     files:
       - config.toml
 """
-# Internal only until Task 9 adds the IngressRoutes and Middlewares; no
+# Task 9 adds the edge (IngressRoutes + Middlewares); no
 # NetworkPolicy until the netpol plan adopts the namespace (its Task 13).
 PAGES_KINDS = [
     "ConfigMap",
     "Deployment",
     "Deployment",
+    "IngressRoute",
+    "IngressRoute",
+    "Middleware",
+    "Middleware",
     "Namespace",
     "PrometheusRule",
     "SealedSecret",
@@ -410,8 +415,6 @@ def test_renovate_never_automerges_pages():
         assert rule["automerge"] is False, f"{image} must never automerge"
         assert "kubernetes" in rule.get("matchManagers", []), f"{image}: the Deployment pin is the kubernetes manager's"
         assert rule.get("description"), f"{image}: say why in a description"
-        later = [r for r in rules[idx[0] + 1:] if r.get("automerge") is True and image in r.get("matchPackageNames", [image])]
-        assert not later, f"a later packageRule turns automerge back on for {image}"
     desc = {image: next(r for r in rules if image in r.get("matchPackageNames", []))["description"] for image in RENOVATE_IMAGES}
     for must in ("pre-1.0", "changelog", "2 weeks", "suite"):
         assert must in desc[RENOVATE_IMAGES[0]], f"git-pages rule description must mention {must!r}"
@@ -501,6 +504,9 @@ def test_pods_hardened():
         assert sc["readOnlyRootFilesystem"] is True, name
         assert sc["capabilities"] == {"drop": ["ALL"]}, name
         assert not sc.get("privileged"), name
+        assert sc.get("runAsUser", 65532) != 0, f"M3: {name} container runAsUser 0"
+        assert "add" not in sc["capabilities"], f"M3: {name} adds capabilities"
+        assert all("hostPort" not in p for p in c.get("ports", [])), f"M3: {name} hostPort"
         assert c["resources"]["requests"]["memory"] and c["resources"]["limits"]["memory"], name
         assert c["resources"] == RESOURCES[name], f"{name}: resources (Task 10 Step 6 moves them)"
 
@@ -520,7 +526,8 @@ def test_git_pages_deployment():
     assert env_of(c) == {"TMPDIR": "/tmp", "HOME": "/tmp"}
     assert {p["name"]: p["containerPort"] for p in c["ports"]} == SERVICES["git-pages"]
     assert c["livenessProbe"]["httpGet"] == {"path": "/metrics", "port": 3002}
-    assert c["readinessProbe"]["tcpSocket"] == {"port": 3000}
+    assert c["readinessProbe"]["httpGet"] == {"path": "/metrics", "port": 3002}, "M1: /metrics answers only once the backend started"
+    assert "tcpSocket" not in c["readinessProbe"]
 
     # The config is the generated, content-hashed ConfigMap, so a config change rolls the pod.
     (cm,) = of_kind(docs, "ConfigMap")
@@ -581,7 +588,10 @@ def test_services_internal():
     assert {s["metadata"]["name"] for s in of_kind(docs, "Service")} == set(SERVICES)
     for name, ports in SERVICES.items():
         svc = named(docs, "Service", name)
-        assert svc["spec"].get("type", "ClusterIP") == "ClusterIP", f"{name} is internal only until Task 9"
+        assert svc["spec"].get("type", "ClusterIP") == "ClusterIP", f"{name}: Services stay ClusterIP; Traefik is the only way in"
+        for key in ("externalIPs", "loadBalancerIP", "loadBalancerSourceRanges", "externalName", "nodePort"):
+            assert key not in svc["spec"], f"M2: {name} must not set {key}"
+        assert all("nodePort" not in p for p in svc["spec"]["ports"]), name
         assert {p["name"]: p["port"] for p in svc["spec"]["ports"]} == ports
         assert all(p["targetPort"] == p["name"] for p in svc["spec"]["ports"])
         labels = named(docs, "Deployment", name)["spec"]["template"]["metadata"]["labels"]
@@ -669,7 +679,7 @@ def test_no_certificate_in_pages():
     for d in docs:
         for path, _ in walk(d):
             assert not (len(path) >= 2 and path[-2:] == ("tls", "secretName")), f"{d['kind']}: tls.secretName at {path}"
-    assert not of_kind(docs, "Ingress") and not of_kind(docs, "IngressRoute"), "no public route until Task 9"
+    assert not of_kind(docs, "Ingress"), "Ingress cannot match methods: IngressRoute only (D6)"
 
 
 def test_forgejo_webhook_allowlist():
@@ -740,3 +750,157 @@ def test_one_certificate_covers_realliance_page():
             if isinstance(d, dict) and d.get("kind") == "Certificate" and "realliance.page" in d.get("spec", {}).get("dnsNames", []):
                 hits.append((d["metadata"]["namespace"], d["metadata"]["name"]))
     assert hits == [("traefik", "wildcard-tls")]
+
+
+# ---- Task 9: the public edge ------------------------------------------------
+
+SITES_MATCH = (
+    r"HostRegexp(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.realliance\.page$`)"
+    " && (Method(`GET`) || Method(`HEAD`))"
+    " && (!PathPrefix(`/.git-pages/`) || Path(`/.git-pages/health`))"
+)
+APEX_MATCH = "Host(`realliance.page`) || Host(`www.realliance.page`)"
+OWNER_RE = r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.realliance\.page$"
+
+
+def ingressroutes(ns: str) -> list[dict]:
+    require_deployed()
+    return [d for d in of_kind(render(PAGES_DIR), "IngressRoute") if d["metadata"]["namespace"] == ns]
+
+
+def route(name: str) -> dict:
+    require_deployed()
+    ir = named(render(PAGES_DIR), "IngressRoute", name)
+    (r,) = ir["spec"]["routes"]
+    return r
+
+
+def mw(name: str) -> dict:
+    require_deployed()
+    return named(render(PAGES_DIR), "Middleware", name)
+
+
+def all_pages_routes() -> list[dict]:
+    return [r for ir in ingressroutes(NAMESPACE) for r in ir["spec"]["routes"]]
+
+
+def test_sites_route_get_head_only():
+    """D2: the POST restriction is the router matcher."""
+    r = route("pages-sites")
+    assert r["match"] == SITES_MATCH and r["priority"] == 10
+    assert r["middlewares"] == [{"name": "pages-headers"}]
+
+
+def test_sites_host_accepts_only_single_label_owners():
+    """The matcher's regex is the exact owner grammar, and does what it says."""
+    (rx,) = re.findall(r"HostRegexp\(`([^`]*)`\)", route("pages-sites")["match"])
+    assert rx == OWNER_RE
+    ok = ["realliance.realliance.page", "a.realliance.page", "a-b.realliance.page", "9x.realliance.page"]
+    bad = ["realliance.page", "www.realliance.page.evil.com", "a.b.realliance.page", "-a.realliance.page",
+           "a-.realliance.page", "A.realliance.page", "a_b.realliance.page", ".realliance.page",
+           ("a" * 64) + ".realliance.page", "evilrealliance.page"]
+    assert all(re.fullmatch(rx, h) for h in ok)
+    assert not any(re.fullmatch(rx, h) for h in bad)
+    assert re.fullmatch(rx, ("a" * 63) + ".realliance.page")
+
+
+def test_apex_redirect_outranks_sites():
+    """RF4."""
+    a = route("pages-apex")
+    assert a["match"] == APEX_MATCH
+    assert a["priority"] > route("pages-sites")["priority"] and a["priority"] == 100
+    assert a["middlewares"] == [{"name": "pages-headers"}, {"name": "pages-apex-redirect"}]
+
+
+def test_apex_redirect_is_a_path_keeping_302():
+    spec = mw("pages-apex-redirect")["spec"]["redirectRegex"]
+    assert spec["permanent"] is False, "D12: a 301 would be cached forever"
+    assert spec["regex"] == r"^https?://(?:www\.)?realliance\.page/(.*)$"
+    assert spec["replacement"] == "https://realliance.realliance.page/${1}"
+    m = re.match(spec["regex"], "https://www.realliance.page/x/y?q=1")
+    assert m and m.expand(spec["replacement"].replace("${1}", r"\1")) == "https://realliance.realliance.page/x/y?q=1"
+    assert re.match(spec["regex"], "http://realliance.page/")
+
+
+def test_headers_strip_set_cookie():
+    """Acceptance 7, static half."""
+    h = mw("pages-headers")["spec"]["headers"]
+    assert h["customResponseHeaders"] == {"Set-Cookie": "", "Server": ""}
+    assert h["contentTypeNosniff"] is True
+    assert h["referrerPolicy"] == "strict-origin-when-cross-origin"
+    assert (h["stsSeconds"], h["stsIncludeSubdomains"], h["stsPreload"]) == (31536000, False, False)
+    assert all(rt["middlewares"][0] == {"name": "pages-headers"} for rt in all_pages_routes())
+
+
+def test_only_git_pages_3000_is_public():
+    """Exposure guard: the relay and git-pages' metrics port are never routed."""
+    routes = all_pages_routes()
+    assert {r["match"] for r in routes} == {SITES_MATCH, APEX_MATCH}
+    for r in routes:
+        assert r["kind"] == "Rule"
+        assert r["services"] == [{"name": "git-pages", "port": 3000}], r["services"]
+    for ir in ingressroutes(NAMESPACE):
+        assert ir["spec"]["entryPoints"] == ["websecure"]
+    text = json.dumps(ingressroutes(NAMESPACE))
+    assert "pages-relay" not in text and "3002" not in text and "metrics" not in text
+
+
+def test_pages_routes_have_no_tls_secret():
+    """Amendment: the shared cert is the default TLSStore's."""
+    irs = ingressroutes(NAMESPACE)
+    assert len(irs) == 2
+    assert all("tls" not in ir["spec"] for ir in irs)
+
+
+def test_nothing_else_routes_realliance_page():
+    """No Ingress host, and no IngressRoute outside cluster/pages, mentions realliance.page."""
+    for p in (REPO / "cluster").rglob("*.yaml"):
+        if ".secret." in p.name or PAGES_DIR in p.as_posix():
+            continue
+        text = p.read_text()
+        if "realliance.page" not in text.replace(r"realliance\.page", "realliance.page"):
+            continue
+        for d in yaml.safe_load_all(text):
+            if not isinstance(d, dict):
+                continue
+            blob = json.dumps(d)
+            if d.get("kind") in ("Ingress", "IngressRoute", "IngressRouteTCP", "HTTPRoute"):
+                assert "realliance.page" not in blob.replace("\\\\.", "."), f"{p} routes realliance.page"
+
+
+def _rule_could_match(rule: dict, image: str) -> bool:
+    """Conservative: True unless the rule's own constraints provably exclude `image`."""
+    import fnmatch
+
+    managers = rule.get("matchManagers")
+    if managers is not None and "kubernetes" not in managers and "regex" not in managers:
+        return False
+    files = rule.get("matchFileNames")
+    if files is not None and not any(fnmatch.fnmatch(f, g) for g in files for f in ("cluster/pages/git-pages.yaml", "cluster/pages/pages-relay.yaml")):
+        return False
+    names = rule.get("matchPackageNames", [])
+    patterns = rule.get("matchPackagePatterns", [])
+    if not names and not patterns:
+        return True  # no name constraint: matches every package
+    for n in names:
+        if n.startswith("/") and n.endswith("/") and len(n) > 1:
+            if re.search(n[1:-1], image):
+                return True
+        elif fnmatch.fnmatch(image, n):
+            return True
+    return any(re.search(p, image) for p in patterns)
+
+
+def test_renovate_no_rule_could_automerge_pages_images():
+    """M4: no automerge:true packageRule (exact, glob, regex or pattern) may match the two images."""
+    rules = json.loads((REPO / ".renovaterc.json").read_text())["packageRules"]
+    for image in RENOVATE_IMAGES:
+        for i, r in enumerate(rules):
+            if r.get("automerge") is True:
+                assert not _rule_could_match(r, image), f"packageRule #{i} could automerge {image}"
+    # the helper itself: globs, regexes and name-less rules count
+    assert _rule_could_match({"automerge": True}, RENOVATE_IMAGES[0])
+    assert _rule_could_match({"matchPackageNames": ["codeberg.org/**"]}, RENOVATE_IMAGES[0])
+    assert _rule_could_match({"matchPackageNames": ["/git-pages/"]}, RENOVATE_IMAGES[0])
+    assert _rule_could_match({"matchPackagePatterns": ["^ghcr\\.io/"]}, RENOVATE_IMAGES[1])
+    assert not _rule_could_match({"matchPackageNames": ["ghcr.io/other/x"]}, RENOVATE_IMAGES[1])
