@@ -700,3 +700,43 @@ def test_cloudflareddns_tracks_realliance_page():
     assert len(hosts) == len(zones) == len(types)
     i = hosts.index("realliance.page")
     assert zones[i] == PAGES_ZONE_ID and types[i] == "A"
+
+
+# --- Task 8: wildcard certificate gains realliance.page ------------------------
+
+WILDCARD_SANS = [
+    "chrismiller.xyz", "*.chrismiller.xyz", "*.music.chrismiller.xyz",
+    "realliance.net", "*.realliance.net", "werethemille.rs", "*.werethemille.rs",
+    "buttert.art", "*.buttert.art", "realliance.page", "*.realliance.page",
+]
+
+
+def test_wildcard_cert_sans():
+    c = yaml.safe_load((REPO / "cluster/traefik/wildcard-cert.yaml").read_text())
+    assert c["spec"]["dnsNames"] == WILDCARD_SANS
+    assert c["spec"]["commonName"] == "*.chrismiller.xyz"
+    assert c["spec"]["issuerRef"] == {"name": "letsencrypt-prod", "kind": "ClusterIssuer"}
+    assert c["spec"]["privateKey"]["rotationPolicy"] == "Always"
+
+
+def test_default_tlsstore_untouched():
+    stores = [p for p in (REPO / "cluster").rglob("*.yaml") if not p.name.endswith(".secret.yaml")
+              and "kind: TLSStore" in p.read_text()]
+    assert stores == [REPO / "cluster/traefik/tlsstore.yaml"]
+    d = yaml.safe_load(stores[0].read_text())
+    assert d["spec"]["defaultCertificate"]["secretName"] == "wildcard-tls"
+
+
+def test_one_certificate_covers_realliance_page():
+    hits = []
+    for p in (REPO / "cluster").rglob("*.yaml"):
+        if p.name.endswith(".secret.yaml"):
+            continue
+        try:
+            docs = list(yaml.safe_load_all(p.read_text()))
+        except yaml.YAMLError:
+            continue  # not plain manifests (templates, tags)
+        for d in docs:
+            if isinstance(d, dict) and d.get("kind") == "Certificate" and "realliance.page" in d.get("spec", {}).get("dnsNames", []):
+                hits.append((d["metadata"]["namespace"], d["metadata"]["name"]))
+    assert hits == [("traefik", "wildcard-tls")]

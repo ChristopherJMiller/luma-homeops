@@ -9,6 +9,8 @@
 # werethemille.rs and buttert.art were added 2026-09-24 when they came under
 # terraform (cloudflare/dns/); a host in either zone now serves valid TLS with
 # no per-app Certificate, same as the other two.
+# realliance.page joined 2026-11-04 for Realliance Pages (<owner>.realliance.page;
+# spec + amendment, docs/superpowers/specs). Still one certificate.
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -30,5 +32,7 @@ spec:
     - '*.werethemille.rs'
     - buttert.art
     - '*.buttert.art'
+    - realliance.page
+    - '*.realliance.page'
   privateKey:
     rotationPolicy: Always
