@@ -146,7 +146,28 @@ def test_stylesheet_overrides_only_font_variables():
     assert re.search(r"--fonts-heading:\s*\"Fredoka\",", css)
     # fallbacks kept: the upstream stacks follow our face
     assert "system-ui" in css and "monospace" in css and "sans-serif" in css
-    assert re.search(r"h1,h2,h3,h4,h5,h6,\.ui\.header\{font-family:var\(--fonts-heading\)\}", css)
+    # Fredoka only on real headings; small Fomantic section titles (.ui.header) stay Atkinson
+    assert ":where(h1,h2,h3,h4):not(.ui.header)" in css
+    assert ".markup h1,.markup h2,.markup h3,.markup h4,.markup h5,.markup h6" in css
+    assert ".repo-header .flex-item-title" in css
+    assert ".ui.header{font-family:var(--fonts-regular)}" in css
+    heading_rules = re.findall(r"([^{}]+)\{font-family:var\(--fonts-heading\)\}", css)
+    assert heading_rules
+    assert not any(re.search(r"(^|,)\s*\.ui\.header\s*(,|$)", r.strip()) for r in heading_rules)
+
+
+def test_radius_variant_b_only_touches_the_two_radius_variables():
+    css = CSS.read_text()
+    assert ":root{--border-radius:8px;--border-radius-medium:12px}" in css
+    declared = set(re.findall(r"(--[a-z-]+)\s*:", css))
+    assert declared <= {"--fonts-proportional", "--fonts-monospace", "--fonts-heading",
+                        "--border-radius", "--border-radius-medium"}, declared
+    # avatars keep their old corners; pills (--border-radius-full) and counters are not touched
+    assert re.search(r"\.ui\.avatar[^{]*\{border-radius:4px\}", css)
+    assert "--border-radius-full" not in css and "--border-radius-large" not in css
+    # radius rules never hide or move anything
+    for bad in (r"display\s*:\s*none", r"visibility\s*:\s*hidden", r"position\s*:"):
+        assert not re.search(bad, css), bad
 
 
 def test_fonts_apply_to_every_selectable_theme():

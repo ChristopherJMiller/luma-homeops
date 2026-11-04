@@ -6,7 +6,7 @@ from Google Fonts or any CDN (`scripts/test_forge_fonts.py` fails the build if a
 | Role | Family | Files (`public/assets/fonts/`) | Weights |
 |------|--------|-------------------------------|---------|
 | Body | Atkinson Hyperlegible | `atkinson-hyperlegible-{Regular,Italic,Bold,BoldItalic}.woff2` | 400, 700, + italics |
-| Headings (`h1`-`h6`, `.ui.header`) | Fredoka | `fredoka-latin.woff2` | variable 300-700 |
+| Headings (`h1`-`h4`, markdown `h1`-`h6`, repo title; not `.ui.header`) | Fredoka | `fredoka-latin.woff2` | variable 300-700 |
 | Code (code blocks, diffs, file views, inline code) | Noto Sans Mono | `noto-sans-mono-latin.woff2` | variable 100-900 |
 
 Subset: **latin only** (Basic Latin, Latin-1, general punctuation, euro/trademark/arrows/minus; no latin-ext).
