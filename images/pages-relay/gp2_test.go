@@ -46,8 +46,6 @@ type gp2 struct {
 	stale      int
 	ended      int
 	start      float64
-	altStart   float64 // nonzero: every other /metrics read reports this start (two pods)
-	reads      int
 	accepted   int
 	failNext   func(site string) bool
 	duration   func(site string) time.Duration
@@ -85,11 +83,7 @@ func (f *gp2) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == "/metrics":
 		f.mu.Lock()
-		f.reads++
 		start := f.start
-		if f.altStart != 0 && f.reads%2 == 0 {
-			start = f.altStart
-		}
 		if f.ended > 0 {
 			fmt.Fprintf(w, "git_pages_site_updates{via=\"webhook\"} %d\n", f.ended)
 		}
@@ -227,9 +221,8 @@ func settleHeld(t *testing.T, h *harness, d time.Duration) {
 	}
 }
 
-// The stress test with holds, at production ratios: 1 s LM resolution, a 3 s
-// 202 timer, updates of 0-20 s and some of 20-200 s, 5 min update-timeout,
-// unchanged re-publishes (same ETag), and optionally failures, timeouts and
+// I1: a hold ends on health at the commit, but the update runs on (CreateDomain,
+// AddSite) and is counted late; a later ledger base must not miss that count.
 func TestLedgerLateIncrement(t *testing.T) {
 	f := newGP2(3*time.Millisecond, time.Millisecond, 2*time.Second)
 	var n atomic.Int32
@@ -281,8 +274,6 @@ func TestLedgerLateIncrement(t *testing.T) {
 	}
 }
 
-// Concern 3: during a git-pages rollout two processes answer behind the
-// Service. A counter read from the new pod ends holds whose updates still run
 func grepLog(l string, subs ...string) string {
 	var out []string
 	for _, line := range strings.Split(l, "\n") {
@@ -294,4 +285,63 @@ func grepLog(l string, subs ...string) string {
 		}
 	}
 	return strings.Join(out, "\n")
+}
+
+// I1 end to end with another site's answer in between (N1): a quick publish of c,
+// answered 200, must not lower the bound that a's health end set.
+func TestLedgerLateIncrementAfterOtherSite(t *testing.T) {
+	f := newGP2(3*time.Millisecond, time.Millisecond, 2*time.Second)
+	var aN, bN atomic.Int32
+	f.duration = func(site string) time.Duration {
+		switch {
+		case strings.HasPrefix(site, "a."):
+			if aN.Add(1) == 1 {
+				return 0 // site a exists already (answered 200)
+			}
+			return 10 * time.Millisecond // a: 202, commits at 10 ms
+		case strings.HasPrefix(site, "b."):
+			if bN.Add(1) == 1 {
+				return 600 * time.Millisecond // b: a long update
+			}
+			return time.Millisecond // b's quick fix
+		}
+		return 0 // c: a quick publish, answered 200
+	}
+	var pc atomic.Int32
+	f.postCommit = func() time.Duration {
+		if pc.Add(1) == 2 {
+			return 200 * time.Millisecond // a's CreateDomain is slow
+		}
+		return 0
+	}
+	cfg := scaledHold()
+	cfg.Timeout = 2 * time.Second
+	cfg.LedgerWarmup = 90 * time.Millisecond
+	h := gp2Harness(t, f, cfg, true)
+	f.bump("a")
+	h.pushTo(t, "a", "site")
+	settleHeld(t, h, time.Second)
+	time.Sleep(40 * time.Millisecond)
+	f.bump("a")
+	h.pushTo(t, "a", "site")
+	waitFor(t, "a's hold to end on health", func() bool { return h.holds("completed") == "1" })
+	f.bump("c")
+	h.pushTo(t, "c", "site") // answered 200
+	settleHeld(t, h, time.Second)
+	time.Sleep(50 * time.Millisecond) // > LedgerQuiet; a's update is still in its tail
+	f.bump("b")
+	h.pushTo(t, "b", "site")
+	waitFor(t, "b held", func() bool { return h.held() == "1" })
+	f.bump("b")
+	h.pushTo(t, "b", "site")
+	time.Sleep(900 * time.Millisecond)
+	settleHeld(t, h, 5*time.Second)
+	f.bg.Wait()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	t.Logf("log:\n%s", grepLog(h.log.String(), "hold ended", "updates counter"))
+	if f.overlaps != 0 || f.stale != 0 {
+		t.Errorf("REPRODUCED: %d overlapping updates, %d stale commits (b committed %d, head %d)",
+			f.overlaps, f.stale, f.committed["b.realliance.page/site/"], f.head["b.realliance.page/site/"])
+	}
 }

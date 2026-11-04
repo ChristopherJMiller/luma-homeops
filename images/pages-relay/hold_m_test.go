@@ -179,3 +179,34 @@ func TestHoldUnchangedRepublishEndsOnLastModified(t *testing.T) {
 		t.Errorf("a hold timed out:\n%s", h.metrics())
 	}
 }
+
+// N1: lastEnd only rises. Another site's answer, or another hold's timeout, at
+// an earlier time must not lower the bound that a health-ended hold set.
+func TestLastEndNeverLowered(t *testing.T) {
+	cfg := HoldConfig{Timeout: 5 * time.Minute, HealthFirst: time.Second}
+	q := newQueue(64, NewCounters())
+	t0 := time.Now().Add(-time.Hour)
+	a := job{Target: Target{Host: "a.realliance.page", Path: "site"}}
+	c := job{Target: Target{Host: "c.realliance.page", Path: "site"}}
+	d := job{Target: Target{Host: "d.realliance.page", Path: "site"}}
+	for _, j := range []job{a, c, d} {
+		q.launch()
+		q.inFlight[j.Target.Site()] = true
+	}
+	q.finish(a, ansRunning, siteHealth{status: 404, known: true}, t0, t0, cfg)
+	q.finish(d, ansRunning, siteHealth{status: 404, known: true}, t0, t0, cfg)
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.healthSeen(a.Target.Site(), siteHealth{status: 200, ok: true, known: true, lm: "x", etag: "1"}, t0.Add(10*time.Second), time.Second)
+	want := t0.Add(5 * time.Minute)
+	if !q.led.lastEnd.Equal(want) {
+		t.Fatalf("lastEnd %v, want a's deadline %v", q.led.lastEnd, want)
+	}
+	q.mu.Unlock()
+	q.finish(c, ansDone, siteHealth{}, t0, t0.Add(20*time.Second), cfg) // a quick publish answered 200
+	q.mu.Lock()
+	q.endHold(d.Target.Site(), HeldTimedOut, "deadline", t0.Add(30*time.Second)) // another hold times out
+	if !q.led.lastEnd.Equal(want) {
+		t.Errorf("lastEnd lowered to %v, want %v", q.led.lastEnd, want)
+	}
+}

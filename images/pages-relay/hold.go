@@ -275,9 +275,18 @@ type ledger struct {
 	seen         bool // the poller has read the counter
 	last         float64
 	lastStart    float64
-	lastEnd      time.Time // one of the relay's updates last ended
+	lastEnd      time.Time // when the latest of the relay's updates may end; only ever raised (raiseLastEnd)
 	unknownAt    time.Time // a forward last went unanswered
 	startedAt    time.Time
+}
+
+// raiseLastEnd records that an update of the relay's may run until t. It never
+// lowers the bound: a later, earlier-ending update must not undo what a
+// health-ended update's tail needs (review N1 of fix 2).
+func (l *ledger) raiseLastEnd(t time.Time) {
+	if t.After(l.lastEnd) {
+		l.lastEnd = t
+	}
 }
 
 // launch counts a forward about to go: until its answer says otherwise, it may
@@ -301,7 +310,7 @@ func (q *queue) finish(j job, a answer, base siteHealth, sent, now time.Time, cf
 	case ansNone:
 		q.led.launched--
 	case ansDone:
-		q.led.lastEnd = now
+		q.led.raiseLastEnd(now)
 	case ansUnknown:
 		q.led.ok = false
 		q.led.unknownAt = now
@@ -330,7 +339,7 @@ func (q *queue) endHold(site string, o HoldOutcome, evidence string, now time.Ti
 	q.c.SetHeld(len(q.held))
 	q.c.HoldEnded(o)
 	if o != HeldReleased {
-		q.led.lastEnd = now
+		q.led.raiseLastEnd(now)
 	}
 	q.wake.Broadcast()
 	return ended{site: site, outcome: o, evidence: evidence, held: now.Sub(h.since)}
@@ -403,9 +412,7 @@ func (q *queue) healthSeen(site string, cur siteHealth, now time.Time, next time
 		// until its deadline it may still reach the counter: no base is sound
 		// before then (review I1 of fix 2). The deadline is the 202 plus
 		// HoldTimeout, at or after the update's own.
-		if h.deadline.After(q.led.lastEnd) {
-			q.led.lastEnd = h.deadline
-		}
+		q.led.raiseLastEnd(h.deadline)
 		return []ended{e}
 	}
 	h.due = now.Add(next)

@@ -329,6 +329,8 @@ func TestHoldFailingDoesNotBlockOtherSites(t *testing.T) {
 	if second.Sub(heldAt) < cfg.Timeout-100*time.Millisecond {
 		t.Errorf("a went again %v after its hold began, before the %v deadline", second.Sub(heldAt), cfg.Timeout)
 	}
+	// b's deadline comes a few ms after a's; wait for it rather than race it.
+	waitFor(t, "b's hold to time out too", func() bool { return h.holds("timeout") == "2" })
 	if h.holds("timeout") != "2" || h.holds("completed") != "0" {
 		t.Errorf("hold outcomes:\n%s", h.metrics())
 	}
