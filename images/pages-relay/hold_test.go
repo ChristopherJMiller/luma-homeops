@@ -416,7 +416,7 @@ func TestHoldIgnoresForeignUpdates(t *testing.T) {
 }
 
 // A git-pages restart kills the updates it was running: holds on forwards sent
-// before it started end.
+// before it started end as aborted (a later push of the site waits, so no re-queue).
 func TestHoldEndsOnGitPagesRestart(t *testing.T) {
 	fp := newFakePages(20 * time.Millisecond)
 	never := make(chan struct{})
@@ -442,10 +442,10 @@ func TestHoldEndsOnGitPagesRestart(t *testing.T) {
 		defer fp.mu.Unlock()
 		return fp.committed["a.realliance.page/site/"] == 2
 	})
-	if h.holds("completed") != "1" {
+	if h.holds("aborted") != "1" || h.holds("completed") != "0" {
 		t.Errorf("hold outcomes:\n%s", h.metrics())
 	}
-	if l := h.log.String(); !strings.Contains(l, `"evidence":"git_pages_restarted"`) {
+	if l := h.log.String(); !strings.Contains(l, `"evidence":"git_pages_restarted, superseded by a waiting push"`) {
 		t.Errorf("log: %s", l)
 	}
 }

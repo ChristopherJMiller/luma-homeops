@@ -51,8 +51,11 @@ const MaxInFlight = 2
 // 5 s (DeliverTimeout), so a longer wait is a failed delivery anyway.
 const DefaultSlotWait = 3 * time.Second
 
-// DefaultBodyTimeout bounds reading the body once it has a slot.
-const DefaultBodyTimeout = 10 * time.Second
+// DefaultBodyTimeout bounds reading the body once it has a slot. Forgejo gives
+// a delivery 5 s in all, so a body still arriving after 4 s is a failed
+// delivery already; the shorter bound is what a slow-loris sender can hold a
+// slot for (review M2 of fix 2).
+const DefaultBodyTimeout = 4 * time.Second
 
 // Workers forward queued sites to git-pages, at most one forward per site.
 const Workers = 2
@@ -72,8 +75,9 @@ const HoldTimeout = 5 * time.Minute
 // goes away, and SIGTERM comes after it.
 const PreStopSleep = 5 * time.Second
 
-// DrainTimeout is how long SIGTERM waits for the queue to drain: 66 forwards
-// (64 queued + 2 in flight) on 2 workers at git-pages' 3 s answer
+// DrainTimeout is how long SIGTERM waits for the queue to drain: about 70
+// forwards (64 queued, 2 in flight, and the waiting pushes of held sites, which
+// QueueMax does not bound) on 2 workers at git-pages' 3 s answer
 // (src/pages.go:832) is about 100 s. Holds end when the drain starts, so none
 // waits out HoldTimeout. PreStopSleep + DrainTimeout must fit in
 // terminationGracePeriodSeconds (120 in cluster/pages/pages-relay.yaml).
@@ -282,16 +286,18 @@ func Verify(body, secret []byte, sigHex string) bool {
 }
 
 // HoldOutcome is how a hold ended: completed (evidence that git-pages' update
-// ended), timeout (HoldTimeout, no evidence) or released (shutdown).
+// ended), timeout (HoldTimeout, no evidence), released (shutdown) or aborted
+// (git-pages restarted and the update died with it).
 type HoldOutcome string
 
 const (
 	HeldCompleted HoldOutcome = "completed"
 	HeldTimedOut  HoldOutcome = "timeout"
 	HeldReleased  HoldOutcome = "released"
+	HeldAborted   HoldOutcome = "aborted"
 )
 
-var allHoldOutcomes = []HoldOutcome{HeldCompleted, HeldTimedOut, HeldReleased}
+var allHoldOutcomes = []HoldOutcome{HeldCompleted, HeldTimedOut, HeldReleased, HeldAborted}
 
 type Counters struct {
 	mu    sync.Mutex
@@ -367,6 +373,7 @@ func NewClient() *http.Client {
 type job struct {
 	Target   Target
 	CloneURL string // as Forgejo sent it; git-pages compares it case-insensitively
+	retried  bool   // forwarded again once after git-pages restarted under it
 }
 
 // forwardBody is a minimal push that git-pages 0.10.1 accepts: the only two
@@ -691,7 +698,9 @@ func (rl *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		sw = DefaultSlotWait
 	}
 	// A body slot: wait for one rather than refuse a burst, but not past
-	// Forgejo's 5 s delivery timeout, nor once the sender has gone (review M2).
+	// Forgejo's 5 s delivery timeout. client_gone fires only when net/http has
+	// noticed the sender go; on HTTP/1.1 it does so only after the body is read,
+	// so a sender that leaves during this wait is found out by the wait (M2).
 	// The signature cannot be checked first: it covers the whole body, and the
 	// slot is what bounds reading bodies. A waiter holds no body memory.
 	select {

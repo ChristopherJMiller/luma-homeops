@@ -13,11 +13,12 @@ package main
 //   - completed, on evidence that the update ended: the site's health moved
 //     from the baseline read before the forward (every update that gets as far
 //     as storing commits the manifest, even an unchanged one, and the commit
-//     moves its Last-Modified: update.go:73-86, manifest.go:466,
+//     moves its Last-Modified: update.go:73-86, manifest.go:468,
 //     backend_s3.go:602-631); or git-pages' webhook update counter shows that
 //     every update the relay started has ended (the ledger below: the only
-//     evidence for an update that fails after its 202); or git-pages restarted
-//     after the forward went, killing the update;
+//     evidence for an update that fails after its 202);
+//   - aborted, when git-pages restarted after the forward went: the update died
+//     with it, so the push is re-queued once (see abort);
 //   - timeout, at HoldTimeout, with no evidence;
 //   - released, when the drain starts at SIGTERM.
 //
@@ -237,7 +238,7 @@ func (rl *Relay) readUpdates(ctx context.Context) (updatesSample, error) {
 }
 
 type hold struct {
-	target   Target
+	job      job        // the forward that went (the target, and the clone URL for a re-queue)
 	base     siteHealth // read before the forward
 	sent     time.Time  // when the forward went
 	since    time.Time  // the 202
@@ -257,7 +258,8 @@ type ended struct {
 // count of webhook updates that have ended, git_pages_site_updates{via="webhook"},
 // which grows when an update ends, whatever its outcome (src/pages.go:924,
 // :52-53). The relay is git-pages' only webhook client, so from a base taken
-// while nothing of the relay's could still run, the counter catching up with
+// while nothing of the relay's could still run (a hold that ends on health
+// counts as running to its deadline: the update outlives its commit), the counter catching up with
 // the updates started since proves that none of them runs any more.
 //
 // The ledger is not trusted (ok false) from start until it is quiet, after an
@@ -308,7 +310,7 @@ func (q *queue) finish(j job, a answer, base siteHealth, sent, now time.Time, cf
 			q.c.HoldEnded(HeldReleased)
 			return nil, []ended{{site: site, outcome: HeldReleased, evidence: "shutdown"}}
 		}
-		h := &hold{target: j.Target, base: base, sent: sent, since: now, deadline: now.Add(cfg.Timeout),
+		h := &hold{job: j, base: base, sent: sent, since: now, deadline: now.Add(cfg.Timeout),
 			due: now.Add(cfg.HealthFirst)}
 		q.held[site] = h
 		q.c.SetHeld(len(q.held))
@@ -334,6 +336,31 @@ func (q *queue) endHold(site string, o HoldOutcome, evidence string, now time.Ti
 	return ended{site: site, outcome: o, evidence: evidence, held: now.Sub(h.since)}
 }
 
+// abort ends a hold whose update died with git-pages (it restarted: SIGTERM
+// kills updates without draining them, as does an OOM kill). Nothing stored the
+// push and git-pages counts no failure, so the relay forwards it once more,
+// from the branch head, unless a newer push of the site already waits (it
+// supersedes this one) or this was already the second try (an update that
+// kills git-pages must not do it in a loop). Called under q.mu.
+func (q *queue) abort(site string, h *hold, now time.Time) ended {
+	e := q.endHold(site, HeldAborted, "git_pages_restarted", now)
+	_, newer := q.pending[site]
+	switch {
+	case newer:
+		e.evidence += ", superseded by a waiting push"
+	case h.job.retried:
+		e.evidence += ", already retried: redeliver the push from the forge's delivery history"
+	default:
+		j := h.job
+		j.retried = true
+		q.pending[site] = j
+		q.order = append(q.order, site)
+		q.c.SetQueueDepth(len(q.pending))
+		e.evidence += ", re-queued"
+	}
+	return e
+}
+
 func (q *queue) expire(now time.Time) []ended {
 	var out []ended
 	for site, h := range q.held {
@@ -349,7 +376,7 @@ func (q *queue) expire(now time.Time) []ended {
 func (q *queue) nextDue() (site string, t Target, due, deadline time.Time, any bool) {
 	for s, h := range q.held {
 		if !any || h.due.Before(due) {
-			site, t, due = s, h.target, h.due
+			site, t, due = s, h.job.Target, h.due
 		}
 		if !any || h.deadline.Before(deadline) {
 			deadline = h.deadline
@@ -367,7 +394,16 @@ func (q *queue) healthSeen(site string, cur siteHealth, now time.Time, next time
 		return nil
 	}
 	if cur.movedFrom(h.base) {
-		return []ended{q.endHold(site, HeldCompleted, "health", now)}
+		e := q.endHold(site, HeldCompleted, "health", now)
+		// The commit moved the health, but the update runs on after it
+		// (CreateDomain, AddSite) and is counted only when that is done, so
+		// until its deadline it may still reach the counter: no base is sound
+		// before then (review I1 of fix 2). The deadline is the 202 plus
+		// HoldTimeout, at or after the update's own.
+		if h.deadline.After(q.led.lastEnd) {
+			q.led.lastEnd = h.deadline
+		}
+		return []ended{e}
 	}
 	h.due = now.Add(next)
 	return nil
@@ -393,7 +429,7 @@ func (q *queue) updatesSeen(s updatesSample, now time.Time) (out []ended, distru
 		cut := time.Unix(0, int64(s.start*float64(time.Second))).Add(-time.Second)
 		for site, h := range q.held {
 			if h.sent.Before(cut) {
-				out = append(out, q.endHold(site, HeldCompleted, "git_pages_restarted", now))
+				out = append(out, q.abort(site, h, now))
 			}
 		}
 	}
@@ -543,7 +579,7 @@ func (rl *Relay) poll() {
 func (rl *Relay) logEnded(es []ended) {
 	for _, e := range es {
 		lvl := slog.LevelInfo
-		if e.outcome == HeldTimedOut {
+		if e.outcome == HeldTimedOut || e.outcome == HeldAborted {
 			lvl = slog.LevelWarn
 		}
 		rl.Log.Log(context.Background(), lvl, "hold ended", "site", e.site, "outcome", string(e.outcome),

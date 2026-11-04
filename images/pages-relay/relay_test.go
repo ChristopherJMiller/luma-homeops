@@ -496,7 +496,7 @@ func TestMetricsAllOutcomesStartAtZero(t *testing.T) {
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("outcomes %v, want %v", got, want)
 	}
-	if strings.Join(holds, ",") != "completed,timeout,released" {
+	if strings.Join(holds, ",") != "completed,timeout,released,aborted" {
 		t.Errorf("hold outcomes %v", holds)
 	}
 	for _, typ := range []string{"# TYPE pages_relay_queue_depth gauge", "# TYPE pages_relay_sites_held gauge", "# TYPE pages_relay_holds_total counter"} {
