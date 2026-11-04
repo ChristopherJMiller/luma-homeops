@@ -62,7 +62,15 @@
 /* attached box titles and boxes (diff file boxes, README box, settings sections) */
 .ui.top.attached.header,.ui[class*="top attached"].menu,.ui.top.attached.segment{border-radius:12px 12px 0 0}
 .ui.bottom.attached.header,.ui[class*="bottom attached"].menu,.ui.bottom.attached.segment{border-radius:0 0 12px 12px}
-.ui.attached.header:not(.top):not(.bottom),.ui.attached.segment:not(.top):not(.bottom){border-radius:0}
+.ui.attached.header:not(.top):not(.bottom){border-radius:0}
+.ui.attached.segment:last-child:not(.top){border-radius:0 0 12px 12px}
+.ui.top.attached.segment:only-child{border-radius:12px}
+.ui.horizontal.segments>.segment:first-child{border-radius:12px 0 0 12px}
+.ui.horizontal.segments>.segment:last-child{border-radius:0 12px 12px 0}
+.ui.horizontal.segments>.segment:only-child{border-radius:12px}
+/* repo home file list: stock hard-codes 4.57px on the bottom of the table that closes the box */
+#repo-files-table.ui.table{border-radius:0 0 12px 12px}
+.ui.bottom.attached.message{border-radius:0 0 12px 12px}
 
 /* hard-coded top-only / per-corner radii that ignore the variables */
 .ui.modal>.header,.ui.modal>:first-child:not(.icon):not(.dimmer){border-top-left-radius:12px;border-top-right-radius:12px}

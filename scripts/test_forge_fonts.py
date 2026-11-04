@@ -186,3 +186,12 @@ def test_fonts_apply_to_every_selectable_theme():
             assert "font-family" not in text and "--fonts-" not in text, f"{sheet.name} sets a font"
             assert "@font-face" not in text
     assert values["gitea"]["config"]["ui"]["DEFAULT_THEME"] in themes
+
+
+def test_attached_segment_radius_does_not_square_the_last_child():
+    # round 2 squared the bottom of every last-child attached segment (diff file bodies); stock rounds it
+    css = re.sub(r"/\*.*?\*/", "", CSS.read_text(), flags=re.S)
+    for selectors, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        if "segment" in selectors and ":not(.top):not(.bottom)" in selectors:
+            assert not re.search(r"border-radius\s*:\s*0\s*(;|$)", body.strip()), selectors
+    assert ".ui.attached.segment:last-child:not(.top){border-radius:0 0 12px 12px}".replace(" ", "") in css.replace(" ", "")
