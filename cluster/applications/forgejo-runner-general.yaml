@@ -1,0 +1,25 @@
+---
+# forgejo-runner-general: the Forgejo Actions runner for git.realliance.net (host mode, label
+# `general`, registered for realliance/realliance.net only). Manifests in cluster/forgejo-runner-general.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: forgejo-runner-general
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/forgejo-runner-general
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: forgejo-runner-general
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

@@ -60,6 +60,15 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_pages_manifests.py
         pass_filenames: false
         files: ^(cluster/(pages|traefik|dns|cert-manager|applications)/.*|cloudflare/dns/.*\.tf|images/pages-relay/relay\.go|scripts/test_pages_manifests\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
+      # Realliance.net on the forge: the general runner's fixed values (restricted PSA, pod
+      # hardening, pinned slim image, wipe-on-start, nothing shared with the galaxy runner).
+      # Later tasks add the site pin test to the same hook.
+      - id: realliance-net
+        name: realliance.net runner static tests
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_runner_general.py
+        pass_filenames: false
+        files: ^(cluster/(forgejo-runner-general|forgejo-runner|realliance\.net|applications|components/netpol)/.*|images/forgejo-runner-general/.*|scripts/test_(runner_general|realliance_net_pin)\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
       # Realliance Forge typography: no CDN/Google Fonts reference, every @font-face src ships in a
       # ConfigMap, every forgejo ConfigMap under 1 MiB (cluster/forgejo/custom/FONTS.md).
       - id: forge-fonts

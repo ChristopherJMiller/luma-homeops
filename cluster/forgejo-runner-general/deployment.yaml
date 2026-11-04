@@ -1,0 +1,97 @@
+---
+# forgejo-runner daemon, host mode, label `general`: the runner class for the public site repo
+# (realliance/realliance.net). Every job runs IN THIS POD as uid 1000: it can read the connection
+# token (config.yml) and the shared HOME/TMPDIR, and reach what any pod reaches. It holds no other
+# credential (no Forgejo admin token, no Keycloak secret, no Kubernetes token). It is never
+# registered for realliance/forge-bot, and shares nothing with the `galaxy` runner in
+# forgejo-runner (own namespace, PVC, Secret and image).
+#
+# What persists, all on the forgejo-runner-general-work PVC:
+#   /work/act/<rand>   one job's workdir; the runner deletes it when the job ends (not if it is killed)
+#   /work/home, /work/tmp   HOME and TMPDIR, which every job inherits: shared between the jobs of one
+#                           pod lifetime, including ~/.cache/act (a job can leave ~/.gitconfig or
+#                           other files behind for the next)
+#   /work/.runner      registration file; not written while config.yml declares the connection
+# There is no cache dir. The start command wipes /work/act, /work/home and /work/tmp, so
+# `kubectl rollout restart` clears every job's state.
+# Security model and accepted risk: the forge-bot + CI spec, "Security model, plainly".
+# NetworkPolicy: none until Part C of the realliance.net plan (after the NetworkPolicy plan's B2).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: forgejo-runner-general
+  namespace: forgejo-runner-general
+  labels:
+    app.kubernetes.io/name: forgejo-runner-general
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # one RWO work volume
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: forgejo-runner-general
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: forgejo-runner-general
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        nodeAffinity:
+          # Not `top`: it runs hottest (#2603).
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values: [top]
+      containers:
+        - name: runner
+          # images/forgejo-runner-general (forgejo-runner v13.2.1, Node 24, git, curl; no Go, ko or
+          # gcc), built by GitHub Actions. Renovate bumps the Dockerfile; this pin is a second,
+          # manual commit.
+          image: ghcr.io/christopherjmiller/forgejo-runner-general:sha-f9c09c5@sha256:567175795c431ad68271d20e344d162b5cd975e86c3b0e21c7666424c392ed7f
+          command:
+            - sh
+            - -c
+            - rm -rf /work/home /work/tmp /work/act && mkdir -p /work/act /work/home /work/tmp && exec forgejo-runner daemon --config /etc/forgejo-runner/config.yml
+          env:
+            - name: HOME
+              value: /work/home
+            - name: TMPDIR
+              value: /work/tmp
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 2Gi
+          volumeMounts:
+            - name: work
+              mountPath: /work
+            - name: config
+              mountPath: /etc/forgejo-runner
+              readOnly: true
+      volumes:
+        - name: work
+          persistentVolumeClaim:
+            claimName: forgejo-runner-general-work
+        - name: config
+          secret:
+            secretName: forgejo-runner-general-config # SealedSecret runner-config.yaml

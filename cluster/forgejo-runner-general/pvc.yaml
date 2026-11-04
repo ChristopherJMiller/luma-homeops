@@ -1,0 +1,15 @@
+---
+# The runner's whole writable state: per-job workdirs (act/), HOME and TMPDIR. No cache dir. SSD
+# pool (discard), never the SMR pool; no big emptyDir on the etcd NVMe. The SC reclaim policy is
+# Retain: deleting this PVC leaves a Released PV behind (S4: confirm first).
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: forgejo-runner-general-work
+  namespace: forgejo-runner-general
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: rook-ceph-block-ssd
+  resources:
+    requests:
+      storage: 5Gi

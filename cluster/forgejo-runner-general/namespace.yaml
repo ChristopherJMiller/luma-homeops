@@ -1,0 +1,9 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: forgejo-runner-general
+  labels:
+    # Host-mode runner with a non-root uid, no capabilities, no Docker and a read-only root: the pod
+    # satisfies `restricted`, so enforce it. forgejo-runner (the forge-bot runner) stays on baseline.
+    pod-security.kubernetes.io/enforce: restricted
