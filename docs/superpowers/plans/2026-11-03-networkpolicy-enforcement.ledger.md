@@ -163,3 +163,41 @@ Gate G after (18:36–18:37Z): identical to before, apart from the new app (59 a
 
 No rollback trigger fired, and break-glass was not used.
 - 2026-11-03 (realliance-pages Task 1): the edge snapshot now has 4 more hosts and 2 more probes. This plan's next Gate G must re-baseline first, since an old before-file no longer lines up.
+
+## A3b: the enforcer on all three nodes (2026-11-04)
+
+**A3b_start=2026-11-04T18:41:00Z** (all three agents Ready). Tasks 6 and 7 start no earlier than **2026-11-05T18:41:00Z** and run back to back. Task 5 can run during this soak.
+
+Pre-approved (Answers, 2026-11-03), on condition that the 24 h idle gate passes and Gate G is clean. Both held, so the Step 5 STOP needed no new question.
+
+24 h gate (Step 1) at 18:36:24Z: `PASS bottom kube-network-policies-2q4mz packet_id=0 packets=0 restarts=0 flags=ok`, then `idle: PASS (1 agents, 0 NetworkPolicies)`. `top pod`: 1m / 26Mi.
+
+S1 on `top` and `middle` (read-only):
+- Each lists 54 `cni-*` entries in `/var/run/netns`. Nothing listens on `:9080`, `/proc/net/netfilter/nfnetlink_queue` is empty, and `/var/run/nri` is absent.
+- Memory requests are at 85% on both, about 4.3 Gi below allocatable, so the 64Mi request preempts nothing.
+
+Commit `a10e39b8` drops the `kubernetes.io/hostname` node selector; the render keeps the upstream selector `kubernetes.io/os: linux`. It also names the rollback marker in the comments of the kustomization and of `cluster/applications/kube-network-policies.yaml` (the Task 4 carry). Static tests: 1 failed with the new expectation, then 16 passed after the patch edit.
+
+Gate G before (18:39–18:41Z), a fresh baseline for this task:
+- 3 nodes Ready, none cordoned.
+- Ceph HEALTH_WARN, with warn codes MDS_CLIENT_RECALL plus the muted AUTH_INSECURE_*. 145/145 PGs active+clean.
+- Argo: 60 apps, only `rook`/`rook-cluster` Degraded.
+- No bad pods and 0 NetworkPolicies.
+- Edge snapshot: 46 rows (scratch `edge-t4-before.txt`).
+
+Pushed at 18:40:49Z, and Argo synced at 18:40:52Z.
+- The DaemonSet created the `top` and `middle` pods together at 18:40:52Z. They were Ready at 18:40:54Z and 18:40:55Z.
+- Then it replaced `bottom`'s pod: `kube-network-policies-r5bd2` started and was Ready at 18:41:00Z.
+- `numberReady/desiredNumberScheduled` = `3/3` at 18:41:00Z. All three run digest `d9350ce2…300d`, with 0 restarts.
+
+Checks after the deploy:
+- The kernel queue reads `98 1 0 2 128 0 0 0 1` on all three nodes: bound, nothing queued, no drops.
+- `idle` at 18:41:16Z FAILED on all three: the `nfqueue_*` gauges were absent. An agent publishes them only after its first collection, and the pods were 16–24 s old. Every counter read 0, so no rollback trigger fired.
+- `idle` at 18:41:53Z: three `PASS … packet_id=0 packets=0 restarts=0 flags=ok` lines, then `idle: PASS (3 agents, 0 NetworkPolicies)`.
+- `top pod` at 18:41:53Z and 18:42:43Z: 1m / 20–22Mi per agent. The rollback limits are CPU 100m and memory 200Mi. No agent logged an `E`/`F` line.
+- Prometheus `up{namespace="kube-system",pod=~"kube-network-policies-.*"}`: 3 series (`.240`, `.241` and `.242` on 9080), each 1. DaemonSet ready 3, desired 3. No `KubeNetworkPolicies*` alert is pending or firing.
+- `scripts/check-prometheus-rules.sh` exits 0 (`selected=40 groups=43 alerting=178 recording=82`). The `kube-network-policies` group's 3 rules are `ok` and `inactive`. The only WARN is the existing `unselected music-streaming/gonic-alerts`.
+
+Gate G after (18:41–18:42Z): identical to before. The warn codes are the same, all 145 PGs are active+clean, and no Argo app changed status. Gate G finds no bad pods, no NetworkPolicies and no Warning events since the push. The edge diff is empty after the `code_challenge|state|nonce` normalisation.
+
+No rollback trigger fired, and break-glass was not used.
