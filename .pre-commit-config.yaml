@@ -60,6 +60,14 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_pages_manifests.py
         pass_filenames: false
         files: ^(cluster/(pages|traefik|dns|cert-manager|applications)/.*|cloudflare/dns/.*\.tf|images/pages-relay/relay\.go|scripts/test_pages_manifests\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
+      # Realliance Forge typography: no CDN/Google Fonts reference, every @font-face src ships in a
+      # ConfigMap, every forgejo ConfigMap under 1 MiB (cluster/forgejo/custom/FONTS.md).
+      - id: forge-fonts
+        name: Forge fonts static tests
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_forge_fonts.py
+        pass_filenames: false
+        files: ^(cluster/forgejo/.*|cluster/applications/forgejo-release\.yaml|scripts/(test_forge_fonts\.py|build-forge-fonts\.sh)|\.pre-commit-config\.yaml)$
       # scripts/netpol-verify.sh against a stub kubectl: a partial pod list or an
       # unparseable answer must FAIL, never pass vacuously.
       - id: netpol-verify-selftest

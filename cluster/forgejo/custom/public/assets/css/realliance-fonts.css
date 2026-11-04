@@ -1,0 +1,22 @@
+/* Realliance Forge typography: Atkinson Hyperlegible (body), Fredoka (headings), Noto Sans Mono (code).
+   Self-hosted OFL fonts, latin subset (cluster/forgejo/custom/FONTS.md). Loaded on every page by
+   templates/custom/header.tmpl, after the theme sheet, so it applies to every selectable theme.
+   Forgejo derives all text from --fonts-proportional and --fonts-monospace; only those are replaced. */
+
+@font-face{font-family:"Atkinson Hyperlegible";font-style:normal;font-weight:400;font-display:swap;src:url("../fonts/atkinson-hyperlegible-Regular.woff2") format("woff2")}
+@font-face{font-family:"Atkinson Hyperlegible";font-style:italic;font-weight:400;font-display:swap;src:url("../fonts/atkinson-hyperlegible-Italic.woff2") format("woff2")}
+@font-face{font-family:"Atkinson Hyperlegible";font-style:normal;font-weight:700;font-display:swap;src:url("../fonts/atkinson-hyperlegible-Bold.woff2") format("woff2")}
+@font-face{font-family:"Atkinson Hyperlegible";font-style:italic;font-weight:700;font-display:swap;src:url("../fonts/atkinson-hyperlegible-BoldItalic.woff2") format("woff2")}
+@font-face{font-family:"Fredoka";font-style:normal;font-weight:300 700;font-display:swap;src:url("../fonts/fredoka-latin.woff2") format("woff2")}
+@font-face{font-family:"Noto Sans Mono";font-style:normal;font-weight:100 900;font-display:swap;src:url("../fonts/noto-sans-mono-latin.woff2") format("woff2")}
+
+:root{
+  --fonts-proportional: "Atkinson Hyperlegible", -apple-system, "Segoe UI", system-ui, "Noto Sans", "Noto Sans Hebrew", Roboto, "Helvetica Neue", Arial;
+  --fonts-monospace: "Noto Sans Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace, var(--fonts-emoji);
+  --fonts-heading: "Fredoka", var(--fonts-proportional), sans-serif, var(--fonts-emoji);
+}
+
+h1,h2,h3,h4,h5,h6,.ui.header{font-family:var(--fonts-heading)}
+
+/* the one monospace declaration upstream hard-codes (diff line numbers) */
+.repository .data-table .line-num{font-family:var(--fonts-monospace)}

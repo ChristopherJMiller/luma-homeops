@@ -204,3 +204,11 @@ into `$GITEA_CUSTOM/templates/` (see `extraContainerVolumeMounts` in `forgejo-re
 should show only the added lines), carry the change over, and bump `realliance/templates-rev`
 (Forgejo reads templates at start). `tests/forge/test_forge_signin.py::test_settings_link_to_realliance_account`
 catches a lost override.
+
+## Typography (fonts)
+
+Body Atkinson Hyperlegible, headings Fredoka, code Noto Sans Mono; self-hosted woff2 (OFL), never a CDN.
+One stylesheet (`realliance-fonts.css`) is loaded on every page by the `custom/header.tmpl` override, so
+it applies to every theme. Sources, pins, sizes and the rebuild script: `cluster/forgejo/custom/FONTS.md`.
+Test: `scripts/test_forge_fonts.py` (pre-commit hook `forge-fonts`). Deploying it restarts Forgejo once
+(new volume and mounts).
