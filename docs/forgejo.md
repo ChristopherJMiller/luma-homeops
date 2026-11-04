@@ -153,7 +153,8 @@ it creates tables in an order that ignores Forgejo 15's foreign keys and does no
    (owner uid 1000), via a helper pod running the pinned Forgejo image — exactly what
    `restore-drill.sh up` does into `forgejo-drill`.
 4. Scale Forgejo back to 1 (Argo), then on the pod:
-   `forgejo admin regenerate hooks` and `forgejo doctor check --all`.
+   `forgejo admin regenerate hooks` and `forgejo doctor check --all`. The hooks step applies on 15
+   only. Forgejo 16 and later centralise hooks and rewrite them at start, so drop it from 16 on.
 5. Check: sign in, `git ls-remote` a few repos, fetch an LFS object, compare the SSH host key.
 
 On a brand-new host without galaxy, the same artefacts suffice: the Realliance B2 buckets, the
@@ -229,3 +230,17 @@ file.
 **On a Forgejo upgrade (15 to 17):** re-check that the `custom/header.tmpl` hook still exists, that
 `--fonts-proportional`, `--fonts-monospace`, `--fonts-regular`, `--border-radius`, `--border-radius-medium` and
 `AssetVersion` still exist, and re-screenshot (Fomantic radius rules are hard-coded and may move).
+
+## 19 LTS hop carry list
+
+Decision 2026-11-04: stay on 15 LTS, hop once to 19 LTS about May 2027
+(`docs/superpowers/specs/2026-11-04-forgejo-17-upgrade-design.md`). Renovate never merges the
+chart by itself (`.renovaterc.json`, guarded by `scripts/test_forgejo_renovate.py`), because a bump restarts Forgejo.
+For the hop:
+
+- Pin `[service].ADD_MEMBERS_BY_INVITATIONS=false` before the hop, not now (15 lacks the setting, and it restarts Forgejo).
+- Port the Catppuccin oklch shim.
+- Re-copy `navbar.tmpl`.
+- The administrator API can create true system hooks with `config.is_system_webhook`.
+- Add a Renovate custom manager for `image.tag`/`image.digest`: no manager sees them inside `valuesObject`.
+- `INTERNAL_TOKEN` no longer exists in 18 and later.

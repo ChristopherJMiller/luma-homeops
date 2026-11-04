@@ -68,6 +68,13 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_forge_fonts.py
         pass_filenames: false
         files: ^(cluster/forgejo/.*|cluster/applications/forgejo-release\.yaml|scripts/(test_forge_fonts\.py|sync-brand\.sh)|\.pre-commit-config\.yaml)$
+      # Renovate must never automerge the forgejo-helm chart (a bump restarts Forgejo).
+      - id: forgejo-renovate
+        name: Forgejo chart Renovate guard
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_forgejo_renovate.py
+        pass_filenames: false
+        files: ^(scripts/test_forgejo_renovate\.py|\.renovaterc\.json|cluster/applications/forgejo-release\.yaml)$
       # scripts/netpol-verify.sh against a stub kubectl: a partial pod list or an
       # unparseable answer must FAIL, never pass vacuously.
       - id: netpol-verify-selftest

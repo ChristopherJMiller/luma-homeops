@@ -165,6 +165,12 @@
       "automerge": false,
       "groupName": "home-assistant core",
       "description": "HA core, in its own PR: read the breaking-changes section, pg_dumpall first, hactl lint in the new image (see docs/ha.md)."
+    },
+    {
+      "matchManagers": ["argocd"],
+      "matchFileNames": ["cluster/applications/forgejo-release.yaml"],
+      "automerge": false,
+      "description": "The forgejo-helm chart (Forgejo stays on 15 LTS until the 19 LTS hop). Every chart bump changes the pod template or init scripts and restarts Forgejo, which cannot start while SSO discovery is down. Matched by file because the schemeless OCI repoURL gives no stable depName. Last in the list so it wins over the presets. See docs/forgejo.md."
     }
   ],
   "customManagers": [
