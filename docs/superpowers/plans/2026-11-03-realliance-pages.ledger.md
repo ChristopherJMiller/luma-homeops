@@ -18,3 +18,25 @@
 - New snapshot: 35 host rows (+4) and 11 probe rows (+2); saved to scratch `edge-new.txt`.
 - Gate G comparisons must first normalise Dex's random per-request values with `sed -E 's/(code_challenge|state|nonce)=[^& ]*/\1=X/g'`.
 - Diff old vs new after normalisation: no removed or changed lines. The only additions are the six new rows. `git.realliance.net/` returns 200. The five `realliance.page` rows show `000 err=60` (no certificate for the name yet), as expected before DNS and cert. The script prints exactly one line per row whatever the outcome: a curl failure collapses to `000 err=<curl exit code>` and curl's own text is discarded.
+
+## Task 5 - the `pages` app (local commit ce1cc569, before the STOP)
+
+- Sizing pre-check (2026-11-04, ~01:00Z, `kubectl describe nodes`): allocatable memory is 30,829 MiB on each node. Memory requests: top 26,345 Mi (85.5 %), middle 26,339 Mi (85.4 %), bottom 27,066 Mi (87.8 %). Task 5 adds 96 Mi of requests: git-pages 64 Mi and the relay 32 Mi. The relay's 32 Mi replaces the plan's 16 Mi, following the Task 4 measurement. Worst case, with both pods on bottom, bottom goes from 87.8 % to 88.1 % (+0.3 points). CPU requests add 15m. Limits are git-pages 1 Gi and relay 128 Mi (`GOMEMLIMIT=100MiB`). Task 10 Step 6 sets the final values from measurements.
+- git-pages release notes (0.10.0 of 2026-10-25 and 0.10.1 of 2026-10-28), read for the breaking items:
+  - Administrators:
+    - `[server].caddy` is now `[server].proxy`. The config uses `proxy = "-"`, and an unknown key aborts the start.
+    - The SIGHUP reload is gone, so a config change needs a restart. The hashed `git-pages-config` ConfigMap rolls the pod.
+    - `-size-histogram` is now `-analyze-storage text`.
+    - The `-audit-log` columns were reordered, and `-reason` was added.
+    - Caddy will later leave the image; the `proxy` endpoint stays.
+  - End users:
+    - On a project site (`/<repo>/`), a `_headers` source path must start with the project path, and so must a `_redirects` target with a 2xx/4xx code.
+    - A PATCH carrying `_redirects` or `_headers` now replaces them instead of appending. PATCH is off in v1 (D7).
+  - 0.10.1 (security): Forgejo-level repository redirects are no longer followed. A renamed or transferred repo publishes only under its new name, and the old site stays until it is taken down.
+  - Also in 0.10.x: `-delete-site` performs the takedown, and sites are cached for about 60 s.
+- Gate G before (2026-11-04T01:17Z):
+  - G1: 3 nodes Ready, none cordoned or tainted. Ceph HEALTH_OK; the only checks are the muted `AUTH_INSECURE_*` ones, and the `MDS_CLIENT_RECALL` warn has cleared. 145 pgs: 144 active+clean plus 1 active+clean+scrubbing+deep. 9/9 OSDs up/in, and there is no recovery.
+  - G2: 59 Argo apps. Only `rook` is not Healthy (Synced/Degraded); `rook-cluster` is Healthy now.
+  - G3: the edge snapshot has 46 lines (scratch `edge-t5-before.txt`). It is identical to Task 1's `edge-new.txt` once `cert=` is stripped and Dex values are normalised. The `realliance.page` rows still show `000 err=60`.
+  - G4: no pods outside Running/Succeeded.
+- Cross-plan: no netpol Gate G window is open (that plan is paused until 2026-11-04T18:35Z), and forge-bot is in pre-T16 code review, so no apply or drill window is open.
