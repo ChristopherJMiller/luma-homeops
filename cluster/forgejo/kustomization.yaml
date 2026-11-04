@@ -23,6 +23,7 @@ configMapGenerator:
   - name: forgejo-custom-templates
     files:
       - user-settings-navbar.tmpl=custom/templates/user/settings/navbar.tmpl
+      - custom-header.tmpl=custom/templates/custom/header.tmpl # loads realliance-fonts.css on every page
     options:
       disableNameSuffixHash: true # referenced by name from the other Application
   # Catppuccin themes (custom/public/CATPPUCCIN.md): two maps because one ConfigMap is capped at 1 MiB.
@@ -110,6 +111,43 @@ configMapGenerator:
       annotations:
         # ~620 KB: client-side apply's last-applied annotation would exceed the 256 KB cap
         argocd.argoproj.io/sync-options: ServerSideApply=true
+  # Realliance typography (custom/FONTS.md): Atkinson Hyperlegible, Fredoka, Noto Sans Mono, self-hosted.
+  # The stylesheet joins the projected css/ directory with the themes; the fonts get a directory of
+  # their own. Together ~0.2 MiB, far under the 1 MiB ConfigMap cap, so one map each.
+  - name: forgejo-font-css
+    files:
+      - custom/public/assets/css/realliance-fonts.css
+    options:
+      disableNameSuffixHash: true
+  - name: forgejo-fonts
+    files:
+      - custom/public/assets/fonts/atkinson-hyperlegible-Regular.woff2
+      - custom/public/assets/fonts/atkinson-hyperlegible-Italic.woff2
+      - custom/public/assets/fonts/atkinson-hyperlegible-Bold.woff2
+      - custom/public/assets/fonts/atkinson-hyperlegible-BoldItalic.woff2
+      - custom/public/assets/fonts/fredoka-latin.woff2
+      - custom/public/assets/fonts/noto-sans-mono-latin.woff2
+      - custom/public/assets/fonts/OFL-atkinson-hyperlegible.txt
+      - custom/public/assets/fonts/OFL-fredoka.txt
+      - custom/public/assets/fonts/OFL-noto-sans-mono.txt
+    options:
+      disableNameSuffixHash: true
+      annotations:
+        # ~0.2 MiB base64: near enough client-side apply's 256 KB last-applied cap to avoid it
+        argocd.argoproj.io/sync-options: ServerSideApply=true
+  # Realliance logo (custom/BRAND.md): navbar/home logo (3d, -auto), favicon, apple-touch, logo.png, and
+  # baked mocha/latte logos that the stylesheet swaps in for fixed themes. ~45 KB, far under 1 MiB.
+  - name: forgejo-img
+    files:
+      - custom/public/assets/img/logo.svg
+      - custom/public/assets/img/logo-mocha.svg
+      - custom/public/assets/img/logo-latte.svg
+      - custom/public/assets/img/logo.png
+      - custom/public/assets/img/favicon.svg
+      - custom/public/assets/img/favicon.png
+      - custom/public/assets/img/apple-touch-icon.png
+    options:
+      disableNameSuffixHash: true
 patches:
   - target: {kind: SealedSecret, name: patroni-restapi}
     patch: |- # fail-closed dependency of every Spilo pod (D7): never prune it

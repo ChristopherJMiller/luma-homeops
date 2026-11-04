@@ -204,3 +204,28 @@ into `$GITEA_CUSTOM/templates/` (see `extraContainerVolumeMounts` in `forgejo-re
 should show only the added lines), carry the change over, and bump `realliance/templates-rev`
 (Forgejo reads templates at start). `tests/forge/test_forge_signin.py::test_settings_link_to_realliance_account`
 catches a lost override.
+
+## Typography (fonts)
+
+Body Atkinson Hyperlegible, headings Fredoka, code Noto Sans Mono; self-hosted woff2 (OFL), never a CDN.
+One stylesheet (`realliance-fonts.css`) is loaded on every page by the `custom/header.tmpl` override, so
+it applies to every theme. Sources, pins, sizes and the rebuild script: `cluster/forgejo/custom/FONTS.md`.
+Fredoka is on real headings only (`:where(h1,h2,h3,h4):not(.ui.header)`, `.markup h1-h6`, the repo title);
+Fomantic `.ui.header` section titles stay Atkinson. The same sheet sets corner radius variant B
+(`--border-radius` 8px, `--border-radius-medium` 12px, plus the Fomantic rules that hard-code 4.57px; avatars stay 4px,
+pills and counters are untouched). Test: `scripts/test_forge_fonts.py` (pre-commit hook `forge-fonts`).
+Deploying it restarts Forgejo once (new volume and mounts).
+
+**Deploy order with the SSO theme (never both in one window).** The forge refuses to start while SSO discovery
+is down, and the SSO theme change restarts Keycloak. So: (1) merge realliance/sso (login + account themes) first,
+wait for ansible-pull and the Keycloak restart (about 5-7 min), confirm a real sign-in and that
+`pytest tests/realm/test_login_theme.py` passes in that repo; (2) only then merge this change. Not while the pages
+acceptance suite or forge-bot tests run. Merge-time notes: sync the `forgejo` Application (ConfigMaps) before
+`forgejo-release` so the new mounts exist when the pod starts; `custom/header.tmpl` is a subPath mount, so editing
+it needs a `realliance/templates-rev` bump (CSS and fonts are directory mounts and update live in about a minute);
+`/assets/*` is cached up to 6 h and font files carry no version, so after a later CSS edit hard-reload or rename the
+file.
+
+**On a Forgejo upgrade (15 to 17):** re-check that the `custom/header.tmpl` hook still exists, that
+`--fonts-proportional`, `--fonts-monospace`, `--fonts-regular`, `--border-radius`, `--border-radius-medium` and
+`AssetVersion` still exist, and re-screenshot (Fomantic radius rules are hard-coded and may move).
