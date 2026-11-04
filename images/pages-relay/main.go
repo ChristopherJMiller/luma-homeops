@@ -2,12 +2,15 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -43,6 +46,7 @@ func main() {
 	rl := &Relay{Secret: secret, Upstream: uu, Domain: env("PAGES_RELAY_DOMAIN", "realliance.page"),
 		Forge: forge, Client: NewClient(), Counters: counters,
 		Log: slog.New(slog.NewJSONHandler(os.Stdout, nil))}
+	rl.start()
 	mux := http.NewServeMux()
 	mux.Handle("/hook", rl)
 	mux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
@@ -52,5 +56,22 @@ func main() {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { fmt.Fprintln(w, "ok") })
 	srv := &http.Server{Addr: env("PAGES_RELAY_LISTEN", ":8080"), Handler: mux,
 		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 60 * time.Second}
-	fatal(srv.ListenAndServe().Error())
+
+	sig, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
+	defer stop()
+	served := make(chan error, 1)
+	go func() { served <- srv.ListenAndServe() }()
+	select {
+	case err := <-served:
+		fatal(err.Error())
+	case <-sig.Done():
+	}
+	// SIGTERM: stop accepting, let the deliveries being answered finish, then
+	// forward everything queued. Whatever is left at DrainTimeout is logged by
+	// site name; a crash loses the queue (accepted: redeliver from Forgejo).
+	rl.Log.Info("shutdown: stop accepting", "drain_timeout", DrainTimeout.String())
+	ctx, cancel := context.WithTimeout(context.Background(), DrainTimeout)
+	defer cancel()
+	srv.Shutdown(ctx)
+	rl.Shutdown(ctx)
 }

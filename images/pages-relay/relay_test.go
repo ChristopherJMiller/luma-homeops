@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,6 +19,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -170,30 +172,76 @@ func TestVerify(t *testing.T) {
 	}
 }
 
+// syncBuffer is a log sink the test can read while workers write to it.
+type syncBuffer struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (s *syncBuffer) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.Write(p)
+}
+
+func (s *syncBuffer) String() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.b.String()
+}
+
 type harness struct {
 	relay *Relay
-	hits  *atomic.Int32
-	log   *bytes.Buffer
+	hits  *atomic.Int32 // POSTs (forwards) the fake git-pages received
+	gets  *atomic.Int32 // GETs (site checks) the fake git-pages received
+	log   *syncBuffer
 	up    *httptest.Server
 }
 
+// newHarness puts a fake git-pages (h; nil answers 200) behind a Relay. Cleanup
+// shuts the relay down before the fake closes.
 func newHarness(t *testing.T, h http.HandlerFunc) *harness {
 	t.Helper()
-	hits := new(atomic.Int32)
+	hits, gets := new(atomic.Int32), new(atomic.Int32)
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
+		if r.Method == http.MethodGet {
+			gets.Add(1)
+		} else {
+			hits.Add(1)
+		}
 		if h != nil {
 			h(w, r)
 		}
 	}))
 	t.Cleanup(up.Close)
 	u, _ := url.Parse(up.URL)
-	buf := new(bytes.Buffer)
-	return &harness{
-		relay: &Relay{Secret: []byte("s3cret"), Upstream: u, Domain: domain, Forge: forge,
-			Client: up.Client(), Counters: NewCounters(), Log: slog.New(slog.NewJSONHandler(buf, nil))},
-		hits: hits, log: buf, up: up,
+	buf := new(syncBuffer)
+	rl := &Relay{Secret: []byte("s3cret"), Upstream: u, Domain: domain, Forge: forge,
+		Client: up.Client(), Counters: NewCounters(), Log: slog.New(slog.NewJSONHandler(buf, nil))}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		rl.Shutdown(ctx)
+	})
+	return &harness{relay: rl, hits: hits, gets: gets, log: buf, up: up}
+}
+
+// settle waits until nothing is queued or being forwarded.
+func (h *harness) settle(t *testing.T) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for !h.relay.idle() {
+		if time.Now().After(deadline) {
+			t.Fatal("relay queue never drained")
+		}
+		time.Sleep(2 * time.Millisecond)
 	}
+}
+
+// minimalBody is all the relay forwards: the two fields git-pages 0.10.1 reads
+// from a push (src/pages.go:880-885).
+func minimalBody(cloneURL string) string {
+	return `{"ref":"refs/heads/pages","repository":{"clone_url":"` + cloneURL + `"}}`
 }
 
 func (h *harness) post(t *testing.T, body []byte, event, sig string) *httptest.ResponseRecorder {
@@ -221,46 +269,56 @@ func payload(t *testing.T, ev Event) []byte {
 	return b
 }
 
+// Accept, then queue: the delivery is answered 202 at once and a worker
+// forwards a minimal payload.
 func TestServeForwards(t *testing.T) {
-	var gotHost, gotPath, gotCT, gotEv string
-	var gotBody []byte
+	var mu sync.Mutex
+	var gotHost, gotPath, gotCT, gotEv, gotBody string
 	h := newHarness(t, func(w http.ResponseWriter, r *http.Request) {
-		gotHost, gotPath, gotCT, gotEv = r.Host, r.URL.Path, r.Header.Get("Content-Type"), r.Header.Get("X-Forgejo-Event")
-		gotBody, _ = io.ReadAll(r.Body)
+		b, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		gotHost, gotPath, gotCT, gotEv, gotBody = r.Host, r.URL.Path, r.Header.Get("Content-Type"), r.Header.Get("X-Forgejo-Event"), string(b)
+		mu.Unlock()
 		w.WriteHeader(202)
 		io.WriteString(w, "updating")
 	})
 	body := payload(t, pushEv(pub("Org", "Site")))
 	w := h.post(t, body, "push", sign(body, h.relay.Secret))
-	if w.Code != 202 || w.Body.String() != "updating" {
+	if w.Code != 202 || w.Body.String() != "queued\n" {
 		t.Fatalf("%d %q", w.Code, w.Body.String())
 	}
-	if gotHost != "org.realliance.page" || gotPath != "/site/" || gotCT != "application/json" || gotEv != "push" || !bytes.Equal(gotBody, body) {
-		t.Fatalf("upstream saw %q %q %q %q", gotHost, gotPath, gotCT, gotEv)
+	h.settle(t)
+	mu.Lock()
+	defer mu.Unlock()
+	if gotHost != "org.realliance.page" || gotPath != "/site/" || gotCT != "application/json" || gotEv != "push" ||
+		gotBody != minimalBody(forge+"Org/Site.git") {
+		t.Fatalf("upstream saw %q %q %q %q %q", gotHost, gotPath, gotCT, gotEv, gotBody)
 	}
-	var m bytes.Buffer
-	h.relay.Counters.WriteTo(&m)
-	if !strings.Contains(m.String(), `pages_relay_events_total{outcome="forwarded"} 1`) {
-		t.Error(m.String())
+	m := h.metrics()
+	if !strings.Contains(m, `pages_relay_events_total{outcome="forwarded"} 1`) || !strings.Contains(m, `outcome="queued"} 1`) {
+		t.Error(m)
 	}
 }
 
+// A non-2xx answer or a transport error is counted upstream_error by the worker;
+// Forgejo already has its 202.
 func TestServeUpstreamErrors(t *testing.T) {
 	h := newHarness(t, func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(503) })
 	body := payload(t, pushEv(pub("o", "r")))
-	w := h.post(t, body, "push", sign(body, h.relay.Secret))
-	if w.Code != 503 {
+	if w := h.post(t, body, "push", sign(body, h.relay.Secret)); w.Code != 202 {
 		t.Errorf("status %d", w.Code)
 	}
-	var m bytes.Buffer
-	h.relay.Counters.WriteTo(&m)
-	if !strings.Contains(m.String(), `outcome="upstream_error"} 1`) {
-		t.Error(m.String())
+	h.settle(t)
+	if m := h.metrics(); !strings.Contains(m, `outcome="upstream_error"} 1`) {
+		t.Error(m)
 	}
 	h.up.Close()
-	w = h.post(t, body, "push", sign(body, h.relay.Secret))
-	if w.Code != 502 {
-		t.Errorf("transport error status %d", w.Code)
+	if w := h.post(t, body, "push", sign(body, h.relay.Secret)); w.Code != 202 {
+		t.Errorf("transport error: status %d", w.Code)
+	}
+	h.settle(t)
+	if m := h.metrics(); !strings.Contains(m, `outcome="upstream_error"} 2`) || !strings.Contains(m, `outcome="forwarded"} 0`) {
+		t.Error(m)
 	}
 }
 
@@ -270,22 +328,25 @@ func TestServeNoRedirects(t *testing.T) {
 	})
 	h.relay.Client = NewClient()
 	body := payload(t, pushEv(pub("o", "r")))
-	w := h.post(t, body, "push", sign(body, h.relay.Secret))
+	if w := h.post(t, body, "push", sign(body, h.relay.Secret)); w.Code != 202 {
+		t.Errorf("status %d", w.Code)
+	}
+	h.settle(t)
 	if h.hits.Load() != 1 {
 		t.Errorf("hits %d", h.hits.Load())
 	}
-	if w.Code < 300 || w.Code >= 400 {
-		// 302 passes through (non-2xx) and is counted as an upstream error.
-		t.Errorf("status %d", w.Code)
+	// A 302 is not followed; it is non-2xx, so upstream_error.
+	if m := h.metrics(); !strings.Contains(m, `outcome="upstream_error"} 1`) {
+		t.Error(m)
 	}
 }
 
 func TestServeUnpublishNotForwarded(t *testing.T) {
-	h := newHarness(t, nil)
+	h := newHarness(t, nil) // the site check answers 200: git-pages has the site
 	body := payload(t, Event{Name: "repository", Action: "deleted", Repository: pub("o", "r")})
 	w := h.post(t, body, "repository", sign(body, h.relay.Secret))
-	if w.Code != 200 || h.hits.Load() != 0 {
-		t.Fatalf("%d hits %d", w.Code, h.hits.Load())
+	if w.Code != 200 || h.hits.Load() != 0 || h.gets.Load() != 1 {
+		t.Fatalf("%d posts %d gets %d", w.Code, h.hits.Load(), h.gets.Load())
 	}
 	var m bytes.Buffer
 	h.relay.Counters.WriteTo(&m)
@@ -370,12 +431,18 @@ func TestPrivateLogsNoNames(t *testing.T) {
 	if l == "" || strings.Contains(l, "secret-org") || strings.Contains(l, "hidden") || strings.Contains(l, "s3cret") {
 		t.Fatalf("log: %q", l)
 	}
+	// D9: git-pages logs every request's Host and path, so a private repo's
+	// unpublish is never checked against it.
+	if h.hits.Load() != 0 || h.gets.Load() != 0 {
+		t.Fatalf("posts %d gets %d", h.hits.Load(), h.gets.Load())
+	}
 }
 
 func TestPublicLogsHostPath(t *testing.T) {
 	h := newHarness(t, nil)
 	body := payload(t, pushEv(pub("org", "site")))
 	h.post(t, body, "push", sign(body, h.relay.Secret))
+	h.settle(t)
 	if l := h.log.String(); !strings.Contains(l, "org.realliance.page") || !strings.Contains(l, "/site/") || strings.Contains(l, "s3cret") {
 		t.Fatalf("log: %q", l)
 	}
@@ -384,14 +451,28 @@ func TestPublicLogsHostPath(t *testing.T) {
 func TestMetricsAllOutcomesStartAtZero(t *testing.T) {
 	var b bytes.Buffer
 	NewCounters().WriteTo(&b)
-	lines := strings.Split(strings.TrimSpace(b.String()), "\n")
-	if len(lines) != 11 {
-		t.Fatalf("%d lines: %q", len(lines), b.String())
-	}
-	for _, l := range lines {
-		if !strings.HasPrefix(l, `pages_relay_events_total{outcome="`) || !strings.HasSuffix(l, " 0") {
-			t.Errorf("bad line %q", l)
+	want := []string{"forwarded", "queued", "coalesced", "ignored_event", "ignored_ref", "ignored_private",
+		"ignored_name", "ignored_no_site", "unpublish_requested", "bad_signature", "bad_request",
+		"upstream_error", "too_large", "busy"}
+	var got []string
+	for _, l := range strings.Split(strings.TrimSpace(b.String()), "\n") {
+		switch {
+		case strings.HasPrefix(l, "# "):
+		case strings.HasPrefix(l, `pages_relay_events_total{outcome="`):
+			if !strings.HasSuffix(l, "} 0") {
+				t.Errorf("bad line %q", l)
+			}
+			got = append(got, strings.TrimSuffix(strings.TrimPrefix(l, `pages_relay_events_total{outcome="`), `"} 0`))
+		case l == "pages_relay_queue_depth 0":
+		default:
+			t.Errorf("unexpected line %q", l)
 		}
+	}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("outcomes %v, want %v", got, want)
+	}
+	if !strings.Contains(b.String(), "\npages_relay_queue_depth 0\n") || !strings.Contains(b.String(), "# TYPE pages_relay_queue_depth gauge") {
+		t.Errorf("no queue depth gauge: %q", b.String())
 	}
 }
 
@@ -495,15 +576,17 @@ func TestForgejoShapes(t *testing.T) {
 	repo := repoJSON("Org", "public", "Site", false, false)
 	h := newHarness(t, nil)
 	b := pushBody(repo, 3)
-	if w := h.post(t, b, "push", sign(b, h.relay.Secret)); w.Code != 200 || h.hits.Load() != 1 {
+	w := h.post(t, b, "push", sign(b, h.relay.Secret))
+	h.settle(t)
+	if w.Code != 202 || h.hits.Load() != 1 {
 		t.Fatalf("push: %d hits %d", w.Code, h.hits.Load())
 	}
 	b = deleteBranchBody(repo)
 	h.post(t, b, "delete", sign(b, h.relay.Secret))
 	b = repoDeletedBody(repo)
 	h.post(t, b, "repository", sign(b, h.relay.Secret))
-	if !strings.Contains(h.metrics(), `outcome="unpublish_requested"} 2`) || h.hits.Load() != 1 {
-		t.Errorf("metrics %s hits %d", h.metrics(), h.hits.Load())
+	if !strings.Contains(h.metrics(), `outcome="unpublish_requested"} 2`) || h.hits.Load() != 1 || h.gets.Load() != 2 {
+		t.Errorf("metrics %s posts %d gets %d", h.metrics(), h.hits.Load(), h.gets.Load())
 	}
 	if l := h.log.String(); !strings.Contains(l, "org.realliance.page") {
 		t.Errorf("public unpublish should log host: %q", l)
@@ -524,29 +607,10 @@ func TestLargeRealPushForwarded(t *testing.T) {
 	if len(b) <= 1<<20 {
 		t.Fatalf("fixture too small: %d", len(b))
 	}
-	if w := h.post(t, b, "push", sign(b, h.relay.Secret)); w.Code != 200 || h.hits.Load() != 1 {
+	w := h.post(t, b, "push", sign(b, h.relay.Secret))
+	h.settle(t)
+	if w.Code != 202 || h.hits.Load() != 1 {
 		t.Fatalf("%d hits %d", w.Code, h.hits.Load())
-	}
-}
-
-func TestBusyWhenOverLimit(t *testing.T) {
-	release := make(chan struct{})
-	h := newHarness(t, func(w http.ResponseWriter, r *http.Request) { <-release })
-	b := pushBody(repoJSON("org", "public", "site", false, false), 1)
-	sig := sign(b, h.relay.Secret)
-	done := make(chan int, MaxInFlight)
-	for i := 0; i < MaxInFlight; i++ {
-		go func() { done <- h.post(t, b, "push", sig).Code }()
-	}
-	for h.hits.Load() < int32(MaxInFlight) {
-		time.Sleep(5 * time.Millisecond)
-	}
-	if w := h.post(t, b, "push", sig); w.Code != 503 || !strings.Contains(h.metrics(), `outcome="busy"} 1`) {
-		t.Errorf("5th: %d %s", w.Code, h.metrics())
-	}
-	close(release)
-	for i := 0; i < MaxInFlight; i++ {
-		<-done
 	}
 }
 
@@ -595,8 +659,9 @@ func TestPeakAllocOneMaxBody(t *testing.T) {
 	runtime.ReadMemStats(&before)
 	w := httptest.NewRecorder()
 	h.relay.ServeHTTP(w, req)
+	h.settle(t)
 	runtime.ReadMemStats(&after)
-	if w.Code != 200 || h.hits.Load() != 1 {
+	if w.Code != 202 || h.hits.Load() != 1 {
 		t.Fatalf("%d hits %d", w.Code, h.hits.Load())
 	}
 	alloc := after.TotalAlloc - before.TotalAlloc
@@ -632,27 +697,8 @@ func TestSlowBodyTimesOut(t *testing.T) {
 	}
 	// The slot is free again.
 	b := pushBody(repoJSON("org", "public", "site", false, false), 1)
-	if w := h.post(t, b, "push", sign(b, h.relay.Secret)); w.Code != 200 {
+	if w := h.post(t, b, "push", sign(b, h.relay.Secret)); w.Code != 202 {
 		t.Errorf("after: %d", w.Code)
-	}
-}
-
-// N3: 503 carries Retry-After.
-func TestBusyRetryAfter(t *testing.T) {
-	release := make(chan struct{})
-	h := newHarness(t, func(w http.ResponseWriter, r *http.Request) { <-release })
-	b := pushBody(repoJSON("org", "public", "site", false, false), 1)
-	sig := sign(b, h.relay.Secret)
-	for i := 0; i < MaxInFlight; i++ {
-		go h.post(t, b, "push", sig)
-	}
-	for h.hits.Load() < int32(MaxInFlight) {
-		time.Sleep(5 * time.Millisecond)
-	}
-	w := h.post(t, b, "push", sig)
-	close(release)
-	if w.Code != 503 || w.Header().Get("Retry-After") != "5" {
-		t.Errorf("%d %q", w.Code, w.Header().Get("Retry-After"))
 	}
 }
 
