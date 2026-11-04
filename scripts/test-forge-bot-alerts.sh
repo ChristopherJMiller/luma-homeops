@@ -33,7 +33,7 @@ fgit() {
 }
 
 # Step 4's inputs: the pinned commit's two files.
-short=$(sed -nE 's#^ *image: git\.realliance\.net/realliance/forge-bot:sha-([0-9a-f]{7})@sha256:[0-9a-f]{64}$#\1#p' "$dir/statefulset.yaml")
+short=$(sed -nE 's#^ *image: git\.realliance\.net/realliance-ops/forge-bot:sha-([0-9a-f]{7})@sha256:[0-9a-f]{64}$#\1#p' "$dir/statefulset.yaml")
 [ "$(printf '%s\n' "$short" | grep -c .)" -eq 1 ] || { echo "FAIL: expected exactly one pinned forge-bot image in statefulset.yaml" >&2; exit 1; }
 full=$(fgit rev-parse --verify --quiet "$short^{commit}") ||
   { echo "could not run: commit $short is not in $src (git -C $src fetch, or set FORGE_BOT_SRC)" >&2; exit 2; }

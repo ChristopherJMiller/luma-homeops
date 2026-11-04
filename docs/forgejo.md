@@ -107,7 +107,7 @@ including this one.
 forge-bot reconciles Forgejo with the SSO every 5 min ± 30 s: login (`access`), site admin
 (`admin`), mapped teams (`teams`), email, name and pronouns (`profile`) and the SSO picture
 (`avatar`). Code, README (what it writes, safety rules, metrics) and alert rules:
-`git.realliance.net/realliance/forge-bot`. Spec:
+`git.realliance.net/realliance-ops/forge-bot`. Spec:
 `docs/superpowers/specs/2026-11-02-forge-bot-and-ci-design.md`.
 
 - **Manifests:** `cluster/forge-bot/` (Application `forge-bot`). `config.yaml` holds the job

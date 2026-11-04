@@ -120,7 +120,7 @@
     },
     {
       "matchManagers": ["kubernetes"],
-      "matchPackageNames": ["git.realliance.net/realliance/forge-bot"],
+      "matchPackageNames": ["git.realliance.net/realliance-ops/forge-bot"],
       "automerge": false,
       "description": "forge-bot (cluster/forge-bot/statefulset.yaml) holds the Forgejo site-admin token and the SSO manage-users client secret. Its pin is a sha-<7> tag of a reviewed release commit, so a digest update means that tag moved: a CI re-run on the same commit (a rebuild) or anyone who can push the image as that tag (a tamper). :automergeDigest would otherwise roll it out unseen. Never automerge; re-pin only after Chris reviews the release (docs/forgejo.md#forge-bot). The PR stays open as the tamper alarm. scripts/test_forge_bot_renovate.py guards this rule.",
       "prBodyNotes": [

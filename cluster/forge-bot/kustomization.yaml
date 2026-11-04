@@ -1,6 +1,6 @@
 ---
 # forge-bot: keeps the Realliance forge (Forgejo, git.realliance.net) in step with Realliance SSO
-# (Keycloak, sso.realliance.net). Code, README and alert rules: git.realliance.net/realliance/forge-bot.
+# (Keycloak, sso.realliance.net). Code, README and alert rules: git.realliance.net/realliance-ops/forge-bot.
 # Spec: docs/superpowers/specs/2026-11-02-forge-bot-and-ci-design.md. Runbook: docs/forgejo.md#forge-bot.
 #
 # Not manifests, so not listed: alerts_test.yaml (forge-bot's promtool tests, checked by

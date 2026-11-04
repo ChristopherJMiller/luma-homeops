@@ -24,7 +24,7 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parent.parent
-IMAGE = "git.realliance.net/realliance/forge-bot"
+IMAGE = "git.realliance.net/realliance-ops/forge-bot"
 PIN_FILE = "cluster/forge-bot/statefulset.yaml"
 MANAGER, DATASOURCE = "kubernetes", "docker"
 DESCRIPTION_MUST = "re-pin only after Chris reviews the release (docs/forgejo.md#forge-bot)"
