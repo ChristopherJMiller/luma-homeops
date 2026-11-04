@@ -15,8 +15,6 @@ spec:
     spec:
       hostNetwork: true
       priorityClassName: system-node-critical # memory is ~84% requested; this must never be preempted
-      nodeSelector:
-        kubernetes.io/hostname: bottom # A3a only; Task 4 removes this line
       tolerations:
         - operator: Exists
       containers:

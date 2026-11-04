@@ -3,10 +3,12 @@
 # beside Talos's flannel. Runbook: docs/networkpolicy.md.
 # Design: docs/superpowers/specs/2026-11-03-networkpolicy-enforcement-design.md.
 #
-# Roll back by rendering nothing (cluster/kube-network-policies/kustomization.yaml
-# -> `resources: []`, no patches; allowEmpty lets Argo prune it all), never by
-# deleting this file: there is no resources-finalizer, so the root app would
-# orphan the DaemonSet and leave it running.
+# Roll back by rendering nothing, never by deleting this file: there is no
+# resources-finalizer, so the root app would orphan the DaemonSet and leave it
+# running. The rollback edits cluster/kube-network-policies/kustomization.yaml
+# only: the marker `# netpol: rolled back (Global Constraints)` on its own line
+# before `apiVersion:`, `resources: []`, no patches. allowEmpty lets Argo prune
+# it all; the netpol-manifests hook rejects an empty render without the marker.
 #
 # No CreateNamespace: kube-system is never Argo's to create or prune.
 apiVersion: argoproj.io/v1alpha1

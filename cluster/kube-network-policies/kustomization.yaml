@@ -18,8 +18,13 @@
 # the vendored file (.renovaterc.json).
 #
 # No kustomization-level `namespace:`: the PrometheusRule lives in `prometheus`.
-# Roll back by rendering nothing (`resources: []`, no patches), never by deleting
-# cluster/applications/kube-network-policies.yaml.
+#
+# Roll back by rendering nothing, never by deleting
+# cluster/applications/kube-network-policies.yaml. In one commit, add the
+# marker `# netpol: rolled back (Global Constraints)` as its own line before
+# `apiVersion:`, set `resources: []` and delete the `patches:` block. The
+# netpol-manifests hook accepts an empty render only with that marker
+# (scripts/test_netpol_manifests.py). Redeploy with `git revert` of that commit.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:

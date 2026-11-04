@@ -343,8 +343,8 @@ def test_enforcer_daemonset():
     assert len(metrics) == 1 and metrics[0]["containerPort"] == 9080
     assert {"name": "MY_NODE_NAME", "valueFrom": {"fieldRef": {"fieldPath": "spec.nodeName"}}} in c["env"]
 
-    # A3a only: Task 4 (A3b) drops the hostname and expects {"kubernetes.io/os": "linux"}.
-    assert pod["nodeSelector"] == {"kubernetes.io/os": "linux", "kubernetes.io/hostname": "bottom"}
+    # One agent on every node since A3b (Task 4); A3a ran on bottom only.
+    assert pod["nodeSelector"] == {"kubernetes.io/os": "linux"}
 
 
 def test_enforcer_monitoring():
