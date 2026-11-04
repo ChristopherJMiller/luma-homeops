@@ -1,0 +1,32 @@
+---
+# pages: Realliance Pages (git-pages + pages-relay), the static sites for
+# public repos on git.realliance.net at https://<owner>.realliance.page/<repo>/.
+# Manifests in cluster/pages; static tests scripts/test_pages_manifests.py.
+# Design: docs/superpowers/specs/2026-11-03-realliance-pages-design.md.
+#
+# Roll back by rendering nothing (cluster/pages/kustomization.yaml -> the marked
+# `resources: []`, see the test's docstring; allowEmpty lets Argo prune it all),
+# never by deleting this file: there is no resources-finalizer, so the root app
+# would orphan everything and leave it running.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: pages
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/pages
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: pages
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

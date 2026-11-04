@@ -35,6 +35,7 @@ resources:
   - music-streaming.yaml
   - dex.yaml
   - oauth2-proxy.yaml
+  - pages.yaml
   - metallb.yaml
   - metrics-server.yaml
   - ipmi-exporter.yaml

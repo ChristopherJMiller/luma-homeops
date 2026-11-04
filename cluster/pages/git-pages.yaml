@@ -1,0 +1,116 @@
+---
+# git-pages 0.10.1 (codeberg.org/git-pages/git-pages): serves every site of
+# Realliance Pages. All state is in the private B2 bucket `realliance-pages`, so
+# one replica is enough and a reschedule recovers in minutes. On a webhook POST
+# (from pages-relay only; Traefik will route GET/HEAD alone, plan D2) it clones
+# the repo from git.realliance.net itself and publishes the `pages` branch.
+#
+# Runs as 65532 on a read-only root: the image's /app/data is never used (S3
+# storage, no acme), clones go to the /tmp emptyDir. The Go heap limit follows
+# the cgroup (automemlimit, max-heap-size-ratio 0.5 of the memory limit).
+# A B2 failure at start aborts at BucketExists -> CrashLoop (a rollback trigger).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: git-pages
+  labels:
+    app.kubernetes.io/name: git-pages
+    app.kubernetes.io/part-of: pages
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: git-pages
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: git-pages
+        app.kubernetes.io/part-of: pages
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: git-pages
+          # Pinned to the 0.10.1 OCI index digest. Renovate never automerges it
+          # (.renovaterc.json): pre-1.0, read every changelog in the range.
+          image: codeberg.org/git-pages/git-pages:0.10.1@sha256:882733e3fc4b5cde8cb3f83b786f8b85854c9ad951662b64fca23cbd34f79dc9
+          command: ["/bin/git-pages", "-config", "/etc/git-pages/config.toml"]
+          envFrom:
+            - secretRef:
+                name: git-pages-s3
+          env:
+            - name: TMPDIR
+              value: /tmp
+            - name: HOME
+              value: /tmp
+          ports:
+            - name: pages
+              containerPort: 3000
+            - name: metrics
+              containerPort: 3002
+          # Listeners open before the S3 backend initialises; a backend failure
+          # exits the process, so the probes only need the ports.
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 3002
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            tcpSocket:
+              port: 3000
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          # Initial sizing (plan Task 5 Step 3); Task 10 Step 6 sets the final
+          # values from measurements.
+          resources:
+            requests:
+              cpu: 10m
+              memory: 64Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: config
+              mountPath: /etc/git-pages
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: git-pages-config
+        # Repo clones during a publish; a site is capped at 128 MB.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 2Gi
+---
+# git-pages.pages.svc.cluster.local:3000 (pages-relay's upstream; Traefik from
+# Task 9) and :3002 (Prometheus).
+apiVersion: v1
+kind: Service
+metadata:
+  name: git-pages
+  labels:
+    app.kubernetes.io/name: git-pages
+    app.kubernetes.io/part-of: pages
+spec:
+  selector:
+    app.kubernetes.io/name: git-pages
+  ports:
+    - name: pages
+      port: 3000
+      targetPort: pages
+    - name: metrics
+      port: 3002
+      targetPort: metrics

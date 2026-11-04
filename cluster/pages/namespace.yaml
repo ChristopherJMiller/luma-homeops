@@ -1,0 +1,12 @@
+---
+# D12: both pods (git-pages, pages-relay) meet PodSecurity `restricted`.
+# No NetworkPolicy yet: the NetworkPolicy plan adopts this namespace in its
+# Task 13, after Realliance Pages' acceptance suite is green.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pages
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

@@ -46,6 +46,20 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_netpol_manifests.py
         pass_filenames: false
         files: ^(cluster/.*|scripts/test_netpol_manifests\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
+      # Realliance Pages' fixed values: the git-pages 0.10.1 pin and config (128 MB
+      # cap, proxy not caddy, header allowlist), pod hardening for PodSecurity
+      # restricted, the relay's env, monitors and alerts, Renovate rules, and the
+      # one shared wildcard certificate (no per-host cert)
+      # (docs/superpowers/specs/2026-11-03-realliance-pages-design.md). Later plan
+      # tasks extend it to traefik/, dns/, cert-manager/ and cloudflare/dns/. It
+      # accepts the marked rollback (render nothing); the test file's docstring
+      # has the edit.
+      - id: pages-manifests
+        name: Realliance Pages static tests
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_pages_manifests.py
+        pass_filenames: false
+        files: ^(cluster/(pages|traefik|dns|cert-manager|applications)/.*|cloudflare/dns/.*\.tf|images/pages-relay/relay\.go|scripts/test_pages_manifests\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
       # scripts/netpol-verify.sh against a stub kubectl: a partial pod list or an
       # unparseable answer must FAIL, never pass vacuously.
       - id: netpol-verify-selftest

@@ -1,0 +1,44 @@
+# git-pages 0.10.1 config for Realliance Pages (plan D3, D7). Read once at start;
+# kustomize hashes it into the ConfigMap name, so a change here rolls the pod.
+# git-pages refuses to start on an unknown key (0.10.0 renamed [server].caddy
+# to [server].proxy). S3 credentials come from the git-pages-s3 Secret as
+# PAGES_STORAGE_S3_ACCESS_KEY_ID / PAGES_STORAGE_S3_SECRET_ACCESS_KEY, never here.
+# Sizes use c2h5oh/datasize: "MB" is 1 << 20 bytes.
+log-format = "json"
+# No codeberg-pages-compat, no acme (Traefik terminates TLS).
+features = []
+
+[server]
+pages = "tcp/:3000"
+# The Caddy on-demand-TLS endpoint; unused, so off.
+proxy = "-"
+metrics = "tcp/:3002"
+
+# No `authorization` key: forge-authorized PUT/PATCH/DELETE stay off (no uploads in v1).
+[[wildcard]]
+domain = "realliance.page"
+clone-url = "https://git.realliance.net/<user>/<project>.git"
+index-repo = "pages"
+index-repo-branch = "pages"
+
+[storage]
+type = "s3"
+
+[storage.s3]
+endpoint = "s3.us-east-005.backblazeb2.com"
+region = "us-east-005"
+bucket = "realliance-pages"
+
+[storage.s3.blob-cache]
+max-size = "64MB"
+
+[limits]
+# The quota: a hard cap (Chris, 2026-11-03). A publish over it is refused and the
+# site keeps its last content; PagesSiteUpdateFailing fires.
+max-site-size = "128MB"
+update-timeout = "5m"
+concurrent-uploads = 16
+allowed-repository-url-prefixes = ["https://git.realliance.net/"]
+# Never Set-Cookie, HSTS, nosniff or Referrer-Policy: Traefik owns those.
+allowed-custom-headers = ["Content-Security-Policy", "Cross-Origin-Embedder-Policy", "Cross-Origin-Opener-Policy", "Cross-Origin-Resource-Policy", "Access-Control-Allow-Origin", "Permissions-Policy", "X-Frame-Options", "X-Robots-Tag"]
+allow-basic-auth = false

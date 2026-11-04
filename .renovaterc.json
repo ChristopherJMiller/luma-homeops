@@ -107,6 +107,18 @@
       "description": "Our own Forgejo Actions runner (images/forgejo-runner, cluster/forgejo-runner). It runs every CI job for git.realliance.net in host mode, and every job can read the runner's connection tokens, so a new image is a change to the CI trust boundary. :automergeDigest would otherwise deploy a re-pushed sha- tag unseen (the workflow can be re-run on the same commit). Read the Dockerfile diff and the workflow's smoke test, then re-pin by hand."
     },
     {
+      "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["codeberg.org/git-pages/git-pages"],
+      "automerge": false,
+      "description": "Realliance Pages' server (cluster/pages/git-pages.yaml). git-pages is pre-1.0 and breaks config and site behaviour in minor releases (0.10.0 renamed [server].caddy and changed _headers/_redirects paths; 0.10.1 stopped following Forgejo redirects). Read every changelog in the bump range, take only releases at least 2 weeks old, and re-run the pages acceptance suite (realliance/sso tests/forge/test_forge_pages.py) after merging. git-pages rejects unknown config keys at start, so a renamed key is a CrashLoop."
+    },
+    {
+      "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["ghcr.io/christopherjmiller/pages-relay"],
+      "automerge": false,
+      "description": "Our own Forgejo -> git-pages relay (images/pages-relay). It decides which host a push publishes to and which repos are public enough to publish, so a new image is a change to who can publish where. :automergeDigest would otherwise deploy a re-pushed sha- tag unseen. Read the diff and the workflow's test run, then bump the sha- tag by hand."
+    },
+    {
       "matchManagers": ["gomod", "dockerfile"],
       "matchFileNames": ["images/mcp-jwt-auth/**"],
       "groupName": "mcp-jwt-auth deps",

@@ -1,0 +1,108 @@
+---
+# pages-relay (images/pages-relay): the target of the one Forgejo system webhook
+# (http://pages-relay.pages.svc.cluster.local:8080/hook, plan Task 6). It checks
+# X-Forgejo-Signature against the webhook secret, maps a push to the `pages`
+# branch of a public repo to Host <owner>.realliance.page + /<repo>/, and POSTs it
+# to git-pages by Service (plan D1, D2). It never names a private repo (D9).
+#
+# Bounded by design: 16 MiB body cap (too_large), 2 deliveries in flight (busy,
+# 503 Retry-After 5), 5 s header / 10 s body deadlines. Two 16 MiB bodies peak
+# near 33 MiB; GOMEMLIMIT keeps the GC ahead of the 128Mi limit (Task 4 fix
+# round 2). Forgejo 15 never retries a non-2xx delivery.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pages-relay
+  labels:
+    app.kubernetes.io/name: pages-relay
+    app.kubernetes.io/part-of: pages
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pages-relay
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pages-relay
+        app.kubernetes.io/part-of: pages
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: pages-relay
+          # The sha- tag .github/workflows/pages-relay.yml published, by digest.
+          # It decides which host a push publishes to: bump by hand, never automerge.
+          image: ghcr.io/christopherjmiller/pages-relay:sha-d82d30c@sha256:63509d09b62fb25a6318375e3fb2e7f67c9fdbabffc77eb72b63023ba4c6846e
+          env:
+            - name: PAGES_RELAY_UPSTREAM
+              value: http://git-pages.pages.svc.cluster.local:3000
+            - name: PAGES_RELAY_DOMAIN
+              value: realliance.page
+            - name: PAGES_RELAY_FORGE
+              value: https://git.realliance.net/
+            - name: PAGES_RELAY_SECRET_FILE
+              value: /etc/pages-relay/webhook-secret
+            - name: GOMEMLIMIT
+              value: 100MiB
+          ports:
+            - name: http
+              containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          # From the Task 4 measurement; Task 10 Step 6 re-measures with a 16 MiB
+          # body over a real socket.
+          resources:
+            requests:
+              cpu: 5m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: webhook-secret
+              mountPath: /etc/pages-relay
+              readOnly: true
+      volumes:
+        - name: webhook-secret
+          secret:
+            secretName: pages-relay-webhook
+            items:
+              - key: webhook-secret
+                path: webhook-secret
+---
+# pages-relay.pages.svc.cluster.local:8080: /hook (Forgejo), /metrics
+# (Prometheus), /healthz (probes).
+apiVersion: v1
+kind: Service
+metadata:
+  name: pages-relay
+  labels:
+    app.kubernetes.io/name: pages-relay
+    app.kubernetes.io/part-of: pages
+spec:
+  selector:
+    app.kubernetes.io/name: pages-relay
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

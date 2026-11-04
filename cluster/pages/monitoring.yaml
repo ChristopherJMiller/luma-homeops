@@ -1,0 +1,107 @@
+---
+# Scrapes for Realliance Pages. `release: prometheus` is what makes Prometheus
+# select these; without it a monitor exists and collects nothing, silently.
+# No jobLabel: the job is the Service name, which PagesDown's absent() uses.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: git-pages
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: git-pages
+  namespaceSelector:
+    matchNames: [pages]
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 30s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: pages-relay
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pages-relay
+  namespaceSelector:
+    matchNames: [pages]
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+---
+# Alerts for Realliance Pages. All `warning` (homelab-default receiver). The event
+# alerts carry no `for:`: a single failed publish or refused delivery is the
+# signal, and Forgejo 15 never retries a non-2xx delivery (plan F23).
+# pages_relay_events_total{outcome} is exported for every outcome from start, so
+# increase() sees the first event; git_pages_site_update_error{cause} is created
+# by its first error, hence the `unless ... offset` branch (Review Focus 5).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: pages-alerts
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: pages
+      rules:
+        - alert: PagesDown
+          expr: |
+            up{namespace="pages"} == 0
+              or absent(up{namespace="pages",job="git-pages"})
+              or absent(up{namespace="pages",job="pages-relay"})
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Realliance Pages: {{ $labels.job }} is down or not scraped"
+            description: "No healthy scrape of {{ $labels.job }} in namespace pages for 10m: sites (git-pages) or publishing (pages-relay) are out. kubectl -n pages get pods; kubectl -n pages logs deploy/{{ $labels.job }}."
+        - alert: PagesSiteUpdateFailing
+          expr: |
+            (sum by (cause) (increase(git_pages_site_update_error[30m])) > 0)
+              or (sum by (cause) (git_pages_site_update_error unless git_pages_site_update_error offset 30m) > 0)
+          labels:
+            severity: warning
+          annotations:
+            summary: "Realliance Pages: a site update failed ({{ $labels.cause }})"
+            description: "git-pages refused or failed a publish; the site keeps its last content, while Forgejo may show the delivery as green (git-pages answers 202 after 3 s). Often the 128 MB cap (max-site-size). See kubectl -n pages logs deploy/git-pages."
+        - alert: PagesRelayUpstreamError
+          expr: |
+            increase(pages_relay_events_total{outcome="upstream_error"}[30m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Realliance Pages: pages-relay could not hand a push to git-pages"
+            description: "git-pages was unreachable or answered non-2xx (a fast update error answers 503), so that push did not publish and Forgejo will not retry it. kubectl -n pages logs deploy/pages-relay and deploy/git-pages; redeliver from the system hook's delivery history."
+        - alert: PagesBadSignatures
+          expr: |
+            increase(pages_relay_events_total{outcome="bad_signature"}[30m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Realliance Pages: deliveries with a bad X-Forgejo-Signature"
+            description: "pages-relay refused deliveries whose HMAC does not match pages-relay-webhook: the Forgejo system hook secret is out of sync with PAGES_WEBHOOK_SECRET in sso-secrets forge/secrets.env, or something other than Forgejo is posting to the relay."
+        - alert: PagesRelayRejecting
+          # bad_signature is PagesBadSignatures' alone, so each outcome alerts once.
+          expr: |
+            sum by (outcome) (increase(pages_relay_events_total{outcome=~"too_large|busy|bad_request"}[30m])) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Realliance Pages: pages-relay refused deliveries ({{ $labels.outcome }})"
+            description: "too_large = body over 16 MiB (413); busy = more than 2 deliveries in flight (503); bad_request = a body that is not a well-formed Forgejo event (400). Forgejo 15 never retries, so the push did not publish: redeliver from the system hook's delivery history. kubectl -n pages logs deploy/pages-relay."
+        - alert: PagesTakedownRequested
+          expr: |
+            increase(pages_relay_events_total{outcome="unpublish_requested"}[6h]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Realliance Pages: a published site's branch or repo was deleted"
+            description: "The site stays up until an Owner takes it down (plan D8); a private repo's request carries no names, so find the site with git-pages' admin listing. See docs/pages.md § Takedown (git-pages -delete-site)."

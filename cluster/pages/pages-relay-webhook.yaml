@@ -1,0 +1,13 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: pages-relay-webhook
+  namespace: pages
+spec:
+  encryptedData:
+    webhook-secret: AgC2OViypJxM4dDLilk6wKKsKO37JNa8aguGsb3hlywukfavSST7650EHFV7PuLk0effQKoZVOoXPcq+3Z2chgBAVeIu14CmOlQDLOheK92f719/AC+YMjbpY1pdFq/01oqeT74vLbNOiX0eBOMx+/J2H7IY1+UE1A392uypy7iIbnI6bGPNLbjedOHY3CWO7qBfV8eu0C9KnKAd2FV+JqXn8R2WDLDER5pqhNy+Z9w05TryExcjaJFRV+2lwyDIpK4dji8K9jxI3voBTspR3v8/xq7QBCRfotTugaLAji723V63z0ghRiQbJDjWRKRfeVKFaaY6y07aJrjFcdF926K2ZvdqfBKV9wHnf5+OJ1KCfI2bkhEpnkRSf8oeK5r8hSGYMy6KCjDsKvVDcoDx+VwUTU8MNwnmfnL//XjiTCbLr2VQRzJW/b2eg4IPXAOBMn4DjREoJ47r13wUGKsz82H21dR17vJCb5hZqcLPl9YS6xQ7MxjRhSmwqF7WbMjPIJPVy34q54ReR9ZAluxkVzhO+CFJG0dQMroAdRCoUBgx1xUnOGRHAcpEu+16D4Sr1HD5VtATzSpYuR8ZhYgjvbRIGLQqVgyISmhQHoZaU2Qm70Wpu33xk7zY7BkeHe+rKYAeUXY/Z8LziLOonzXIQzAPcLN8GfP6loLN4mjOxDwpCsA80MFwVkEKaZTUgLSST/WgLXHdhXrEYeNUyQz2CD41sj/gr12aOOylZtJJQlXExtg67RQdiRpzNwEyR/bIGYouM0c6pA4zZRgcFmvvb9Yb
+  template:
+    metadata:
+      name: pages-relay-webhook
+      namespace: pages
