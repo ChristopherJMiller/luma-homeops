@@ -100,7 +100,12 @@ spec:
                 # is at the input, so neither the azure nor the syslog output ever
                 # sees these files. K8S-Logging.Exclude stays Off below, so a
                 # workload can never opt itself back in or out.
-                Exclude_Path /var/log/containers/*_luma-sandbox*_*.log,/var/log/containers/*_luma-browser*_*.log
+                Exclude_Path /var/log/containers/*_luma-sandbox*_*.log,/var/log/containers/*_luma-browser*_*.log,/var/log/containers/rook-ceph-mon-*_rook_mon-*.log,/var/log/containers/fluent-bit-*_logging_fluent-bit-*.log,/var/log/containers/metallb-speaker-*_metallb-system_speaker-*.log,/var/log/containers/*-repo-server-*_argo-cd_repo-server-*.log,/var/log/containers/*-application-controller-*_argo-cd_application-controller-*.log,/var/log/containers/*_media_exportarr-*.log
+                # Cost cut (Azure bill, 2026-11-04): six chatty sources were 77% of
+                # ingestion and have no debug value here (kubectl logs keeps them).
+                # Matched by pod, namespace and container, so nothing else in those
+                # namespaces is touched. This is at the input, so the syslog output
+                # to the router drops them too.
             [INPUT]
                 Name systemd
                 Tag host.*
@@ -122,8 +127,9 @@ spec:
                 Kube_URL https://kubernetes.default.svc:443
                 Kube_CA_File /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
                 Kube_Token_File /var/run/secrets/kubernetes.io/serviceaccount/token
-                Merge_Log On
-                Merge_Log_Key log_processed
+                Merge_Log Off
+                Labels Off
+                Annotations Off
                 K8S-Logging.Parser On
                 K8S-Logging.Exclude Off
             [FILTER]
