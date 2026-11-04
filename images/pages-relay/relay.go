@@ -287,7 +287,9 @@ func Verify(body, secret []byte, sigHex string) bool {
 
 // HoldOutcome is how a hold ended: completed (evidence that git-pages' update
 // ended), timeout (HoldTimeout, no evidence), released (shutdown) or aborted
-// (git-pages restarted and the update died with it).
+// (git-pages restarted and the update died with it; the push was re-queued or
+// superseded) or aborted_lost (the same, but the push was already a retry and
+// nothing forwards it: redeliver it).
 type HoldOutcome string
 
 const (
@@ -295,9 +297,10 @@ const (
 	HeldTimedOut  HoldOutcome = "timeout"
 	HeldReleased  HoldOutcome = "released"
 	HeldAborted   HoldOutcome = "aborted"
+	HeldLost      HoldOutcome = "aborted_lost"
 )
 
-var allHoldOutcomes = []HoldOutcome{HeldCompleted, HeldTimedOut, HeldReleased, HeldAborted}
+var allHoldOutcomes = []HoldOutcome{HeldCompleted, HeldTimedOut, HeldReleased, HeldAborted, HeldLost}
 
 type Counters struct {
 	mu    sync.Mutex

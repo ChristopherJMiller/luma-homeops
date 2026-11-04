@@ -40,12 +40,12 @@ func TestHoldAbortedRequeuesOnce(t *testing.T) {
 		defer fp.mu.Unlock()
 		return fp.updates["a.realliance.page/site/"] == 2 && h.held() == "1"
 	})
-	if h.holds("aborted") != "1" || h.holds("completed") != "0" {
+	if h.holds("aborted") != "1" || h.holds("aborted_lost") != "0" || h.holds("completed") != "0" {
 		t.Errorf("after the first restart:\n%s", h.metrics())
 	}
 	time.Sleep(1100 * time.Millisecond)
 	fp.restart()
-	waitFor(t, "the second hold to abort", func() bool { return h.holds("aborted") == "2" })
+	waitFor(t, "the second hold to abort", func() bool { return h.holds("aborted_lost") == "1" })
 	time.Sleep(100 * time.Millisecond)
 	fp.mu.Lock()
 	n := fp.updates["a.realliance.page/site/"]
@@ -54,7 +54,7 @@ func TestHoldAbortedRequeuesOnce(t *testing.T) {
 		t.Errorf("the retry was retried: %d updates, held %s", n, h.held())
 	}
 	l := h.log.String()
-	for _, want := range []string{`"level":"WARN"`, `"outcome":"aborted"`, `"site":"a.realliance.page/site"`, "re-queued", "already retried"} {
+	for _, want := range []string{`"level":"WARN"`, `"outcome":"aborted"`, `"outcome":"aborted_lost"`, `"site":"a.realliance.page/site"`, "re-queued", "already retried"} {
 		if !strings.Contains(l, want) {
 			t.Errorf("log lacks %q:\n%s", want, grepLog(l, "hold ended"))
 		}
@@ -84,6 +84,9 @@ func TestAbortRequeueRules(t *testing.T) {
 				q.abort(s, h, now)
 			}
 		}
+	}
+	if q.c.holds[HeldAborted] != 2 || q.c.holds[HeldLost] != 1 {
+		t.Errorf("outcomes: aborted %d (want a and b), aborted_lost %d (want c)", q.c.holds[HeldAborted], q.c.holds[HeldLost])
 	}
 	if len(q.held) != 0 {
 		t.Fatalf("holds left: %d", len(q.held))

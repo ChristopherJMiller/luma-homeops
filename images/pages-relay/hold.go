@@ -343,21 +343,24 @@ func (q *queue) endHold(site string, o HoldOutcome, evidence string, now time.Ti
 // supersedes this one) or this was already the second try (an update that
 // kills git-pages must not do it in a loop). Called under q.mu.
 func (q *queue) abort(site string, h *hold, now time.Time) ended {
-	e := q.endHold(site, HeldAborted, "git_pages_restarted", now)
 	_, newer := q.pending[site]
-	switch {
-	case newer:
-		e.evidence += ", superseded by a waiting push"
-	case h.job.retried:
+	if !newer && h.job.retried {
+		// Nothing will forward it: a human must redeliver (PagesRelayPushLost).
+		e := q.endHold(site, HeldLost, "git_pages_restarted", now)
 		e.evidence += ", already retried: redeliver the push from the forge's delivery history"
-	default:
-		j := h.job
-		j.retried = true
-		q.pending[site] = j
-		q.order = append(q.order, site)
-		q.c.SetQueueDepth(len(q.pending))
-		e.evidence += ", re-queued"
+		return e
 	}
+	e := q.endHold(site, HeldAborted, "git_pages_restarted", now)
+	if newer {
+		e.evidence += ", superseded by a waiting push"
+		return e
+	}
+	j := h.job
+	j.retried = true
+	q.pending[site] = j
+	q.order = append(q.order, site)
+	q.c.SetQueueDepth(len(q.pending))
+	e.evidence += ", re-queued"
 	return e
 }
 
@@ -579,7 +582,7 @@ func (rl *Relay) poll() {
 func (rl *Relay) logEnded(es []ended) {
 	for _, e := range es {
 		lvl := slog.LevelInfo
-		if e.outcome == HeldTimedOut || e.outcome == HeldAborted {
+		if e.outcome == HeldTimedOut || e.outcome == HeldAborted || e.outcome == HeldLost {
 			lvl = slog.LevelWarn
 		}
 		rl.Log.Log(context.Background(), lvl, "hold ended", "site", e.site, "outcome", string(e.outcome),
