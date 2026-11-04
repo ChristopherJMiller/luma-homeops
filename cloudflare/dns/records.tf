@@ -10,6 +10,13 @@ locals {
       id      = "797612475ed6a8f7193a623ffc107f07"
       proxied = false
     }
+    # Realliance Pages (spec + amendment, 2026-11-03): sites are served at
+    # <owner>.realliance.page. DNS-only; apex A tracked by cloudflareddns,
+    # wildcard CNAME to the apex. Never put a TXT on the apex.
+    "realliance.page" = {
+      id      = "2874e930ce400b828a616598190b2fbe"
+      proxied = false
+    }
     # Adopted 2026-09-24 so the family side of the house is managed like the
     # rest. DNS-only, which is how its apex already was — and the right
     # default for a zone meant to carry media uploads (the proxy caps

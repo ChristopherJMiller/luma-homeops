@@ -677,3 +677,26 @@ def test_forgejo_webhook_allowlist():
     app = yaml.safe_load((REPO / "cluster/applications/forgejo-release.yaml").read_text())
     values = app["spec"]["source"]["helm"]["valuesObject"]
     assert values["gitea"]["config"]["webhook"] == {"ALLOWED_HOST_LIST": "external,pages-relay.pages.svc.cluster.local"}
+
+
+# --- Task 7: DNS for realliance.page -------------------------------------------
+
+PAGES_ZONE_ID = "2874e930ce400b828a616598190b2fbe"
+
+
+def test_realliance_page_zone_declared():
+    """realliance.page is a DNS-only zone in the terraform zone map (Task 7)."""
+    text = (REPO / "cloudflare/dns/records.tf").read_text()
+    m = re.search(r'"realliance\.page"\s*=\s*\{(.*?)\}', text, re.S)
+    assert m, "realliance.page missing from local.zones"
+    body = m.group(1)
+    assert re.search(rf'id\s*=\s*"{PAGES_ZONE_ID}"', body)
+    assert re.search(r"proxied\s*=\s*false", body)
+
+
+def test_cloudflareddns_tracks_realliance_page():
+    cm = yaml.safe_load((REPO / "cluster/dns/cloudflareddns-config.yaml").read_text())["data"]
+    hosts, zones, types = (cm[k].rstrip(";").split(";") for k in ("CF_HOSTS", "CF_ZONES", "CF_RECORDTYPES"))
+    assert len(hosts) == len(zones) == len(types)
+    i = hosts.index("realliance.page")
+    assert zones[i] == PAGES_ZONE_ID and types[i] == "A"
