@@ -181,6 +181,8 @@ Redeliver it from Forgejo's own delivery history:
 
 The push is not gone for good: the `pages` branch holds the truth. If the delivery has aged out, push an empty commit to `pages`.
 
+A push also ends up lost, without an alert, when git-pages dies and the relay cannot see the restart. The hold then ends as `timeout`, and nothing re-queues it. This happens when the outage outlasts the hold, or in the last second of a rollout. If a site looks stale, redeliver the push.
+
 ## Operations
 
 - **System hook.** One Forgejo system webhook points at the relay. `ensure_system_hook()` in the acceptance suite re-checks it and refuses to create one, because the administrator API only makes default hooks. To recreate a missing hook, an Owner runs the guarded database flip in the ledger (Tasks 6 and 11), then re-runs the suite. This needs `kubectl` access to the Forgejo database. Re-check it on the Forgejo 17 upgrade.
