@@ -40,6 +40,7 @@
 - **Gates, limits and timing (spec).** Loop 5 s, sweep 5 min. `tiny` defaults: 1 job at once per owner, 120 minutes a UTC day, 2 pods globally. Each launch reserves 20 minutes. Pickup timeout 3 min; after 3 failed launches the job holds as `launch-failing`. Orphans go after 10 min.
 - **Label routing.** The listing query is `labels=tiny,small,medium,large,docker` from the start (D13). Only `tiny` can be anything but `off` in phase 1; `config.Load` rejects any other class in another mode.
 - **Ids, not names.** Logs, metrics, the ledger and the usage API carry owner and repo ids only. Metrics carry no owner at all.
+- **Periods.** A period is a UTC calendar month *(Chris)*. The `period=` parameter of the usage API takes `current`, `previous` or `YYYY-MM`.
 
 ### How changes land
 
@@ -49,16 +50,11 @@
 - **`realliance-ops/forge`** (inventory, private; `~/Repos/realliance-forge`): a branch, a signed commit, `fj … pr create`; **Chris** merges fast-forward so the head stays Owner-signed. Apply from the laptop with the README's env, only after its STOP.
 - **`realliance/sso`** (GitHub, public): signed commits on a branch, `gh pr create --fill`; merge only when Chris says merge. This plan adds only `tests/ci_helpers.py`, `tests/forge/test_forge_ci_dispatch.py`, `tests/forge/test_forge_runner_proofs.py` and `tests/forge/test_forge_ci_tiny.py`. It never edits `forge_helpers.py`, `conftest.py` or `pytest.ini`.
 - **`realliance/sso-secrets`** (private): `git commit -S`, push `main` (covered by the start OK).
-- **Every commit** in every repo ends with:
-
-  ```
-  Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
-  Claude-Session: https://claude.ai/code/session_01FWhaDeswMqYvQaVdpL8oit
-  ```
+- **Every commit** in every repo ends with the attribution lines the session's harness gives (the running model's `Co-Authored-By` and the `Claude-Session` line), never a hard-coded model name.
 
 - Every shell that signs or uses ssh/gpg exports `DISPLAY=:10.0 XAUTHORITY=$HOME/.Xauthority`. Never `--no-verify` or `--no-gpg-sign` (S6).
 - **STOP—ask Chris** is one AskUserQuestion that states the change, the Gate G evidence, what to watch and the rollback trigger. Options: `approve: do it, and roll back at once if a trigger fires` and `hold`. A rejected or interrupted call may already have run, so read live state before redoing anything.
-- **Rollback.** Revert the task's commit. For the first `ci-dispatch` push, set `cluster/ci-dispatch/kustomization.yaml` to `resources: []`; Argo prunes it (`allowEmpty: true`), except the PVC (`Prune=false`). Never roll back by deleting an `Application` file. Stopping all `tiny` work at once is the spec's break-glass: scale `ci-dispatch` to 0 (S2 incident exception), then delete the Jobs in `ci-tiny`.
+- **Rollback.** Revert the task's commit. For the first `ci-dispatch` push, set `cluster/ci-dispatch/kustomization.yaml` to `resources: []`; Argo prunes the rest (`allowEmpty: true`) but leaves the Namespace `ci-dispatch` and the PVC (both `Prune=false,Delete=false`), so the ledger survives. Never roll back by deleting an `Application` file. Stopping all `tiny` work at once is the spec's break-glass: scale `ci-dispatch` to 0 (S2 incident exception), then delete the Jobs in `ci-tiny`.
 - **Ledger:** `docs/superpowers/plans/2026-11-04-runner-classes-phase-0-1.ledger.md`. Answers, Gate G summaries, proof results, timings, digests and rulings. No secrets, no Azure ids, no hidden org, team or group names.
 - **Waits:** `Monitor` for anything over 60 s, never a sleep loop.
 
@@ -72,6 +68,7 @@
 ### Cluster, secrets, compute
 
 - `export KUBECONFIG=/tmp/galaxy-kubeconfig`; refresh from Talos (CLAUDE.md) if rejected. `kubectl`, `kubeseal`, `az` and `promtool` run through `nix develop --command …` in luma-homeops; pytest and tofu through `nix develop --command …` in `realliance-sso`.
+- `SCRATCH=~/Repos/luma-homeops/.superpowers/sdd/2026-11-04-runner-classes-phase-0-1/scratch` (git-ignored). Define it in every shell that uses `$SCRATCH`.
 - Never `Read`, `cat` or diff a `*.secret.yaml`, `nodes/*`, `forge/secrets.env` or `forge/runner.env`. Values travel through pipes, stdin and `umask 077` files, never argv, echo, assertion messages, logs, PR text or the ledger. In git-crypt repos use `git diff --no-textconv`.
 - Azure output never reaches the ledger with an id in it: every `az` call uses `-o none` or a `--query` that selects named, id-free fields.
 - Go, pinned to 4 threads: `GO="taskset -c 0-3 nix develop $HOME/Repos/luma-homeops --command env GOMAXPROCS=4 go"`, then `$GO test -race -p=4 ./...`. No local docker or kind; CI builds images.
@@ -87,39 +84,38 @@
   - Metrics are hand-written text exposition, as in `pages-relay`, not `client_golang`.
   - `TestDirectRequires` fails the build if `go.mod` requires any other module directly; `govulncheck` runs in CI. The Kubernetes and Forgejo clients are hand-written (spec).
 - **D4. Copy the signature checks; don't import them.** `internal/signed` is forge-bot v0.1.0's `internal/inventory/verify.go` (commit 9be4857) plus its real-git fixture, because Go forbids importing another module's `internal/`. The header names the source commit.
-- **D5. StatefulSet, not Deployment with `Recreate`.** forge-bot's Task 16 review (I1) showed that a Deployment with `Recreate` is no singleton under eviction or drain. `ci-dispatch` also takes `flock(LOCK_EX|LOCK_NB)` on `/data/.lock` at start and exits 1 if another process holds it. The ledger's partial unique index (one active launch per job and attempt) is the third guard. The PVC carries `argocd.argoproj.io/sync-options: Prune=false,Delete=false`.
+- **D5. StatefulSet, not Deployment with `Recreate`.** forge-bot's Task 16 review (I1) showed that a Deployment with `Recreate` is no singleton under eviction or drain. `ci-dispatch` also takes `flock(LOCK_EX|LOCK_NB)` on `/data/.lock` at start and exits 1 if another process holds it. The ledger's partial unique index (one active launch per job and attempt) is the third guard. The PVC and the Namespace `ci-dispatch` carry `argocd.argoproj.io/sync-options: Prune=false,Delete=false`; pruning a Namespace deletes its PVC whatever the PVC says.
 - **D6. Memory `emptyDir` for `/work`, and no new StorageClass in phase 1** (spec, "Why memory, not disk").
 - **D7. Every phase 1 alert is weekday (`severity: warning`).** `CIDispatchOrphanCompute` moves to the 24/7 route in phase 2, when orphans cost money. A `tiny` orphan pod dies at its Kubernetes deadline anyway. Phase 1 edits no `Alertmanager` config.
 - **D8. Ledger backup.** Phase 1 code writes a nightly consistent copy (`VACUUM INTO /data/snapshots/ledger-<date>.db`, keeping 7). The restic CronJob and its host land in phase 2, before any paid class, which fits the spec's rule that paid classes stay off until a restore. Losing a phase 1 ledger costs one day of `tiny` minutes.
-- **D9. Billing date.** Task 4 reads the current billing period read-only (`az billing period list`). The start date goes into the ConfigMap as `billing.period_anchor`, and periods run monthly from it. If `az` can't read it, Chris reads it from the portal (Q1). Phase 2 checks it daily against Cost Management.
 - **D10. The member's guide is `docs/members.md` in `realliance/ci-dispatch`,** because the forge has no wiki yet. It moves to the wiki once one exists.
 - **D11. `forgejo-admin` is the caps test owner.** `ci.yaml` gives it `tiny_minutes_per_day: 20`, exactly one reservation, so the acceptance suite can prove an `owner-limit` hold with a real job. The break-glass account never needs CI.
-- **D12. Dry-run writes no ledger rows.** It logs each decision once, counts `ci_dispatch_launches_total{outcome="dry-run"}`, and launches nothing.
+- **D12. Dry-run writes no launch rows.** It may write holds. It logs each decision once, counts `ci_dispatch_launches_total{outcome="dry-run"}` once per decision change, and launches nothing.
 - **D13. The listing query includes every class label from phase 1 on,** so a `[tiny, docker]` or `[small, medium]` job shows as a `label` hold in the usage API instead of waiting unseen. Paid classes stay `off`, so their jobs wait.
 - **D14. Phase 0's proofs are a pytest drill** (`tests/forge/test_forge_runner_proofs.py`, `CI_DRILL=runner-proofs`). The Forgejo 17 and 19 LTS upgrades re-run it, since everything here rests on the `--handle` semantics.
 - **D15. The usage API (port 8081) gets no ingress rule in phase 1.** Tests reach it through `kubectl port-forward`, which enters the pod over localhost. The rule for the Forgejo pods arrives with the fork page.
 - **D16. The dispatcher's API server rule** allows TCP 6443 to the three node IPs, the post-DNAT endpoints of `kubernetes.default`. Task 18 proves it against deny logs.
 - **D17. Launch order: reserve, register, Job (suspended), Secret owned by the Job, resume.** The Secret needs the Job's uid, and a suspended Job starts no pod until its Secret exists. `blockOwnerDeletion` stays unset, so the Role needs no `finalizers` right.
 - **D18. Handles and the runner row.** The dispatcher accepts a handle only if it matches `^[A-Za-z0-9_-]{1,128}$` and passes it as an argv element, never through a shell. Task 3 ledgers when Forgejo deletes an ephemeral runner row (at pickup or at job end) and the `status` values on the way. Task 12's pickup check keys on those values; the default assumption: the row exists, and the job still shows `waiting`.
-- **D19. `ForgeUnexpectedAdmin` belongs to forge-bot** (a follow-up for that plan). Until it ships, Task 1 and `docs/ci.md` record the expected site-administrator list (`forgejo-admin`, `forge-bot`, `ci-dispatch`), and the runbook's weekly check compares `GET /admin/users` against it.
+- **D19. `ForgeUnexpectedAdmin` belongs to forge-bot** (a follow-up for that plan). Until it ships, Task 1 and `docs/ci.md` record the expected local accounts (`forgejo-admin`, `forge-bot`, `forge-ci`, `ci-dispatch`), and the runbook's weekly check compares `GET /admin/users` (administrators and local accounts) and the non-ephemeral runners against them.
 
 ## Review focus
 
 1. **A job cancelled or superseded after its runner registered, before pickup.** A person expects the pod and the runner to go away and the owner to pay at most a minute. Expected: gone within the 3-minute pickup timeout, no `ci-*` runner left, charged ≤ 1 minute. Tests: Task 12 `TestReapJobGoneBeforePickup`; Task 16 `test_nothing_outlives_the_job`.
 2. **A re-run of a finished job** (same job id, attempt 2). Expected: a new launch under the new key, never blocked by attempt 1's ledger row. Tests: Task 10 `TestReserveNewAttempt`; Task 12 `TestRerunLaunches`.
 3. **A dispatcher restart between `RegisterRunner` and `CreateJob`.** Expected: on start, reconcile deletes the orphan runner and frees the reservation before any new launch; no double launch. Test: Task 12 `TestStartupReconcileAfterCrashMidLaunch` (table over every launch step).
-4. **A held job logs every 5 s for 24 h.** The Azure workspace has a 0.25 GB daily cap (commit 09578b8d). Expected: one log line per decision change per key, and none per loop. Test: Task 13 `TestDecisionLogOncePerChange`.
+4. **A held job logs every 5 s for 24 h.** The Azure workspace has a 0.25 GB daily cap (commit 09578b8d). Expected: one log line per decision change per key, and none per loop. Test: Task 12 `TestDecisionLogOncePerChange`.
 5. **The UTC midnight boundary.** A `tiny` job reserved at 23:55 that ends at 00:10. Expected: charged to the day it launched, and no double charge. Test: Task 10 `TestTinyMinutesChargedToLaunchDay`.
 6. **Someone's own repo runner named `ci-…`.** Expected: the reaper never deletes it, because it carries a repo or owner scope. Test: Task 12 `TestReaperIgnoresForeignRunners`.
 
 ## Coordination with concurrent plans
 
 **NetworkPolicy plan** (`docs/superpowers/plans/2026-11-03-networkpolicy-enforcement.md`; its ledger on 2026-11-04 shows A1, A2 and A3a done, `A3a_start=2026-11-03T18:35:10Z`; A3b no earlier than 2026-11-04T18:35:10Z; then Tasks 6 and 7, at least 24 h green, then Task 8, which is B2):
-- N1. Tasks 0 to 17 need nothing from it. The first `ci-dispatch` push (Task 18) waits for `B2_done` in that ledger and a current `scripts/netpol-verify.sh runner` PASS. `tiny: on` (Task 19) also waits for its Task 9's ledgered restart gap. The earliest `B2_done` is about 2026-11-06.
+- N1. Tasks 0 to 16 need nothing from it. Task 17 needs its Task 7 on `main` (it creates `cluster/components/netpol/{default-deny,allow-dns,egress-internet-only}`), so schedule Task 17 after that, and run Tasks 15 and 16 meanwhile. The first `ci-dispatch` push (Task 18) waits for `B2_done` in that ledger and a current `scripts/netpol-verify.sh runner` PASS. `tiny: on` (Task 19) also waits for its Task 9's ledgered restart gap. The earliest `B2_done` is about 2026-11-06.
 - N2. This plan adds one component, `cluster/components/netpol/egress-internet-web/`. It never edits the other components, `scripts/test_netpol_manifests.py`, `scripts/netpol-verify.sh` or `cluster/netpol-canary/*`. If `netpol-manifests` needs an entry for `ci-dispatch` or `ci-tiny`, the NetworkPolicy owner adds it (ask through Chris), and Task 18 waits.
-- N3. Serialize STOPs: no deploy of this plan between another plan's Gate G before and after runs.
+- N3. Serialize STOPs: no deploy of this plan between another plan's Gate G before and after runs. Also push nothing to a `realliance/ci-dispatch` branch (each push starts a `galaxy` run) while its Task 8 Steps 1 to 11 or its Task 9 is open.
 - N4. Task 3's probe pods carry no policy, so no agent enrolls them, and they never run inside that plan's `idle`, baseline or canary measurement windows.
-- N5. After Task 5 the `galaxy` runner serves `realliance/ci-dispatch` too. Its runner-idle check (B2 Step 1, Task 9 Step 1) then covers `/repos/realliance/ci-dispatch/actions/tasks`; write that into its ledger at Task 5. After Task 19, every enforcer restart first checks that `ci-tiny` has no pods, or pauses `tiny` (`docs/ci.md`).
+- N5. After Task 5 the `galaxy` runner serves `realliance/ci-dispatch` too. Its runner-idle check (B2 Step 1, Task 9 Step 1) then covers `/repos/realliance/ci-dispatch/actions/tasks`; write that into its ledger at Task 5. After Task 19, every enforcer restart, Talos hop or kube-network-policies bump first pauses `tiny` and checks that `ci-tiny` has no pods (`docs/ci.md`).
 
 **forge-bot plan** (`docs/superpowers/plans/2026-11-02-forge-bot-and-ci.md`; Task 16 deploy held on branch `forge-bot-deploy`):
 - F1. Other plans edit `.renovaterc.json` too; rebase immediately before every commit that touches it.
@@ -139,7 +135,7 @@
 | Path | Responsibility | Task |
 |---|---|---|
 | `docs/superpowers/plans/2026-11-04-runner-classes-phase-0-1.ledger.md` | ledger | 0 |
-| `~/Repos/realliance-sso/tests/ci_helpers.py` | shared helpers for the three test files | 1 |
+| `~/Repos/realliance-sso/tests/ci_helpers.py` | shared helpers for the three test files | 1, 3, 16 |
 | `~/Repos/realliance-sso/tests/forge/test_forge_ci_dispatch.py` | account, token scopes, repo, `galaxy` registration | 1, 2, 5 |
 | `~/Repos/realliance-sso/tests/forge/test_forge_runner_proofs.py` | phase 0 drill | 3 |
 | `~/Repos/realliance-sso/tests/forge/test_forge_ci_tiny.py` | phase 1 acceptance | 16 |
@@ -160,12 +156,14 @@
 - Create: `docs/superpowers/plans/2026-11-04-runner-classes-phase-0-1.ledger.md` (sections: Answers, Baseline, one per task)
 
 - [ ] **Step 1: Worktree.** Run the worktree command under How changes land. Expected: a clean tree at `origin/main`.
-- [ ] **Step 2: Execution-start OK.** One AskUserQuestion covering:
-  - routine pushes: luma-homeops docs and ledger; `realliance/ci-dispatch` branch pushes and PRs; sso-secrets commits; `realliance/sso` test branches;
-  - the pre-approved Spot probe, restated in exactly its approved shape (Task 4);
-  - Q1 to Q3 at the end of this plan.
+- [ ] **Step 2: Record the answers.** Chris answered on 2026-11-04, so ask nothing. Ledger, under Answers:
+  - credit periods are calendar months (the old Q1 is withdrawn);
+  - `modernc.org/sqlite` accepted (Q2: yes);
+  - `tiny` may go on before `ForgeUnexpectedAdmin`, with the weekly check in `docs/ci.md` (Q3: yes);
+  - the Spot probe, pre-approved in exactly the shape Task 4 states;
+  - the start OK covers routine pushes: luma-homeops docs and ledger, `realliance/ci-dispatch` branch pushes and PRs, sso-secrets commits, `realliance/sso` test branches.
 
-  Ledger the answers. Anything not covered stays a STOP.
+  Anything not covered stays a STOP.
 - [ ] **Step 3: Baseline.** Gate G1, G2 and G4; G3 to `$SCRATCH/edge-ci-0.txt`. Also ledger:
   - `ceph df` for `block-pool-ssd` MAX AVAIL (Expected: about 138 GiB);
   - `GET /api/v1/admin/users` filtered to `is_admin` with `FORGEJO_ADMIN_TOKEN`, logins only (Expected: `forgejo-admin`, `forge-bot` and the human Owners).
@@ -181,7 +179,7 @@
 **Interfaces:**
 - Produces, in `ci_helpers`:
   - `CI_TOKEN_KEY = "CI_DISPATCH_FORGEJO_TOKEN"`; `ci_token() -> str` reads it from `FORGE_SECRETS` through `_load_env`, never printing it.
-  - `EXPECTED_ADMINS = {"forgejo-admin", "forge-bot", "ci-dispatch"}` (local accounts; the test adds the Owners at run time from the `realliance-ops` Owners team).
+  - `EXPECTED_ADMINS = {"forgejo-admin", "forge-bot", "forge-ci", "ci-dispatch"}` (local accounts; the test adds the Owners at run time from the `realliance-ops` Owners team).
 - Produces: the local account `ci-dispatch` (site administrator, `source_id` 0, `prohibit_login` false) and its token.
 
 - [ ] **Step 1: Write the failing tests.**
@@ -197,8 +195,8 @@ def test_ci_dispatch_token_scopes():
     assert forge_api("GET", "/api/v1/admin/actions/runners", token=t).status_code == 200
     assert forge_api("GET", f"/api/v1/repos/{INVENTORY}/branches/main", token=t).status_code == 200
     assert forge_api("GET", "/api/v1/users/forgejo-admin", token=t).status_code == 200
-    assert forge_api("POST", "/api/v1/user/repos", token=t, json={"name": "nope"}).status_code == 403   # no write:repository
-    assert forge_api("PATCH", f"/api/v1/repos/{FORGE_BOT_REPO}", token=t, json={"description": "x"}).status_code == 403
+    assert forge_api("POST", "/api/v1/user/repos", token=t, json={}).status_code == 403   # no write:repository; an invalid body, so a wrong scope answers 422 and creates nothing
+    assert forge_api("PATCH", f"/api/v1/repos/{FORGE_BOT_REPO}", token=t, json={"description": 1}).status_code == 403   # invalid body: 422 would mean a wrong scope, and nothing changes
 
 def test_site_admins_as_expected():          # D19, the interim check
     admins = {u["login"] for u in forge_api_paged("/api/v1/admin/users") if u["is_admin"]}
@@ -230,12 +228,13 @@ git add forge/secrets.env && git commit -S -m "forge: ci-dispatch API token" && 
 **Interfaces:**
 - Produces: `forgejo_repository.ci_dispatch` and `forgejo_branch_protection.ci_dispatch_main`, shaped like `forge_bot` and `forge_bot_main`; a hand-set `v*` tag protection (Owners); the local clone `~/Repos/ci-dispatch`.
 
-- [ ] **Step 1: Write the failing test** `test_ci_dispatch_repo_public_and_protected`: the body of `test_forge_bot_repo_public_and_protected` (`test_forge_inventory.py`) with `realliance/ci-dispatch`. Run it. Expected: FAIL (404).
+- [ ] **Step 1: Write the failing test** `test_ci_dispatch_repo_public_and_protected`: the body of `test_forge_bot_repo_public_and_protected` (`test_forge_inventory.py`) with `realliance/ci-dispatch`. Add `test_ci_dispatch_registry_secret_exists`: the name `REGISTRY_TOKEN` appears in `GET /repos/realliance/ci-dispatch/actions/secrets` (never its value). Run them. Expected: FAIL (404).
 - [ ] **Step 2: Declare it.** `repos.tf` gets the two resources with the comment `Runner classes controller: gates and launches one-job runners per queued job (Go). Public; its code is not secret. Same shape as forge-bot. auto_init: protection needs an existing main. An Owner sets the v* tag protection by hand.` Description: `Realliance CI dispatcher: one fresh runner per job, within each owner's limits (Go)`. `has_actions = true`, `has_packages = true`, `prevent_destroy`. README: add it to the critical-repos list.
 - [ ] **Step 3: Plan.** Expected: `2 to add, 0 to change, 0 to destroy`. Commit signed, push, open the PR. **Chris:** merges fast-forward.
 - [ ] **Step 4: STOP—ask Chris, then apply.** Expected: `2 added`. Then `tofu plan`: `No changes.`
 - [ ] **Step 5: Tag protection and clone.** `forge_api("POST", "/api/v1/repos/realliance/ci-dispatch/tag_protections", json={"name_pattern": "v*", "whitelist_teams": ["Owners"]})` returns 201. `git clone ssh://git@git.realliance.net/realliance/ci-dispatch.git ~/Repos/ci-dispatch`.
-- [ ] **Step 6: Run the test.** Expected: PASS, and `test_forge_inventory.py`'s drift test stays green.
+- [ ] **Step 5b: Registry secret.** The `image` job logs in with `REGISTRY_TOKEN`, as forge-bot's does. A `python -I` script reads the `forge-ci` token from sso-secrets and sends `PUT /repos/realliance/ci-dispatch/actions/secrets/REGISTRY_TOKEN` with the value in the JSON body, never in argv or output. The workflow's header comment already carries the accepted-risk text.
+- [ ] **Step 6: Run the tests.** Expected: PASS, and `test_forge_inventory.py`'s drift test stays green.
 
 ### Task 3: The Forgejo 15 proofs (drill)
 
@@ -261,6 +260,7 @@ git add forge/secrets.env && git commit -S -m "forge: ci-dispatch API token" && 
   - `test_labels_subset_rule`: jobs with `runs-on` `[L]`, `[L, docker]`, `[docker]` and `[L, other]`. `labels=L,docker` returns exactly the first three (filtered to the probe repo), and `labels=L` returns exactly `[L]`.
   - `test_needs_and_concurrency_visibility`: job `b` with `needs: a`, and two runs in one `concurrency` group. Record the `status` and `needs` the listing shows for `b` while `a` waits, and for the second run while the first holds the group. Assert the dispatcher's rule: it launches only for `status == "waiting"`, and a job held back never shows as `waiting`. If it does, STOP: Task 11's gate needs another signal.
   - `test_pod_shape_runs`: A's pod used the `tiny` pod shape (read-only root, uid 1000, memory `/work`, `HOME` and `TMPDIR` under `/work`); the job script asserts `id -u` = 1000 and that `/work` is `tmpfs`.
+  - `test_repo_listing_scope`: with an ephemeral instance runner registered, does `GET /repos/{owner}/{repo}/actions/runners` list it? Record the answer.
   - Timing, recorded by every test: job first seen in the listing, registration returned, pod `Running`, job `running` (`task_id` set), job done.
   - Teardown deletes the pods, Secrets, runners left behind (`DELETE /admin/actions/runners/{id}`) and the probe repo.
 - [ ] **Step 2: Run without the env.** Expected: all skipped.
@@ -276,7 +276,8 @@ git add forge/secrets.env && git commit -S -m "forge: ci-dispatch API token" && 
   - the runner row's lifecycle (D18), feeding Task 12's pickup check;
   - the label subset rule with `docker`;
   - how `needs` and `concurrency` show in the listing;
-  - median and longest time from registration to `running`. If the longest is over 90 s, raise the `tiny` pickup timeout to twice that and ledger the ruling.
+  - the answer to `test_repo_listing_scope`. If instance runners show in a repo listing, hand the filter (`not ephemeral`, or `owner_id` and `repo_id` set) to forge-bot's `tests/forge/test_forge_ci.py` (`all galaxy labels`) and to the realliance.net plan's runner-listing test (`exactly one runner`), through Chris;
+  - median and longest time from registration to `running`. If the longest is over 90 s, raise the `tiny` pickup timeout to twice that and ledger the ruling. Task 17 Step 4 sets it in `config.yaml`.
 - [ ] **Step 7: Commit** the drill (signed, sso branch `ci-dispatch`).
 
 ### Task 4: Azure facts and the Spot probe
@@ -288,7 +289,6 @@ git add forge/secrets.env && git commit -S -m "forge: ci-dispatch API token" && 
 - [ ] **Step 1: Read-only facts.** Inside `nix develop`:
   - `az account show --query '{name:name,state:state}'`. Expected: name `Realliance`, `Enabled`.
   - For `westus3` and `westus2`: `az vm list-skus -l <r> --resource-type virtualMachines --query "[?contains(['Standard_D2as_v6','Standard_D4as_v6','Standard_D8as_v6'], name)].{name:name,restrictions:restrictions[].reasonCode}"`, and `az vm list-usage -l <r> --query "[?name.value=='cores'||name.value=='lowPriorityCores'||contains(name.value,'DASv6')].{n:name.value,cur:currentValue,lim:limit}"`.
-  - `az billing period list --query "[0].{start:billingPeriodStartDate,end:billingPeriodEndDate}"` (D9). If it errors, ledger the error code and ask Chris (Q1).
   - The retail Spot and pay-as-you-go price for `Standard_D2as_v6` in each region, from `https://prices.azure.com/api/retail/prices` (public).
   - Pick the region: `westus3` if it restricts none of the three sizes, else `westus2`. Ledger the facts and the pick.
 - [ ] **Step 2: Create the throwaway group and the VM.** Set `R` to the Step 1 pick. Put a fresh, never-used key at `$SCRATCH/spot/probe.pub` (`ssh-keygen -t ed25519 -N '' -f $SCRATCH/spot/probe`). Then:
@@ -318,15 +318,15 @@ t1=$(date +%s)
 **Interfaces:**
 - Produces: the `galaxy` runner holds two connections, `galaxy-forge-bot` (unchanged) and `galaxy-ci-dispatch`, both with label `galaxy:host`.
 
-- [ ] **Step 1: Write the failing test** `test_galaxy_serves_forge_bot_and_ci_dispatch_only`. Runners with `galaxy` labels appear exactly on `realliance/forge-bot` (`galaxy-forge-bot`) and `realliance/ci-dispatch` (`galaxy-ci-dispatch`). `realliance/realliance.net`, `realliance/brand`, `realliance/pages` and `realliance/forgejo` show none. Run it. Expected: FAIL.
-- [ ] **Step 2: Preconditions (F2, N5).** `git log --oneline -- cluster/forgejo-runner`, and re-read its non-secret files. Runner idle: forge-bot's `actions/tasks` shows nothing `running` or `waiting`. The NetworkPolicy ledger shows no B2 or Task 9 window open.
+- [ ] **Step 1: Write the failing test** `test_galaxy_serves_forge_bot_and_ci_dispatch_only`. Runners with `galaxy` labels appear exactly on `realliance/forge-bot` (`galaxy-forge-bot`) and `realliance/ci-dispatch` (`galaxy-ci-dispatch`). `realliance/realliance.net`, `realliance/brand`, `realliance/pages` and `realliance/forgejo` show none. Add `test_ci_dispatch_and_forge_bot_write_access_equal`: the collaborators and teams with write access on the two repos are the same set (the premise for sharing one runner; the spec's "Build" section). Run them. Expected: the first FAILS; the second PASSES, and a failure of the second is a STOP.
+- [ ] **Step 2: Preconditions (F2, N5).** `git log --oneline -- cluster/forgejo-runner`, and re-read its non-secret files. Runner idle: forge-bot's `actions/tasks` shows nothing `running` or `waiting`. The NetworkPolicy ledger shows no B2 or Task 9 window open. Read pages' ledger too: no acceptance suite is running on `galaxy`. Run the write-access test and ledger its result before Step 3.
 - [ ] **Step 3: STOP—ask Chris.** It mints a runner credential and redeploys the `galaxy` runner (Recreate). Ask him to hold forge-bot CI pushes for the window. Rollback trigger: the runner does not reconnect both connections within 10 min (revert, reseal and push).
 - [ ] **Step 4: Register.**
   - In sso-secrets: `printf 'RUNNER_CI_DISPATCH_SECRET=%s\n' "$(openssl rand -hex 20)" >> forge/runner.env`, then a signed commit and a push.
   - `(. forge/runner.env; printf %s "$RUNNER_CI_DISPATCH_SECRET") | kubectl -n forgejo exec -i deploy/forgejo -c forgejo -- forgejo forgejo-cli actions register --name galaxy-ci-dispatch --scope realliance/ci-dispatch --labels galaxy --secret-stdin=-`. Expected: one UUID; ledger it, since a UUID is not secret.
 - [ ] **Step 5: Add the connection without reading the file.** A scratch `python -I` script under `umask 077`:
   - loads the decrypted `runner-config.secret.yaml`; if it holds no `server.connections` map, it stops, and so does the task (STOP: the format differs from forge-bot's Task 7);
-  - derives the new `uuid` and `token` with `forgejo-runner create-runner-file --instance https://git.realliance.net --name galaxy-ci-dispatch`, the secret on stdin, as the forge-bot plan's Task 7 Step 5 does (with its `task-7-report.md` corrections);
+  - derives the new `uuid` (the UUID of the bytes `secret[:16]`) and `token` (the 40-hex secret itself) inside the script, as forge-bot's `task-7-report.md` section 2 describes, and asserts the `uuid` equals the one `register` printed. It never runs `create-runner-file`, which takes the secret only as an argv element;
   - adds `galaxy-ci-dispatch: {url: https://git.realliance.net/, uuid, token, labels: [galaxy:host]}` next to the existing connection, changing nothing else;
   - writes it back and prints only the connection names, their labels and a byte count.
 
@@ -337,7 +337,7 @@ t1=$(date +%s)
 
 ## Phase 1: `ci-dispatch` and `tiny`
 
-All Go work is in `~/Repos/ci-dispatch`, on branch `v1`, with a PR that Chris merges in Task 14. Every task ends with `$GO vet ./... && $GO test -race -p=4 ./...` green; then commit (signed) and push. The PR's CI run on `galaxy` stays green.
+All Go work is in `~/Repos/ci-dispatch`, on branch `v1`, with a PR that Chris merges in Task 14. Every task ends with `$GO vet ./... && $GO test -race -p=4 ./...` green; then commit (signed) and push. The PR's CI run on `galaxy` stays green. Each branch push starts such a run, so N3's no-push rule covers Tasks 6 to 14.
 
 ### Task 6: Scaffold: module, model, config, CI, the dependency guard
 
@@ -375,7 +375,6 @@ type Config struct {
     Interval, Sweep time.Duration
     Ledger, Snapshots string
     Listen, UsageListen, UsageTokenFile string
-    PeriodAnchor time.Time
 }
 func Load(path string) (Config, error)
 ```
@@ -385,7 +384,7 @@ func Load(path string) (Config, error)
   - `TestRoute` (table): `[tiny]` → `tiny`; `[small, docker]` → `small` with Docker; `[tiny, docker]`, `[small, medium]`, `[docker]` and `[]` → rejected.
   - `TestParseMode`, `TestKeyString`, `TestValidHandle` (rejects `a b`, `../x`, `$(x)` and 129 characters).
   - `TestLoadDefaults`: a minimal file gives `Interval` 5s, `Sweep` 5m, `Tiny.Pickup` 3m, `Tiny.HardStop` 20m, `Tiny.RunnerTimeout` 15m, `Listen` `:8080`, `UsageListen` `:8081` and every class `ModeOff`.
-  - `TestLoadRejects` (table): an unknown key (strict decoding); an unknown class; a mode outside the three; any paid class not `off` ("no backend in v1"); `Tiny.HardStop` ≤ `Tiny.RunnerTimeout`; an image without `@sha256:`; a missing `PeriodAnchor`.
+  - `TestLoadRejects` (table): an unknown key (strict decoding); an unknown class; a mode outside the three; any paid class not `off` ("no backend in v1"); `Tiny.HardStop` ≤ `Tiny.RunnerTimeout`; an image without `@sha256:`.
   - `TestDirectRequires`: parse `go.mod`; the direct requirements are exactly the three modules.
   - `TestSecretRedacts`: the copied forge-bot tests, unchanged.
 - [ ] **Step 3: Run them.** Expected: FAIL (packages do not compile).
@@ -396,12 +395,12 @@ func Load(path string) (Config, error)
   - `main.go`: `--config` (default `/etc/ci-dispatch/config/config.yaml`), `Load` or exit 1. The loop arrives in Task 13.
   - README: purpose, the classes table, safety rules (link the spec in luma-homeops), modes, the Forgejo client's two writes, and how Chris pins releases by hand in luma-homeops after review.
 - [ ] **Step 5: Run the tests.** Expected: PASS.
-- [ ] **Step 6: Commit, push branch `v1`, open the PR.** Expected: its run is `success` on `galaxy-ci-dispatch`. If no runner picks it up within 5 min, read the runner pod's log first.
+- [ ] **Step 6: Commit, push branch `v1`, open the PR.** Expected: its run is `success` on `galaxy-ci-dispatch`. If no runner picks it up within 5 min, read the runner pod's log first. If the 3Gi `galaxy` pod runs out of memory compiling `modernc.org/sqlite` under `-race`, run `-race` on the other packages and a plain `go test` on `ledger`; never raise the runner limit without a STOP.
 
 ### Task 7: Signed limits: `internal/signed` and `internal/limits`
 
 **Files:**
-- Create: `internal/signed/verify.go`, its test and `testdata/` (copied from forge-bot 9be4857 `internal/inventory/verify*.go` and `testdata/gen-git-fixture.sh` with its outputs); `internal/limits/limits.go`, `source.go` and their tests
+- Create: `internal/signed/verify.go`, `parse.go`, their tests and `testdata/` (copied from forge-bot 9be4857 `internal/inventory/verify*.go`, `parse.go`, `parse_test.go` and `testdata/gen-git-fixture.sh` with its outputs); `internal/limits/limits.go`, `source.go` and their tests
 
 **Interfaces (produces):**
 
@@ -452,7 +451,7 @@ func (s *Source) Reload(ctx context.Context, now time.Time) error   // each swee
 func (s *Source) Current() (l Limits, verified bool, everVerified bool)
 ```
 
-- [ ] **Step 1: Copy** `verify.go`, its tests and the fixture verbatim, changing only the package clause and a header naming forge-bot 9be4857. Run its tests. Expected: PASS at once. This step has no red phase, because the copy carries its own tests.
+- [ ] **Step 1: Copy** `verify.go`, `parse.go` (`ParseFingerprints`), their tests and the fixture verbatim, changing only the package clause and a header naming forge-bot 9be4857. Run its tests. Expected: PASS at once. This step has no red phase, because the copy carries its own tests.
 - [ ] **Step 2: Write the failing `limits` tests.**
   - `TestParseSpecExample`: the spec's `ci.yaml` parses; `$10` is `10_000_000`.
   - `TestParseRejects` (table): an unknown key, a duplicate key, a negative value, a class outside the four, a non-numeric dollar value.
@@ -527,6 +526,7 @@ type Spec struct {
     Key model.Key; Try int; OwnerID int64
     Handle, UUID, PublicURL, Image, RunnerConfigMap string
     ExpiresAt time.Time
+    HardStop, RunnerTimeout time.Duration                         // from Config.Tiny; HardStop is activeDeadlineSeconds
 }
 func Name(k model.Key, try int) string                              // "ci-tiny-<job>-<attempt>-<try>"
 func JobManifest(s Spec) ([]byte, error)                            // refuses a handle that fails model.ValidHandle
@@ -534,13 +534,13 @@ func SecretManifest(name, jobUID string, token secret.Value) []byte // ownerRefe
 ```
 
 - [ ] **Step 1: Write the failing tests.**
-  - `TestJobManifestShape`: decode it and assert every pod item that Global Constraints fixes. Also: `suspend: true`; labels `app.kubernetes.io/name: ci-tiny`, `app.kubernetes.io/managed-by: ci-dispatch` and `ci-dispatch/key`; annotations `ci-dispatch/owner-id` and `ci-dispatch/expires-at`; the preferred anti-`top` node affinity; the spread across nodes with `ScheduleAnyway`.
+  - `TestJobManifestShape`: decode it and assert every pod item that Global Constraints fixes. Also: `suspend: true`; labels `app.kubernetes.io/name: ci-tiny`, `app.kubernetes.io/managed-by: ci-dispatch` and `ci-dispatch/key`; annotations `ci-dispatch/owner-id` and `ci-dispatch/expires-at`; the preferred anti-`top` node affinity; the spread across nodes with `ScheduleAnyway`; `activeDeadlineSeconds` equals `Spec.HardStop`; env `HOME=/work/home` and `TMPDIR=/work/tmp`; `/work` is a memory `emptyDir` with `sizeLimit: 1Gi`.
   - `TestRunnerArgv`: `command == ["sh", "-c", "mkdir -p /work/home /work/tmp /work/act && exec forgejo-runner \"$@\"", "sh", "one-job", "--config", "/etc/ci-tiny/config.yml", "--wait", "--handle", h, "--url", url, "--uuid", u, "--token-url", "file:///creds/token", "--label", "tiny:host"]`. The handle is one argv element, never inside the script.
   - `TestGateIsSpecVerbatim`: the `netpol-gate` init container's script equals the NetworkPolicy spec §6.3 body byte for byte (read from a `testdata/` copy). Its image is the `tiny` image; requests `10m`/`32Mi`, limit `128Mi`; the same securityContext as the runner.
   - `TestJobManifestRefusesBadHandle`.
   - `TestSecretOwnedByJob`: one `ownerReference` (`batch/v1`, `Job`, name, uid), no `blockOwnerDeletion`, key `token`, `type: Opaque`.
   - `TestKubeGuard` (runtime, fake API server): only the seven request shapes in Interfaces, in the configured namespace only. The guard refuses each of these unsent: a path in another namespace, a PATCH body other than `{"spec":{"suspend":false}}`, and a GET on a Secret.
-  - `TestKubeTokenReread`: the client picks up a rotated token file within a minute.
+  - `TestKubeTokenReread`: with an injected clock, the client picks up a rotated token file after a minute; the test never sleeps.
   - `TestNoOtherWritesInSource` (static, as in Task 8).
 - [ ] **Step 2: Run them.** Expected: FAIL.
 - [ ] **Step 3: Write the code** with `encoding/json` structs for the manifests, no templates.
@@ -595,8 +595,9 @@ The schema has `launches`, `holds`, `config` and `meta(schema_version)`. A parti
   - `TestSnapshotConsistentAndPruned`: the copy opens and holds every row; 9 days of snapshots leave 7.
   - `TestNoTokenColumn`: the schema has no column named like `token` or `secret`.
   - `TestMigrationsIdempotent`.
+  - `TestSnapshotWithUnwritableTmpdir`: with `TMPDIR` read-only, a snapshot and a sorted `Launches` query still work.
 - [ ] **Step 2: Run them.** Expected: FAIL.
-- [ ] **Step 3: Write the code** with `database/sql` and `modernc.org/sqlite`: `journal_mode=WAL`, `busy_timeout=5000`, `foreign_keys=on`, and `BEGIN IMMEDIATE` for every write.
+- [ ] **Step 3: Write the code** with `database/sql` and `modernc.org/sqlite`: `journal_mode=WAL`, `temp_store=MEMORY`, `busy_timeout=5000`, `foreign_keys=on`, and `BEGIN IMMEDIATE` for every write.
 - [ ] **Step 4: Run the tests.** Expected: PASS. Commit: `ledger: SQLite, one active launch per key, flock, nightly snapshot`.
 
 ### Task 11: `internal/gate` and fair order
@@ -639,7 +640,7 @@ func Plan(jobs []model.Job, in Inputs) []model.Decision
 ### Task 12: `internal/loop`: reconcile, launch, reap, settle
 
 **Files:**
-- Create: `internal/loop/loop.go`, `reap.go`, `fakes_test.go`, `loop_test.go`, `reap_test.go`
+- Create: `internal/loop/loop.go`, `reap.go`, `decisions.go`, `fakes_test.go`, `loop_test.go`, `reap_test.go`, `decisions_test.go`; `internal/metrics/metrics.go` and its test (moved here from Task 13, because `loop.New` needs both)
 
 **Interfaces (produces):**
 
@@ -658,11 +659,11 @@ func (lp *Loop) Start(ctx context.Context, now time.Time) error   // reconcile b
 func (lp *Loop) Tick(ctx context.Context, now time.Time) Result   // every Interval
 func (lp *Loop) Sweep(ctx context.Context, now time.Time) Result  // every Sweep: runners, orphans, config, snapshot at 03:00 UTC
 func (lp *Loop) Run(ctx context.Context)                          // never overlapping
-func (lp *Loop) Healthy(now time.Time) bool                       // a completed loop within 3 × Interval
+func (lp *Loop) Healthy(now time.Time) bool                       // a tick finished within 3 × Interval, whatever Forgejo answered
 ```
 
 `Tick`:
-1. Read the jobs and the `ci-tiny` Jobs and Pods. A failed read ends the tick with no writes and no success timestamp.
+1. Read the jobs and the `ci-tiny` Jobs and Pods. A failed Forgejo jobs read skips the gate and the launches only; a failed Kubernetes read skips everything. Reaping an expired Job always runs. Either failure leaves the success timestamp unchanged, though the tick still counts as finished for `Healthy`.
 2. Reconcile each active launch: pod `Running` and job `running` → `running`; Job gone or finished → `ended`, then settle.
 3. `gate.Plan`.
 4. For each `Launch`, in mode `on`: `Reserve` → `RegisterRunner` → `SetRegistered` → `CreateJob` → `CreateSecret` → `ResumeJob` → `SetCreated`. A failure at any step undoes the earlier steps in reverse and calls `Undo`. In `dry-run`: log and count only.
@@ -676,6 +677,18 @@ Reap rules (the spec's table, `tiny` values):
 - a `ci-tiny` Job, or a runner that is `ci-*`, ephemeral and instance-scoped, with no active ledger row and older than 10 min: delete it (a runner's age is first-seen time, which it lacks itself);
 - anything else, never.
 
+Also built here (moved from Task 13, F3):
+- Metrics, with label values from fixed sets only and every series present from start:
+  - `ci_dispatch_loop_last_success_timestamp` (it updates only when every read succeeded; it feeds `CIDispatchStale`, not `/healthz`);
+  - `ci_dispatch_jobs{class,state}`, `ci_dispatch_holds{class,reason}`, `ci_dispatch_class_mode{class}`;
+  - `ci_dispatch_launches_total{class,backend,outcome}` (`outcome`: `launched`, `dry-run`, `error`, `undone`);
+  - `ci_dispatch_start_seconds{class,backend}` (histogram; buckets 5, 10, 20, 30, 60, 120, 300; from first seen to `running`);
+  - `ci_dispatch_reaped_total{reason}` (`pickup`, `gone-before-pickup`, `expired`, `orphan-job`, `orphan-runner`), `ci_dispatch_orphans{kind}` (`job`, `runner`, `expired`);
+  - `ci_dispatch_errors_total{api}` (`forgejo`, `kube`, `ledger`, `inventory`);
+  - `ci_dispatch_config_verified`, `ci_dispatch_config_ever_verified`.
+  - Phase 2 adds the money, price, sweeper and drift metrics.
+- `Decisions.Log(d model.Decision, now time.Time)`: one slog JSON line per key whenever its action or reason changes, with fields `key`, `owner_id`, `repo_id`, `class`, `action`, `reason`, `mode`. Settled launches log `reserved_minutes` and `charged_minutes`.
+
 - [ ] **Step 1: Write the failing tests** (in-memory fakes that record every call, and a fake clock).
   - `TestTickLaunchesInOrder`: exactly reserve, register, create the Job, create the Secret, resume, mark created.
   - `TestUndoAtEveryStep` (table over each step failing): the loop undoes every earlier side effect and frees the reservation, and the next tick can launch the key again.
@@ -685,10 +698,15 @@ Reap rules (the spec's table, `tiny` values):
   - `TestReapExpired`; `TestReapOrphansAfterTenMinutes`.
   - `TestReaperIgnoresForeignRunners` (Review Focus 6): a repo-scoped `ci-x`, an owner-scoped `ci-y` and a persistent `ci-z` survive.
   - `TestRerunLaunches` (Review Focus 2).
-  - `TestDryRunWritesNothing`: no ledger row, no Forgejo or Kubernetes write.
-  - `TestReadFailureWritesNothing`: a failed jobs read leaves the success timestamp unchanged.
+  - `TestDryRunWritesNothing`: no launch row, no Forgejo or Kubernetes write (it may write holds); the dry-run counter rises once per decision change, not per tick.
+  - `TestReadFailureWritesNothing`: a failed jobs read makes no launch or ledger write and leaves the success timestamp unchanged.
   - `TestForgejoDownReaperStillWorks`: with every Forgejo call failing, an expired Job is still deleted.
   - `TestRunNeverOverlaps`.
+  - `TestHealthyWhileForgejoDown`: with every Forgejo call failing, `Healthy` stays true while ticks finish, and turns false only when a tick wedges for over 3 × Interval.
+  - `TestMetricsFixedLabels`: every label value belongs to its set, and no label name contains `owner`.
+  - `TestMetricsTextFormat`: the output parses under the Prometheus text rules (a small checker in the test).
+  - `TestDecisionLogOncePerChange` (Review Focus 4): 1,000 ticks over one held job give one line; a change of reason gives a second.
+  - `TestLogsCarryIdsOnly`: no line carries a repo or owner name, even when a fake job name contains one.
 - [ ] **Step 2: Run them.** Expected: FAIL.
 - [ ] **Step 3: Write the code.**
 - [ ] **Step 4: Run the tests,** then `$GO test -race -count=20 ./internal/loop/`. Expected: PASS. Commit: `loop: reconcile, launch with undo, reap, settle; restart-safe`.
@@ -696,34 +714,20 @@ Reap rules (the spec's table, `tiny` values):
 ### Task 13: Metrics, the usage API, decision logs, `main`
 
 **Files:**
-- Create: `internal/metrics/metrics.go` and its test; `internal/usage/usage.go` and its test; `internal/loop/decisions.go` and its test
+- Create: `internal/usage/usage.go` and its test (`internal/metrics` and `internal/loop/decisions.go` belong to Task 12)
 - Edit: `cmd/ci-dispatch/main.go`
 
 **Interfaces (produces):**
-- Metrics, with label values from fixed sets only and every series present from start:
-  - `ci_dispatch_loop_last_success_timestamp`;
-  - `ci_dispatch_jobs{class,state}`, `ci_dispatch_holds{class,reason}`, `ci_dispatch_class_mode{class}`;
-  - `ci_dispatch_launches_total{class,backend,outcome}` (`outcome`: `launched`, `dry-run`, `error`, `undone`);
-  - `ci_dispatch_start_seconds{class,backend}` (histogram; buckets 5, 10, 20, 30, 60, 120, 300; from first seen to `running`);
-  - `ci_dispatch_reaped_total{reason}`, `ci_dispatch_orphans{kind}` (`job`, `runner`, `expired`);
-  - `ci_dispatch_errors_total{api}` (`forgejo`, `kube`, `ledger`, `inventory`);
-  - `ci_dispatch_config_verified`, `ci_dispatch_config_ever_verified`.
-  - Phase 2 adds the money, price, sweeper and drift metrics.
-- `Decisions.Log(d model.Decision, now time.Time)`: one slog JSON line per key whenever its action or reason changes, with fields `key`, `owner_id`, `repo_id`, `class`, `action`, `reason`, `mode`. Settled launches log `reserved_minutes` and `charged_minutes`.
 - Usage API on `UsageListen`, with `Authorization: Bearer <usage token>` compared through `subtle.ConstantTimeCompare`:
-  - `GET /v1/owners/{owner_id}/usage?period=current|previous|YYYY-MM-DD`: the spec's JSON. In phase 1, `paid` carries the owner's limit and zeros, and `global.paid` is `closed`.
+  - `GET /v1/owners/{owner_id}/usage?period=current|previous|YYYY-MM`: the spec's JSON. In phase 1, `paid` carries the owner's limit and zeros, and `global.paid` is `closed`.
   - `GET /v1/owners/{owner_id}/jobs?period=…&limit=…` (`limit` ≤ 200).
-  - `func Period(anchor, now time.Time, which string) (start, end time.Time, err error)`: monthly from the anchor's day of the month, clamped to the month's last day.
-- `main`: load the config; read both secrets; `ledger.Open` (exit 1 on `ErrLocked`); build the clients (30 s timeouts); `Start`; serve `:8080` (`/metrics`, `/healthz`) and `:8081`; `Run` until SIGTERM. SIGTERM finishes the step in flight, at most 20 s.
+  - `func Period(now time.Time, which string) (start, end time.Time, err error)`: the UTC calendar month, first day to last day, for `current`, `previous` or `YYYY-MM`.
+- `main`: load the config; read both secrets; `ledger.Open` (exit 1 on `ErrLocked`); build the clients (30 s timeouts); `Start`; serve `:8080` (`/metrics`, and `/healthz` from `Healthy`) and `:8081`; `Run` until SIGTERM. SIGTERM finishes the step in flight, at most 20 s.
 
 - [ ] **Step 1: Write the failing tests.**
-  - `TestMetricsFixedLabels`: every label value belongs to its set, and no label name contains `owner`.
-  - `TestMetricsTextFormat`: the output parses under the Prometheus text rules (a small checker in the test).
-  - `TestDecisionLogOncePerChange` (Review Focus 4): 1,000 ticks over one held job give one line; a change of reason gives a second.
-  - `TestLogsCarryIdsOnly`: no line carries a repo or owner name, even when a fake job name contains one.
   - `TestUsageAuth`: no token → 401; a wrong token → 401; the right token → 200; `/metrics` and `/healthz` live on the other port only.
   - `TestUsageShape`: the golden spec JSON, with money as decimal strings.
-  - `TestPeriod` (table): anchor day 31 in February; `previous`; a date inside a period.
+  - `TestPeriod` (table): a month boundary; December to January; `previous`; `YYYY-MM`; a malformed value.
   - `TestJobsLimitCapped`.
   - `TestMainRefusesSecondInstance`, `TestMainRefusesMissingSecretFile` (the error names the path, never the content).
 - [ ] **Step 2: Run them.** Expected: FAIL.
@@ -747,12 +751,12 @@ Reap rules (the spec's table, `tiny` values):
 
 - [ ] **Step 1: Write it** from the spec's example, with:
   - `defaults` as the spec;
-  - `global` as the spec;
+  - `global` as the spec, except `tiny_concurrent: 1` (F14: raise it to 2 after a clean day);
   - `classes: {tiny: on, small: off, medium: off, large: off}`;
   - `owners: {realliance: {tiny_concurrent: 2}, forgejo-admin: {tiny_minutes_per_day: 20}}` (D11);
   - `deny: []`;
   - a header comment: names resolve to ids at each load, an unknown name fails the load, the ceilings live in code, and only an Owner-signed head counts.
-- [ ] **Step 2: Check locally** with a scratch Go test in `~/Repos/ci-dispatch` that runs `limits.Parse` on the file. Expected: PASS.
+- [ ] **Step 2: Check locally** with a scratch Go test in `~/Repos/ci-dispatch` that runs `limits.Parse` on the file. The same test then runs `Resolve` read-only against the live forge, with `CI_DISPATCH_FORGEJO_TOKEN` from the environment, so a mistyped owner fails now. Expected: PASS.
 - [ ] **Step 3: Commit signed, push, open the PR.** **Chris:** merges fast-forward. Nothing to apply: tofu ignores the file.
 
 ### Task 16: The acceptance suite, written first (`realliance/sso`)
@@ -770,10 +774,10 @@ Reap rules (the spec's table, `tiny` values):
   - `test_tiny_job_egress_confined`: the job runs `scripts/netpol-connect.js` against the `all` rows of `cluster/netpol-canary/matrix.txt` (without the `$HOST_IP` rows), plus `dropped github.com:22`, `dropped 1.1.1.1:853` and `open 1.1.1.1:80`, then `git ls-remote` on the forge and on GitHub. Every row must match. The test first checks from the laptop that `github.com:22` and `1.1.1.1:853` answer, so a timeout in the job means the policy dropped the packet, not that the target is dead.
   - `test_nothing_outlives_the_job` (Review Focus 1): 60 s after the run ends, `ci-tiny` has no Job, Pod or Secret for its key, and no runner `ci-tiny-<job>-*` exists. Then a probe that someone cancels before pickup leaves nothing behind either.
   - `test_owner_runs_one_at_a_time`: a member pushes two probes that each sleep 30 s; the second starts only after the first ends.
-  - `test_owner_minutes_cap_holds` (D11): a `forgejo-admin` repo runs one job, and a second holds as `owner-limit` in its usage. Its teardown says the account stays capped until 00:00 UTC.
+  - `test_owner_minutes_cap_holds` (D11): a `forgejo-admin` repo runs one job, and a second holds as `owner-limit` in its usage. Its teardown says the account stays capped until 00:00 UTC. The test reads the usage first: if `forgejo-admin` has already used its 20 minutes today, it asserts the hold only and skips the launch half.
   - `test_label_combo_holds`: `runs-on: [tiny, docker]` holds as `label`; `runs-on: small` waits with no hold; neither ever runs.
   - `test_usage_api_auth_and_ids`: 401 without the token; 200 with it; the body holds ids and no login or repo names.
-  - `test_dispatcher_secrets_not_in_tiny_pod` (`galaxy_only`): during a probe that sleeps 60 s, `kube -n ci-tiny exec -i <pod> -c runner -- sh -c 'grep -rqsF -f /dev/stdin /etc /work /creds /proc/1/environ'` with each of `CI_DISPATCH_FORGEJO_TOKEN`, `CI_DISPATCH_USAGE_TOKEN`, `FORGEJO_ADMIN_TOKEN` and `FORGE_BOT_FORGEJO_TOKEN` on stdin exits non-zero. A positive control finds a nonce the job wrote.
+  - `test_dispatcher_secrets_not_in_tiny_pod` (`galaxy_only`): during a probe that sleeps 60 s, the test runs `kube -n ci-tiny exec <pod> -c runner -- sh -c 'cat /proc/1/environ; find /etc /work /creds -type f -exec cat {} +'` and searches the output locally with `grep -F -f` over a `umask 077` temp file, deleted at once, that holds `CI_DISPATCH_FORGEJO_TOKEN`, `CI_DISPATCH_USAGE_TOKEN`, `FORGEJO_ADMIN_TOKEN` and `FORGE_BOT_FORGEJO_TOKEN` from the test's own environment. No token ever enters a pod or an argv. Expected: no match. A positive control finds a nonce the job wrote. Tell the realliance.net executor, through Chris, that its general-runner test pipes tokens into a pod the same way.
 - [ ] **Step 2: Run them.** `nix develop --command pytest tests/forge/test_forge_ci_tiny.py -v`. Expected: FAIL or ERROR (no dispatcher).
 - [ ] **Step 3: Commit signed, open a draft PR.**
 
@@ -788,7 +792,7 @@ Reap rules (the spec's table, `tiny` values):
 - Edit: `cluster/applications/kustomization.yaml`, `.pre-commit-config.yaml` (hook `ci-dispatch-manifests`), `.renovaterc.json`
 
 **Interfaces:**
-- Consumes: the Task 14 digest, the realliance.net Task 3A pin (R2), forge-bot's keyring (F3) and the Task 4 billing anchor.
+- Consumes: the Task 14 digest, the realliance.net Task 3A pin (R2), forge-bot's keyring (F3), Task 3's pickup ruling, and the NetworkPolicy plan's Task 7 components on `main`. If `cluster/components/` is absent, wait for that task and rebase (N1).
 - Produces: Service `ci-dispatch.ci-dispatch.svc.cluster.local`, ports `http` 8080 and `usage` 8081.
 
 - [ ] **Step 1: Write the failing static tests** in `scripts/test_ci_dispatch_manifests.py`. Its docstring says it never reads `*.secret.*`; it renders with `kubectl kustomize`, like `test_netpol_manifests.py`'s helper.
@@ -800,12 +804,13 @@ Reap rules (the spec's table, `tiny` values):
     - `automountServiceAccountToken: false` and a projected token volume (`expirationSeconds: 3600`, plus `kube-root-ca.crt`);
     - `enableServiceLinks: false`; the PVC at `/data`;
     - requests `10m`/`48Mi`, limit `256Mi`, `GOMEMLIMIT=192MiB`;
-    - `terminationGracePeriodSeconds: 30`; `startupProbe` and `livenessProbe` on `/healthz`.
-  - `test_pvc_kept`: `rook-ceph-block-ssd`, `1Gi`, RWO, `Prune=false,Delete=false`.
+    - a 64Mi `emptyDir` at `/tmp` and `TMPDIR=/tmp` (for SQLite temp files, since the root stays read-only);
+    - `terminationGracePeriodSeconds: 30`; `startupProbe` and `livenessProbe` on `/healthz` (a wedge detector: it stays up while Forgejo is down).
+  - `test_pvc_kept`: `rook-ceph-block-ssd`, `1Gi`, RWO, `Prune=false,Delete=false`; the Namespace `ci-dispatch` carries the same annotation.
   - `test_rbac_exact`: one Role in `ci-tiny` with exactly `batch/jobs` [create, get, list, patch, delete], `secrets` [create, delete] and `pods` [get, list]; one RoleBinding to `ci-dispatch/ci-dispatch`; no ClusterRole and no ClusterRoleBinding.
   - `test_quota_exact`: the four quota values from Global Constraints.
-  - `test_tiny_runner_config`: the ConfigMap's `config.yml` has `runner.capacity: 1`, `runner.timeout: 15m`, `cache.enabled: false`, `host.workdir_parent: /work/act` and no `server.connections`.
-  - `test_config_values`: `classes == {"tiny": "dry-run", "small": "off", "medium": "off", "large": "off"}`; the `tiny` image equals `cluster/forgejo-runner-general/deployment.yaml`'s runner image while that file exists; `forgejo.url` is `http://forgejo-http.forgejo.svc.cluster.local:3000`; `billing.period_anchor` holds a date.
+  - `test_tiny_runner_config`: the ConfigMap's `config.yml` has `runner.capacity: 1`, `runner.timeout: 15m`, `cache.enabled: false`, `host.workdir_parent: /work/act` and no `server.connections`; `runner.timeout` equals `Tiny.RunnerTimeout` in the dispatcher's `config.yaml`.
+  - `test_config_values`: `classes == {"tiny": "dry-run", "small": "off", "medium": "off", "large": "off"}`; the `tiny` image equals `cluster/forgejo-runner-general/deployment.yaml`'s runner image while that file exists; `forgejo.url` is `http://forgejo-http.forgejo.svc.cluster.local:3000`.
   - `test_keyring_matches_forge_bot` (F3): byte-identical to `cluster/forge-bot/keyring/*` when that directory exists, otherwise skipped with a reason.
   - `test_tiny_policies`: exactly `default-deny`, `allow-dns` and `egress-internet-web` in `ci-tiny`, and no ingress rule.
   - `test_egress_internet_web`: its WAN rule equals `egress-internet-only`'s; its internet rule has the same `except` list, and ports exactly TCP 80 and 443.
@@ -826,7 +831,7 @@ Reap rules (the spec's table, `tiny` values):
   - In sso-secrets: `printf 'CI_DISPATCH_USAGE_TOKEN=%s\n' "$(openssl rand -hex 32)" >> forge/secrets.env`, then a signed commit and a push.
   - For each of the two, a scratch `python -I` script under `umask 077` reads `forge/secrets.env` and writes the one-key Secret, printing only a byte count.
   - Seal: `KUBECONFIG=/tmp/galaxy-kubeconfig nix develop --command ./sign.sh`. Expected: two `kind: SealedSecret` files.
-- [ ] **Step 4: Write the manifests** that pass Step 1's tests. `config.yaml` sets `tiny: dry-run`. The `tiny` sub-kustomization uses `components: [../../components/netpol/default-deny, ../../components/netpol/allow-dns, ../../components/netpol/egress-internet-web]`. The dispatcher sub-kustomization uses the first two and its own `networkpolicy.yaml`. The StatefulSet's comment carries D5's reasoning. The `Application` carries the comment `roll back by rendering nothing, never by deleting this file`.
+- [ ] **Step 4: Write the manifests** that pass Step 1's tests. `config.yaml` sets `tiny: dry-run`, and `tiny.pickup` to twice Task 3's longest registration-to-running time plus the `netpol-gate` wait that the NetworkPolicy ledger records at B2 (Task 19 Step 5 may still adjust it). The `tiny` sub-kustomization uses `components: [../../components/netpol/default-deny, ../../components/netpol/allow-dns, ../../components/netpol/egress-internet-web]`. The dispatcher sub-kustomization uses the first two and its own `networkpolicy.yaml`. The StatefulSet's comment carries D5's reasoning. The `Application` carries the comment `roll back by rendering nothing, never by deleting this file`. The `ci-dispatch` Namespace manifest carries `argocd.argoproj.io/sync-options: Prune=false,Delete=false`, as the PVC does (D5).
 - [ ] **Step 5: Hook and Renovate.** `ci-dispatch-manifests` runs `python -m pytest -q -p no:cacheprovider scripts/test_ci_dispatch_manifests.py` on files `^(cluster/(ci-dispatch|components/netpol|forgejo-runner-general|forge-bot|applications)/.*|scripts/test_ci_dispatch_manifests\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$`. Rebase before touching `.renovaterc.json` (F1).
 - [ ] **Step 6: Run everything.** The static tests, `scripts/test-ci-dispatch-alerts.sh`, `scripts/test_netpol_manifests.py` and `scripts/check-kustomizations.sh`. Expected: PASS. If `netpol-manifests` fails on the new namespaces, follow N2.
 - [ ] **Step 7: Commit on the branch** (`ci-dispatch: dispatcher in dry-run and the ci-tiny namespace (runner classes Task 17)`) and push the branch only, never `main`.
@@ -854,7 +859,7 @@ Reap rules (the spec's table, `tiny` values):
 **Files:**
 - Edit: `cluster/ci-dispatch/dispatcher/config.yaml` (`tiny: on`), `scripts/test_ci_dispatch_manifests.py` (expected mode)
 
-- [ ] **Step 1: Preconditions.** Task 18 Step 5 green. The NetworkPolicy ledger holds its Task 9 restart gap (N1). Every node is under 88 % memory requested, since each `tiny` pod adds 512Mi, about 1.7 points of one node.
+- [ ] **Step 1: Preconditions.** Task 18 Step 5 green. The NetworkPolicy ledger holds its Task 9 restart gap (N1). `docs/ci.md` is on `main` (Task 20 Step 1), so the pause, the break-glass and the weekly check exist before `tiny` runs. Every node is at or below 86 % memory requested, measured after the general runner, forge-bot and pages deploys; ledger the three numbers. Each `tiny` pod adds 512Mi, about 1.7 points of one node. `ci.yaml` keeps `global.tiny_concurrent: 1`; raise it to 2 only after a clean day, with an Owner-signed commit (no deploy).
 - [ ] **Step 2: Change the expected mode,** watch `test_config_values` fail, set `tiny: on`, watch it pass. Commit: `ci-dispatch: tiny on (runner classes Task 19)`.
 - [ ] **Step 3: Gate G, then STOP—ask Chris.** Every member can now run code on galaxy. Rollback trigger: any acceptance test fails, any deny line from `ci-tiny/` that the matrix did not expect, or `NodeMemoryRequestsHigh`. Rollback: `tiny: off`, revert and push; for a fast stop, the break-glass.
 - [ ] **Step 4: Push and `Monitor`** the pod rollout (the config hash changes).
@@ -864,6 +869,8 @@ Reap rules (the spec's table, `tiny` values):
 - [ ] **Step 8: Mark the sso PR ready.** **Chris:** merges.
 
 ### Task 20: docs
+
+**Order.** Step 1 lands early, as its own docs-only push during the Task 18 dry-run and before Task 19 Step 3 (F2), with vale run on `docs/ci.md` alone. The other steps follow Task 19.
 
 **Files:**
 - Create: `docs/ci.md`; `~/Repos/ci-dispatch/docs/members.md` (D10)
@@ -876,8 +883,8 @@ Reap rules (the spec's table, `tiny` values):
   - finding a job's record: the `jobs` endpoint of the usage API for its owner (port-forward and the usage token), and the decision log in Azure by `key`. The image is distroless, so nothing can `exec` into it;
   - alerts and what each means;
   - rotating the dispatcher token, the usage token and the `galaxy-ci-dispatch` runner secret;
-  - the weekly site-administrator check (D19);
-  - before any enforcer restart, confirm `ci-tiny` has no pods (N5);
+  - the weekly check (D19): site administrators, local accounts (`forgejo-admin`, `forge-bot`, `forge-ci`, `ci-dispatch`) and non-ephemeral runners, each against its expected list;
+  - before any enforcer restart, Talos hop or kube-network-policies bump, pause `tiny` and confirm `ci-tiny` has no pods (N5);
   - re-running `CI_DRILL=runner-proofs` at every Forgejo upgrade (D14).
 - [ ] **Step 2: `docs/members.md`:** `runs-on: tiny`, its limits, what the pod can and cannot reach (ports 80 and 443 only), no `docker` on `tiny`, no `ubuntu-latest`, and how to see usage until the fork page exists (ask an Owner).
 - [ ] **Step 3: Verify.** `grep -n 'ci-dispatch' CLAUDE.md docs/forgejo.md | wc -l` gives at least 2. `grep -nE 'secret|token' docs/ci.md` shows names only. Run vale on both new files. Expected: no output.
@@ -903,9 +910,3 @@ Reap rules (the spec's table, `tiny` values):
 - **The fork's usage page:** Forgejo receives `CI_DISPATCH_USAGE_TOKEN`, and `ci-dispatch` gains an ingress rule for the Forgejo pods on 8081.
 - **Forgejo 19 LTS:** job webhooks, with polling kept as a backstop; re-run the phase 0 drill first.
 - **Warm capacity:** only if a class's median start stays over 2 minutes for a month.
-
-## Open questions for Chris
-
-- **Q1.** If `az billing period list` can't read the Realliance subscription's billing period (Task 4), what is the credit's renewal day? Phase 1's usage periods and phase 2's caps count from it.
-- **Q2.** `modernc.org/sqlite` adds about ten transitive modules beside a site-administrator token. Accept it (the default), or prefer a standard-library-only ledger (an append-only JSON-lines file with a rebuilt index), which costs more code and the SQL constraint of D5?
-- **Q3.** Turn `tiny` on (Task 19) before forge-bot ships `ForgeUnexpectedAdmin`, relying on the weekly check in `docs/ci.md` meanwhile? The default is yes, since forge-bot's own deploy is still held.

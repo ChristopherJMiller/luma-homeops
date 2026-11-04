@@ -1,5 +1,12 @@
 # Runner classes for the Realliance forge: design
 
+> **Amendment (2026-11-04, pre-flight).** The plan's pre-flight changed four points, and the text below follows them:
+>
+> - credit periods are UTC calendar months, not the subscription's billing date *(Chris)*;
+> - `ci-dispatch` is a StatefulSet, not a `Recreate` Deployment;
+> - the Spot probe runs in a throwaway resource group, not the CI group;
+> - the dispatcher's Role also holds the Job `patch` verb, to resume a suspended Job.
+
 - **Date:** 2026-11-04.
 - **Status:** draft for Chris's review. Nothing built.
 - **Research:** `.superpowers/runners-research/findings.md` and
@@ -97,7 +104,7 @@ Facts from the research, and what each one forces.
 | `rook-ceph-block-ssd` has reclaim policy `Retain`, so per-job claims would leak volumes | gives `tiny` a memory-backed work directory |
 | galaxy nodes run at 84 to 89 % of memory requested; `NodeMemoryRequestsHigh` fires over 90 % | keeps `tiny` requests small and caps the class with a quota |
 | The Realliance subscription is a Visual Studio credit of $150 a month with the spending limit on. The DNS terraform state and logging (about $10 a month) share it, and reaching the limit stops them too. The offer's docs say no Spot, yet the quota shows 20 low-priority cores. Each region allows 20 VM vCPU, 20 ACI cores, and 0 ACI Spot cores. `Microsoft.App` isn't registered | caps CI at $100 *(Chris)*; uses ACI and pay-as-you-go VMs *(Chris)*; tries Spot only after a probe |
-| The credit renews on the subscription's billing date, not on the first of the month | counts every limit over that billing period |
+| The credit period is the calendar month *(Chris)* | counts every limit over the UTC calendar month |
 | Azure budgets stop nothing. Cost data arrives 8 to 24 h late, and budget actions up to 48 h late | enforces in the dispatcher, with backstops faster than the budget |
 | NetworkPolicy has no FQDN rules | can at best limit the dispatcher's Azure traffic to the internet on 443 |
 | The forge has internal sign-in and basic auth off, and tokens still work. `prohibit_login` blocks tokens too; forge-bot relies on that | gives `ci-dispatch` no web sign-in by construction, and never sets `prohibit_login` on it |
@@ -238,9 +245,9 @@ Every item here is *(Claude's call)*.
   `git.realliance.net/realliance/ci-dispatch`, and Chris reviews the diff before every re-pin, as for
   forge-bot.
 - **Deploy:** Argo app `ci-dispatch` (`cluster/ci-dispatch/`, namespaces `ci-dispatch` and `ci-tiny`,
-  both Pod Security `restricted`). One replica, `Recreate`, distroless, non-root, read-only root. The
+  both Pod Security `restricted`). One replica as a StatefulSet, distroless, non-root, read-only root. The
   ledger is SQLite on a 1 GiB `rook-ceph-block-ssd` claim; `Retain` suits a ledger.
-- **Kubernetes rights:** a Role in `ci-tiny` only, for Jobs (create, read, delete), Secrets (create,
+- **Kubernetes rights:** a Role in `ci-tiny` only, for Jobs (create, read, patch, delete), Secrets (create,
   delete), and Pods (read).
 - **Azure identity:** a service principal with a custom role on the CI resource group only. The role
   can create and delete container groups, VMs, NICs, disks, and public IPs, join the one subnet, and
@@ -298,7 +305,7 @@ instead.
 
 Every item here is *(Claude's call)*.
 
-- **SQLite** with one writer: one replica, `Recreate`, and an RWO claim. Cluster Postgres would add an
+- **SQLite** with one writer: one replica as a StatefulSet, and an RWO claim. Cluster Postgres would add an
   HA cluster's memory to nodes near 85 % for no gain.
 - **Rows:** launches (key, owner, repo, class, backend, compute and runner ids, state, timestamps,
   reservation, cost, outcome), holds, prices, periods, and the verified config commit. Money in whole
@@ -358,7 +365,7 @@ The cloud sweeper (see Budget enforcement) is the second, independent reaper.
 | ledger lost | paid classes stay off until a restore |
 | price feed down | the last prices serve for up to 7 days, then paid jobs wait |
 | config untrusted | the last verified config, with an alert |
-| a second dispatcher | the RWO claim and `Recreate` prevent it, and per-key uniqueness catches it anyway |
+| a second dispatcher | the StatefulSet, the RWO claim and a file lock prevent it, and per-key uniqueness catches it anyway |
 | a job cancelled before pickup, or held by a concurrency group | the pickup timeout reaps the launch; phase 0 checks how the listing shows a job that a concurrency group holds back |
 
 **Charging** *(Claude's call)*: the owner pays for every launch made for their job, even a wasted one.
@@ -370,12 +377,12 @@ queue-and-cancel abuse, and a wasted ACI launch costs about a cent.
 The data source for the fork's runner page *(Chris)*. It listens on a ClusterIP Service only, never on
 Traefik, behind a read-only bearer token that only Forgejo holds.
 
-`GET /v1/owners/{owner_id}/usage?period=current|previous|<start date>`
+`GET /v1/owners/{owner_id}/usage?period=current|previous|<YYYY-MM>`
 
 ```json
 {
   "owner_id": 42,
-  "period": {"start": "2026-11-17", "end": "2026-12-16"},
+  "period": {"start": "2026-11-01", "end": "2026-11-30"},
   "paid": {
     "limit_usd": "10.00", "limit_source": "default",
     "used_usd": "3.42", "reserved_usd": "0.21", "remaining_usd": "6.37",
@@ -414,7 +421,7 @@ dispatcher has no rights in it.
 | 5 | the custom role and Azure Policy on the CI group | Chris's terraform | at create | other regions, sizes, shapes, and resource types |
 | 6 | regional quota | Azure | at create | more than 20 VM vCPU, or 20 ACI cores |
 | 7 | cloud sweeper: a Logic App in the guard group, every 10 min | its managed identity | within 10 to 20 min | deletes anything older than 90 min; over $0.60 an hour for two sweeps in a row, deletes all compute and **locks** |
-| 8 | a $105 budget on the CI group, over the billing month | Azure, then the sweeper's lock | 8 to 48 h late | deletes all compute and locks |
+| 8 | a $105 budget on the CI group, over the calendar month | Azure, then the sweeper's lock | 8 to 48 h late | deletes all compute and locks |
 | 9 | the $120 subscription budget (exists: `azure/logging/`, 80 % and 100 % alerts) | Azure | late | nothing; it emails Chris |
 
 **Lock** means the sweeper removes the dispatcher's role assignment on the CI group. Only Chris
@@ -572,13 +579,13 @@ for one `small` group, too much under this cap, and a warm Spot VM about $22 a m
 The Go layout and schema; loop intervals and pickup timeouts; ARM API versions; the region (`westus2`
 or `westus3`, by size availability); image contents and the default job image; cloud-init; the Policy
 definitions and the role's exact actions; the sweeper's definition and its price table; the API server
-rule, checked against deny logs; and how the dispatcher learns the billing date.
+rule, checked against deny logs.
 
 ## Decisions for Chris
 
 Answered 2026-11-04:
 
-1. **Probe Spot once: yes.** One D2as_v6 Spot VM in the CI group for about 5 minutes, as a phase 0 proof.
+1. **Probe Spot once: yes.** One D2as_v6 Spot VM in a throwaway resource group for about 5 minutes, as a phase 0 proof.
    A pass adds Spot to phase 3 as the first choice for VM jobs, with pay-as-you-go as the fallback and an
    off switch; a fail keeps VMs on pay-as-you-go. Treat a pass as something that can stop working.
 2. **gVisor for `tiny`: no.** Pod hardening, the netpol gate and the egress lockdown carry the escape risk.
