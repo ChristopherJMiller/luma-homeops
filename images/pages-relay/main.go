@@ -51,6 +51,6 @@ func main() {
 	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { fmt.Fprintln(w, "ok") })
 	srv := &http.Server{Addr: env("PAGES_RELAY_LISTEN", ":8080"), Handler: mux,
-		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 60 * time.Second}
+		ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 60 * time.Second}
 	fatal(srv.ListenAndServe().Error())
 }

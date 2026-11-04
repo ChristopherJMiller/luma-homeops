@@ -8,6 +8,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -31,7 +32,10 @@ const MaxBody = 16 << 20
 
 // MaxInFlight bounds concurrent requests (and so buffered bodies); the rest
 // get 503 and are counted busy.
-const MaxInFlight = 4
+const MaxInFlight = 2
+
+// DefaultBodyTimeout bounds reading one body once a slot is held.
+const DefaultBodyTimeout = 10 * time.Second
 
 // SignatureHeader carries the lowercase hex HMAC-SHA256 of the raw body, with
 // no "sha256=" prefix.
@@ -111,6 +115,15 @@ func (r Repo) Publishable() bool {
 	return !r.Private && !r.Internal && r.OwnerVisibility == "public"
 }
 
+func isASCII(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] >= 0x80 {
+			return false
+		}
+	}
+	return true
+}
+
 func allZeros(s string) bool {
 	if len(s) != 40 && len(s) != 64 {
 		return false
@@ -139,7 +152,13 @@ func Route(ev Event, domain, forge string) (Target, Outcome) {
 	if !ev.Repository.Publishable() && !unpublishEvent {
 		return Target{}, IgnoredPrivate
 	}
+	if !isASCII(ev.Repository.OwnerLogin) || !isASCII(ev.Repository.Name) {
+		return Target{}, IgnoredName
+	}
 	if len(ev.Repository.CloneURL) < len(forge) || !strings.EqualFold(ev.Repository.CloneURL[:len(forge)], forge) {
+		return Target{}, BadRequest
+	}
+	if !isASCII(ev.Repository.CloneURL) {
 		return Target{}, BadRequest
 	}
 	if !strings.EqualFold(ev.Repository.CloneURL, forge+ev.Repository.OwnerLogin+"/"+ev.Repository.Name+".git") {
@@ -244,8 +263,9 @@ type Relay struct {
 	Counters *Counters
 	Log      *slog.Logger
 
-	once sync.Once
-	sem  chan struct{}
+	BodyTimeout time.Duration
+	once        sync.Once
+	sem         chan struct{}
 }
 
 func (rl *Relay) done(w http.ResponseWriter, code int, o Outcome, msg string, attrs ...any) {
@@ -253,6 +273,24 @@ func (rl *Relay) done(w http.ResponseWriter, code int, o Outcome, msg string, at
 	rl.Log.Info("event", append([]any{"outcome", string(o)}, attrs...)...)
 	w.WriteHeader(code)
 	io.WriteString(w, msg)
+}
+
+// readBody reads the whole body into ONE buffer sized by Content-Length (cap
+// MaxBody), so a request costs about one body of memory. Without a length it
+// falls back to a growing read.
+func readBody(w http.ResponseWriter, r *http.Request) ([]byte, error) {
+	lr := http.MaxBytesReader(w, r.Body, MaxBody)
+	if r.ContentLength < 0 {
+		return io.ReadAll(lr)
+	}
+	if r.ContentLength > MaxBody {
+		return nil, &http.MaxBytesError{Limit: MaxBody}
+	}
+	buf := make([]byte, r.ContentLength)
+	if _, err := io.ReadFull(lr, buf); err != nil {
+		return nil, err
+	}
+	return buf, nil
 }
 
 func (rl *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -270,10 +308,17 @@ func (rl *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case rl.sem <- struct{}{}:
 		defer func() { <-rl.sem }()
 	default:
+		w.Header().Set("Retry-After", "5")
 		rl.done(w, http.StatusServiceUnavailable, Busy, "busy\n")
 		return
 	}
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, MaxBody))
+	bt := rl.BodyTimeout
+	if bt == 0 {
+		bt = DefaultBodyTimeout
+	}
+	// Errors (unsupported by recorders) are ignored; the server enforces it.
+	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(bt))
+	body, err := readBody(w, r)
 	if err != nil {
 		var mbe *http.MaxBytesError
 		if errors.As(err, &mbe) {
@@ -314,7 +359,7 @@ func (rl *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (rl *Relay) forward(w http.ResponseWriter, r *http.Request, t Target, evName string, body []byte, attrs []any) {
 	u := *rl.Upstream
 	u.Path = strings.TrimRight(rl.Upstream.Path, "/") + t.Path
-	req, err := http.NewRequestWithContext(context.WithoutCancel(r.Context()), http.MethodPost, u.String(), strings.NewReader(string(body)))
+	req, err := http.NewRequestWithContext(context.WithoutCancel(r.Context()), http.MethodPost, u.String(), bytes.NewReader(body))
 	if err != nil {
 		rl.done(w, http.StatusBadGateway, UpstreamError, "upstream_error\n", attrs...)
 		return

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -9,11 +10,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -526,23 +529,23 @@ func TestLargeRealPushForwarded(t *testing.T) {
 	}
 }
 
-func TestBusyWhenFiveInFlight(t *testing.T) {
+func TestBusyWhenOverLimit(t *testing.T) {
 	release := make(chan struct{})
 	h := newHarness(t, func(w http.ResponseWriter, r *http.Request) { <-release })
 	b := pushBody(repoJSON("org", "public", "site", false, false), 1)
 	sig := sign(b, h.relay.Secret)
-	done := make(chan int, 4)
-	for i := 0; i < 4; i++ {
+	done := make(chan int, MaxInFlight)
+	for i := 0; i < MaxInFlight; i++ {
 		go func() { done <- h.post(t, b, "push", sig).Code }()
 	}
-	for h.hits.Load() < 4 {
+	for h.hits.Load() < int32(MaxInFlight) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	if w := h.post(t, b, "push", sig); w.Code != 503 || !strings.Contains(h.metrics(), `outcome="busy"} 1`) {
 		t.Errorf("5th: %d %s", w.Code, h.metrics())
 	}
 	close(release)
-	for i := 0; i < 4; i++ {
+	for i := 0; i < MaxInFlight; i++ {
 		<-done
 	}
 }
@@ -570,5 +573,107 @@ func TestRouteHardening(t *testing.T) {
 		if _, o := Route(pushEv(k), domain, forge); o != IgnoredName {
 			t.Errorf("repo %q: %v", name, o)
 		}
+	}
+}
+
+// N1: one 16 MiB request must not allocate much beyond one body buffer.
+func TestPeakAllocOneMaxBody(t *testing.T) {
+	h := newHarness(t, func(w http.ResponseWriter, r *http.Request) { io.Copy(io.Discard, r.Body) })
+	head := `{"ref":"refs/heads/pages","after":"` + strings.Repeat("b", 40) + `","repository":` +
+		repoJSON("org", "public", "site", false, false) + `,"pad":"`
+	pad := MaxBody - len(head) - 2
+	b := []byte(head + strings.Repeat("x", pad) + `"}`)
+	if len(b) != MaxBody {
+		t.Fatalf("fixture %d", len(b))
+	}
+	sig := sign(b, h.relay.Secret)
+	req := httptest.NewRequest(http.MethodPost, "/hook", bytes.NewReader(b))
+	req.Header.Set("X-Forgejo-Event", "push")
+	req.Header.Set(SignatureHeader, sig)
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	w := httptest.NewRecorder()
+	h.relay.ServeHTTP(w, req)
+	runtime.ReadMemStats(&after)
+	if w.Code != 200 || h.hits.Load() != 1 {
+		t.Fatalf("%d hits %d", w.Code, h.hits.Load())
+	}
+	alloc := after.TotalAlloc - before.TotalAlloc
+	t.Logf("allocated %.1f MiB for a %d MiB body", float64(alloc)/(1<<20), MaxBody>>20)
+	if alloc > 40<<20 {
+		t.Errorf("allocated %d MiB, want < 40", alloc>>20)
+	}
+	if MaxInFlight != 2 {
+		t.Errorf("MaxInFlight %d", MaxInFlight)
+	}
+}
+
+// N2: a stalled body frees its slot at the body deadline.
+func TestSlowBodyTimesOut(t *testing.T) {
+	h := newHarness(t, nil)
+	h.relay.BodyTimeout = 200 * time.Millisecond
+	srv := httptest.NewServer(h.relay)
+	defer srv.Close()
+	conn, err := net.Dial("tcp", strings.TrimPrefix(srv.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	fmt.Fprintf(conn, "POST /hook HTTP/1.1\r\nHost: x\r\nContent-Length: 1000\r\nX-Forgejo-Event: push\r\n\r\nabcdefghij")
+	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	start := time.Now()
+	line, err := bufio.NewReader(conn).ReadString('\n')
+	if err != nil || !strings.Contains(line, "400") || time.Since(start) > 2*time.Second {
+		t.Fatalf("line %q err %v after %v", line, err, time.Since(start))
+	}
+	if !strings.Contains(h.metrics(), `outcome="bad_request"} 1`) {
+		t.Error(h.metrics())
+	}
+	// The slot is free again.
+	b := pushBody(repoJSON("org", "public", "site", false, false), 1)
+	if w := h.post(t, b, "push", sign(b, h.relay.Secret)); w.Code != 200 {
+		t.Errorf("after: %d", w.Code)
+	}
+}
+
+// N3: 503 carries Retry-After.
+func TestBusyRetryAfter(t *testing.T) {
+	release := make(chan struct{})
+	h := newHarness(t, func(w http.ResponseWriter, r *http.Request) { <-release })
+	b := pushBody(repoJSON("org", "public", "site", false, false), 1)
+	sig := sign(b, h.relay.Secret)
+	for i := 0; i < MaxInFlight; i++ {
+		go h.post(t, b, "push", sig)
+	}
+	for h.hits.Load() < int32(MaxInFlight) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	w := h.post(t, b, "push", sig)
+	close(release)
+	if w.Code != 503 || w.Header().Get("Retry-After") != "5" {
+		t.Errorf("%d %q", w.Code, w.Header().Get("Retry-After"))
+	}
+}
+
+// N4: ASCII only, before any case folding.
+func TestNonASCIIRejected(t *testing.T) {
+	kelvin := "K"
+	r := pub("o", kelvin+"ate")
+	if _, o := Route(pushEv(r), domain, forge); o != IgnoredName {
+		t.Errorf("kelvin repo: %v", o)
+	}
+	if _, o := Route(pushEv(pub("o", "ré")), domain, forge); o != IgnoredName {
+		t.Errorf("accented repo: %v", o)
+	}
+	r = pub("o", "kate")
+	r.CloneURL = forge + "o/" + kelvin + "ate.git" // folds to kate under EqualFold
+	if _, o := Route(pushEv(r), domain, forge); o != BadRequest {
+		t.Errorf("lookalike clone url: %v", o)
+	}
+	r = pub("o", "r")
+	r.CloneURL = "https://git.realliance.net/o/r.git​"
+	if _, o := Route(pushEv(r), domain, forge); o != BadRequest {
+		t.Errorf("zero-width clone url: %v", o)
 	}
 }
