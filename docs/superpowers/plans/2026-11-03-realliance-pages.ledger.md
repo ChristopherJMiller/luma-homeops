@@ -57,3 +57,15 @@
   - G3: `edge-t5-after.txt` is identical to `edge-t5-before.txt` after normalisation.
   - G4: no pods outside Running/Succeeded.
 - No rollback trigger fired.
+
+## Task 6: Forgejo to relay (2026-11-04) - BLOCKED at Step 7
+
+- RED/GREEN: `test_forgejo_webhook_allowlist` failed (`KeyError: 'webhook'`), then 25/25 passed. Commit 17770e59 pushed to main 01:38:44Z.
+- Gate G before (matches Task 5 after): 3 nodes Ready; Ceph HEALTH_OK, 144 active+clean plus 1 active+clean+scrubbing+deep; only `rook` Degraded in Argo; no non-Running pods; edge snapshot identical to Task 5 after (modulo random PKCE code_challenge values). CI runner `idle`, no running forge-bot runs (stale `waiting` runs 3/7/11/15 are old).
+- Forgejo restart: old pod Terminating 01:38:50Z, new pod 1/1 and `/api/v1/version` 200 at 01:39:10Z (about 20 s). `[webhook] ALLOWED_HOST_LIST = external,pages-relay.pages.svc.cluster.local` confirmed in app.ini.
+- Probe repo `forgejo-admin/pages-probe` created (201, public) before the hook.
+- Hook created via `POST /api/v1/admin/hooks`: id 1, active, events delete/push/repository, branch_filter `pages`.
+- FINDING: Forgejo 15 stores that hook with `is_system_webhook = f` (repo_id 0) - a DEFAULT webhook, not a system one. `GET /api/v1/admin/hooks` (system list) returns `[]` even with the hook present, so `ensure_system_hook` is NOT idempotent (it would create duplicates). The swagger has no type parameter for the admin hook create.
+- Probe commit to `pages` (6f46ec35, token probe-5afdfae0): no delivery (hook_task empty, relay counters all 0, no webhook log lines), site 404 after 90 s. Answers the question the probe exists for: this hook does NOT reach pre-existing repos.
+- Action taken: hook 1 disabled (active=false). Nothing else changed. Forgejo, the allowlist and the probe repo/branch stay. No takedown needed (no site was published). deleteFiles: not exercised (no publish); undecided.
+- Needs a ruling: create a true system webhook (admin UI "System Webhooks" in Forgejo 15, or set `is_system_webhook` in the DB - a prod DB write), then re-run Step 7.
