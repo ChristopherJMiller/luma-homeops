@@ -79,3 +79,21 @@
 - Takedown: `-delete-site forgejo-admin.realliance.page/pages-probe`; the CLI logged `deleted`; the site returned 404 after 48 s. Probe repo kept.
 - Gate G after: 3 nodes Ready; Ceph HEALTH_OK, 145/145 active+clean; only `rook` Degraded in Argo; no non-Running pods; edge snapshot identical to before (PKCE noise aside).
 - Helper fix: realliance/sso `pages-acceptance` 1713e46 (draft PR #40): `ensure_system_hook` detects the hook with a read-only DB SELECT, updates it in place, and refuses to create one (error points at this ledger); `test_system_webhook_present` asserts `is_system_webhook`.
+
+## Task 7: DNS for realliance.page (2026-11-04) - DONE
+
+- Zone id `2874e930ce400b828a616598190b2fbe` (active, account Realliance). No existing records, so no import.
+- RED: zone and cloudflareddns tests failed; GREEN: 30/30 after the edit. Commit 54502d86.
+- Gate G before: 3 nodes Ready; Ceph HEALTH_OK, 145 active+clean; only `rook` Degraded; no non-Running pods; edge snapshot identical to Task 6 after.
+- Plan: 2 to add, 0 to change, 0 to destroy (`apex["realliance.page"]`, `wildcard["realliance.page"]`). Apply: 2 added, 0 changed, 0 destroyed. Re-plan: No changes.
+- Pushed; Argo `dns` Synced at 54502d86; `rollout restart deploy/cloudflareddns` 1/1 Ready; log: realliance.page "No update needed", no error.
+- dig: apex 152.44.247.88; anything.realliance.page -> realliance.page. -> 152.44.247.88. Edge snapshot after identical.
+
+## Task 8: wildcard certificate gains realliance.page (2026-11-04) - DONE
+
+- RED: `test_wildcard_cert_sans` and `test_one_certificate_covers_realliance_page` failed (the latter also because a non-manifest YAML broke the scan; the test now skips unparseable files). GREEN 30/30. Commit 49f4f9c5, pushed 01:52Z.
+- Pre-checks: CAA for realliance.page empty. Before: revision 4, notAfter 2026-12-25T04:04:51Z.
+- Gate G before: 3 nodes Ready; 145/145 active+clean; Ceph HEALTH_WARN for one MDS client cache-pressure (not slow-op); only `rook` Degraded; no non-Running pods; edge snapshot identical.
+- Reissue: wildcard-tls-5 order valid; Ready True at about 01:59Z (about 7 min). No errored/invalid order or challenge.
+- After: revision 5, notAfter 2027-02-02T01:01:18Z. git.realliance.net, photos.chrismiller.xyz and realliance.page each serve 11 SANs.
+- Gate G3: only realliance.page lines changed (TLS error 000 -> 404, as expected); every pre-existing host line identical. Argo `rook-cluster` also showed Degraded afterwards, consistent with the Ceph cache-pressure warning; unrelated to the cert.
