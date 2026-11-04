@@ -62,3 +62,23 @@ Plan: `docs/superpowers/plans/2026-11-04-bots-to-realliance-ops.md`. Answers, li
 
 - `docs/forgejo.md`, CLAUDE.md (the Realliance forge row), and the comments in `cluster/forgejo-runner/kustomization.yaml` and `cluster/forgejo-runner-general/deployment.yaml` name `realliance-ops`. Both runner renders are byte-identical to before. Vale is clean on the changed lines.
 - sso PR #48 (`bots-ops`, `0afe2f4`) squash-merged as `aa14177`.
+
+## The restore-drill fixture (Chris, 2026-11-04)
+
+- Before: `realliance/restore-drill-fixture` id 16, private, with the `realliance` all-repos teams (Owners, maintainers, members) and no hooks, keys, mirrors, secrets or variables. `main` `c3065015b632`. One LFS object (row 4, `oid` `5493a3f4…63cd`, 1048576 bytes), served from B2 by a 303.
+- Transfer: **202** at 22:16:22Z, after a guard read 200 (id 16, private) at the source and 404 at the target.
+- After: id 16, private, teams `["Owners"]`, anonymous 404. In the database the repo's owner is 208, LFS row 4 still points at repo 16, and a redirect row maps (52, `restore-drill-fixture`) to 16. At the new path the LFS media answers 303 to B2 with sha256 = `oid`, and a fresh clone with LFS gives `object.bin` with sha256 = `oid`.
+- Old path: the API answers 301. git fails with `RPC failed; HTTP 301`: git follows a redirect only on the first request, and a private repo's 301 comes on the authenticated retry after the 401. With `http.followRedirects=true` the old URL reaches `c3065015b632`.
+- `restore-drill.sh fixture` (read-only when the repo exists) says the repo already exists. `check` didn't run, because `forgejo-drill` is down.
+- luma-homeops `39931637`: `FIXTURE=`, the create call (org and name from `FIXTURE`), `docs/forgejo.md`, and `check` compares `realliance-ops/forge`. The old inventory path would fail its prod `ls-remote` for the same 301 reason. The fixture stays out of the inventory, and `tofu plan` says `No changes.`
+
+## Task 8: verification, retiring the old secret
+
+- Step 1 (sso `main` `aa14177`, run alone from 22:19Z to 22:43Z): 86 passed, 2 failed, 11 skipped (the opt-in drills). Both failures, `test_member_cannot_see_inventory` and `test_pages_repo_is_root_site`, stopped in `forge_login` ("Forgejo did not start a session") before their assertions. Re-run alone, both passed. The passes include `test_members_cannot_push_bots`, the writers test, `test_galaxy_serves_forge_bot_and_ci_dispatch_only`, `test_ops_registry_token_scope` and `test_allowlist_jobs_wait`.
+- Step 2: tasks 82 (PR `test`), 84 (`main` `test`) and 85 (`main` `image`) succeeded on runner 17, and task 83 (PR `image`) skipped by design. Rows 17 and 18 are `idle` at the new paths, and the `galaxy` job listing is `null`.
+- Step 3: `tofu plan` on inventory `354690f`: `No changes.`
+- Step 4 checks (22:45:45Z): a scan of every branch, tag and open PR of the 5 `realliance` repos found no `REGISTRY_TOKEN`, `toJSON(secrets)`, `secrets[` or `secrets: inherit` in any workflow or action file. The only secret reference is `GITHUB_TOKEN` in `realliance.net`, which publishes to ghcr.io. No repo has secrets or variables. forge-ci had one token row (30, `ci-registry`, `write:package`). Its PBKDF2 hash matched `FORGE_CI_PACKAGE_TOKEN` and no other sso-secrets value, and no other file held the value. The DELETE predicate (id, uid 137, name, scope, hash) selected 1 row. Positive control: the token read `/packages/realliance` (200), and the registry's token carried `UserID` 137.
+- Step 4 (22:46:11Z): deleting the `realliance` org secret `REGISTRY_TOKEN` gave **204**, and that org's secrets are `[]`; `realliance-ops` keeps its own. One transaction on `acid-forgejo-0`, the leader: DELETE, `GET DIAGNOSTICS ROW_COUNT`, raise unless 1, COMMIT. It deleted 1 row, and forge-ci holds 0 tokens. The old token now gets **401** from the API and **401** from the registry's `/v2/token`.
+- sso-secrets `e427db0` removes `FORGE_CI_PACKAGE_TOKEN`. sso PR #49 (`4c27b83`, open) adds `test_realliance_has_no_registry_token` and `test_forge_ci_holds_no_token` and drops the forge-ci leg of `test_ops_registry_token_scope`; the 5 token tests pass. Until #49 merges, the two tests on `main` that read the removed key fail with `KeyError`.
+- Rollback now needs a new token: mint one, then set the org secret again.
+- Follow-up 4 needs no item in the fork's `WISHLIST.md`: the database delete revoked forge-ci's token.
