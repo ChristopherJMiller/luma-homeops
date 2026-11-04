@@ -209,3 +209,11 @@ Runner classes N5. Commit `f5f71a53` (pushed at 19:38:29Z) gives the `galaxy` ru
 - The runner-idle check in B2 Step 1, Task 9 Step 1 and every later enforcer restart now covers both repos the runner serves: `/repos/realliance/forge-bot/actions/tasks` and `/repos/realliance/ci-dispatch/actions/tasks`. It also covers the general runner's `/repos/realliance/realliance.net/actions/tasks`, as the note for Task 3 Part B says.
 - The CI hold in the same STOP covers branch pushes to `realliance/ci-dispatch`, since each one starts a `galaxy` run. The runner classes plan holds them itself (its N3) while Task 8 Steps 1 to 11 or Task 9 is open.
 - No NetworkPolicy changed. The pod keeps its name prefix, namespace and labels, so B2's selectors still match it.
+
+## Cross-plan: forge-bot and ci-dispatch moved to `realliance-ops` (bots-to-realliance-ops Tasks 3 and 4, 2026-11-04)
+
+Forgejo transferred `realliance/ci-dispatch` (id 240) at 21:27:18Z and `realliance/forge-bot` (id 94) at 21:30:35Z into `realliance-ops`, which is now public. Runner rows 17 (`galaxy-forge-bot`) and 18 (`galaxy-ci-dispatch`) match jobs by repo id, so the `galaxy` runner serves both repos unchanged. No NetworkPolicy and no runner config changed.
+
+- The old API paths now answer 301, and `curl` without `-L` prints no count. The runner-idle check in B2 Step 1, Task 9 Step 1 and every later enforcer restart uses `/repos/realliance-ops/forge-bot/actions/tasks` and `/repos/realliance-ops/ci-dispatch/actions/tasks`. The general runner's check keeps `/repos/realliance/realliance.net/actions/tasks`.
+- Task 8 Step 5's job script runs `git ls-remote https://git.realliance.net/realliance-ops/forge-bot HEAD`. Git follows the old path's redirect, but the redirect lasts only until someone creates a repo of that name in `realliance`.
+- The CI hold in the same STOP covers branch pushes to both `realliance-ops` repos. Only `realliance-ops` Owners can push to them now.

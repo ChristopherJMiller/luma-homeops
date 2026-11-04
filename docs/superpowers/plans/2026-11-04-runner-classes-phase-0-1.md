@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to run this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Moved (2026-11-04):** since 2026-11-04 `ci-dispatch` lives at `realliance-ops/ci-dispatch` (id 240, plan `2026-11-04-bots-to-realliance-ops.md`), and so do its Go module and image. Its `image` job pushes as `ops-ci` with the `realliance-ops` org secret `REGISTRY_TOKEN`. The `galaxy-ci-dispatch` runner row matches by repo id, so it still serves the repo; a re-registration uses `--scope realliance-ops/ci-dispatch`. Tasks 1 to 5 keep the paths they ran with.
+
 **Goal:** a member of the Realliance forge puts `runs-on: tiny` in a workflow and the job runs, with no setup, in a fresh hardened pod on galaxy that nothing else shares and that goes away with the job. The `ci-dispatch` controller gates every launch on the owner's signed limits, accounts for it in a ledger, and reaps anything that outlives its job. Phase 0 first proves the Forgejo 15 mechanics on the live forge and runs the one approved Spot probe.
 
 **Architecture:**
@@ -25,7 +27,7 @@
 | forgejo-runner | v13.2.1. `one-job` flags: `--wait`, `--handle`, `--url`, `--uuid`, `--token-url`, `--label` (repeatable), `--config` | source at tag `v13.2.1`, `internal/app/cmd/cmd.go`. `--token-url` takes only `file:` URLs (`ResolveSecretURL`). `one-job` refuses more than one connection. |
 | Proof pod image | `ghcr.io/christopherjmiller/forgejo-runner:sha-6b269ab@sha256:3bb2fca689b0c986039be061a4201580488c30bcdcb476815f80d737f97b76e9` | the `galaxy` runner's image in `cluster/forgejo-runner/deployment.yaml` (runner 13.2.1, node, uid 1000) |
 | `tiny` image | `ghcr.io/christopherjmiller/forgejo-runner-general:sha-<7>@sha256:<64>` | the realliance.net plan's Task 3A pin, consumed unchanged (R2) |
-| Dispatcher image | `git.realliance.net/realliance/ci-dispatch:sha-<7>@sha256:<64>` | set in Task 14 |
+| Dispatcher image | `git.realliance.net/realliance-ops/ci-dispatch:sha-<7>@sha256:<64>` | set in Task 14 |
 | ko base | `gcr.io/distroless/static-debian12:nonroot@sha256:afa5c872c891853ca7fcf1f12c3edb23f7eeef36189728842dd51042ff57f7ab` | forge-bot's `.ko.yaml` |
 | Go modules | `github.com/ProtonMail/go-crypto v1.5.2`, `go.yaml.in/yaml/v3 v3.0.5` (forge-bot's), `modernc.org/sqlite v1.61.0` (2026-10-21) | Task 6 Step 1 re-reads `proxy.golang.org/<module>/@v/<v>.info` and takes the newest release at least 2 weeks old |
 | CI pins | `actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0`, `golang.org/x/vuln/cmd/govulncheck@v1.9.0` | forge-bot's `ci.yaml` |
@@ -34,7 +36,7 @@
 ### Values fixed by the spec or by this plan
 
 - **Names.** Argo app `ci-dispatch`, path `cluster/ci-dispatch/` with sub-kustomizations `dispatcher/` (namespace `ci-dispatch`) and `tiny/` (namespace `ci-tiny`), both Pod Security `restricted`. StatefulSet, Service and ServiceAccount `ci-dispatch`. PVC `ci-dispatch-ledger` (1Gi, `rook-ceph-block-ssd`, RWO). ConfigMaps `ci-dispatch-config` and `ci-dispatch-keyring` (hash-suffixed) and `ci-tiny-runner` in `ci-tiny`. SealedSecrets `ci-dispatch-forgejo` (key `forgejo-token`) and `ci-dispatch-usage` (key `usage-token`). PrometheusRule `ci-dispatch-alerts`. Component `cluster/components/netpol/egress-internet-web`.
-- **Forge.** Local site-administrator account `ci-dispatch` (`ci-dispatch@realliance.net`). Its token `CI_DISPATCH_FORGEJO_TOKEN` holds exactly `read:admin,write:admin,read:repository,read:user,read:organization`. Usage token `CI_DISPATCH_USAGE_TOKEN`. Both canonical in `~/Repos/realliance-sso-secrets/forge/secrets.env`. Repo `realliance/ci-dispatch` (public, Go module `git.realliance.net/realliance/ci-dispatch`, MIT OR Apache-2.0). Second `galaxy` registration `galaxy-ci-dispatch` at scope `realliance/ci-dispatch`, secret `RUNNER_CI_DISPATCH_SECRET` in `forge/runner.env`.
+- **Forge.** Local site-administrator account `ci-dispatch` (`ci-dispatch@realliance.net`). Its token `CI_DISPATCH_FORGEJO_TOKEN` holds exactly `read:admin,write:admin,read:repository,read:user,read:organization`. Usage token `CI_DISPATCH_USAGE_TOKEN`. Both canonical in `~/Repos/realliance-sso-secrets/forge/secrets.env`. Repo `realliance-ops/ci-dispatch` (public, Go module `git.realliance.net/realliance-ops/ci-dispatch`, MIT OR Apache-2.0). Second `galaxy` registration `galaxy-ci-dispatch` at scope `realliance/ci-dispatch`, secret `RUNNER_CI_DISPATCH_SECRET` in `forge/runner.env`.
 - **Runner names.** `ci-tiny-<job>-<attempt>-<try>`, always ephemeral, always instance scope. The reaper touches a runner only if all three hold (prefix `ci-`, `ephemeral`, `owner_id == 0 && repo_id == 0`).
 - **`tiny` shape (spec).** Job: `suspend: true` at create, `backoffLimit: 0`, `activeDeadlineSeconds: 1200`, `ttlSecondsAfterFinished: 0`. Runner `--label tiny:host`, capacity 1, timeout 15m, cache off. Pod: uid/gid 1000, read-only root, all capabilities dropped, `RuntimeDefault`, no service account token, no service links. Requests `250m`/`512Mi`, limits `1` CPU and `2Gi`. `/work` is an `emptyDir` with `medium: Memory`, `sizeLimit: 1Gi`. Placement prefers nodes other than `top` and spreads across nodes. Quota in `ci-tiny`: `pods: 3`, `requests.cpu: 750m`, `requests.memory: 1536Mi`, `limits.memory: 6Gi`.
 - **Gates, limits and timing (spec).** Loop 5 s, sweep 5 min. `tiny` defaults: 1 job at once per owner, 120 minutes a UTC day, 2 pods globally. Each launch reserves 20 minutes. Pickup timeout 3 min; after 3 failed launches the job holds as `launch-failing`. Orphans go after 10 min.
@@ -46,7 +48,7 @@
 
 - **luma-homeops** (public). Work in the worktree `~/Repos/luma-homeops-ci` on branch `ci-dispatch` (`git -C ~/Repos/luma-homeops worktree add ~/Repos/luma-homeops-ci -b ci-dispatch origin/main`), never in the main checkout, which other agents share. `git add` only the task's paths. Commit with `nix develop --command git commit -S …`; pre-commit runs yamlfmt, kustomize-build, `netpol-manifests`, `pages-manifests`, the other plans' hooks and, from Task 17, `ci-dispatch-manifests`. If a hook rewrites a file, `git add` it and commit again. Land with `git fetch origin && git rebase origin/main && git push origin HEAD:main`.
 - **A push that changes what Argo renders is a deploy, and every deploy is a STOP.** Docs-only, ledger-only, `images/` and `.github/` pushes are routine.
-- **`realliance/ci-dispatch`** (forge, public; clone `~/Repos/ci-dispatch`): signed commits on branch `v1`, a PR, **Chris** merges fast-forward (`fj -H git.realliance.net pr merge realliance/ci-dispatch#<n> -d`).
+- **`realliance-ops/ci-dispatch`** (forge, public; clone `~/Repos/ci-dispatch`): signed commits on branch `v1`, a PR, **Chris** merges fast-forward (`fj -H git.realliance.net pr merge realliance-ops/ci-dispatch#<n> -d`).
 - **`realliance-ops/forge`** (inventory, private; `~/Repos/realliance-forge`): a branch, a signed commit, `fj … pr create`; **Chris** merges fast-forward so the head stays Owner-signed. Apply from the laptop with the README's env, only after its STOP.
 - **`realliance/sso`** (GitHub, public): signed commits on a branch, `gh pr create --fill`; merge only when Chris says merge. This plan adds only `tests/ci_helpers.py`, `tests/forge/test_forge_ci_dispatch.py`, `tests/forge/test_forge_runner_proofs.py` and `tests/forge/test_forge_ci_tiny.py`. It never edits `forge_helpers.py`, `conftest.py` or `pytest.ini`.
 - **`realliance/sso-secrets`** (private): `git commit -S`, push `main` (covered by the start OK).
@@ -88,7 +90,7 @@
 - **D6. Memory `emptyDir` for `/work`, and no new StorageClass in phase 1** (spec, "Why memory, not disk").
 - **D7. Every phase 1 alert is weekday (`severity: warning`).** `CIDispatchOrphanCompute` moves to the 24/7 route in phase 2, when orphans cost money. A `tiny` orphan pod dies at its Kubernetes deadline anyway. Phase 1 edits no `Alertmanager` config.
 - **D8. Ledger backup.** Phase 1 code writes a nightly consistent copy (`VACUUM INTO /data/snapshots/ledger-<date>.db`, keeping 7). The restic CronJob and its host land in phase 2, before any paid class, which fits the spec's rule that paid classes stay off until a restore. Losing a phase 1 ledger costs one day of `tiny` minutes.
-- **D10. The member's guide is `docs/members.md` in `realliance/ci-dispatch`,** because the forge has no wiki yet. It moves to the wiki once one exists.
+- **D10. The member's guide is `docs/members.md` in `realliance-ops/ci-dispatch`,** because the forge has no wiki yet. It moves to the wiki once one exists.
 - **D11. `forgejo-admin` is the caps test owner.** `ci.yaml` gives it `tiny_minutes_per_day: 20`, exactly one reservation, so the acceptance suite can prove an `owner-limit` hold with a real job. The break-glass account never needs CI.
 - **D12. Dry-run writes no launch rows.** It may write holds. It logs each decision once, counts `ci_dispatch_launches_total{outcome="dry-run"}` once per decision change, and launches nothing.
 - **D13. The listing query includes every class label from phase 1 on,** so a `[tiny, docker]` or `[small, medium]` job shows as a `label` hold in the usage API instead of waiting unseen. Paid classes stay `off`, so their jobs wait.
@@ -97,7 +99,7 @@
 - **D16. The dispatcher's API server rule** allows TCP 6443 to the three node IPs, the post-DNAT endpoints of `kubernetes.default`. Task 18 proves it against deny logs.
 - **D17. Launch order: reserve, register, Job (suspended), Secret owned by the Job, resume.** The Secret needs the Job's uid, and a suspended Job starts no pod until its Secret exists. `blockOwnerDeletion` stays unset, so the Role needs no `finalizers` right.
 - **D18. Handles and the runner row.** The dispatcher accepts a handle only if it matches `^[A-Za-z0-9_-]{1,128}$` and passes it as an argv element, never through a shell. Task 3 ledgers when Forgejo deletes an ephemeral runner row (at pickup or at job end) and the `status` values on the way. Task 12's pickup check keys on those values; the default assumption: the row exists, and the job still shows `waiting`.
-- **D19. `ForgeUnexpectedAdmin` belongs to forge-bot** (a follow-up for that plan). Until it ships, Task 1 and `docs/ci.md` record the expected local accounts (`forgejo-admin`, `forge-bot`, `forge-ci`, `ci-dispatch`), and the runbook's weekly check compares `GET /admin/users` (administrators and local accounts) and the non-ephemeral runners against them.
+- **D19. `ForgeUnexpectedAdmin` belongs to forge-bot** (a follow-up for that plan). Until it ships, Task 1 and `docs/ci.md` record the expected local accounts (`forgejo-admin`, `forge-bot`, `forge-ci`, `ops-ci`, `ci-dispatch`), and the runbook's weekly check compares `GET /admin/users` (administrators and local accounts) and the non-ephemeral runners against them.
 
 ## Review focus
 
@@ -113,9 +115,9 @@
 **NetworkPolicy plan** (`docs/superpowers/plans/2026-11-03-networkpolicy-enforcement.md`; its ledger on 2026-11-04 shows A1, A2 and A3a done, `A3a_start=2026-11-03T18:35:10Z`; A3b no earlier than 2026-11-04T18:35:10Z; then Tasks 6 and 7, at least 24 h green, then Task 8, which is B2):
 - N1. Tasks 0 to 16 need nothing from it. Task 17 needs its Task 7 on `main` (it creates `cluster/components/netpol/{default-deny,allow-dns,egress-internet-only}`), so schedule Task 17 after that, and run Tasks 15 and 16 meanwhile. The first `ci-dispatch` push (Task 18) waits for `B2_done` in that ledger and a current `scripts/netpol-verify.sh runner` PASS. `tiny: on` (Task 19) also waits for its Task 9's ledgered restart gap. The earliest `B2_done` is about 2026-11-06.
 - N2. This plan adds one component, `cluster/components/netpol/egress-internet-web/`. It never edits the other components, `scripts/test_netpol_manifests.py`, `scripts/netpol-verify.sh` or `cluster/netpol-canary/*`. If `netpol-manifests` needs an entry for `ci-dispatch` or `ci-tiny`, the NetworkPolicy owner adds it (ask through Chris), and Task 18 waits.
-- N3. Serialize STOPs: no deploy of this plan between another plan's Gate G before and after runs. Also push nothing to a `realliance/ci-dispatch` branch (each push starts a `galaxy` run) while its Task 8 Steps 1 to 11 or its Task 9 is open.
+- N3. Serialize STOPs: no deploy of this plan between another plan's Gate G before and after runs. Also push nothing to a `realliance-ops/ci-dispatch` branch (each push starts a `galaxy` run) while its Task 8 Steps 1 to 11 or its Task 9 is open.
 - N4. Task 3's probe pods carry no policy, so no agent enrolls them, and they never run inside that plan's `idle`, baseline or canary measurement windows.
-- N5. After Task 5 the `galaxy` runner serves `realliance/ci-dispatch` too. Its runner-idle check (B2 Step 1, Task 9 Step 1) then covers `/repos/realliance/ci-dispatch/actions/tasks`; write that into its ledger at Task 5. After Task 19, every enforcer restart, Talos hop or kube-network-policies bump first pauses `tiny` and checks that `ci-tiny` has no pods (`docs/ci.md`).
+- N5. After Task 5 the `galaxy` runner serves `realliance/ci-dispatch` too. Its runner-idle check (B2 Step 1, Task 9 Step 1) then covers `/repos/realliance-ops/ci-dispatch/actions/tasks` (`realliance/ci-dispatch` before 2026-11-04); write that into its ledger at Task 5. After Task 19, every enforcer restart, Talos hop or kube-network-policies bump first pauses `tiny` and checks that `ci-tiny` has no pods (`docs/ci.md`).
 
 **forge-bot plan** (`docs/superpowers/plans/2026-11-02-forge-bot-and-ci.md`; Task 16 deploy held on branch `forge-bot-deploy`):
 - F1. Other plans edit `.renovaterc.json` too; rebase immediately before every commit that touches it.
@@ -124,7 +126,7 @@
 - F4. Hand the expected administrator list (D19) to that plan's executor through Chris, for `ForgeUnexpectedAdmin`.
 
 **realliance.net plan** (`docs/superpowers/plans/2026-11-04-realliance-net-on-forge.md`):
-- R1. Its rule F3 ("the `galaxy` runner's allowlist never changes") gives way for `realliance/ci-dispatch` only, by the approved spec ("Build"). Ledger that in its ledger at Task 5.
+- R1. Its rule F3 ("the `galaxy` runner's allowlist never changes") gives way for `realliance-ops/ci-dispatch` (id 240) only, by the approved spec ("Build"). Ledger that in its ledger at Task 5.
 - R2. Task 17 consumes its Task 3A image pin and waits for it. While its `general` runner exists, a static test keeps the two pins equal.
 - R3. Retiring `general` into `tiny` is the spec's phase 1b, a follow-up here.
 
@@ -161,7 +163,7 @@
   - `modernc.org/sqlite` accepted (Q2: yes);
   - `tiny` may go on before `ForgeUnexpectedAdmin`, with the weekly check in `docs/ci.md` (Q3: yes);
   - the Spot probe, pre-approved in exactly the shape Task 4 states;
-  - the start OK covers routine pushes: luma-homeops docs and ledger, `realliance/ci-dispatch` branch pushes and PRs, sso-secrets commits, `realliance/sso` test branches.
+  - the start OK covers routine pushes: luma-homeops docs and ledger, `realliance-ops/ci-dispatch` branch pushes and PRs, sso-secrets commits, `realliance/sso` test branches.
 
   Anything not covered stays a STOP.
 - [ ] **Step 3: Baseline.** Gate G1, G2 and G4; G3 to `$SCRATCH/edge-ci-0.txt`. Also ledger:
@@ -389,9 +391,9 @@ func Load(path string) (Config, error)
   - `TestSecretRedacts`: the copied forge-bot tests, unchanged.
 - [ ] **Step 3: Run them.** Expected: FAIL (packages do not compile).
 - [ ] **Step 4: Write the code.**
-  - `go.mod`: `module git.realliance.net/realliance/ci-dispatch`, `go 1.26.0`, `toolchain go1.26.10`.
+  - `go.mod`: `module git.realliance.net/realliance-ops/ci-dispatch`, `go 1.26.0`, `toolchain go1.26.10`.
   - `.ko.yaml`: the base from Pins, `linux/amd64`, `-trimpath`, `-s -w`.
-  - `.forgejo/workflows/ci.yaml`: forge-bot's file with `./cmd/ci-dispatch` and `KO_DOCKER_REPO: git.realliance.net/realliance/ci-dispatch`, and the same header comment (never approve fork-PR runs).
+  - `.forgejo/workflows/ci.yaml`: forge-bot's file with `./cmd/ci-dispatch` and `KO_DOCKER_REPO: git.realliance.net/realliance-ops/ci-dispatch`, the same `ko login … -u ops-ci`, and the same header comment (never approve fork-PR runs).
   - `main.go`: `--config` (default `/etc/ci-dispatch/config/config.yaml`), `Load` or exit 1. The loop arrives in Task 13.
   - README: purpose, the classes table, safety rules (link the spec in luma-homeops), modes, the Forgejo client's two writes, and how Chris pins releases by hand in luma-homeops after review.
 - [ ] **Step 5: Run the tests.** Expected: PASS.
@@ -739,8 +741,8 @@ Also built here (moved from Task 13, F3):
 **Files:** none new.
 
 - [ ] **Step 1: Whole-branch review** (superpowers:requesting-code-review) against the spec's sections on the administrator token and on security, and this plan's Review focus. Fix in one round; ledger the rulings.
-- [ ] **Step 2: Chris merges** PR `v1` fast-forward and signs tag `v0.1.0`. The `main` run builds `git.realliance.net/realliance/ci-dispatch:sha-<7>`. Expected: run `success`, and the log ends in `…@sha256:<64>`. Fallback, per the spec: an Owner runs the same `ko build` locally from that commit with `DOCKER_CONFIG` in a temp dir. Ledger which path built it.
-- [ ] **Step 3: Link the package.** `POST /api/v1/packages/realliance/container/ci-dispatch/-/link/ci-dispatch` returns 201. Check that an anonymous manifest GET returns 200, and hash the body, since B2 direct serving drops `Docker-Content-Digest`.
+- [ ] **Step 2: Chris merges** PR `v1` fast-forward and signs tag `v0.1.0`. The `main` run builds `git.realliance.net/realliance-ops/ci-dispatch:sha-<7>`. Expected: run `success`, and the log ends in `…@sha256:<64>`. Fallback, per the spec: an Owner runs the same `ko build` locally from that commit with `DOCKER_CONFIG` in a temp dir. Ledger which path built it.
+- [ ] **Step 3: Link the package.** `POST /api/v1/packages/realliance-ops/container/ci-dispatch/-/link/ci-dispatch` returns 201. Check that an anonymous manifest GET returns 200, and hash the body, since B2 direct serving drops `Docker-Content-Digest`.
 - [ ] **Step 4: STOP—ask Chris to review the release** (`git verify-tag v0.1.0`, `git log -p` of the whole branch). Ledger his approval and the digest.
 
 ### Task 15: `ci.yaml` in the inventory
@@ -799,7 +801,7 @@ Also built here (moved from Task 13, F3):
   - `test_app_registered`: path `cluster/ci-dispatch`, prune + selfHeal + allowEmpty, `CreateNamespace=false` (the namespaces are manifests), no `resources-finalizer`, and listed in the applications kustomization.
   - `test_namespaces_restricted`: `ci-dispatch` and `ci-tiny` carry `pod-security.kubernetes.io/enforce: restricted`.
   - `test_dispatcher_pod`:
-    - a StatefulSet with `replicas: 1`; image matching `^git\.realliance\.net/realliance/ci-dispatch:sha-[0-9a-f]{7}@sha256:[0-9a-f]{64}$`;
+    - a StatefulSet with `replicas: 1`; image matching `^git\.realliance\.net/realliance-ops/ci-dispatch:sha-[0-9a-f]{7}@sha256:[0-9a-f]{64}$`;
     - uid and `fsGroup` 65532, read-only root, all capabilities dropped, `RuntimeDefault`;
     - `automountServiceAccountToken: false` and a projected token volume (`expirationSeconds: 3600`, plus `kube-root-ca.crt`);
     - `enableServiceLinks: false`; the PVC at `/data`;
@@ -816,7 +818,7 @@ Also built here (moved from Task 13, F3):
   - `test_egress_internet_web`: its WAN rule equals `egress-internet-only`'s; its internet rule has the same `except` list, and ports exactly TCP 80 and 443.
   - `test_dispatcher_policy`: in `ci-dispatch`, `default-deny`, `allow-dns` and `ci-dispatch`. That last one allows ingress from namespace `prometheus` on TCP 8080 only, and egress to the Forgejo pods on TCP 3000 and to `192.168.0.240/32`, `.241/32` and `.242/32` on TCP 6443 (D16). Each rule has a comment.
   - `test_monitoring`: the ServiceMonitor has `release: prometheus`, port `http` and a keep-list of `ci_dispatch_.*`. The PrometheusRule has `release: prometheus` and exactly the five phase 1 alerts, all `severity: warning` (D7).
-  - `test_renovate_never_automerges_ci_dispatch`: a dedicated `automerge: false` rule for `git.realliance.net/realliance/ci-dispatch`, after every rule that could match it.
+  - `test_renovate_never_automerges_ci_dispatch`: a dedicated `automerge: false` rule for `git.realliance.net/realliance-ops/ci-dispatch`, after every rule that could match it.
   - `test_no_plain_secrets`: the render holds no `kind: Secret`, only SealedSecrets.
   - Run. Expected: FAIL (no `cluster/ci-dispatch`).
 - [ ] **Step 2: Write the alert rules and their tests.** `prometheusrule.yaml`:
@@ -883,12 +885,12 @@ Also built here (moved from Task 13, F3):
   - finding a job's record: the `jobs` endpoint of the usage API for its owner (port-forward and the usage token), and the decision log in Azure by `key`. The image is distroless, so nothing can `exec` into it;
   - alerts and what each means;
   - rotating the dispatcher token, the usage token and the `galaxy-ci-dispatch` runner secret;
-  - the weekly check (D19): site administrators, local accounts (`forgejo-admin`, `forge-bot`, `forge-ci`, `ci-dispatch`) and non-ephemeral runners, each against its expected list;
+  - the weekly check (D19): site administrators, local accounts (`forgejo-admin`, `forge-bot`, `forge-ci`, `ops-ci`, `ci-dispatch`) and non-ephemeral runners, each against its expected list;
   - before any enforcer restart, Talos hop or kube-network-policies bump, pause `tiny` and confirm `ci-tiny` has no pods (N5);
   - re-running `CI_DRILL=runner-proofs` at every Forgejo upgrade (D14).
 - [ ] **Step 2: `docs/members.md`:** `runs-on: tiny`, its limits, what the pod can and cannot reach (ports 80 and 443 only), no `docker` on `tiny`, no `ubuntu-latest`, and how to see usage until the fork page exists (ask an Owner).
 - [ ] **Step 3: Verify.** `grep -n 'ci-dispatch' CLAUDE.md docs/forgejo.md | wc -l` gives at least 2. `grep -nE 'secret|token' docs/ci.md` shows names only. Run vale on both new files. Expected: no output.
-- [ ] **Step 4: Commit and push** (docs-only): `docs: forge CI runbook and the tiny class (runner classes Task 20)`. The members' guide goes to `realliance/ci-dispatch` through a PR.
+- [ ] **Step 4: Commit and push** (docs-only): `docs: forge CI runbook and the tiny class (runner classes Task 20)`. The members' guide goes to `realliance-ops/ci-dispatch` through a PR.
 
 ### Task 21: one week, then phase 1 ends
 

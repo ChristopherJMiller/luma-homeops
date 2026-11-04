@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Moved (2026-11-04):** since 2026-11-04 the repo and image live at `realliance-ops/forge-bot` (plan `2026-11-04-bots-to-realliance-ops.md`). The Go module path stays `git.realliance.net/realliance/forge-bot` until the next reviewed release. CI pushes images as `ops-ci` (team `realliance-ops/ci`, packages only) with the `realliance-ops` org secret `REGISTRY_TOKEN`. Steps before Task 16 keep the paths they ran with.
+
 **Goal:** forge-bot, a stateless Go reconciler, keeps git.realliance.net's access, admin status, non-Owners teams and profiles in step with Realliance SSO every ~5 min. It writes avatars back to SSO `picture`, it fails safe, and it is built by Forgejo Actions on one unprivileged in-cluster runner.
 
 **Architecture:** Five repos move together.
@@ -64,7 +66,7 @@
   - team `realliance/ci`;
   - Keycloak master client `forge-bot`;
   - Go module `git.realliance.net/realliance/forge-bot`;
-  - image `git.realliance.net/realliance/forge-bot:sha-<7>@sha256:…`.
+  - image `git.realliance.net/realliance-ops/forge-bot:sha-<7>@sha256:…` (`realliance/forge-bot` until 2026-11-04).
 
 **Versions**
 
@@ -1320,9 +1322,9 @@ Expected: PASS; the PR run on galaxy is green
 - Consumes: Tasks 8–14 merged, Task 15, `FORGE_BOT_FORGEJO_TOKEN`, `forge_bot_client_secret`.
 - Produces: Deployment `forge-bot/forge-bot` (all modes `dry-run`), ConfigMaps `forge-bot-config` and `forge-bot-keyring` (hash-suffixed, so a mode change restarts the pod), PrometheusRule `forge-bot-alerts`.
 
-- [ ] **Step 1: Chris merges PR `v1` into `main` (fast-forward).** The `main` run builds `git.realliance.net/realliance/forge-bot:sha-<7>`. Expected: run `success`, with the job log ending in `…@sha256:<digest>`. Fallback (spec "Bootstrap") if the runner cannot publish: an Owner runs the same `ko build` locally from that commit with the `forge-ci` token, with `DOCKER_CONFIG` in a temp dir. Ledger which path built the image.
+- [ ] **Step 1: Chris merges PR `v1` into `main` (fast-forward).** The `main` run builds `git.realliance.net/realliance-ops/forge-bot:sha-<7>`. Expected: run `success`, with the job log ending in `…@sha256:<digest>`. Fallback (spec "Bootstrap") if the runner cannot publish: an Owner runs the same `ko build` locally from that commit with the `ops-ci` token (`OPS_CI_PACKAGE_TOKEN`), with `DOCKER_CONFIG` in a temp dir. Ledger which path built the image.
 
-- [ ] **Step 2: STOP — Chris reviews the release.** `git -C ~/Repos/forge-bot fetch && git verify-commit <sha> && git log -p <initial-commit>..<sha>` (later re-pins review `<pinned>..<new>`). Proceed only on his OK. Link the package to the repo: `POST /api/v1/packages/realliance/container/forge-bot/-/link/forge-bot`.
+- [ ] **Step 2: STOP: Chris reviews the release.** `git -C ~/Repos/forge-bot fetch && git verify-commit <sha> && git log -p <initial-commit>..<sha>` (later re-pins review `<pinned>..<new>`). Proceed only on his OK. Link the package to the repo: `POST /api/v1/packages/realliance-ops/container/forge-bot/-/link/forge-bot`.
 
 - [ ] **Step 3: Write the failing tests**
 
@@ -1332,7 +1334,7 @@ BOT_DIR = LUMA / "cluster/forge-bot"
 def test_forge_bot_manifests_hardened():                          # Success 17
     # same pod/container checks as test_runner_manifests_unprivileged, plus readOnlyRootFilesystem True,
     # requests {cpu: 20m, memory: 32Mi}, limits.memory 128Mi, replicas 1, strategy Recreate,
-    # image matches r"^git\.realliance\.net/realliance/forge-bot:sha-[0-9a-f]{7}@sha256:[0-9a-f]{64}$"
+    # image matches r"^git\.realliance\.net/realliance-ops/forge-bot:sha-[0-9a-f]{7}@sha256:[0-9a-f]{64}$"
 
 def test_forge_bot_networkpolicy_present():
     np = next(x for x in manifests(BOT_DIR) if x["kind"] == "NetworkPolicy")
@@ -1358,7 +1360,7 @@ def test_main_push_builds_and_galaxy_runs_pin():                  # Success 14
     head = forge_api("GET", f"/api/v1/repos/{FORGE_BOT_REPO}/branches/main").json()["commit"]["id"]
     assert any(r["status"] == "success" for r in runs_for(FORGE_BOT_REPO, head))
     pinned = re.search(r"forge-bot:(sha-[0-9a-f]{7})@(sha256:[0-9a-f]{64})", (BOT_DIR / "deployment.yaml").read_text())
-    m = anonymous_manifest("realliance/forge-bot", pinned.group(1))
+    m = anonymous_manifest(FORGE_BOT_REPO, pinned.group(1))
     assert m.status_code == 200 and m.headers["Docker-Content-Digest"] == pinned.group(2)
     pod = json.loads(kube("-n", "forge-bot", "get", "pods", "-o", "json").stdout)["items"][0]
     assert pod["status"]["containerStatuses"][0]["imageID"].endswith(pinned.group(2))
@@ -1703,7 +1705,7 @@ Expected: PASS (drills and paging tests skipped)
     - "Who gets in": access, admin and teams sync within ~5 min; removal is one SSO step; email syncs; the hidden-org gate is met; the inventory is at `realliance-ops/forge`.
     - The manual two-step becomes "fallback while forge-bot is down or its breaker has tripped".
     - A new **forge-bot** section: jobs, modes and how to flip one, `allow_bulk_until` (signed Owner commit, ≤ 24 h), alerts and their routes, `picture` (edit profiles in the SSO, suspend with `active: false`), token and secret rotation, the re-pin review (`git verify-commit` + `git log -p <pinned>..<new>`, the range named in the pin commit), and rollback (modes → `dry-run` + the recorded command).
-    - A new **CI** section: Actions settings, the runner and its allowlist (registration per repo, rotation by re-registering), the `galaxy` label only, the B0 outcome and `REGISTRY_TOKEN`, never approving fork PRs, the accepted branch-push risk and its revisit trigger, the Forgejo 15 Actions differences.
+    - A new **CI** section: Actions settings, the runner and its allowlist (registration per repo, rotation by re-registering), the `galaxy` label only, the B0 outcome and `REGISTRY_TOKEN` (since 2026-11-04 the `realliance-ops` org secret, `ops-ci`), never approving fork PRs, the accepted branch-push risk and its revisit trigger, the Forgejo 15 Actions differences.
     - Clearing runner state: the work PVC outlives the pod, so empty `/work/cache` and `/work/act` with `kubectl exec`, then restart the pod.
   - `realliance/sso` README: no "forge-sync" left.
   - Wiki (STOP — ask Chris; public): the three pages get the same changes.
