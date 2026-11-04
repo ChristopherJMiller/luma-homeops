@@ -31,11 +31,12 @@
 /* avatars are rounded squares via var(--border-radius); keep them as they were */
 .ui.avatar,img.ui.avatar,.ui.avatar img,.ui.avatar svg{border-radius:4px}
 
-/* small: buttons, inputs, labels, selects, dropdown fields, menu items */
+/* small: buttons, inputs, labels, selects, dropdown fields, menu items (direct children only: an item inside a dropdown menu
+   that sits in a secondary menu stays a square list row, as stock draws it, not a pill that bumps the menu border) */
 .ui.button,.ui.basic.button,.ui.basic.buttons .button,.ui.input>input,.ui.input textarea,.ui.form textarea,
 .ui.form select,.ui.form input[type=text],.ui.form input[type=password],.ui.form input[type=email],
 .ui.form input[type=search],.ui.form input[type=url],.ui.form input[type=number],.ui.form input:not([type]),
-.ui.selection.dropdown,.ui.search.selection .prompt,.ui.label,.ui.secondary.menu .item,.ui.secondary.menu .active.item,
+.ui.selection.dropdown,.ui.search.selection .prompt,.ui.label,.ui.secondary.menu>.item,.ui.secondary.menu>.active.item,
 .ui.secondary.vertical.menu>.item{border-radius:8px}
 .ui.buttons .button:first-child{border-radius:8px 0 0 8px}
 .ui.buttons .button:last-child{border-radius:0 8px 8px 0}
@@ -56,8 +57,11 @@
 .ui.vertical.menu>.item:first-child{border-radius:12px 12px 0 0}
 .ui.vertical.menu>.item:last-child{border-radius:0 0 12px 12px}
 .ui.vertical.menu>.item:only-child,.ui.vertical.menu>.active.item:only-child{border-radius:12px}
-.ui.menu>.item:first-child{border-radius:12px 0 0 12px}
-.ui.menu>.item:last-child{border-radius:0 12px 12px 0}
+/* plain horizontal (boxed) menus only: a .ui.secondary.menu (the navbar, repo tabs, filter bars) has free-standing items that
+   round all four corners on hover, so rounding only the ends of the row squares one side of the first and last item;
+   a .vertical menu has its own end rules below (the extra :not() must not out-specify them) */
+.ui.menu:not(.secondary):not(.vertical)>.item:first-child{border-radius:12px 0 0 12px}
+.ui.menu:not(.secondary):not(.vertical)>.item:last-child{border-radius:0 12px 12px 0}
 
 /* attached box titles and boxes (diff file boxes, README box, settings sections) */
 .ui.top.attached.header,.ui[class*="top attached"].menu,.ui.top.attached.segment{border-radius:12px 12px 0 0}
@@ -74,7 +78,7 @@
 
 /* hard-coded top-only / per-corner radii that ignore the variables */
 .ui.modal>.header,.ui.modal>:first-child:not(.icon):not(.dimmer){border-top-left-radius:12px;border-top-right-radius:12px}
-.repository.view.issue .comment-list .comment>.content>div:first-child{border-radius:12px 12px 0 0}
+.repository.view.issue .comment-list .comment>.content>div:first-child:not(.segment){border-radius:12px 12px 0 0}
 .comment-header,.markup .file-preview-box .header,.ui.attached.message,
 .ui.cards>.card>.content:first-child,.ui.card>.content:first-child,
 .ui.table>thead>tr:first-child>th:only-child{border-radius:12px 12px 0 0}

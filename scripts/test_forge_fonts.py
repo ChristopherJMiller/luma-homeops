@@ -216,6 +216,26 @@ def test_attached_segment_radius_does_not_square_the_last_child():
     assert ".ui.attached.segment:last-child:not(.top){border-radius:0 0 12px 12px}".replace(" ", "") in css.replace(" ", "")
 
 
+def test_menu_end_item_radius_skips_secondary_menus():
+    # the navbar, repo tabs and list filter bars are `.ui.secondary.menu`s whose items are separate pills that round
+    # all four corners on hover. A radius rule on a bare `.ui.menu>.item:first-child|:last-child` out-specifies that
+    # and squares one side of the first/last item (logo, Help, Sign in, Label, Sort) the moment it is hovered.
+    css = re.sub(r"/\*.*?\*/", "", CSS.read_text(), flags=re.S)
+    seen = 0
+    for selectors, body in re.findall(r"([^{}]+)\{([^{}]*)\}", css):
+        if "radius" not in body:
+            continue
+        for sel in (s.strip() for s in selectors.split(",")):
+            if re.match(r"\.ui\.menu(:not\([^)]*\))*>\.(active\.)?item:(first|last|only)-child$", sel):
+                seen += 1
+                assert ":not(.secondary)" in sel, f"{sel} would square the end items of the navbar and tab bars"
+                assert ":not(.vertical)" in sel, f"{sel} would out-specify the vertical-menu end rules"
+    assert seen == 2, "the boxed-menu end-item rules (first-child, last-child) moved; update this test"
+    # and the 8px item radius is for the menu's own items, not every .item below it: a descendant selector also hits
+    # the rows of a dropdown menu inside a secondary menu (navbar +/avatar menus, issue and PR list filters)
+    assert not re.search(r"\.ui\.secondary\.menu\s+(\.active)?\.item\b", css), "use `.ui.secondary.menu>.item`"
+
+
 # --- Realliance logo (cluster/forgejo/custom/BRAND.md) ---
 IMG = CUSTOM / "public/assets/img"
 FIXED_IMG = ["logo.svg", "logo.png", "favicon.svg", "favicon.png", "apple-touch-icon.png"]  # names Forgejo requests

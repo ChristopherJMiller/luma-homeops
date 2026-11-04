@@ -7,9 +7,9 @@
   "signer": "E9245FED84E0EC721C7B5C336BFB8037115ADE26",
   "manifest_sha256": "d03dbd7122bf0e05897351c7f792801cb187ae5da3a94c4e205f86301174f586",
   "files": {
-    "css/realliance-fonts.d6f04a97.css": {
+    "css/realliance-fonts.bcecc5eb.css": {
       "from": "cluster/forgejo/custom/public/assets/css/realliance-fonts.css",
-      "sha256": "d6f04a97992a89ebbfd50b4c3e0db83f8f0fbab46ed162f3a24bd80e23de2f48"
+      "sha256": "bcecc5eb22956e3356429a374387d2e82a65451418cfc6bd54cb10b731c2171c"
     },
     "fonts/OFL-atkinson-hyperlegible.txt": {
       "from": "fonts/OFL-atkinson-hyperlegible.txt",

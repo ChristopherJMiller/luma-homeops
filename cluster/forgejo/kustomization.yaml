@@ -116,7 +116,7 @@ configMapGenerator:
   # their own. Together ~0.2 MiB, far under the 1 MiB ConfigMap cap, so one map each.
   - name: forgejo-font-css
     files:
-      - custom/public/assets/css/realliance-fonts.d6f04a97.css
+      - custom/public/assets/css/realliance-fonts.bcecc5eb.css
     options:
       disableNameSuffixHash: true
   - name: forgejo-fonts
