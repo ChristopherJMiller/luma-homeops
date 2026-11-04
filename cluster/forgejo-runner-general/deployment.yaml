@@ -3,7 +3,7 @@
 # (realliance/realliance.net). Every job runs IN THIS POD as uid 1000: it can read the connection
 # token (config.yml) and the shared HOME/TMPDIR, and reach what any pod reaches. It holds no other
 # credential (no Forgejo admin token, no Keycloak secret, no Kubernetes token). It is never
-# registered for realliance/forge-bot, and shares nothing with the `galaxy` runner in
+# registered for realliance-ops/forge-bot, and shares nothing with the `galaxy` runner in
 # forgejo-runner (own namespace, PVC, Secret and image).
 #
 # What persists, all on the forgejo-runner-general-work PVC:

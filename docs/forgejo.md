@@ -22,6 +22,15 @@ Keycloak on the CrownCloud VPS, repos `realliance/sso*`).
 | Bare repos (all git history), `[repository] ROOT=/repos` | PVC `forgejo-repos`, 50Gi, `rook-ceph-block` (HDD) | grows, read-mostly |
 | LFS, packages + container images, attachments, archives | B2 `realliance-forge-objects` (Realliance account), served **directly** from B2 (`SERVE_DIRECT`) | binaries never touch the SMR pool or the home uplink |
 
+**The bots live in `realliance-ops`** (since 2026-11-04, plan
+`docs/superpowers/plans/2026-11-04-bots-to-realliance-ops.md`): `realliance-ops/forge-bot` (id 94)
+and `realliance-ops/ci-dispatch` (id 240), both public, beside the private inventory. Only Owners
+push them, so only Owners start a run on the `galaxy` runner, which serves these two repos and
+nothing else. Their images are `git.realliance.net/realliance-ops/<bot>`, which CI pushes as the
+local account `ops-ci` with the org secret `REGISTRY_TOKEN`. forge-bot's Go module path stays
+`git.realliance.net/realliance/forge-bot` until its next reviewed release. A runner connection
+matches jobs by repo id; to re-register one, use `--scope realliance-ops/<repo>`.
+
 See also `docs/pages.md` (Realliance Pages: the system webhook, the relay, `*.realliance.page`).
 
 "minio" in the config is Forgejo's name for any S3 server; there is no MinIO. Backblaze needs
@@ -90,15 +99,19 @@ that step 2 sticks.
 
 On Forgejo both preconditions are met (2026-11-03). The group→team map left this public repo: it
 lives in Forgejo's database, and forge-bot's `teams.yaml` in the inventory takes it over. The
-inventory moved from `realliance/forge` to `realliance-ops/forge`, an org with the Owners team only,
-so `realliance` members can't read it and maintainers can't edit its branch protection.
+inventory moved from `realliance/forge` to `realliance-ops/forge`. `realliance-ops` holds the
+Owners, plus team `ci` (packages only, no repos; its one member is `ops-ci`). `realliance`
+members can't read the inventory, maintainers can't edit its branch protection, and neither
+group can push either bot.
 
 **Still open — the GitHub mirror.** The inventory is push-mirrored to the private GitHub repo
 `realliance/forge`, and the GitHub `realliance` org's base permission is **read**, so every GitHub
 org member can read it (and `teams.yaml` will name hidden orgs). **Decided (Chris, 2026-11-03):** GitHub mirroring maps each Forgejo org one-to-one to a configured
 GitHub org (the later forge-bot mirroring job), so `realliance-ops` mirrors into its own GitHub org,
 not `realliance`. Before the first hidden org, move the inventory's push mirror to that org; the
-`realliance` base permission stays as it is. Always: keep every hidden org's name out of every public repo,
+`realliance` base permission doesn't change. The same mapping puts forge-bot's and ci-dispatch's
+mirrors in the `realliance-ops` GitHub org, public there, beside the private inventory mirror.
+Neither bot has a mirror today. Always: keep every hidden org's name out of every public repo,
 including this one.
 
 ## Mail
