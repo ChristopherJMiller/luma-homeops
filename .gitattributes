@@ -4,3 +4,4 @@ satellites/.keys/* filter=git-crypt diff=git-crypt
 cluster/home-assistant/state/credentials.yaml filter=git-crypt diff=git-crypt
 cluster/home-assistant/state/people.yaml filter=git-crypt diff=git-crypt
 *.secret.conf filter=git-crypt diff=git-crypt
+*.secret.auto.tfvars filter=git-crypt diff=git-crypt

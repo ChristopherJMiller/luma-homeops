@@ -18,7 +18,7 @@ terraform {
 
 provider "azurerm" {
   features {}
-  subscription_id = "ddc1f03e-6903-4508-a23d-1754eb304cad"
+  subscription_id = var.subscription_id
 }
 
 # Resource Group for luma-homelab logging
@@ -91,7 +91,9 @@ resource "azurerm_consumption_budget_resource_group" "luma_homelab_logging_budge
   time_grain = "Monthly"
 
   time_period {
-    start_date = "2025-08-01T00:00:00Z"
+    # Azure refuses a budget whose start month is in the past when it is (re)created: bump this to the
+    # current month if the budget is ever replaced.
+    start_date = "2026-11-01T00:00:00Z"
     end_date   = "2030-12-31T23:59:59Z"
   }
 
@@ -116,6 +118,49 @@ resource "azurerm_consumption_budget_resource_group" "luma_homelab_logging_budge
     enabled   = true
     threshold = 100
     operator  = "GreaterThan"
+
+    contact_emails = var.alert_emails
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 100
+    operator       = "GreaterThan"
+    threshold_type = "Forecasted"
+
+    contact_emails = var.alert_emails
+  }
+}
+
+# Whole-subscription budget: watches the shared hard limit, CI included.
+resource "azurerm_consumption_budget_subscription" "subscription" {
+  name            = "luma-homelab-subscription-budget"
+  subscription_id = "/subscriptions/${var.subscription_id}"
+
+  amount     = var.subscription_budget_usd
+  time_grain = "Monthly"
+
+  time_period {
+    # Azure refuses a budget whose start month is in the past when it is (re)created: bump this to the
+    # current month if the budget is ever replaced.
+    start_date = "2026-11-01T00:00:00Z"
+    end_date   = "2030-12-31T23:59:59Z"
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 80
+    operator       = "GreaterThan"
+    threshold_type = "Actual"
+
+    contact_emails = var.alert_emails
+  }
+
+  notification {
+    enabled        = true
+    threshold      = 100
+    operator       = "GreaterThan"
+    threshold_type = "Actual"
 
     contact_emails = var.alert_emails
   }

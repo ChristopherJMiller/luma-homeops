@@ -55,3 +55,14 @@ variable "environment" {
   type        = string
   default     = "luma-homelab"
 }
+
+variable "subscription_id" {
+  description = "Azure subscription id (set in logging.secret.auto.tfvars)"
+  type        = string
+}
+
+variable "subscription_budget_usd" {
+  description = "Monthly budget for the whole subscription in USD"
+  type        = number
+  default     = 120
+}
