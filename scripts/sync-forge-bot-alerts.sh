@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copy forge-bot's alert rules and their promtool tests out of the forge-bot release that
-# cluster/forge-bot/deployment.yaml pins, into cluster/forge-bot/:
+# cluster/forge-bot/statefulset.yaml pins, into cluster/forge-bot/:
 #   prometheusrule.yaml  the PrometheusRule forge-bot-alerts, whose spec is internal/metrics/alerts.yaml
 #   alerts_test.yaml     internal/metrics/alerts_test.yaml, byte for byte (not a manifest: the
 #                        kustomization does not list it)
@@ -24,8 +24,8 @@ fgit() {
     -u GIT_ALTERNATE_OBJECT_DIRECTORIES -u GIT_PREFIX GIT_CONFIG_GLOBAL=/dev/null git -C "$src" "$@"
 }
 
-short=$(sed -nE 's#^ *image: git\.realliance\.net/realliance/forge-bot:sha-([0-9a-f]{7})@sha256:[0-9a-f]{64}$#\1#p' "$dir/deployment.yaml")
-[ "$(printf '%s\n' "$short" | grep -c .)" -eq 1 ] || { echo "sync: expected exactly one pinned forge-bot image in $dir/deployment.yaml" >&2; exit 2; }
+short=$(sed -nE 's#^ *image: git\.realliance\.net/realliance/forge-bot:sha-([0-9a-f]{7})@sha256:[0-9a-f]{64}$#\1#p' "$dir/statefulset.yaml")
+[ "$(printf '%s\n' "$short" | grep -c .)" -eq 1 ] || { echo "sync: expected exactly one pinned forge-bot image in $dir/statefulset.yaml" >&2; exit 2; }
 full=$(fgit rev-parse --verify --quiet "$short^{commit}") ||
   { echo "sync: commit $short is not in $src; run: git -C $src fetch" >&2; exit 2; }
 

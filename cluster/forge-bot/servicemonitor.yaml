@@ -5,6 +5,11 @@
 # avatar, read, selfcheck). Without honorLabels Prometheus renames it to exported_job, and every
 # `by (job)`, `on (job)` and `{job=...}` in the alert rules keys on the scrape job instead
 # (pre-flight #1). Series without a `job` label (up, the cycle gauges) still get job="forge-bot".
+# honorLabels also lets the target set job, namespace or instance on anything it emits, so the
+# keep-list confines it to its own series: a buggy or compromised bot cannot write, say,
+# ceph_health_status{namespace="rook"} or satisfy another rule's absent() (review M4). Every metric
+# forge-bot's alert rules and their promtool tests read matches it (the realliance/sso suite checks).
+# up and scrape_* are added after metric relabelling, so they are kept regardless.
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -22,3 +27,7 @@ spec:
       path: /metrics
       interval: 60s
       honorLabels: true
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: forge_bot_.*|go_.*|process_.*|promhttp_.*
+          action: keep

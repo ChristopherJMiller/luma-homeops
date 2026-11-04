@@ -4,7 +4,7 @@
 #   2. promtool check rules --lint=all --lint-fatal on its spec;
 #   3. promtool test rules with forge-bot's own unit tests (cluster/forge-bot/alerts_test.yaml);
 #   4. both copies still equal internal/metrics/alerts.yaml and alerts_test.yaml at the commit of
-#      the image deployment.yaml pins (scripts/sync-forge-bot-alerts.sh writes them).
+#      the image statefulset.yaml pins (scripts/sync-forge-bot-alerts.sh writes them).
 # forge-bot's CI has no promtool (final review M12), so its alert tests run here. Like
 # scripts/test-backup-alerts.sh: offline (after the first `nix shell` fetch), no cluster access.
 #
@@ -33,8 +33,8 @@ fgit() {
 }
 
 # Step 4's inputs: the pinned commit's two files.
-short=$(sed -nE 's#^ *image: git\.realliance\.net/realliance/forge-bot:sha-([0-9a-f]{7})@sha256:[0-9a-f]{64}$#\1#p' "$dir/deployment.yaml")
-[ "$(printf '%s\n' "$short" | grep -c .)" -eq 1 ] || { echo "FAIL: expected exactly one pinned forge-bot image in deployment.yaml" >&2; exit 1; }
+short=$(sed -nE 's#^ *image: git\.realliance\.net/realliance/forge-bot:sha-([0-9a-f]{7})@sha256:[0-9a-f]{64}$#\1#p' "$dir/statefulset.yaml")
+[ "$(printf '%s\n' "$short" | grep -c .)" -eq 1 ] || { echo "FAIL: expected exactly one pinned forge-bot image in statefulset.yaml" >&2; exit 1; }
 full=$(fgit rev-parse --verify --quiet "$short^{commit}") ||
   { echo "could not run: commit $short is not in $src (git -C $src fetch, or set FORGE_BOT_SRC)" >&2; exit 2; }
 mkdir "$tmp/upstream"

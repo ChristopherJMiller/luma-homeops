@@ -6,16 +6,28 @@
 # stdout is slog JSON plus the audit trail, and an email or name change carries the old and new
 # value, so it must reach private sinks only: fluent-bit ships it to the router's syslog and Azure
 # Log Analytics, both Chris's. No log or audit line carries a token or secret.
+#
+# A StatefulSet, not a Deployment, for at-most-one bot: the code has no lease, two bots would race
+# the same writes and each would page on the other's picture writes as unexpected. The StatefulSet
+# controller never creates forge-bot-0 while the old forge-bot-0 object exists, through rollouts,
+# drains and evictions alike; a Deployment's ReplicaSet starts the replacement while the old pod is
+# still terminating. The price: on node loss forge-bot stays down until the node returns, or an
+# operator force-deletes the pod after confirming the node is off (S4); ForgeBotStale fires meanwhile.
+# No volumes to claim. serviceName is the ordinary metrics Service (no per-pod DNS is needed).
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: forge-bot
   labels:
     app.kubernetes.io/name: forge-bot
 spec:
   replicas: 1
-  strategy:
-    type: Recreate # never two bots: cycles must not overlap, and the self-check counts its own writes
+  serviceName: forge-bot
+  updateStrategy:
+    # Deletes forge-bot-0, waits for it to be gone, then creates the new one. A rollout to a template
+    # whose pod never becomes Ready stalls; after reverting it, delete forge-bot-0 by hand (the
+    # StatefulSet "forced rollback").
+    type: RollingUpdate
   selector:
     matchLabels:
       app.kubernetes.io/name: forge-bot
@@ -41,8 +53,9 @@ spec:
       containers:
         - name: forge-bot
           # Built by forge-bot's CI from the reviewed release commit (v0.1.0 = 9be4857); an OCI
-          # manifest, amd64. A new image never deploys itself: re-pin here after review, and re-run
-          # scripts/sync-forge-bot-alerts.sh for the same commit.
+          # manifest, amd64. A new image never deploys itself: .renovaterc.json never automerges
+          # this image (a moved sha- tag is a rebuild or a tamper; its PR is the alarm). Re-pin by
+          # hand after review, and re-run scripts/sync-forge-bot-alerts.sh for the same commit.
           image: git.realliance.net/realliance/forge-bot:sha-9be4857@sha256:6b42aa63fc579f46e79df488a29846ef9b1c7defcd0f425fa40d5e6745218827
           args:
             - --config=/etc/forge-bot/config/config.yaml
@@ -68,7 +81,9 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 30
-          # 503 after three intervals (15 min) without a cycle whose reads all completed.
+          # A wedge detector, not a health check of the reads: /healthz answers 503 only when no cycle
+          # of ANY outcome (failed reads included) has finished in 3 intervals (15 min). Each cycle is
+          # capped at one interval, so only a stuck loop gets here; an SSO outage never restarts the pod.
           livenessProbe:
             httpGet:
               path: /healthz

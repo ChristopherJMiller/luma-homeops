@@ -105,27 +105,34 @@ including this one.
 > forge-bot) is written by the forge-bot plan's Task 19. The alert summaries link here.
 
 forge-bot reconciles Forgejo with the SSO every 5 min ± 30 s: login (`access`), site admin
-(`admin`), mapped teams (`teams`), email and name (`profile`) and the SSO picture (`avatar`).
-Code, README (what it writes, safety rules, metrics) and alert rules:
+(`admin`), mapped teams (`teams`), email, name and pronouns (`profile`) and the SSO picture
+(`avatar`). Code, README (what it writes, safety rules, metrics) and alert rules:
 `git.realliance.net/realliance/forge-bot`. Spec:
 `docs/superpowers/specs/2026-11-02-forge-bot-and-ci-design.md`.
 
 - **Manifests:** `cluster/forge-bot/` (Application `forge-bot`). `config.yaml` holds the job
   modes; every job starts in `dry-run` (plan, audit, meter, write nothing). Move one job at a time
   to `apply` and watch a cycle. A config change restarts the pod (hash-suffixed ConfigMap).
+- **One bot, never two:** a StatefulSet (`forge-bot-0`), because two bots would race each other's
+  writes. On node loss forge-bot stays down until the node returns, or an operator force-deletes
+  the pod after confirming the node is off (S4); ForgeBotStale fires meanwhile. A rollout whose new
+  pod never becomes Ready stalls: revert the change, then delete `forge-bot-0`.
 - **Trust root:** `cluster/forge-bot/keyring/`: the Owners' public keys and their fingerprints.
   Only an inventory head signed by one of them is trusted. It lives here, not in the inventory.
-- **Image:** pinned `sha-<7>@sha256:…` in `deployment.yaml`. CI builds every `main` push and
-  tag; nothing deploys until a reviewed re-pin. After a re-pin, run
+- **Image:** pinned `sha-<7>@sha256:…` in `statefulset.yaml`. CI builds every `main` push and
+  tag; nothing deploys until a reviewed re-pin. Renovate never automerges this image
+  (`.renovaterc.json`, guarded by the `forge-bot-renovate` hook): its PR for a moved `sha-` tag
+  is a rebuild or a tamper, never a merge. After a re-pin, run
   `nix develop --command scripts/sync-forge-bot-alerts.sh` (the PrometheusRule is a copy of the
   release's `internal/metrics/alerts.yaml`); the `forge-bot-alerts` pre-commit hook runs promtool
   lint and forge-bot's own alert tests and fails until the copy matches the pinned commit.
 - **Logs:** stdout is the audit trail, with old and new emails and names. It goes only to the
   private sinks (router syslog, Azure Log Analytics). Read it in a terminal; don't paste it.
-- **Network:** egress is DNS, the Forgejo pods on :3000 and TCP 443 to public addresses (the SSO
-  is behind Cloudflare). The policy is enforced only on nodes where the kube-network-policies
-  agent runs.
-- **Look:** `kubectl -n forge-bot logs deploy/forge-bot`; metrics `forge_bot_*` (README table).
+- **Network:** default-deny both ways. In: Prometheus's namespace on :8080. Out: DNS, the Forgejo
+  pods on :3000 and TCP 443 to public addresses (the SSO is behind Cloudflare; the WAN /25 is
+  excepted). The policy is enforced only on nodes where the kube-network-policies agent runs.
+- **Look:** `kubectl -n forge-bot logs forge-bot-0`; metrics `forge_bot_*` (README table). The
+  scrape keeps only `forge_bot_*`, `go_*`, `process_*` and `promhttp_*` series.
 
 ## Mail
 

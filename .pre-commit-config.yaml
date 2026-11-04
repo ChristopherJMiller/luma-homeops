@@ -64,13 +64,22 @@ repos:
       # internal/metrics/alerts.yaml (scripts/sync-forge-bot-alerts.sh writes it).
       # promtool lint, forge-bot's own promtool unit tests (alerts_test.yaml; its CI
       # has no promtool), and both copies equal to the pinned commit's files. A
-      # re-pin in deployment.yaml without a re-sync fails here.
+      # re-pin in statefulset.yaml without a re-sync fails here.
       - id: forge-bot-alerts
         name: forge-bot alert rules (promtool lint + unit tests, in sync with the pinned release)
         language: system
         entry: scripts/test-forge-bot-alerts.sh
         pass_filenames: false
-        files: ^(cluster/forge-bot/(prometheusrule|alerts_test|deployment)\.yaml|scripts/(test|sync)-forge-bot-alerts\.sh)$
+        files: ^(cluster/forge-bot/(prometheusrule|alerts_test|statefulset)\.yaml|scripts/(test|sync)-forge-bot-alerts\.sh)$
+      # forge-bot holds the Forgejo site-admin token and the SSO manage-users secret,
+      # and the repo extends :automergeDigest. No packageRule that could match its
+      # image may automerge; the dedicated rule says why (Task 16 review C1).
+      - id: forge-bot-renovate
+        name: forge-bot's image is never automerged by Renovate
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_forge_bot_renovate.py
+        pass_filenames: false
+        files: ^(\.renovaterc\.json|cluster/forge-bot/statefulset\.yaml|scripts/test_forge_bot_renovate\.py|\.pre-commit-config\.yaml)$
       # scripts/netpol-verify.sh against a stub kubectl: a partial pod list or an
       # unparseable answer must FAIL, never pass vacuously.
       - id: netpol-verify-selftest

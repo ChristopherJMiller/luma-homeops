@@ -1,26 +1,39 @@
 ---
-# forge-bot's egress is exactly what it dials:
+# forge-bot is default-deny in both directions, plus exactly what it needs.
+# In:
+#   - Prometheus (namespace prometheus) scraping /metrics on TCP 8080. kubelet's probes come from
+#     root on the node, which the enforcer exempts, so they need no rule (NetworkPolicy spec §3.4).
+# Out:
 #   - DNS (CoreDNS);
-#   - Forgejo's API through the in-cluster Service forgejo-http:3000 (config.yaml forgejo.url).
-#     forge-bot never dials git.realliance.net: public_url only builds avatar URLs. So there is no
-#     WAN /25 hairpin rule here, unlike the runner's (NetworkPolicy spec §6.3);
+#   - Forgejo's API through the in-cluster Service forgejo-http:3000 (config.yaml forgejo.url);
 #   - Keycloak at https://sso.realliance.net, which resolves to Cloudflare (104.21.57.107 and
-#     172.67.190.20 on 2026-11-04), not to the SSO box: TCP 443 to any public address.
-# Ingress stays open: Prometheus scrapes /metrics, and kubelet probes come from the node.
+#     172.67.190.20 on 2026-11-04), not to the SSO box: TCP 443 to public addresses only.
+# forge-bot never dials git.realliance.net (public_url only builds avatar URLs), so it has no WAN /25
+# ALLOW rule, unlike the runner (NetworkPolicy spec §6.3): the WAN /25 is EXCEPTED, so the pod cannot
+# hairpin through the router to Traefik. If the WAN address leaves 152.44.247.0/25, update the except.
 #
-# Enforced by kube-network-policies only on nodes where its agent runs (2026-11-04: `bottom`
-# only); on the other nodes this is intent, not a control, until the enforcer covers them. The
-# enforcer judges the post-DNAT destination, so the Forgejo and DNS rules select pods, never
-# ClusterIPs (NetworkPolicy spec §3.4 and §6.2).
+# Enforced by kube-network-policies only on nodes where its agent runs (2026-11-04: `bottom` only);
+# on the other nodes this is intent, not a control, until the enforcer covers them. The enforcer
+# judges the post-DNAT destination, so the Forgejo and DNS rules select pods, never ClusterIPs
+# (NetworkPolicy spec §3.4 and §6.2).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: forge-bot-egress
+  name: forge-bot
 spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: forge-bot
-  policyTypes: [Egress]
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # The scrape (servicemonitor.yaml). The namespace's automatic name label, not a pod selector:
+    # NetworkPolicy spec §3.5, "allow from namespace prometheus on the metrics port".
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: prometheus
+      ports:
+        - {protocol: TCP, port: 8080}
   egress:
     # DNS. The policy sees the CoreDNS pod IPs, not the 10.96.0.10 ClusterIP.
     - to:
@@ -44,18 +57,21 @@ spec:
               app.kubernetes.io/instance: forgejo
       ports:
         - {protocol: TCP, port: 3000}
-    # Keycloak behind Cloudflare: HTTPS to public addresses only. The excepts keep out pods and
-    # Services (10/8), the LAN, nodes, BMCs and LoadBalancer IPs (192.168/16), the other private
-    # range, the tailnet (CGNAT), link-local and multicast.
+    # Keycloak behind Cloudflare: HTTPS to public addresses only. The excepts are the NetworkPolicy
+    # spec's not-internet list (§6.3, the runner's), the WAN /25 included.
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
             except:
-              - 10.0.0.0/8
+              - 0.0.0.0/8
+              - 10.0.0.0/8 # pods 10.244.0.0/16, Services 10.96.0.0/12
+              - 100.64.0.0/10 # CGNAT, the tailnet behind the router
+              - 127.0.0.0/8
+              - 169.254.0.0/16 # link-local, metadata-style addresses
               - 172.16.0.0/12
-              - 192.168.0.0/16
-              - 100.64.0.0/10
-              - 169.254.0.0/16
-              - 224.0.0.0/4
+              - 192.168.0.0/16 # LAN, nodes, BMCs, KVM, voice VLAN, switch OOB, LB IPs
+              - 224.0.0.0/4 # multicast
+              - 240.0.0.0/4
+              - 152.44.247.0/25 # our WAN /25: its :443 is reflected to Traefik, which forge-bot never needs
       ports:
         - {protocol: TCP, port: 443}
