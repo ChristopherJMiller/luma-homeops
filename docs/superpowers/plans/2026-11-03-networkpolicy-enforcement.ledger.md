@@ -201,3 +201,11 @@ Checks after the deploy:
 Gate G after (18:41–18:42Z): identical to before. The warn codes are the same, all 145 PGs are active+clean, and no Argo app changed status. Gate G finds no bad pods, no NetworkPolicies and no Warning events since the push. The edge diff is empty after the `code_challenge|state|nonce` normalisation.
 
 No rollback trigger fired, and break-glass was not used.
+
+## Cross-plan: the galaxy runner serves `realliance/ci-dispatch` too (runner classes Task 5, 2026-11-04)
+
+Runner classes N5. Commit `f5f71a53` (pushed at 19:38:29Z) gives the `galaxy` runner in `forgejo-runner` a second repo-scoped connection, `galaxy-ci-dispatch`, for `realliance/ci-dispatch`. The same change rotated the `galaxy-forge-bot` connection to a new runner row. The secret change alone does not roll the Deployment, so `kubectl rollout restart` at 19:39:58Z restarted it. The new pod declared both connections at 19:40:00Z.
+
+- The runner-idle check in B2 Step 1, Task 9 Step 1 and every later enforcer restart now covers both repos the runner serves: `/repos/realliance/forge-bot/actions/tasks` and `/repos/realliance/ci-dispatch/actions/tasks`. It also covers the general runner's `/repos/realliance/realliance.net/actions/tasks`, as the note for Task 3 Part B says.
+- The CI hold in the same STOP covers branch pushes to `realliance/ci-dispatch`, since each one starts a `galaxy` run. The runner classes plan holds them itself (its N3) while Task 8 Steps 1 to 11 or Task 9 is open.
+- No NetworkPolicy changed. The pod keeps its name prefix, namespace and labels, so B2's selectors still match it.
