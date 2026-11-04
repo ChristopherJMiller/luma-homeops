@@ -73,12 +73,14 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
-          # Initial sizing (plan Task 5 Step 3); Task 10 Step 6 sets the final
-          # values from measurements.
+          # Requests from the pages Task 10 Step 6 measurement (2026-11-04, 6 h incl.
+          # the acceptance suites): idle working set 91 MiB after the suite x 1.25 =
+          # 115Mi; idle CPU 1.1m, so the 5m floor. Peak 95 MiB, 22 MiB in the oversize
+          # run (a 140 MiB push is refused, not buffered), so the 1Gi limit stands.
           resources:
             requests:
-              cpu: 10m
-              memory: 64Mi
+              cpu: 5m
+              memory: 115Mi
             limits:
               memory: 1Gi
           volumeMounts:

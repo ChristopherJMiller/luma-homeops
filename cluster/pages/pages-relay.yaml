@@ -101,12 +101,13 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
-          # From the Task 4 measurement; Task 10 Step 6 re-measures with a 16 MiB
-          # body over a real socket.
+          # Requests from the pages Task 10 Step 6 measurement (2026-11-04, 6 h): idle
+          # 4.6 MiB x 1.25 rounds to the 16Mi floor, idle CPU 0.1m so the 5m floor,
+          # peak 5.7 MiB. Limit and GOMEMLIMIT stay (a queued body is held, 16 MiB max).
           resources:
             requests:
               cpu: 5m
-              memory: 32Mi
+              memory: 16Mi
             limits:
               memory: 128Mi
           volumeMounts:

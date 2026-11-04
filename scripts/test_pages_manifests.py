@@ -170,11 +170,11 @@ RELAY_ENV = {
     "GOMEMLIMIT": "100MiB",
 }
 
-# Initial sizing (plan Task 5 Step 3; relay values per the Task 4 fix-round-2
-# measurement). Task 10 Step 6 moves them from measurements.
+# Requests from the Task 10 Step 6 measurement (docs/superpowers/plans/
+# 2026-11-03-realliance-pages.ledger.md); limits are unchanged.
 RESOURCES = {
-    "git-pages": {"requests": {"cpu": "10m", "memory": "64Mi"}, "limits": {"memory": "1Gi"}},
-    "pages-relay": {"requests": {"cpu": "5m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}},
+    "git-pages": {"requests": {"cpu": "5m", "memory": "115Mi"}, "limits": {"memory": "1Gi"}},
+    "pages-relay": {"requests": {"cpu": "5m", "memory": "16Mi"}, "limits": {"memory": "128Mi"}},
 }
 
 SERVICES = {
@@ -537,7 +537,7 @@ def test_pods_hardened():
         assert "add" not in sc["capabilities"], f"M3: {name} adds capabilities"
         assert all("hostPort" not in p for p in c.get("ports", [])), f"M3: {name} hostPort"
         assert c["resources"]["requests"]["memory"] and c["resources"]["limits"]["memory"], name
-        assert c["resources"] == RESOURCES[name], f"{name}: resources (Task 10 Step 6 moves them)"
+        assert c["resources"] == RESOURCES[name], f"{name}: resources"
 
     gp = pod_spec(docs, "git-pages")
     tmp = [v for v in gp["volumes"] if v["name"] == "tmp"]

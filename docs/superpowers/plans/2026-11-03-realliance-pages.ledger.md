@@ -129,3 +129,12 @@
 - Correction to the Task 5 entry: the release notes do not mention `-delete-site`. Task 10 verified it live: `-delete-site <domain>` alone panics on a root site, which needs `<domain>/.index`.
 - The 60 s site cache comes from observation, not the release notes. Tests poll for at least a minute.
 - `docs/pages.md` "Bumping git-pages" and "Site files" carry these items.
+
+## Task 10: acceptance and sizing (2026-11-04) - DONE
+
+- Acceptance re-run against the relay at `sha-e7b3303` (not-slow, alone): 14 passed, 1 failed. The failure was `test_no_set_cookie_anywhere`, which curls from the SSO VPS over ssh. The ssh agent refused to sign, then hung on a retry, so the cause is the agent, not the relay. The test needs a re-run with Chris's agent unlocked. The suite needed no change for the `queued` and `coalesced` outcomes.
+- Publish latency: first 3.3 s, update 6.1 s (target 90 s).
+- Oversize (earlier, Chris-approved): refused, `PagesSiteUpdateFailing` fired, v1 kept serving. git-pages peaked at 22 MiB with 140m CPU. The relay peaked at 3 to 4 MiB.
+- Measured over 6 h, including the suites. git-pages: working set 26 MiB at rest, 91 MiB idle after the suite, 95 MiB peak; CPU 1.1m idle, 4.1m peak (5 min rate). pages-relay: 4.6 MiB idle, 5.7 MiB peak; CPU 0.1m idle.
+- Requests set to: git-pages 5m / 115Mi (91 MiB x 1.25); pages-relay 5m / 16Mi (the floor). Limits unchanged: git-pages 1Gi, relay 128Mi with `GOMEMLIMIT` 100MiB.
+- Leftover test users: one Keycloak user in the realliance realm (`test-cea3cd1c`), none in Forgejo. Not deleted.
