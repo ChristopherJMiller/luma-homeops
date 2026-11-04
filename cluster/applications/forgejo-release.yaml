@@ -120,7 +120,7 @@ spec:
 
         gitea:
           podAnnotations:
-            realliance/templates-rev: "4" # bump when anything under cluster/forgejo/custom/ changes
+            realliance/templates-rev: "5" # bump when anything under cluster/forgejo/custom/ changes
           admin:
             # Break-glass only: the internal sign-in form is off, so this account is used through
             # `forgejo admin user …` on the pod. Password: sso-secrets forge/secrets.env.
