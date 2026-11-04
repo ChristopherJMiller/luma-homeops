@@ -757,7 +757,7 @@ def test_one_certificate_covers_realliance_page():
 SITES_MATCH = (
     r"HostRegexp(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.realliance\.page$`)"
     " && (Method(`GET`) || Method(`HEAD`))"
-    " && (!PathPrefix(`/.git-pages/`) || Path(`/.git-pages/health`))"
+    " && (!PathRegexp(`(?i)(\\.|%2e)git-pages`) || Path(`/.git-pages/health`))"
 )
 APEX_MATCH = "Host(`realliance.page`) || Host(`www.realliance.page`)"
 OWNER_RE = r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.realliance\.page$"
@@ -797,7 +797,7 @@ def test_sites_host_accepts_only_single_label_owners():
     assert rx == OWNER_RE
     ok = ["realliance.realliance.page", "a.realliance.page", "a-b.realliance.page", "9x.realliance.page"]
     bad = ["realliance.page", "www.realliance.page.evil.com", "a.b.realliance.page", "-a.realliance.page",
-           "a-.realliance.page", "A.realliance.page", "a_b.realliance.page", ".realliance.page",
+           "a-.realliance.page", "a_b.realliance.page", ".realliance.page",
            ("a" * 64) + ".realliance.page", "evilrealliance.page"]
     assert all(re.fullmatch(rx, h) for h in ok)
     assert not any(re.fullmatch(rx, h) for h in bad)
@@ -815,17 +815,23 @@ def test_apex_redirect_outranks_sites():
 def test_apex_redirect_is_a_path_keeping_302():
     spec = mw("pages-apex-redirect")["spec"]["redirectRegex"]
     assert spec["permanent"] is False, "D12: a 301 would be cached forever"
-    assert spec["regex"] == r"^https?://(?:www\.)?realliance\.page/(.*)$"
+    assert spec["regex"] == r"^https?://[^/]+/(.*)$", "host-agnostic: the router already gated the host"
     assert spec["replacement"] == "https://realliance.realliance.page/${1}"
     m = re.match(spec["regex"], "https://www.realliance.page/x/y?q=1")
     assert m and m.expand(spec["replacement"].replace("${1}", r"\1")) == "https://realliance.realliance.page/x/y?q=1"
     assert re.match(spec["regex"], "http://realliance.page/")
+    # Traefik matches the RAW Host (case, port, trailing dot); the router accepts all of these.
+    for raw in ("https://REALLIANCE.PAGE/x", "https://realliance.page./x", "https://realliance.page:443/x",
+                "https://WWW.realliance.page/x", "https://www.realliance.page./x?a=1"):
+        m = re.match(spec["regex"], raw)
+        assert m, raw
+        assert m.expand(spec["replacement"].replace("${1}", r"\1")).startswith("https://realliance.realliance.page/x")
 
 
 def test_headers_strip_set_cookie():
     """Acceptance 7, static half."""
     h = mw("pages-headers")["spec"]["headers"]
-    assert h["customResponseHeaders"] == {"Set-Cookie": "", "Server": ""}
+    assert h["customResponseHeaders"] == {"Set-Cookie": "", "Server": "", "X-Server": ""}
     assert h["contentTypeNosniff"] is True
     assert h["referrerPolicy"] == "strict-origin-when-cross-origin"
     assert (h["stsSeconds"], h["stsIncludeSubdomains"], h["stsPreload"]) == (31536000, False, False)
@@ -838,7 +844,12 @@ def test_only_git_pages_3000_is_public():
     assert {r["match"] for r in routes} == {SITES_MATCH, APEX_MATCH}
     for r in routes:
         assert r["kind"] == "Rule"
-        assert r["services"] == [{"name": "git-pages", "port": 3000}], r["services"]
+    assert route("pages-sites")["services"] == [{"name": "git-pages", "port": 3000}]
+    # I1: the apex/www route can never reach git-pages, whatever its redirect regex does.
+    assert route("pages-apex")["services"] == [{"name": "noop@internal", "kind": "TraefikService"}]
+    for r in routes:
+        if "Host(" in r["match"] and "HostRegexp" not in r["match"]:
+            assert all(s["name"] != "git-pages" for s in r["services"]), "an apex/www route targets git-pages"
     for ir in ingressroutes(NAMESPACE):
         assert ir["spec"]["entryPoints"] == ["websecure"]
     text = json.dumps(ingressroutes(NAMESPACE))
@@ -904,3 +915,37 @@ def test_renovate_no_rule_could_automerge_pages_images():
     assert _rule_could_match({"matchPackageNames": ["/git-pages/"]}, RENOVATE_IMAGES[0])
     assert _rule_could_match({"matchPackagePatterns": ["^ghcr\\.io/"]}, RENOVATE_IMAGES[1])
     assert not _rule_could_match({"matchPackageNames": ["ghcr.io/other/x"]}, RENOVATE_IMAGES[1])
+
+
+def _path_allowed(path: str) -> bool:
+    """Model of the sites matcher's path clause: !PathRegexp(rx) || Path(health). Traefik matches the encoded path."""
+    (rx,) = re.findall(r"PathRegexp\(`([^`]*)`\)", route("pages-sites")["match"])
+    # Go RE2 `(?i)` is Python's inline flag too.
+    hit = re.search(rx, path)
+    return (not hit) or path == "/.git-pages/health"
+
+
+def test_git_pages_blocked_at_any_depth_and_encoding():
+    """I2: nothing containing .git-pages reaches git-pages except the exact health path."""
+    blocked = [
+        "/.git-pages/archive.tar",
+        "/.git-pages/manifest.json",
+        "/repo/.git-pages/archive.tar",
+        "/repo/.git-pages/manifest.json",
+        "/.git-pages%2Farchive.tar",
+        "/.git-pages%2farchive.tar",
+        "/repo%2F.git-pages%2Farchive.tar",
+        "/%2egit-pages/manifest.json",
+        "/%2Egit-pages/manifest.json",
+        "/.GIT-PAGES/manifest.json",
+        "/x/../.git-pages/archive.tar",
+        "/.git-pages/health/",
+        "/repo/.git-pages/health",
+        "/.git-pages",
+    ]
+    for p in blocked:
+        assert not _path_allowed(p), p
+    assert _path_allowed("/.git-pages/health")
+    for p in ("/", "/repo/", "/repo/index.html", "/my-git-pages/x", "/a.git/b"):
+        assert _path_allowed(p), p
+    assert "PathPrefix" not in route("pages-sites")["match"]

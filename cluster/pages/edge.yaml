@@ -18,6 +18,8 @@ spec:
     customResponseHeaders:
       Set-Cookie: ""
       Server: ""
+      # git-pages copies its Server banner (with the pod name) into X-Server.
+      X-Server: ""
     contentTypeNosniff: true
     referrerPolicy: strict-origin-when-cross-origin
     # Sites are other people's: no includeSubDomains, no preload.
@@ -33,12 +35,14 @@ metadata:
   name: pages-apex-redirect
 spec:
   redirectRegex:
-    regex: ^https?://(?:www\.)?realliance\.page/(.*)$
+    regex: ^https?://[^/]+/(.*)$
     replacement: https://realliance.realliance.page/${1}
     permanent: false
 ---
-# One owner label = one site host. /.git-pages/* is blocked (archive.tar is a CPU
-# and uplink amplifier, manifest.json enumerates) except /.git-pages/health.
+# One owner label = one site host. Any path containing .git-pages (any depth, any
+# case, %2e or %2F encoded; Traefik matches the still-encoded path) is blocked
+# except exactly /.git-pages/health: archive.tar is a CPU and uplink amplifier and
+# manifest.json enumerates, for root and project sites alike.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -47,7 +51,7 @@ spec:
   entryPoints: [websecure]
   routes:
     - kind: Rule
-      match: HostRegexp(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.realliance\.page$`) && (Method(`GET`) || Method(`HEAD`)) && (!PathPrefix(`/.git-pages/`) || Path(`/.git-pages/health`))
+      match: HostRegexp(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.realliance\.page$`) && (Method(`GET`) || Method(`HEAD`)) && (!PathRegexp(`(?i)(\.|%2e)git-pages`) || Path(`/.git-pages/health`))
       priority: 10
       middlewares:
         - name: pages-headers
@@ -55,7 +59,10 @@ spec:
         - name: git-pages
           port: 3000
 ---
-# Apex and www outrank the wildcard route. The apex is not an owner site.
+# Apex and www outrank the wildcard route. The apex is not an owner site, so this
+# route never reaches git-pages (noop@internal): a redirect-regex miss (Traefik
+# matches the raw Host, the router a canonical one) can only 404. The regex is
+# host-agnostic because the router already gated the host.
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
@@ -70,5 +77,5 @@ spec:
         - name: pages-headers
         - name: pages-apex-redirect
       services:
-        - name: git-pages
-          port: 3000
+        - name: noop@internal
+          kind: TraefikService
