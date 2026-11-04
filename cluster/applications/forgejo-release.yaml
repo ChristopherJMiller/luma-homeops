@@ -211,6 +211,11 @@ spec:
               INITIAL_COMMIT: always
             cron.git_gc_repos:
               ENABLED: false # full repacks are the one bulk write repos make on the HDD pool
+            # Webhooks. The default `external` refuses private IPs; the pages-relay Service
+            # (ns pages) is the one in-cluster target. The system hook (pages branch only) is
+            # created through the admin API, not here: docs/pages.md.
+            webhook:
+              ALLOWED_HOST_LIST: external,pages-relay.pages.svc.cluster.local
             # Forgejo Actions. Job logs and artifacts go to B2 through the default [storage] above
             # (actions_log/, actions_artifacts/ in realliance-forge-objects). The one runner is
             # cluster/forgejo-runner (host mode, label `galaxy`), registered per repo: an allowlist.

@@ -670,3 +670,10 @@ def test_no_certificate_in_pages():
         for path, _ in walk(d):
             assert not (len(path) >= 2 and path[-2:] == ("tls", "secretName")), f"{d['kind']}: tls.secretName at {path}"
     assert not of_kind(docs, "Ingress") and not of_kind(docs, "IngressRoute"), "no public route until Task 9"
+
+
+def test_forgejo_webhook_allowlist():
+    """Forgejo's default `external` blocks webhooks to private IPs; the relay is in-cluster (Task 6)."""
+    app = yaml.safe_load((REPO / "cluster/applications/forgejo-release.yaml").read_text())
+    values = app["spec"]["source"]["helm"]["valuesObject"]
+    assert values["gitea"]["config"]["webhook"] == {"ALLOWED_HOST_LIST": "external,pages-relay.pages.svc.cluster.local"}
