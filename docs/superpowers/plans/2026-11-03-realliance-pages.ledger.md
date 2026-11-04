@@ -69,3 +69,13 @@
 - Probe commit to `pages` (6f46ec35, token probe-5afdfae0): no delivery (hook_task empty, relay counters all 0, no webhook log lines), site 404 after 90 s. Answers the question the probe exists for: this hook does NOT reach pre-existing repos.
 - Action taken: hook 1 disabled (active=false). Nothing else changed. Forgejo, the allowlist and the probe repo/branch stay. No takedown needed (no site was published). deleteFiles: not exercised (no publish); undecided.
 - Needs a ruling: create a true system webhook (admin UI "System Webhooks" in Forgejo 15, or set `is_system_webhook` in the DB - a prod DB write), then re-run Step 7.
+
+### Task 6 resolution (2026-11-04) - DONE
+
+- Ruling (Chris): flip the flag in the database. The controller ran one guarded transaction: hook 1 went from `is_system_webhook=f, is_active=f` to `is_system_webhook=t, is_active=t`; URL, secret, events (delete/push/repository) and branch_filter `pages` unchanged. After the flip `GET /api/v1/admin/hooks` lists it.
+- Step 7 re-run: probe commit cb912472 (`probe-74ebc017`) to `forgejo-admin/pages-probe@pages`. Body served via `svc/git-pages` (Host `forgejo-admin.realliance.page`, `/pages-probe/`) after 6.6 s. Relay `forwarded` 0 -> 1, no other outcome moved. Forgejo `hook_task`: push, delivered, succeeded, status 200.
+- system hook reaches pre-existing repos: yes.
+- deleteFiles: not needed (git-pages logs show no RemoveObject/AccessDenied).
+- Takedown: `-delete-site forgejo-admin.realliance.page/pages-probe`; the CLI logged `deleted`; the site returned 404 after 48 s. Probe repo kept.
+- Gate G after: 3 nodes Ready; Ceph HEALTH_OK, 145/145 active+clean; only `rook` Degraded in Argo; no non-Running pods; edge snapshot identical to before (PKCE noise aside).
+- Helper fix: realliance/sso `pages-acceptance` 1713e46 (draft PR #40): `ensure_system_hook` detects the hook with a read-only DB SELECT, updates it in place, and refuses to create one (error points at this ledger); `test_system_webhook_present` asserts `is_system_webhook`.
