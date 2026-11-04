@@ -12,11 +12,20 @@
 # it. At most 64 sites wait; only then is a new site refused (busy, 503
 # Retry-After 5). The queue holds a target and a clone URL per site, never a body.
 #
+# git-pages answers 202 after 3 s while its update goes on, so after a 202 the
+# relay holds the site (hold.go): its next push waits, without occupying a
+# worker, until the site's health Last-Modified moves, git-pages' webhook update
+# counter (PAGES_RELAY_UPSTREAM_METRICS) shows every update the relay started
+# has ended, git-pages restarts, or 5 min pass (update-timeout, config.toml).
+# Polling is one request at a time, at least 1 s apart.
+#
 # Bounded by design: 16 MiB body cap (too_large), 2 bodies read at once (a
-# delivery waits up to 10 s for a slot), 5 s header / 10 s body deadlines. Two
-# 16 MiB bodies peak near 33 MiB; GOMEMLIMIT keeps the GC ahead of the 128Mi
-# limit (Task 4 fix round 2). SIGTERM stops accepting and drains the queue for up
-# to 110 s (DrainTimeout, relay.go), logging any site left; a crash loses it.
+# delivery waits up to 3 s for a slot, under Forgejo's 5 s), 5 s header / 4 s
+# body deadlines. Two 16 MiB bodies peak near 33 MiB; GOMEMLIMIT keeps the GC
+# ahead of the 128Mi limit (Task 4 fix round 2). On delete the pod keeps
+# serving through a 5 s preStop sleep while its endpoint goes away; then SIGTERM
+# stops accepting, releases every hold and drains the queue for up to 110 s
+# (DrainTimeout, relay.go), logging any site left; a crash loses it.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -37,7 +46,8 @@ spec:
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
-      # Outlasts the relay's 110 s SIGTERM drain (scripts/test_pages_manifests.py).
+      # Outlasts the 5 s preStop sleep plus the relay's 110 s SIGTERM drain
+      # (scripts/test_pages_manifests.py).
       terminationGracePeriodSeconds: 120
       securityContext:
         runAsNonRoot: true
@@ -49,7 +59,7 @@ spec:
         - name: pages-relay
           # The sha- tag .github/workflows/pages-relay.yml published, by digest.
           # It decides which host a push publishes to: bump by hand, never automerge.
-          image: ghcr.io/christopherjmiller/pages-relay:sha-53fffd8@sha256:603bbf3fc30019455d0858562de34c058b56da22ef9c08a64c585cc82a8b1a99
+          image: ghcr.io/christopherjmiller/pages-relay:sha-e7b3303@sha256:e8a84fdd16370ff520e4f80642853965cb8edf9f59628cb02f5cce39fe81be02
           env:
             - name: PAGES_RELAY_UPSTREAM
               value: http://git-pages.pages.svc.cluster.local:3000
@@ -59,8 +69,19 @@ spec:
               value: https://git.realliance.net/
             - name: PAGES_RELAY_SECRET_FILE
               value: /etc/pages-relay/webhook-secret
+            # git_pages_site_updates{via="webhook"} ends a hold whose update
+            # failed after its 202 (hold.go).
+            - name: PAGES_RELAY_UPSTREAM_METRICS
+              value: http://git-pages.pages.svc.cluster.local:3002/metrics
             - name: GOMEMLIMIT
               value: 100MiB
+          # Keep serving while kube-proxy drops the endpoint, so a delivery that
+          # still reaches this pod is queued, not refused (review M1). The sleep
+          # action needs no shell (distroless); SIGTERM follows it.
+          lifecycle:
+            preStop:
+              sleep:
+                seconds: 5
           ports:
             - name: http
               containerPort: 8080

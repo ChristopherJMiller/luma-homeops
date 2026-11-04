@@ -162,6 +162,9 @@ RELAY_ENV = {
     "PAGES_RELAY_DOMAIN": "realliance.page",
     "PAGES_RELAY_FORGE": "https://git.realliance.net/",
     "PAGES_RELAY_SECRET_FILE": "/etc/pages-relay/webhook-secret",
+    # git-pages' metrics listener: git_pages_site_updates{via="webhook"} ends a
+    # hold whose update failed after its 202 (images/pages-relay/hold.go).
+    "PAGES_RELAY_UPSTREAM_METRICS": "http://git-pages.pages.svc.cluster.local:3002/metrics",
     # Under the 128Mi limit, so the GC works hard before the kernel OOM-kills
     # (two 16 MiB bodies in flight peak near 33 MiB; Task 4 fix round 2).
     "GOMEMLIMIT": "100MiB",
@@ -195,7 +198,15 @@ ALERT_EXPRS = {
     "PagesBadSignatures": 'increase(pages_relay_events_total{outcome="bad_signature"}[30m]) > 0',
     "PagesRelayRejecting": 'sum by (namespace, outcome) (increase(pages_relay_events_total{outcome=~"too_large|busy|bad_request"}[30m])) > 0',
     "PagesTakedownRequested": 'increase(pages_relay_events_total{outcome="unpublish_requested"}[6h]) > 0',
+    "PagesRelayPushLost": ('sum by (namespace) (increase(pages_relay_holds_total{outcome="aborted_lost"}[10m])) > 0'),
+    "PagesRelayQueueStuck": (
+        "(min by (namespace) (min_over_time(pages_relay_queue_depth[15m])) > 0)"
+        ' unless (sum by (namespace) (increase(pages_relay_events_total{outcome=~"forwarded|upstream_error"}[15m])) > 0)'
+    ),
 }
+# Alerts that read outcomes only as proof of life (any forward attempt), not to
+# alert on them: left out of "each alerted outcome raises exactly one alert".
+LIVENESS_ALERTS = {"PagesRelayQueueStuck"}
 # Outcomes that must raise an alert, each in exactly one alert (Task 4 rulings):
 # a rejected delivery is never retried by Forgejo 15, so it must be seen.
 ALERTED_OUTCOMES = {"upstream_error", "bad_signature", "too_large", "busy", "bad_request", "unpublish_requested"}
@@ -205,11 +216,20 @@ ALERTED_OUTCOMES = {"upstream_error", "bad_signature", "too_large", "busy", "bad
 # deleted branch or repo that git-pages never served.
 QUIET_OUTCOMES = {"forwarded", "queued", "coalesced", "ignored_event", "ignored_ref", "ignored_private",
                   "ignored_name", "ignored_no_site"}
+# Hold outcomes (pages_relay_holds_total). Every one is in exactly one set: aborted_lost
+# is a push nothing will forward again, so a human must redeliver it; the rest
+# heal themselves or are expected.
+ALERTED_HOLD_OUTCOMES = {"aborted_lost"}
+QUIET_HOLD_OUTCOMES = {"completed", "timeout", "released", "aborted"}
 # The relay drains its queue on SIGTERM for DrainTimeout (images/pages-relay/relay.go);
 # the kubelet must not SIGKILL it first.
 RELAY_GRACE_SECONDS = 120
-KNOWN_METRICS = {"up", "git_pages_site_update_error", "pages_relay_events_total"}
-PROMQL_WORDS = {"increase", "sum", "by", "absent", "or", "unless", "offset", "and"}
+# The pod keeps serving through this preStop sleep while kube-proxy drops its
+# endpoint (review M1); SIGTERM, and the drain, come after it.
+RELAY_PRESTOP_SECONDS = 5
+KNOWN_METRICS = {"up", "git_pages_site_update_error", "pages_relay_events_total", "pages_relay_queue_depth",
+                 "pages_relay_holds_total"}
+PROMQL_WORDS = {"increase", "sum", "min", "min_over_time", "by", "absent", "or", "unless", "offset", "and"}
 
 RENOVATE_IMAGES = ["codeberg.org/git-pages/git-pages", "ghcr.io/christopherjmiller/pages-relay"]
 
@@ -686,13 +706,42 @@ def test_alerts_keep_namespace():
     assert "by (" in rules["PagesSiteUpdateFailing"]["expr"] and "by (" in rules["PagesRelayRejecting"]["expr"]
 
 
+def relay_duration(name: str) -> int:
+    """A `const <name> = N * time.Second|time.Minute` in images/pages-relay/relay.go, in seconds."""
+    (n, unit) = re.findall(rf"^const {name} = (\d+) \* time\.(Second|Minute)$", RELAY_SOURCE.read_text(), re.M)[0]
+    return int(n) * (60 if unit == "Minute" else 1)
+
+
 def test_relay_drains_within_grace():
-    """SIGTERM drains the queue for DrainTimeout; the grace period must outlast it with room to log."""
+    """The grace period starts at deletion: it must outlast the preStop sleep, then
+    SIGTERM's DrainTimeout drain, with room to log (review M1)."""
     require_deployed()
-    pod = pod_spec(render(PAGES_DIR), "pages-relay")
+    docs = render(PAGES_DIR)
+    pod, c = pod_spec(docs, "pages-relay"), container(docs, "pages-relay")
     assert pod["terminationGracePeriodSeconds"] == RELAY_GRACE_SECONDS
-    (drain,) = re.findall(r"^const DrainTimeout = (\d+) \* time\.Second$", RELAY_SOURCE.read_text(), re.M)
-    assert int(drain) + 5 <= RELAY_GRACE_SECONDS, f"DrainTimeout {drain}s leaves no room in a {RELAY_GRACE_SECONDS}s grace"
+    prestop = c["lifecycle"]["preStop"]["sleep"]["seconds"]
+    drain = relay_duration("DrainTimeout")
+    assert prestop + drain + 5 <= RELAY_GRACE_SECONDS, (
+        f"preStop {prestop}s + DrainTimeout {drain}s leaves no room in a {RELAY_GRACE_SECONDS}s grace"
+    )
+
+
+def test_relay_prestop_sleep():
+    """A 5 s preStop sleep (the sleep action: distroless has no shell), and the
+    relay's PreStopSleep, which sizes its counter warm-up, says the same."""
+    require_deployed()
+    c = container(render(PAGES_DIR), "pages-relay")
+    assert c["lifecycle"] == {"preStop": {"sleep": {"seconds": RELAY_PRESTOP_SECONDS}}}
+    assert relay_duration("PreStopSleep") == RELAY_PRESTOP_SECONDS
+
+
+def test_relay_hold_matches_update_timeout():
+    """After git-pages' 202 the relay holds the site until the update ends or for
+    HoldTimeout, which must be git-pages' update-timeout: shorter lets two updates
+    of one site overlap, longer stalls a site whose update died silently."""
+    timeout = tomllib.loads(CONFIG_TOML.read_text())["limits"]["update-timeout"]
+    (minutes,) = re.fullmatch(r"(\d+)m", timeout).groups()
+    assert relay_duration("HoldTimeout") == int(minutes) * 60
 
 
 def test_relay_outcomes_alerted_once():
@@ -700,7 +749,7 @@ def test_relay_outcomes_alerted_once():
     require_deployed()
     rules = alert_rules(render(PAGES_DIR))
     assert ALERTED_OUTCOMES <= relay_outcomes()
-    per_alert = {n: outcomes_matched(r["expr"]) for n, r in rules.items()}
+    per_alert = {n: outcomes_matched(r["expr"]) for n, r in rules.items() if n not in LIVENESS_ALERTS}
     for o in sorted(ALERTED_OUTCOMES):
         hits = [n for n, m in per_alert.items() if o in m]
         assert len(hits) == 1, f"outcome {o!r} must raise exactly one alert, got {hits}"
@@ -985,3 +1034,32 @@ def test_git_pages_blocked_at_any_depth_and_encoding():
     for p in ("/", "/repo/", "/repo/index.html", "/my-git-pages/x", "/a.git/b"):
         assert _path_allowed(p), p
     assert "PathPrefix" not in route("pages-sites")["match"]
+
+
+def relay_hold_outcomes() -> set[str]:
+    """Every HoldOutcome the relay can count (images/pages-relay/relay.go)."""
+    found = set(re.findall(r'^\s*Held\w+\s+HoldOutcome\s*=\s*"([a-z_]+)"', RELAY_SOURCE.read_text(), re.M))
+    assert found, "no HoldOutcome constants found in images/pages-relay/relay.go"
+    return found
+
+
+def test_hold_outcomes_classified_and_alerted_once():
+    """Every hold outcome is alerted or quiet, never both; each alerted one has exactly one alert,
+    which fires on the first (no `for:`), keeps namespace, and says where to redeliver."""
+    require_deployed()
+    held = relay_hold_outcomes()
+    assert not ALERTED_HOLD_OUTCOMES & QUIET_HOLD_OUTCOMES
+    assert held == ALERTED_HOLD_OUTCOMES | QUIET_HOLD_OUTCOMES, f"unclassified: {held ^ (ALERTED_HOLD_OUTCOMES | QUIET_HOLD_OUTCOMES)}"
+    rules = alert_rules(render(PAGES_DIR))
+    per_alert = {}
+    for n, r in rules.items():
+        sel = re.findall(r'pages_relay_holds_total\{outcome(=~|=)"([^"]*)"\}', r["expr"])
+        per_alert[n] = set().union(*[set(v.split("|")) if op == "=~" else {v} for op, v in sel]) if sel else set()
+    for o in sorted(ALERTED_HOLD_OUTCOMES):
+        hits = [n for n, m in per_alert.items() if o in m]
+        assert len(hits) == 1, f"hold outcome {o!r} must raise exactly one alert, got {hits}"
+    assert set().union(*per_alert.values()) == ALERTED_HOLD_OUTCOMES
+    lost = rules["PagesRelayPushLost"]
+    assert "for" not in lost and lost["labels"] == {"severity": "warning"}
+    assert "delivery history" in lost["annotations"]["description"]
+    assert "docs/pages.md" in lost["annotations"]["description"]

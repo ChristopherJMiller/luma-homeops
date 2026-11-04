@@ -44,7 +44,11 @@ spec:
 # by its first error, hence the `unless ... offset` branch (Review Focus 5).
 # The relay answers 202 and queues (queued/coalesced, never alerted); its workers
 # count forwarded or upstream_error later, so a failed forward shows only here,
-# never in Forgejo's delivery history. Aggregations keep `namespace`.
+# never in Forgejo's delivery history. After git-pages' 202 the relay holds the
+# site until its update ends (pages_relay_sites_held, pages_relay_holds_total;
+# alerted only for aborted_lost, a push nothing will forward again
+# (PagesRelayPushLost); a failed update is PagesSiteUpdateFailing's). Aggregations keep
+# `namespace`.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -99,7 +103,7 @@ spec:
             severity: warning
           annotations:
             summary: "Realliance Pages: pages-relay refused deliveries ({{ $labels.outcome }})"
-            description: "too_large = body over 16 MiB (413); busy = the queue already holds 64 other sites, or both body slots stayed busy for 10 s (503); bad_request = a body that is not a well-formed Forgejo event (400). Forgejo 15 never retries, so the push did not publish: redeliver from the system hook's delivery history. kubectl -n pages logs deploy/pages-relay."
+            description: "too_large = body over 16 MiB (413); busy = a new site while 64 other sites already wait, or both body slots stayed busy for 3 s (503; Forgejo would time out at 5 s), or the sender gave up waiting (client_gone); bad_request = a body that is not a well-formed Forgejo event (400). Forgejo 15 never retries, so the push did not publish: redeliver from the system hook's delivery history. kubectl -n pages logs deploy/pages-relay."
         - alert: PagesTakedownRequested
           expr: |
             increase(pages_relay_events_total{outcome="unpublish_requested"}[6h]) > 0
@@ -108,3 +112,27 @@ spec:
           annotations:
             summary: "Realliance Pages: a published site's branch or repo was deleted"
             description: "git-pages still serves a site for a deleted pages branch or repo (or the relay could not check, or the repo is private and was not checked). The site stays up until an Owner takes it down (plan D8); a public repo's relay log names the site, a private repo's request carries no names, so find it with git-pages' admin listing. See docs/pages.md § Takedown (git-pages -delete-site)."
+        - alert: PagesRelayQueueStuck
+          # A state alert: its 15m windows are the duration, so no `for:`. A
+          # push queued behind a held site waits at most 5 min (the hold's
+          # deadline), so 15 min of waiting sites and no forward attempt at all
+          # (forwarded or upstream_error) means the workers stopped.
+          expr: |
+            (min by (namespace) (min_over_time(pages_relay_queue_depth[15m])) > 0)
+              unless (sum by (namespace) (increase(pages_relay_events_total{outcome=~"forwarded|upstream_error"}[15m])) > 0)
+          labels:
+            severity: warning
+          annotations:
+            summary: "Realliance Pages: pages-relay has sites queued and has forwarded nothing for 15m"
+            description: "Accepted pushes (Forgejo shows them as 202 queued) are waiting and no worker has tried git-pages in 15 minutes, so they are not publishing. kubectl -n pages logs deploy/pages-relay; then kubectl -n pages rollout restart deploy/pages-relay: SIGTERM forwards what it can and logs each site it could not (\"not forwarded at shutdown\"), to redeliver from the system hook's delivery history."
+        - alert: PagesRelayPushLost
+          # Fires on the first lost push, like the event alerts: no `for:`. An
+          # aborted hold that was re-queued or superseded heals itself and
+          # counts outcome="aborted"; only a push that was already a retry
+          # counts aborted_lost, and nothing forwards that one.
+          expr: sum by (namespace) (increase(pages_relay_holds_total{outcome="aborted_lost"}[10m])) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "Realliance Pages: a push was lost when git-pages restarted twice under it"
+            description: "git-pages restarted while the relay's retry of a push was updating (an OOM kill on a large site, or a rollout), so that push was not published and nothing will forward it again. Redeliver it from the Forgejo system webhook's delivery history, then watch the site: kubectl -n pages logs deploy/pages-relay | grep aborted_lost names it (public repos). See docs/pages.md § Lost pushes."
