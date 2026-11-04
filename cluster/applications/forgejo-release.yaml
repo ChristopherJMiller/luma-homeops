@@ -66,6 +66,9 @@ spec:
           - name: fonts # self-hosted woff2 + OFL texts (cluster/forgejo/custom/FONTS.md)
             configMap:
               name: forgejo-fonts
+          - name: img # Realliance logo, favicons (cluster/forgejo/custom/BRAND.md)
+            configMap:
+              name: forgejo-img
         extraContainerVolumeMounts:
           - name: repos
             mountPath: /repos
@@ -80,6 +83,9 @@ spec:
             readOnly: true
           - name: fonts
             mountPath: /data/gitea/public/assets/fonts
+            readOnly: true
+          - name: img
+            mountPath: /data/gitea/public/assets/img
             readOnly: true
           # <head> hook, after the theme sheet: preloads the body font, loads realliance-fonts.css
           - name: custom-templates

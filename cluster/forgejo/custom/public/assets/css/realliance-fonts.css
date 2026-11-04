@@ -87,3 +87,15 @@
 
 /* the one monospace declaration upstream hard-codes (diff line numbers) */
 .repository .data-table .line-num{font-family:var(--fonts-monospace)}
+
+/* --- Realliance logo (custom/BRAND.md) ---
+   logo.svg is the wide navbar mark (3d); it is not square, so release the 30x30 box (width attr stays as a fallback).
+   logo.svg carries its own prefers-color-scheme ink, right for the *-auto themes. An <img> cannot see the Forgejo
+   theme, so a fixed theme gets a baked file swapped in via content:url(). Fixed light = latte ink, fixed dark = mocha ink. */
+#navbar-logo img{width:auto}
+html[data-theme*="latte"] img[src$="/assets/img/logo.svg"],
+html[data-theme*="light"] img[src$="/assets/img/logo.svg"]{content:url("../img/logo-latte.svg")}
+html[data-theme*="frappe"] img[src$="/assets/img/logo.svg"],
+html[data-theme*="macchiato"] img[src$="/assets/img/logo.svg"],
+html[data-theme*="mocha"] img[src$="/assets/img/logo.svg"],
+html[data-theme*="dark"] img[src$="/assets/img/logo.svg"]{content:url("../img/logo-mocha.svg")}

@@ -195,3 +195,47 @@ def test_attached_segment_radius_does_not_square_the_last_child():
         if "segment" in selectors and ":not(.top):not(.bottom)" in selectors:
             assert not re.search(r"border-radius\s*:\s*0\s*(;|$)", body.strip()), selectors
     assert ".ui.attached.segment:last-child:not(.top){border-radius:0 0 12px 12px}".replace(" ", "") in css.replace(" ", "")
+
+
+# --- Realliance logo (cluster/forgejo/custom/BRAND.md) ---
+IMG = CUSTOM / "public/assets/img"
+IMG_FILES = ["logo.svg", "logo-mocha.svg", "logo-latte.svg", "logo.png", "favicon.svg", "favicon.png", "apple-touch-icon.png"]
+PNG_SIZES = {"logo.png": (512, 512), "favicon.png": (180, 180), "apple-touch-icon.png": (180, 180)}
+
+
+def test_logo_files_exist_and_are_wellformed():
+    for name in IMG_FILES:
+        assert (IMG / name).is_file(), f"missing {name}"
+    for name, (w, h) in PNG_SIZES.items():
+        b = (IMG / name).read_bytes()
+        assert b[:8] == b"\x89PNG\r\n\x1a\n", name
+        assert (int.from_bytes(b[16:20], "big"), int.from_bytes(b[20:24], "big")) == (w, h), name
+
+
+def test_logo_svgs_have_no_external_references():
+    for p in IMG.glob("*.svg"):
+        t = p.read_text()
+        assert "http" not in t.replace('xmlns="http://www.w3.org/2000/svg"', ""), f"{p.name} references a URL"
+        assert not re.search(r"<(image|use|script|foreignObject)\b|@import|url\(|font-family|<text\b|href=", t), f"{p.name} has an external or font dependency"
+        assert "#df8e1d" in t.lower(), f"{p.name} lost the sparkle colour"
+
+
+def test_logo_configmap_ships_every_file_under_1mib(configmaps):
+    cm = configmaps["forgejo-img"]
+    assert set(cm_files(cm)) == set(IMG_FILES)
+    assert cm_size(cm) < MIB
+
+
+def test_logo_mounted_at_public_img():
+    text = RELEASE.read_text()
+    assert "name: forgejo-img" in text
+    assert re.search(r"name: img\n\s+mountPath: /data/gitea/public/assets/img\n\s+readOnly: true", text)
+
+
+def test_fixed_themes_swap_to_baked_logos():
+    css = CSS.read_text()
+    assert "#navbar-logo img{width:auto}" in css
+    for flavour, f in (("latte", "logo-latte.svg"), ("light", "logo-latte.svg"), ("mocha", "logo-mocha.svg"), ("frappe", "logo-mocha.svg"), ("macchiato", "logo-mocha.svg"), ("dark", "logo-mocha.svg")):
+        assert re.search(rf'\[data-theme\*="{flavour}"\][^{{]*\{{content:url\("\.\./img/{f}"\)\}}', css), flavour
+    for f in ("logo-latte.svg", "logo-mocha.svg"):
+        assert (IMG / f).is_file()
