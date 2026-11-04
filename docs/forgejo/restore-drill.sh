@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Restore drill for the Realliance forge (spec Success 9; docs/forgejo.md "Backups and restore").
 #
-#   docs/forgejo/restore-drill.sh fixture         # once: realliance/restore-drill-fixture with an LFS object
+#   docs/forgejo/restore-drill.sh fixture         # once: realliance-ops/restore-drill-fixture with an LFS object
 #   docs/forgejo/restore-drill.sh up [--fresh|dump-key]  # forgejo-drill from the newest (or given) dump/
 #                                                 # object; --fresh first runs both backup jobs now
 #   docs/forgejo/restore-drill.sh check           # drill vs production: repo heads, LFS from B2, SSH host key
@@ -20,7 +20,7 @@ SSO_SECRETS=${SSO_SECRETS:-$HOME/Repos/realliance-sso-secrets}
 CHART=oci://code.forgejo.org/forgejo-helm/forgejo
 CHART_VERSION=17.3.2
 FORGE=https://git.realliance.net
-FIXTURE=realliance/restore-drill-fixture
+FIXTURE=realliance-ops/restore-drill-fixture   # private, Owners only, not in the inventory
 : "${KUBECONFIG:=/tmp/galaxy-kubeconfig}"; export KUBECONFIG
 
 work=$(mktemp -d); chmod 700 "$work"; trap 'rm -rf "$work"' EXIT
@@ -48,8 +48,8 @@ cmd_fixture() {
     log "$FIXTURE already exists"; return
   fi
   curl -fsS -o /dev/null -X POST -H @"$work/auth" -H 'Content-Type: application/json' \
-    -d '{"name":"restore-drill-fixture","private":true,"default_branch":"main","description":"Restore-drill fixture: one LFS object (docs/forgejo/restore-drill.sh in luma-homeops)"}' \
-    "$FORGE/api/v1/orgs/realliance/repos"
+    -d "{\"name\":\"${FIXTURE#*/}\",\"private\":true,\"default_branch\":\"main\",\"description\":\"Restore-drill fixture: one LFS object (docs/forgejo/restore-drill.sh in luma-homeops)\"}" \
+    "$FORGE/api/v1/orgs/${FIXTURE%%/*}/repos"
   local w="$work/fixture"; mkdir "$w"
   git -C "$w" init -q -b main && git -C "$w" lfs install --local >/dev/null && git -C "$w" lfs track '*.bin' >/dev/null
   head -c $((1024 * 1024)) /dev/urandom > "$w/object.bin"
@@ -180,7 +180,8 @@ cmd_check() {
     sleep 2
   done
   local fail=0 repo prod drill
-  for repo in realliance/forge "$FIXTURE"; do
+  # Current paths only: git doesn't follow a private repo's 301 (it arrives on the authenticated retry).
+  for repo in realliance-ops/forge "$FIXTURE"; do
     prod=$(git_with_token "$token" ls-remote "$FORGE/$repo.git" refs/heads/main | cut -f1) || prod=
     drill=$(git_with_token "$token" ls-remote "http://localhost:13000/$repo.git" refs/heads/main | cut -f1) || drill=
     if [ -n "$prod" ] && [ "$prod" = "$drill" ]; then log "ok   $repo main = ${prod:0:12}"; else log "FAIL $repo main: prod=${prod:0:12} drill=${drill:0:12}"; fail=1; fi

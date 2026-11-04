@@ -180,7 +180,8 @@ into namespace `forgejo-drill` (read-only key on the live objects bucket, no mai
 compares it with production (repo heads, an LFS object served from B2, the SSH host key).
 
 **Drill 2026-11-02: PASSED** (`up --fresh` then `check`; restore ~90 s; log in `docs/backups.md`).
-The fixture is `realliance/restore-drill-fixture` (one 1 MiB LFS object) — keep it.
+The fixture is `realliance-ops/restore-drill-fixture` (one 1 MiB LFS object; private, not in the
+inventory; moved from `realliance` on 2026-11-04, same repo id and LFS object) — keep it.
 
 ## Changing the structure
 
