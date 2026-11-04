@@ -198,19 +198,39 @@ type harness struct {
 	up    *httptest.Server
 }
 
-// newHarness puts a fake git-pages (h; nil answers 200) behind a Relay. Cleanup
-// shuts the relay down before the fake closes.
-func newHarness(t *testing.T, h http.HandlerFunc) *harness {
+// newHarness puts a fake git-pages behind a Relay: post answers the forwards
+// (nil: 200), and every GET (the relay's health reads: site checks, the
+// baseline before a forward, hold polls) gets fixedHealth, a site that exists
+// and never changes. Cleanup shuts the relay down before the fake closes.
+func newHarness(t *testing.T, post http.HandlerFunc) *harness {
 	t.Helper()
+	return newHarnessGET(t, post, nil)
+}
+
+// fixedHealth is git-pages' health answer (src/pages.go:236-240) for a site
+// whose manifest never changes.
+func fixedHealth(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Last-Modified", "Mon, 02 Nov 2026 10:00:00 GMT")
+	w.Header().Set("ETag", `"fixed"`)
+	io.WriteString(w, "ok\n")
+}
+
+// newHarnessGET is newHarness with get answering the GETs (nil: fixedHealth).
+func newHarnessGET(t *testing.T, post, get http.HandlerFunc) *harness {
+	t.Helper()
+	if get == nil {
+		get = fixedHealth
+	}
 	hits, gets := new(atomic.Int32), new(atomic.Int32)
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			gets.Add(1)
-		} else {
-			hits.Add(1)
+			get(w, r)
+			return
 		}
-		if h != nil {
-			h(w, r)
+		hits.Add(1)
+		if post != nil {
+			post(w, r)
 		}
 	}))
 	t.Cleanup(up.Close)
@@ -454,7 +474,7 @@ func TestMetricsAllOutcomesStartAtZero(t *testing.T) {
 	want := []string{"forwarded", "queued", "coalesced", "ignored_event", "ignored_ref", "ignored_private",
 		"ignored_name", "ignored_no_site", "unpublish_requested", "bad_signature", "bad_request",
 		"upstream_error", "too_large", "busy"}
-	var got []string
+	var got, holds []string
 	for _, l := range strings.Split(strings.TrimSpace(b.String()), "\n") {
 		switch {
 		case strings.HasPrefix(l, "# "):
@@ -463,7 +483,12 @@ func TestMetricsAllOutcomesStartAtZero(t *testing.T) {
 				t.Errorf("bad line %q", l)
 			}
 			got = append(got, strings.TrimSuffix(strings.TrimPrefix(l, `pages_relay_events_total{outcome="`), `"} 0`))
-		case l == "pages_relay_queue_depth 0":
+		case strings.HasPrefix(l, `pages_relay_holds_total{outcome="`):
+			if !strings.HasSuffix(l, "} 0") {
+				t.Errorf("bad line %q", l)
+			}
+			holds = append(holds, strings.TrimSuffix(strings.TrimPrefix(l, `pages_relay_holds_total{outcome="`), `"} 0`))
+		case l == "pages_relay_queue_depth 0", l == "pages_relay_sites_held 0":
 		default:
 			t.Errorf("unexpected line %q", l)
 		}
@@ -471,8 +496,55 @@ func TestMetricsAllOutcomesStartAtZero(t *testing.T) {
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("outcomes %v, want %v", got, want)
 	}
-	if !strings.Contains(b.String(), "\npages_relay_queue_depth 0\n") || !strings.Contains(b.String(), "# TYPE pages_relay_queue_depth gauge") {
-		t.Errorf("no queue depth gauge: %q", b.String())
+	if strings.Join(holds, ",") != "completed,timeout,released" {
+		t.Errorf("hold outcomes %v", holds)
+	}
+	for _, typ := range []string{"# TYPE pages_relay_queue_depth gauge", "# TYPE pages_relay_sites_held gauge", "# TYPE pages_relay_holds_total counter"} {
+		if !strings.Contains(b.String(), typ) {
+			t.Errorf("no %q: %q", typ, b.String())
+		}
+	}
+}
+
+// M2: a delivery waits for a body slot at most SlotWait (under Forgejo 15's 5 s
+// delivery timeout), and not at all once its client has gone.
+func TestSlotWaitBounded(t *testing.T) {
+	if DefaultSlotWait > 3*time.Second {
+		t.Fatalf("DefaultSlotWait %v must stay under Forgejo's 5 s delivery timeout", DefaultSlotWait)
+	}
+	h := newHarness(t, nil)
+	h.relay.BodyTimeout = 5 * time.Second // the slow bodies keep their slots
+	h.relay.SlotWait = 200 * time.Millisecond
+	h.relay.start() // before the server goroutines touch it
+	srv := httptest.NewServer(h.relay)
+	defer srv.Close()
+	for i := 0; i < MaxInFlight; i++ { // two senders that never finish their bodies
+		conn, err := net.Dial("tcp", strings.TrimPrefix(srv.URL, "http://"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer conn.Close()
+		fmt.Fprintf(conn, "POST /hook HTTP/1.1\r\nHost: x\r\nContent-Length: 1000\r\nX-Forgejo-Event: push\r\n\r\nabc")
+	}
+	waitFor(t, "both slots taken", func() bool { return len(h.relay.sem) == MaxInFlight })
+	b := pushBody(repoJSON("org", "public", "site", false, false), 1)
+	start := time.Now()
+	w := h.post(t, b, "push", sign(b, h.relay.Secret))
+	if d := time.Since(start); w.Code != 503 || d < 200*time.Millisecond || d > time.Second {
+		t.Errorf("third delivery: %d after %v", w.Code, d)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequest(http.MethodPost, "/hook", bytes.NewReader(b)).WithContext(ctx)
+	req.Header.Set("X-Forgejo-Event", "push")
+	req.Header.Set(SignatureHeader, sign(b, h.relay.Secret))
+	start = time.Now()
+	h.relay.ServeHTTP(httptest.NewRecorder(), req)
+	if d := time.Since(start); d > 100*time.Millisecond {
+		t.Errorf("a gone client waited %v", d)
+	}
+	if m := h.metrics(); !counted(m, Busy, 2) || !strings.Contains(h.log.String(), `"reason":"client_gone"`) {
+		t.Errorf("want busy 2 (body_slots, client_gone):\n%s\n%s", m, h.log.String())
 	}
 }
 
@@ -585,7 +657,8 @@ func TestForgejoShapes(t *testing.T) {
 	h.post(t, b, "delete", sign(b, h.relay.Secret))
 	b = repoDeletedBody(repo)
 	h.post(t, b, "repository", sign(b, h.relay.Secret))
-	if !strings.Contains(h.metrics(), `outcome="unpublish_requested"} 2`) || h.hits.Load() != 1 || h.gets.Load() != 2 {
+	// 3 GETs: the health baseline before the forward, then one site check each.
+	if !strings.Contains(h.metrics(), `outcome="unpublish_requested"} 2`) || h.hits.Load() != 1 || h.gets.Load() != 3 {
 		t.Errorf("metrics %s posts %d gets %d", h.metrics(), h.hits.Load(), h.gets.Load())
 	}
 	if l := h.log.String(); !strings.Contains(l, "org.realliance.page") {

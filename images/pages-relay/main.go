@@ -46,6 +46,15 @@ func main() {
 	rl := &Relay{Secret: secret, Upstream: uu, Domain: env("PAGES_RELAY_DOMAIN", "realliance.page"),
 		Forge: forge, Client: NewClient(), Counters: counters,
 		Log: slog.New(slog.NewJSONHandler(os.Stdout, nil))}
+	// git-pages' /metrics, for its webhook update counter (hold.go). Unset, a
+	// hold after a 202 ends by its site's health or at HoldTimeout only.
+	if m := os.Getenv("PAGES_RELAY_UPSTREAM_METRICS"); m != "" {
+		mu, err := url.Parse(m)
+		if err != nil || mu.Host == "" {
+			fatal("PAGES_RELAY_UPSTREAM_METRICS must be an absolute URL")
+		}
+		rl.Updates = mu
+	}
 	rl.start()
 	mux := http.NewServeMux()
 	mux.Handle("/hook", rl)
@@ -66,9 +75,11 @@ func main() {
 		fatal(err.Error())
 	case <-sig.Done():
 	}
-	// SIGTERM: stop accepting, let the deliveries being answered finish, then
-	// forward everything queued. Whatever is left at DrainTimeout is logged by
-	// site name; a crash loses the queue (accepted: redeliver from Forgejo).
+	// SIGTERM (PreStopSleep after the pod began terminating; it served all the
+	// while): stop accepting, let the deliveries being answered finish, release
+	// every hold, then forward everything queued. Whatever is left at
+	// DrainTimeout is logged by site name; a crash loses the queue (accepted:
+	// redeliver from Forgejo).
 	rl.Log.Info("shutdown: stop accepting", "drain_timeout", DrainTimeout.String())
 	ctx, cancel := context.WithTimeout(context.Background(), DrainTimeout)
 	defer cancel()

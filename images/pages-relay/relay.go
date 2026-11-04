@@ -13,6 +13,10 @@
 // wins), a site is never forwarded twice at once, and a push that lands during
 // its site's forward is forwarded again afterwards, so git-pages always fetches a
 // head at least as new as the last push.
+//
+// git-pages answers 202 after 3 s while its update goes on (src/pages.go:914-934).
+// The relay then holds the site (hold.go): it is not forwarded again until that
+// update has ended, so two updates of one site never race to commit.
 package main
 
 import (
@@ -39,24 +43,40 @@ import (
 const MaxBody = 16 << 20
 
 // MaxInFlight bounds the bodies being read at once (each up to MaxBody, in one
-// buffer). A delivery waits up to its body timeout for a slot; only then is it
+// buffer). A delivery waits up to DefaultSlotWait for a slot; only then is it
 // refused as busy.
 const MaxInFlight = 2
 
-// DefaultBodyTimeout bounds waiting for a body slot, then reading the body.
+// DefaultSlotWait bounds waiting for a body slot. Forgejo 15 gives a delivery
+// 5 s (DeliverTimeout), so a longer wait is a failed delivery anyway.
+const DefaultSlotWait = 3 * time.Second
+
+// DefaultBodyTimeout bounds reading the body once it has a slot.
 const DefaultBodyTimeout = 10 * time.Second
 
 // Workers forward queued sites to git-pages, at most one forward per site.
 const Workers = 2
 
 // QueueMax bounds the sites waiting for a forward. A push to a site that is
-// not already waiting is refused as busy (503) only when this many wait.
+// not already waiting, nor being forwarded or held, is refused as busy (503)
+// only when this many wait.
 const QueueMax = 64
+
+// HoldTimeout caps a hold after git-pages' 202: its update-timeout
+// (cluster/pages/config.toml [limits]), counted from the 202, which comes 3 s
+// after the update's own deadline started (src/pages.go:832, :915).
+const HoldTimeout = 5 * time.Minute
+
+// PreStopSleep is the pod's lifecycle.preStop sleep
+// (cluster/pages/pages-relay.yaml): the relay keeps serving while the endpoint
+// goes away, and SIGTERM comes after it.
+const PreStopSleep = 5 * time.Second
 
 // DrainTimeout is how long SIGTERM waits for the queue to drain: 66 forwards
 // (64 queued + 2 in flight) on 2 workers at git-pages' 3 s answer
-// (src/pages.go:832) is about 100 s. terminationGracePeriodSeconds (120 in
-// cluster/pages/pages-relay.yaml) must exceed it.
+// (src/pages.go:832) is about 100 s. Holds end when the drain starts, so none
+// waits out HoldTimeout. PreStopSleep + DrainTimeout must fit in
+// terminationGracePeriodSeconds (120 in cluster/pages/pages-relay.yaml).
 const DrainTimeout = 110 * time.Second
 
 // SiteCheckTimeout bounds asking git-pages whether a site exists; Forgejo 15
@@ -261,13 +281,29 @@ func Verify(body, secret []byte, sigHex string) bool {
 	return hmac.Equal(got, m.Sum(nil))
 }
 
+// HoldOutcome is how a hold ended: completed (evidence that git-pages' update
+// ended), timeout (HoldTimeout, no evidence) or released (shutdown).
+type HoldOutcome string
+
+const (
+	HeldCompleted HoldOutcome = "completed"
+	HeldTimedOut  HoldOutcome = "timeout"
+	HeldReleased  HoldOutcome = "released"
+)
+
+var allHoldOutcomes = []HoldOutcome{HeldCompleted, HeldTimedOut, HeldReleased}
+
 type Counters struct {
 	mu    sync.Mutex
 	n     map[Outcome]uint64
+	holds map[HoldOutcome]uint64
 	depth int
+	held  int
 }
 
-func NewCounters() *Counters { return &Counters{n: map[Outcome]uint64{}} }
+func NewCounters() *Counters {
+	return &Counters{n: map[Outcome]uint64{}, holds: map[HoldOutcome]uint64{}}
+}
 
 func (c *Counters) Inc(o Outcome) {
 	c.mu.Lock()
@@ -282,18 +318,39 @@ func (c *Counters) SetQueueDepth(n int) {
 	c.mu.Unlock()
 }
 
-// WriteTo writes every outcome (from zero, so increase() sees the first event)
-// and the queue depth in the Prometheus text format.
-func (c *Counters) WriteTo(w io.Writer) (int64, error) {
+// SetHeld records how many sites are held after a 202.
+func (c *Counters) SetHeld(n int) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.held = n
+	c.mu.Unlock()
+}
+
+// HoldEnded counts how a hold ended.
+func (c *Counters) HoldEnded(o HoldOutcome) {
+	c.mu.Lock()
+	c.holds[o]++
+	c.mu.Unlock()
+}
+
+// WriteTo writes every outcome (from zero, so increase() sees the first event),
+// the queue depth and the holds in the Prometheus text format. It writes after
+// unlocking: the queue sets the gauges under its own lock (review M8).
+func (c *Counters) WriteTo(w io.Writer) (int64, error) {
 	var b strings.Builder
+	c.mu.Lock()
 	b.WriteString("# TYPE pages_relay_events_total counter\n")
 	for _, o := range allOutcomes {
 		fmt.Fprintf(&b, "pages_relay_events_total{outcome=%q} %d\n", string(o), c.n[o])
 	}
 	b.WriteString("# TYPE pages_relay_queue_depth gauge\n")
 	fmt.Fprintf(&b, "pages_relay_queue_depth %d\n", c.depth)
+	b.WriteString("# TYPE pages_relay_sites_held gauge\n")
+	fmt.Fprintf(&b, "pages_relay_sites_held %d\n", c.held)
+	b.WriteString("# TYPE pages_relay_holds_total counter\n")
+	for _, o := range allHoldOutcomes {
+		fmt.Fprintf(&b, "pages_relay_holds_total{outcome=%q} %d\n", string(o), c.holds[o])
+	}
+	c.mu.Unlock()
 	n, err := io.WriteString(w, b.String())
 	return int64(n), err
 }
@@ -338,10 +395,14 @@ const (
 )
 
 // queue holds the sites waiting for a forward, once each, in first-arrival
-// order. take never hands out a site that is being forwarded: a push that lands
-// during its site's forward waits as a pending ("dirty") entry until that
-// forward ends, then goes again, so git-pages refetches the head after the last
-// push. At most max sites wait; dirty entries count too.
+// order. take never hands out a site that is being forwarded or held: a push
+// that lands meanwhile waits as a pending ("dirty") entry until that forward,
+// and the update git-pages may still run after its 202, has ended; then it goes
+// again, so git-pages refetches the head after the last push. At most max sites
+// wait before a new site is refused; a dirty entry of a site in flight or held
+// is never refused, and Workers plus the holds bound those.
+//
+// The holds and the ledger (hold.go) live under the same lock.
 type queue struct {
 	mu       sync.Mutex
 	wake     *sync.Cond
@@ -349,13 +410,18 @@ type queue struct {
 	order    []string       // waiting sites, first arrival first
 	pending  map[string]job // site -> latest job
 	inFlight map[string]bool
+	held     map[string]*hold
 	closed   bool
-	depth    func(int)
+	c        *Counters
+	kick     chan struct{} // wakes the poller when a hold starts
+	led      ledger
 }
 
-func newQueue(max int, depth func(int)) *queue {
-	q := &queue{max: max, pending: map[string]job{}, inFlight: map[string]bool{}, depth: depth}
+func newQueue(max int, c *Counters) *queue {
+	q := &queue{max: max, pending: map[string]job{}, inFlight: map[string]bool{}, held: map[string]*hold{},
+		c: c, kick: make(chan struct{}, 1)}
 	q.wake = sync.NewCond(&q.mu)
+	q.led.startedAt = time.Now()
 	return q
 }
 
@@ -370,31 +436,31 @@ func (q *queue) put(j job) enqueued {
 		q.pending[site] = j // latest wins
 		return enqCoalesced
 	}
-	if len(q.pending) >= q.max {
+	if len(q.pending) >= q.max && !q.inFlight[site] && q.held[site] == nil {
 		return enqFull
 	}
 	q.pending[site] = j
 	q.order = append(q.order, site)
-	q.depth(len(q.pending))
+	q.c.SetQueueDepth(len(q.pending))
 	q.wake.Broadcast()
 	return enqQueued
 }
 
-// take blocks until a waiting site is not being forwarded and hands it out, or
-// returns false once the queue is closed and empty.
+// take blocks until a waiting site is neither being forwarded nor held and
+// hands it out, or returns false once the queue is closed and empty.
 func (q *queue) take() (job, bool) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	for {
 		for i, site := range q.order {
-			if q.inFlight[site] {
+			if q.inFlight[site] || q.held[site] != nil {
 				continue
 			}
 			j := q.pending[site]
 			delete(q.pending, site)
 			q.order = append(q.order[:i:i], q.order[i+1:]...)
 			q.inFlight[site] = true
-			q.depth(len(q.pending))
+			q.c.SetQueueDepth(len(q.pending))
 			return j, true
 		}
 		if q.closed && len(q.pending) == 0 {
@@ -404,19 +470,34 @@ func (q *queue) take() (job, bool) {
 	}
 }
 
-// done ends a site's forward; its dirty entry, if any, may now go.
-func (q *queue) done(site string) {
+// has reports whether the relay still has anything of site: queued, in flight
+// or held, so a publish may still commit (review M3).
+func (q *queue) has(site string) bool {
 	q.mu.Lock()
-	delete(q.inFlight, site)
-	q.wake.Broadcast()
-	q.mu.Unlock()
+	defer q.mu.Unlock()
+	_, pending := q.pending[site]
+	return pending || q.inFlight[site] || q.held[site] != nil
 }
 
-func (q *queue) close() {
+func (q *queue) isClosed() bool {
 	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.closed
+}
+
+// close stops accepting and releases every hold, so the drain forwards held
+// sites' pushes at once rather than waiting out HoldTimeout (the race that the
+// hold prevents is accepted at shutdown).
+func (q *queue) close(now time.Time) []ended {
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	q.closed = true
+	var out []ended
+	for site := range q.held {
+		out = append(out, q.endHold(site, HeldReleased, "shutdown", now))
+	}
 	q.wake.Broadcast()
-	q.mu.Unlock()
+	return out
 }
 
 // abandon empties the queue and returns what was not forwarded: the sites in
@@ -430,11 +511,12 @@ func (q *queue) abandon() (inFlight, waiting []string) {
 	waiting, q.order = q.order, nil
 	q.pending = map[string]job{}
 	q.closed = true
-	q.depth(0)
+	q.c.SetQueueDepth(0)
 	q.wake.Broadcast()
 	return inFlight, waiting
 }
 
+// idle reports that nothing is queued or being forwarded (holds may remain).
 func (q *queue) idle() bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
@@ -450,27 +532,39 @@ type Relay struct {
 	Counters *Counters
 	Log      *slog.Logger
 
+	// Updates is git-pages' /metrics, for its webhook update counter (hold.go);
+	// nil: a hold ends by its site's health or its deadline only.
+	Updates *url.URL
+	Hold    HoldConfig // zero fields: defaultHold
+
 	BodyTimeout  time.Duration // 0: DefaultBodyTimeout
+	SlotWait     time.Duration // 0: DefaultSlotWait
 	CheckTimeout time.Duration // 0: SiteCheckTimeout
 
-	once   sync.Once
-	sem    chan struct{}
-	q      *queue
-	wg     sync.WaitGroup
-	ctx    context.Context // forwards; canceled when a drain runs out of time
-	cancel context.CancelFunc
+	once    sync.Once
+	sem     chan struct{}
+	q       *queue
+	wg      sync.WaitGroup
+	ctx     context.Context // forwards; canceled when a drain runs out of time
+	cancel  context.CancelFunc
+	pollWG  sync.WaitGroup
+	pctx    context.Context // the hold poller; canceled when the drain starts
+	pcancel context.CancelFunc
 }
 
-// start creates the queue and its workers on first use.
+// start creates the queue, its workers and the hold poller on first use.
 func (rl *Relay) start() {
 	rl.once.Do(func() {
 		rl.sem = make(chan struct{}, MaxInFlight)
-		rl.q = newQueue(QueueMax, rl.Counters.SetQueueDepth)
+		rl.q = newQueue(QueueMax, rl.Counters)
 		rl.ctx, rl.cancel = context.WithCancel(context.Background())
+		rl.pctx, rl.pcancel = context.WithCancel(context.Background())
 		for i := 0; i < Workers; i++ {
 			rl.wg.Add(1)
 			go rl.work()
 		}
+		rl.pollWG.Add(1)
+		go rl.poll()
 	})
 }
 
@@ -479,6 +573,9 @@ func (rl *Relay) idle() bool {
 	return rl.q.idle()
 }
 
+// work forwards sites one at a time. Before each forward it reads the site's
+// health, the baseline a hold compares with, and maybe a ledger base; after a
+// 202 the site is held instead of freed, and the worker moves on.
 func (rl *Relay) work() {
 	defer rl.wg.Done()
 	for {
@@ -486,18 +583,33 @@ func (rl *Relay) work() {
 		if !ok {
 			return
 		}
-		rl.forward(j)
-		rl.q.done(j.Target.Site())
+		var base siteHealth
+		if !rl.q.isClosed() { // a drain holds nothing, so it needs no baseline
+			rl.maybeBase()
+			base = rl.readHealth(rl.ctx, j.Target)
+		}
+		rl.q.launch()
+		sent := time.Now()
+		a := rl.forward(j)
+		h, e := rl.q.finish(j, a, base, sent, time.Now(), rl.holdConfig())
+		if h != nil {
+			rl.Log.Info("hold", "site", j.Target.Site(), "until", h.deadline.UTC().Format(time.RFC3339),
+				"baseline", h.base.String())
+		}
+		rl.logEnded(e)
 	}
 }
 
-// Shutdown stops accepting, then waits until every accepted push is forwarded
-// or ctx ends. It returns, and logs by site name, what was not forwarded:
-// sites still in flight (whose forwards it then cancels) and sites still queued.
-// Only public repos are ever queued, so the names may be logged (D9).
+// Shutdown stops accepting and releases every hold, then waits until every
+// accepted push is forwarded or ctx ends. It returns, and logs by site name,
+// what was not forwarded: sites still in flight (whose forwards it then
+// cancels; git-pages may still publish them) and sites still queued. Only
+// public repos are ever queued, so the names may be logged (D9).
 func (rl *Relay) Shutdown(ctx context.Context) []string {
 	rl.start()
-	rl.q.close()
+	rl.logEnded(rl.q.close(time.Now()))
+	rl.pcancel()
+	rl.pollWG.Wait()
 	drained := make(chan struct{})
 	go func() { rl.wg.Wait(); close(drained) }()
 	select {
@@ -511,7 +623,9 @@ func (rl *Relay) Shutdown(ctx context.Context) []string {
 	rl.cancel()
 	var left []string
 	for _, s := range inFlight {
-		rl.Log.Warn("not forwarded at shutdown", "site", s, "state", "in_flight")
+		// git-pages runs an accepted update under context.WithoutCancel
+		// (src/pages.go:925): canceling the POST does not stop it (review M6).
+		rl.Log.Warn("may not have been forwarded at shutdown", "site", s, "state", "in_flight")
 		left = append(left, s)
 	}
 	for _, s := range waiting {
@@ -572,16 +686,27 @@ func (rl *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if bt == 0 {
 		bt = DefaultBodyTimeout
 	}
-	// A body slot: wait for one rather than refuse a burst.
+	sw := rl.SlotWait
+	if sw == 0 {
+		sw = DefaultSlotWait
+	}
+	// A body slot: wait for one rather than refuse a burst, but not past
+	// Forgejo's 5 s delivery timeout, nor once the sender has gone (review M2).
+	// The signature cannot be checked first: it covers the whole body, and the
+	// slot is what bounds reading bodies. A waiter holds no body memory.
 	select {
 	case rl.sem <- struct{}{}:
 	default:
-		t := time.NewTimer(bt)
+		t := time.NewTimer(sw)
 		select {
 		case rl.sem <- struct{}{}:
 			t.Stop()
 		case <-t.C:
 			rl.busy(w, "reason", "body_slots")
+			return
+		case <-r.Context().Done():
+			t.Stop()
+			rl.count(Busy, "reason", "client_gone") // nobody is left to answer
 			return
 		}
 	}
@@ -633,7 +758,13 @@ func (rl *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case UnpublishRequested:
 		// git-pages logs every request's Host and path (src/pages.go:971-975), so
 		// a non-public repo's names never go there (D9): count it, fail loud.
-		if publishable && !rl.siteExists(target, attrs) {
+		// While the relay still has a publish of the site queued, in flight or
+		// held, git-pages' 404 proves nothing: that update may yet commit (M3).
+		switch {
+		case !publishable:
+		case rl.q.has(target.Site()):
+			attrs = append(attrs, "check", "publish_in_progress")
+		case !rl.siteExists(target, attrs):
 			rl.done(w, http.StatusOK, IgnoredNoSite, "ignored: no site\n", attrs...)
 			return
 		}
@@ -645,50 +776,35 @@ func (rl *Relay) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// siteExists asks git-pages, in-cluster, for the site's manifest
-// (`/<repo>/.git-pages/manifest.json`, or `/.git-pages/manifest.json` for a root
-// site, with Host <owner>.<domain>; wildcard sites need no authorization,
-// src/auth.go:307-339). Only a 404 means "no site"; anything else, or no answer,
-// counts as a site, so a takedown request is never lost to a failed check.
+// siteExists asks git-pages, in-cluster, for the site's health
+// (`/<repo>/.git-pages/health`, or `/.git-pages/health` for a root site, with
+// Host <owner>.<domain>; src/pages.go:236-240). It needs no authorization and
+// serializes nothing, and a missing project falls through to the index site as
+// a file lookup, so it 404s like manifest.json did (review M4). Only a 404
+// means "no site"; anything else, or no answer, counts as a site, so a takedown
+// request is never lost to a failed check.
 func (rl *Relay) siteExists(t Target, attrs []any) bool {
-	ct := rl.CheckTimeout
-	if ct == 0 {
-		ct = SiteCheckTimeout
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), ct)
-	defer cancel()
-	u := *rl.Upstream
-	u.Path = strings.TrimRight(rl.Upstream.Path, "/") + t.Path + ".git-pages/manifest.json"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
+	h := rl.readHealth(context.Background(), t)
+	switch {
+	case h.err != nil:
+		rl.Log.Warn("site check failed", append(attrs, "error", h.err.Error())...)
 		return true
-	}
-	req.Host = t.Host
-	req.Header.Set("Cache-Control", "no-cache") // git-pages bypasses its manifest cache
-	resp, err := rl.Client.Do(req)
-	if err != nil {
-		rl.Log.Warn("site check failed", append(attrs, "error", err.Error())...)
+	case h.status == http.StatusOK:
 		return true
-	}
-	io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
-	resp.Body.Close()
-	switch resp.StatusCode {
-	case http.StatusOK:
-		return true
-	case http.StatusNotFound:
+	case h.status == http.StatusNotFound:
 		return false
 	default:
-		rl.Log.Warn("site check failed", append(attrs, "status", resp.StatusCode)...)
+		rl.Log.Warn("site check failed", append(attrs, "status", h.status)...)
 		return true
 	}
 }
 
 // forward POSTs a minimal push for the job's site to git-pages, with the same
 // headers as Forgejo (git-pages wants X-Forgejo-Event: push and exactly
-// application/json, src/pages.go:845-872), and counts forwarded or
-// upstream_error. git-pages answers when the update ends or after 3 s
-// (202, the update goes on).
-func (rl *Relay) forward(j job) {
+// application/json, src/pages.go:845-872), counts forwarded or upstream_error,
+// and returns what git-pages' answer says of the update (classify). git-pages
+// answers when the update ends or after 3 s (202, the update goes on).
+func (rl *Relay) forward(j job) answer {
 	t := j.Target
 	attrs := []any{"site", t.Site(), "host", t.Host, "path", t.Path}
 	u := *rl.Upstream
@@ -696,7 +812,7 @@ func (rl *Relay) forward(j job) {
 	req, err := http.NewRequestWithContext(rl.ctx, http.MethodPost, u.String(), bytes.NewReader(forwardBody(j.CloneURL)))
 	if err != nil {
 		rl.count(UpstreamError, append(attrs, "error", err.Error())...)
-		return
+		return ansNone
 	}
 	req.Host = t.Host
 	req.Header.Set("Content-Type", "application/json")
@@ -705,17 +821,18 @@ func (rl *Relay) forward(j job) {
 	resp, err := rl.Client.Do(req)
 	if err != nil {
 		if rl.ctx.Err() != nil {
-			return // the drain ran out of time; Shutdown logged the site
+			return ansUnknown // the drain ran out of time; Shutdown logged the site
 		}
 		rl.count(UpstreamError, append(attrs, "error", err.Error())...)
-		return
+		return ansUnknown
 	}
 	defer resp.Body.Close()
-	answer, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
 	o := Forwarded
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		o = UpstreamError
 	}
-	rl.count(o, append(attrs, "status", resp.StatusCode, "answer", strings.TrimSpace(string(answer)),
+	rl.count(o, append(attrs, "status", resp.StatusCode, "answer", strings.TrimSpace(string(body)),
 		"seconds", time.Since(start).Seconds())...)
+	return classify(resp.StatusCode, body)
 }

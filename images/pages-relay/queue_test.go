@@ -187,9 +187,10 @@ func TestQueueFullBusy(t *testing.T) {
 	if w.Code != 503 || w.Header().Get("Retry-After") != "5" || !counted(h.metrics(), Busy, 1) {
 		t.Errorf("65th site: %d %q\n%s", w.Code, w.Header().Get("Retry-After"), h.metrics())
 	}
-	// Neither does a second forward of a site being forwarded: it needs a slot.
-	if w := h.pushTo(t, "busy0", "site"); w.Code != 503 || !counted(h.metrics(), Busy, 2) {
-		t.Errorf("in-flight site: %d", w.Code)
+	// A push for a site being forwarded is not a new site (review M7): it waits
+	// as that site's dirty entry, which Workers and the holds bound.
+	if w := h.pushTo(t, "busy0", "site"); w.Code != 202 || w.Body.String() != "queued\n" || !counted(h.metrics(), Busy, 1) {
+		t.Errorf("in-flight site: %d %q", w.Code, w.Body.String())
 	}
 	gate.open()
 	for i := 0; i < Workers; i++ {
@@ -199,19 +200,22 @@ func TestQueueFullBusy(t *testing.T) {
 	}
 	h.settle(t)
 	m := h.metrics()
-	if !counted(m, Forwarded, Workers+QueueMax) || !strings.Contains(m, "\npages_relay_queue_depth 0\n") {
+	if !counted(m, Forwarded, Workers+QueueMax+1) || !strings.Contains(m, "\npages_relay_queue_depth 0\n") {
 		t.Errorf("after drain:\n%s", m)
 	}
 }
 
 // Two workers, many pushes to three sites: never one site twice at once, never
-// more than two forwards, and each site's last forward starts after its last
-// push was sent.
+// more than two forwards, and each site ends on its final head. Each pusher
+// bumps the head before it delivers, as Forgejo does, and the fake git-pages
+// clones the head when a forward starts and commits it when it ends (the review's
+// head-version check: it catches a dropped final dirty push, which comparing
+// times taken before the POST cannot).
 func TestPerSiteExclusivity(t *testing.T) {
 	var mu sync.Mutex
 	active := map[string]int{}
-	lastStart := map[string]time.Time{}
-	lastSent := map[string]time.Time{}
+	head := map[string]int{}
+	committed := map[string]int{}
 	global, maxGlobal, overlaps := 0, 0, 0
 	h := newHarness(t, func(w http.ResponseWriter, r *http.Request) {
 		site := r.Host + r.URL.Path
@@ -224,13 +228,15 @@ func TestPerSiteExclusivity(t *testing.T) {
 		if global > maxGlobal {
 			maxGlobal = global
 		}
-		lastStart[site] = time.Now()
+		v := head[site] // clone
 		mu.Unlock()
 		time.Sleep(3 * time.Millisecond)
 		mu.Lock()
+		committed[site] = v // commit
 		active[site]--
 		global--
 		mu.Unlock()
+		io.WriteString(w, "replaced\n")
 	})
 	owners := []string{"a", "b", "c"}
 	var wg sync.WaitGroup
@@ -242,7 +248,7 @@ func TestPerSiteExclusivity(t *testing.T) {
 			for i := 0; i < 30; i++ {
 				o := owners[(g+i)%len(owners)]
 				mu.Lock()
-				lastSent[o+".realliance.page/site/"] = time.Now()
+				head[o+".realliance.page/site/"]++
 				mu.Unlock()
 				if c := h.pushTo(t, o, "site").Code; c != 202 {
 					bad.Add(1)
@@ -264,9 +270,9 @@ func TestPerSiteExclusivity(t *testing.T) {
 	if maxGlobal > Workers {
 		t.Errorf("%d forwards at once, want <= %d", maxGlobal, Workers)
 	}
-	for site, sent := range lastSent {
-		if !lastStart[site].After(sent) {
-			t.Errorf("%s: last forward %v is not after the last push %v", site, lastStart[site], sent)
+	for site, v := range head {
+		if committed[site] != v {
+			t.Errorf("%s: committed head %d, last pushed %d", site, committed[site], v)
 		}
 	}
 }
@@ -368,14 +374,19 @@ func TestShutdownDeadlineLogsPending(t *testing.T) {
 	if strings.Join(left, ",") != strings.Join(want, ",") {
 		t.Errorf("left %v, want %v", left, want)
 	}
+	// git-pages runs an update it accepted under context.WithoutCancel
+	// (src/pages.go:925), so a canceled in-flight forward may still publish
+	// (review M6); a queued one never went.
 	l := h.log.String()
-	for _, s := range want {
-		if !strings.Contains(l, `"site":"`+s+`"`) {
-			t.Errorf("log does not name %s: %s", s, l)
+	for _, s := range want[:2] {
+		if !strings.Contains(l, `"msg":"may not have been forwarded at shutdown","site":"`+s+`","state":"in_flight"`) {
+			t.Errorf("log does not name %s as in flight: %s", s, l)
 		}
 	}
-	if !strings.Contains(l, "not forwarded at shutdown") {
-		t.Errorf("log: %s", l)
+	for _, s := range want[2:] {
+		if !strings.Contains(l, `"msg":"not forwarded at shutdown","site":"`+s+`","state":"queued"`) {
+			t.Errorf("log does not name %s as queued: %s", s, l)
+		}
 	}
 }
 
@@ -397,6 +408,10 @@ func TestMainDrainsOnSIGTERM(t *testing.T) {
 	}
 	var got atomic.Int32
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet { // the health baseline before a forward
+			fixedHealth(w, r)
+			return
+		}
 		time.Sleep(300 * time.Millisecond)
 		got.Add(1)
 	}))
@@ -415,14 +430,14 @@ func TestMainDrainsOnSIGTERM(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
+	// Wait's result is kept, so the cleanup does not wait on a channel the
+	// select below already drained (review M9).
+	var waitErr error
+	exited := make(chan struct{})
+	go func() { waitErr = cmd.Wait(); close(exited) }()
 	defer func() {
 		cmd.Process.Kill()
-		select {
-		case <-exited:
-		case <-time.After(5 * time.Second):
-		}
+		<-exited
 	}()
 	base := "http://127.0.0.1:" + port
 	waitFor(t, "the relay to listen", func() bool {
@@ -450,9 +465,9 @@ func TestMainDrainsOnSIGTERM(t *testing.T) {
 		t.Fatal(err)
 	}
 	select {
-	case err := <-exited:
-		if err != nil {
-			t.Fatalf("exit: %v\n%s", err, out.String())
+	case <-exited:
+		if waitErr != nil {
+			t.Fatalf("exit: %v\n%s", waitErr, out.String())
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatalf("no exit 10 s after SIGTERM\n%s", out.String())
@@ -480,7 +495,7 @@ func TestUnpublishSiteCheck(t *testing.T) {
 	} {
 		var mu sync.Mutex
 		var got []seen
-		h := newHarness(t, func(w http.ResponseWriter, r *http.Request) {
+		h := newHarnessGET(t, nil, func(w http.ResponseWriter, r *http.Request) {
 			mu.Lock()
 			got = append(got, seen{r.Method, r.Host, r.URL.Path, r.Header.Get("Cache-Control")})
 			mu.Unlock()
@@ -505,10 +520,12 @@ func TestUnpublishSiteCheck(t *testing.T) {
 			t.Errorf("git-pages %d: want %s 3:\n%s", tc.status, tc.want, m)
 		}
 		mu.Lock()
+		// health, not manifest.json (review M4): same 404 for no site, nothing
+		// serialized, no metadata authorization (src/pages.go:236-240).
 		want := []seen{
-			{"GET", "org.realliance.page", "/site/.git-pages/manifest.json", "no-cache"},
-			{"GET", "org.realliance.page", "/site/.git-pages/manifest.json", "no-cache"},
-			{"GET", "org.realliance.page", "/.git-pages/manifest.json", "no-cache"},
+			{"GET", "org.realliance.page", "/site/.git-pages/health", "no-cache"},
+			{"GET", "org.realliance.page", "/site/.git-pages/health", "no-cache"},
+			{"GET", "org.realliance.page", "/.git-pages/health", "no-cache"},
 		}
 		if fmt.Sprint(got) != fmt.Sprint(want) {
 			t.Errorf("git-pages %d saw %v", tc.status, got)
@@ -528,7 +545,8 @@ func TestUnpublishCheckFailsLoud(t *testing.T) {
 	}
 
 	gate := newReleaser()
-	h = gated(t, gate, func(w http.ResponseWriter, r *http.Request) { gate.wait(r) }) // hangs
+	h = newHarnessGET(t, nil, func(w http.ResponseWriter, r *http.Request) { gate.wait(r) }) // hangs
+	t.Cleanup(gate.open)
 	h.relay.CheckTimeout = 100 * time.Millisecond
 	start := time.Now()
 	if w := h.post(t, body, "delete", sign(body, h.relay.Secret)); w.Code != 200 || !counted(h.metrics(), UnpublishRequested, 1) {
@@ -539,6 +557,52 @@ func TestUnpublishCheckFailsLoud(t *testing.T) {
 	}
 	if SiteCheckTimeout > 3*time.Second {
 		t.Errorf("SiteCheckTimeout %v must leave room in Forgejo's 5 s delivery timeout", SiteCheckTimeout)
+	}
+}
+
+// M3: while the relay still has a publish of the site queued, in flight or held
+// (its update may yet commit), git-pages' 404 proves nothing, so the takedown
+// request is counted without asking.
+func TestUnpublishDuringPublishIsLoud(t *testing.T) {
+	gate := newReleaser()
+	h := newHarnessGET(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Host == "held.realliance.page" {
+			w.WriteHeader(202)
+			io.WriteString(w, "updating (taking longer than 3s)")
+			return
+		}
+		gate.wait(r)
+	}, func(w http.ResponseWriter, r *http.Request) { // git-pages has no site yet
+		w.WriteHeader(404)
+		io.WriteString(w, "site not found\n")
+	})
+	t.Cleanup(gate.open)
+	h.pushTo(t, "held", "site")
+	waitFor(t, "a held site", func() bool { return metricValue(h.metrics(), "pages_relay_sites_held") == "1" })
+	go h.pushTo(t, "a", "site")
+	go h.pushTo(t, "b", "site")
+	waitFor(t, "a and b in flight", func() bool { return h.hits.Load() == 3 })
+	h.pushTo(t, "c", "site") // queued: both workers are busy
+	gets := h.gets.Load()
+	for _, o := range []string{"held", "a", "c"} {
+		b := deleteBranchBody(repoJSON(o, "public", "site", false, false))
+		if w := h.post(t, b, "delete", sign(b, h.relay.Secret)); w.Code != 200 {
+			t.Errorf("%s: %d", o, w.Code)
+		}
+	}
+	if n := h.gets.Load() - gets; n != 0 {
+		t.Errorf("asked git-pages %d times about sites the relay is publishing", n)
+	}
+	if m := h.metrics(); !counted(m, UnpublishRequested, 3) || !counted(m, IgnoredNoSite, 0) {
+		t.Errorf("held, in flight, queued: want unpublish_requested 3:\n%s", m)
+	}
+	// Once the relay has nothing of a site, the check runs again.
+	gate.open()
+	h.settle(t)
+	b := deleteBranchBody(repoJSON("a", "public", "site", false, false))
+	h.post(t, b, "delete", sign(b, h.relay.Secret))
+	if m := h.metrics(); !counted(m, IgnoredNoSite, 1) {
+		t.Errorf("after the publish: %s", m)
 	}
 }
 
@@ -811,6 +875,32 @@ allowed-repository-url-prefixes = ["https://git.realliance.net/"]
 		if outcomeDelta(before, after, tc.want) != 1 {
 			t.Errorf("%s/%s: want %s\nbefore %s\nafter %s", tc.owner, tc.name, tc.want, before, after)
 		}
+	}
+
+	// The hold's completion signal, on the real thing: health carries the
+	// manifest's Last-Modified, and an update moves it even when it changes
+	// nothing (src/update.go:73-86 commits before CompareManifest).
+	site := Target{Host: "org.realliance.page", Path: "/site/"}
+	before := rl.readHealth(context.Background(), site)
+	if !before.ok || before.lm == "" || before.etag == "" {
+		t.Errorf("health of an existing site: %+v", before)
+	}
+	if none := rl.readHealth(context.Background(), Target{Host: "new-owner.realliance.page", Path: "/fresh/"}); !none.known || none.ok {
+		t.Errorf("health of no site: %+v", none)
+	}
+	time.Sleep(1100 * time.Millisecond) // Last-Modified is an HTTP date: 1 s
+	again := exec.Command(bin, "-config", cfg, "-update-site", "org.realliance.page/site", archive)
+	again.Dir = dir
+	if out, err := again.CombinedOutput(); err != nil {
+		t.Fatalf("-update-site again: %v\n%s", err, out)
+	}
+	after := rl.readHealth(context.Background(), site)
+	if !after.movedFrom(before) || after.lm == before.lm {
+		t.Errorf("an unchanged re-publish: before %+v after %+v (want a new Last-Modified)", before, after)
+	}
+	t.Logf("unchanged re-publish: Last-Modified %q -> %q, ETag %q -> %q", before.lm, after.lm, before.etag, after.etag)
+	if same := rl.readHealth(context.Background(), site); same.movedFrom(after) {
+		t.Errorf("health moved without an update: %+v then %+v", after, same)
 	}
 
 	// git-pages itself refuses what the relay never sends.
