@@ -5,10 +5,18 @@
 # branch of a public repo to Host <owner>.realliance.page + /<repo>/, and POSTs it
 # to git-pages by Service (plan D1, D2). It never names a private repo (D9).
 #
-# Bounded by design: 16 MiB body cap (too_large), 2 deliveries in flight (busy,
-# 503 Retry-After 5), 5 s header / 10 s body deadlines. Two 16 MiB bodies peak
-# near 33 MiB; GOMEMLIMIT keeps the GC ahead of the 128Mi limit (Task 4 fix
-# round 2). Forgejo 15 never retries a non-2xx delivery.
+# Forgejo 15 never retries a delivery, so the relay accepts, then queues: a
+# delivery that passes the checks gets 202, and two workers forward the sites in
+# arrival order. Per site the latest push wins (coalesced), a site is never
+# forwarded twice at once, and a push during its site's forward goes again after
+# it. At most 64 sites wait; only then is a new site refused (busy, 503
+# Retry-After 5). The queue holds a target and a clone URL per site, never a body.
+#
+# Bounded by design: 16 MiB body cap (too_large), 2 bodies read at once (a
+# delivery waits up to 10 s for a slot), 5 s header / 10 s body deadlines. Two
+# 16 MiB bodies peak near 33 MiB; GOMEMLIMIT keeps the GC ahead of the 128Mi
+# limit (Task 4 fix round 2). SIGTERM stops accepting and drains the queue for up
+# to 110 s (DrainTimeout, relay.go), logging any site left; a crash loses it.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -29,6 +37,8 @@ spec:
     spec:
       automountServiceAccountToken: false
       enableServiceLinks: false
+      # Outlasts the relay's 110 s SIGTERM drain (scripts/test_pages_manifests.py).
+      terminationGracePeriodSeconds: 120
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
@@ -39,7 +49,7 @@ spec:
         - name: pages-relay
           # The sha- tag .github/workflows/pages-relay.yml published, by digest.
           # It decides which host a push publishes to: bump by hand, never automerge.
-          image: ghcr.io/christopherjmiller/pages-relay:sha-d82d30c@sha256:63509d09b62fb25a6318375e3fb2e7f67c9fdbabffc77eb72b63023ba4c6846e
+          image: ghcr.io/christopherjmiller/pages-relay:sha-53fffd8@sha256:603bbf3fc30019455d0858562de34c058b56da22ef9c08a64c585cc82a8b1a99
           env:
             - name: PAGES_RELAY_UPSTREAM
               value: http://git-pages.pages.svc.cluster.local:3000

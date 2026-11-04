@@ -42,6 +42,9 @@ spec:
 # pages_relay_events_total{outcome} is exported for every outcome from start, so
 # increase() sees the first event; git_pages_site_update_error{cause} is created
 # by its first error, hence the `unless ... offset` branch (Review Focus 5).
+# The relay answers 202 and queues (queued/coalesced, never alerted); its workers
+# count forwarded or upstream_error later, so a failed forward shows only here,
+# never in Forgejo's delivery history. Aggregations keep `namespace`.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -65,8 +68,8 @@ spec:
             description: "No healthy scrape of {{ $labels.job }} in namespace pages for 10m: sites (git-pages) or publishing (pages-relay) are out. kubectl -n pages get pods; kubectl -n pages logs deploy/{{ $labels.job }}."
         - alert: PagesSiteUpdateFailing
           expr: |
-            (sum by (cause) (increase(git_pages_site_update_error[30m])) > 0)
-              or (sum by (cause) (git_pages_site_update_error unless git_pages_site_update_error offset 30m) > 0)
+            (sum by (namespace, cause) (increase(git_pages_site_update_error[30m])) > 0)
+              or (sum by (namespace, cause) (git_pages_site_update_error unless git_pages_site_update_error offset 30m) > 0)
           labels:
             severity: warning
           annotations:
@@ -79,7 +82,7 @@ spec:
             severity: warning
           annotations:
             summary: "Realliance Pages: pages-relay could not hand a push to git-pages"
-            description: "git-pages was unreachable or answered non-2xx (a fast update error answers 503), so that push did not publish and Forgejo will not retry it. kubectl -n pages logs deploy/pages-relay and deploy/git-pages; redeliver from the system hook's delivery history."
+            description: "A queued forward found git-pages unreachable or got a non-2xx answer (a fast update error answers 503), so that push did not publish. Forgejo shows the delivery as 202 queued and will not retry it. kubectl -n pages logs deploy/pages-relay (the event names the site) and deploy/git-pages; redeliver from the system hook's delivery history, or push again."
         - alert: PagesBadSignatures
           expr: |
             increase(pages_relay_events_total{outcome="bad_signature"}[30m]) > 0
@@ -91,12 +94,12 @@ spec:
         - alert: PagesRelayRejecting
           # bad_signature is PagesBadSignatures' alone, so each outcome alerts once.
           expr: |
-            sum by (outcome) (increase(pages_relay_events_total{outcome=~"too_large|busy|bad_request"}[30m])) > 0
+            sum by (namespace, outcome) (increase(pages_relay_events_total{outcome=~"too_large|busy|bad_request"}[30m])) > 0
           labels:
             severity: warning
           annotations:
             summary: "Realliance Pages: pages-relay refused deliveries ({{ $labels.outcome }})"
-            description: "too_large = body over 16 MiB (413); busy = more than 2 deliveries in flight (503); bad_request = a body that is not a well-formed Forgejo event (400). Forgejo 15 never retries, so the push did not publish: redeliver from the system hook's delivery history. kubectl -n pages logs deploy/pages-relay."
+            description: "too_large = body over 16 MiB (413); busy = the queue already holds 64 other sites, or both body slots stayed busy for 10 s (503); bad_request = a body that is not a well-formed Forgejo event (400). Forgejo 15 never retries, so the push did not publish: redeliver from the system hook's delivery history. kubectl -n pages logs deploy/pages-relay."
         - alert: PagesTakedownRequested
           expr: |
             increase(pages_relay_events_total{outcome="unpublish_requested"}[6h]) > 0
@@ -104,4 +107,4 @@ spec:
             severity: warning
           annotations:
             summary: "Realliance Pages: a published site's branch or repo was deleted"
-            description: "The site stays up until an Owner takes it down (plan D8); a private repo's request carries no names, so find the site with git-pages' admin listing. See docs/pages.md § Takedown (git-pages -delete-site)."
+            description: "git-pages still serves a site for a deleted pages branch or repo (or the relay could not check, or the repo is private and was not checked). The site stays up until an Owner takes it down (plan D8); a public repo's relay log names the site, a private repo's request carries no names, so find it with git-pages' admin listing. See docs/pages.md § Takedown (git-pages -delete-site)."

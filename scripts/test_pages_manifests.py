@@ -185,20 +185,29 @@ PAGES_DOWN_EXPR = (
     ' or absent(up{namespace="pages",job="pages-relay"})'
 )
 UPDATE_FAILING_EXPR = (
-    "(sum by (cause) (increase(git_pages_site_update_error[30m])) > 0)"
-    " or (sum by (cause) (git_pages_site_update_error unless git_pages_site_update_error offset 30m) > 0)"
+    "(sum by (namespace, cause) (increase(git_pages_site_update_error[30m])) > 0)"
+    " or (sum by (namespace, cause) (git_pages_site_update_error unless git_pages_site_update_error offset 30m) > 0)"
 )
 ALERT_EXPRS = {
     "PagesDown": PAGES_DOWN_EXPR,
     "PagesSiteUpdateFailing": UPDATE_FAILING_EXPR,
     "PagesRelayUpstreamError": 'increase(pages_relay_events_total{outcome="upstream_error"}[30m]) > 0',
     "PagesBadSignatures": 'increase(pages_relay_events_total{outcome="bad_signature"}[30m]) > 0',
-    "PagesRelayRejecting": 'sum by (outcome) (increase(pages_relay_events_total{outcome=~"too_large|busy|bad_request"}[30m])) > 0',
+    "PagesRelayRejecting": 'sum by (namespace, outcome) (increase(pages_relay_events_total{outcome=~"too_large|busy|bad_request"}[30m])) > 0',
     "PagesTakedownRequested": 'increase(pages_relay_events_total{outcome="unpublish_requested"}[6h]) > 0',
 }
 # Outcomes that must raise an alert, each in exactly one alert (Task 4 rulings):
 # a rejected delivery is never retried by Forgejo 15, so it must be seen.
 ALERTED_OUTCOMES = {"upstream_error", "bad_signature", "too_large", "busy", "bad_request", "unpublish_requested"}
+# Outcomes that never alert. Every outcome the relay counts is in exactly one of
+# the two sets, so a new outcome has to be classified here (relay fix, Task 10
+# concerns 1-2): queued/coalesced are accepted deliveries, ignored_no_site a
+# deleted branch or repo that git-pages never served.
+QUIET_OUTCOMES = {"forwarded", "queued", "coalesced", "ignored_event", "ignored_ref", "ignored_private",
+                  "ignored_name", "ignored_no_site"}
+# The relay drains its queue on SIGTERM for DrainTimeout (images/pages-relay/relay.go);
+# the kubelet must not SIGKILL it first.
+RELAY_GRACE_SECONDS = 120
 KNOWN_METRICS = {"up", "git_pages_site_update_error", "pages_relay_events_total"}
 PROMQL_WORDS = {"increase", "sum", "by", "absent", "or", "unless", "offset", "and"}
 
@@ -657,6 +666,33 @@ def test_update_failing_alert_catches_new_series():
     expr = " ".join(alert_rules(render(PAGES_DIR))["PagesSiteUpdateFailing"]["expr"].split())
     assert "unless git_pages_site_update_error offset 30m" in expr
     assert "increase(git_pages_site_update_error[30m])" in expr
+
+
+def test_relay_outcomes_classified():
+    """Every outcome the relay counts is either alerted or deliberately quiet, never both."""
+    outcomes = relay_outcomes()
+    assert not ALERTED_OUTCOMES & QUIET_OUTCOMES
+    assert outcomes == ALERTED_OUTCOMES | QUIET_OUTCOMES, f"unclassified: {outcomes ^ (ALERTED_OUTCOMES | QUIET_OUTCOMES)}"
+    assert {"queued", "coalesced", "ignored_no_site"} <= outcomes
+
+
+def test_alerts_keep_namespace():
+    """Task 10 concern 3: an aggregated alert keeps `namespace`, which routing and the summary rely on."""
+    require_deployed()
+    rules = alert_rules(render(PAGES_DIR))
+    for name, r in rules.items():
+        for by in re.findall(r"\bby \(([^)]*)\)", r["expr"]):
+            assert "namespace" in [x.strip() for x in by.split(",")], f"{name}: sum by ({by}) drops namespace"
+    assert "by (" in rules["PagesSiteUpdateFailing"]["expr"] and "by (" in rules["PagesRelayRejecting"]["expr"]
+
+
+def test_relay_drains_within_grace():
+    """SIGTERM drains the queue for DrainTimeout; the grace period must outlast it with room to log."""
+    require_deployed()
+    pod = pod_spec(render(PAGES_DIR), "pages-relay")
+    assert pod["terminationGracePeriodSeconds"] == RELAY_GRACE_SECONDS
+    (drain,) = re.findall(r"^const DrainTimeout = (\d+) \* time\.Second$", RELAY_SOURCE.read_text(), re.M)
+    assert int(drain) + 5 <= RELAY_GRACE_SECONDS, f"DrainTimeout {drain}s leaves no room in a {RELAY_GRACE_SECONDS}s grace"
 
 
 def test_relay_outcomes_alerted_once():
