@@ -97,3 +97,11 @@
 - Reissue: wildcard-tls-5 order valid; Ready True at about 01:59Z (about 7 min). No errored/invalid order or challenge.
 - After: revision 5, notAfter 2027-02-02T01:01:18Z. git.realliance.net, photos.chrismiller.xyz and realliance.page each serve 11 SANs.
 - Gate G3: only realliance.page lines changed (TLS error 000 -> 404, as expected); every pre-existing host line identical. Argo `rook-cluster` also showed Degraded afterwards, consistent with the Ceph cache-pressure warning; unrelated to the cert.
+
+## Task 9: public edge (2026-11-04) - DONE
+
+- RED 10 failed / 29 passed; GREEN 39/39. Commit b05c295a, signed, pushed. Includes the Task 5 minors M1 (git-pages readiness httpGet :3002 /metrics), M2 (Services pin no externalIPs/loadBalancerIP), M3 (container hardening pinned), M4 (Renovate automerge check covers glob/regex/pattern rules).
+- Approval: Chris pre-approved (Gate G before equal to the Task 8 after-state with PKCE challenge normalised; tests green; after-diff only realliance.page; Traefik ERR 0).
+- Gate G before: 3 nodes Ready, Ceph HEALTH_WARN known, 145/145 active+clean, only rook/rook-cluster Degraded, no non-Running pods. After: Argo pages Synced/Healthy; snapshot diff = `realliance.page/` and `www.realliance.page/` 404 -> 302 to `https://realliance.realliance.page/`, nothing else; Traefik ERR 0.
+- Curl via .7: apex/www 302 path-kept; POST/PUT/DELETE/PATCH 404 with git-pages and relay counters unchanged; /.git-pages/manifest.json, archive.tar and health 404 (health: no site published); unknown owner 404 with no Set-Cookie and no Server; nosniff, referrer-policy and HSTS max-age=31536000 only; a.b host: no route (TLS name mismatch, 404 with -k).
+- Note: HEAD to the apex gets a 307 (Traefik's redirectRegex uses 307 for non-GET); GET is 302 as specified.
