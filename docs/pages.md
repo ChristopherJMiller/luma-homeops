@@ -38,7 +38,19 @@ branch, get a site. Namespace `pages`, Argo app `pages`, config in
 
 **Latency.** A push is live in about 6 s (the Task 10 drill). git-pages caches a site for 60 s, so poll for a minute before you call it broken.
 
-### Sample workflow (Forgejo Actions)
+### Recommended: the `pages-publish` action
+
+`realliance/actions` (public, MIT) holds a composite action that does the push below, plus a size check against the 128 MB cap and the site URL as output. The forge's default action host is GitHub, so use the full URL:
+
+```yaml
+      - uses: https://git.realliance.net/realliance/actions/pages-publish@v1
+        with:
+          dir: public
+```
+
+Pin by commit `sha` instead of `@v1` for anything sensitive. Members change it by pull request, and Owners tag releases (`v*` is Owners-only). Its `test/run.sh` publishes a throwaway site and takes it down.
+
+### Fallback: the same push by hand (Forgejo Actions)
 
 The automatic token can push `pages`. The Task 10 drill proved it. Pass it through `GIT_CONFIG_*` env so it never appears in argv.
 
