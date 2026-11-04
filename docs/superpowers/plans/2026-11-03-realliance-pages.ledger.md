@@ -27,7 +27,7 @@
     - `[server].caddy` is now `[server].proxy`. The config uses `proxy = "-"`, and an unknown key aborts the start.
     - The SIGHUP reload is gone, so a config change needs a restart. The hashed `git-pages-config` ConfigMap rolls the pod.
     - `-size-histogram` is now `-analyze-storage text`.
-    - The `-audit-log` columns were reordered, and `-reason` was added.
+    - `-audit-log` has reordered columns and a new `-reason` option.
     - Caddy will later leave the image; the `proxy` endpoint stays.
   - End users:
     - On a project site (`/<repo>/`), a `_headers` source path must start with the project path, and so must a `_redirects` target with a 2xx/4xx code.
@@ -113,3 +113,19 @@
 - Ruling n2 applied: the plan's exact values (Task 9 block, D2, D6) and the `cluster/pages/edge.yaml` header now describe the fixed edge. The `edge.yaml` change is comment-only: `kubectl kustomize cluster/pages` output is byte-identical before and after.
 - Recorded for the system hook (Task 6 rollback and guard). The flip was one transaction: `UPDATE webhook SET is_system_webhook=true, is_active=true WHERE id=1 AND repo_id=0 AND owner_id=0 AND is_system_webhook=false AND type='forgejo'`, with exactly 1 row asserted. Roll back by setting both flags to false on the same row. Recreating a lost hook means the same flip on a hook made through the API, which creates default hooks only.
 - Open: Task 13 (PSL) waits on Chris to extend the `realliance.page` registration to 2 years or more.
+
+## Task 12 - git-pages 0.10.x release notes (docs only)
+
+- Source: the Codeberg releases for v0.10.0 (2026-10-25) and v0.10.1 (2026-10-28), re-read 2026-11-04. Task 5 already shipped 0.10.1, so nothing changes in the cluster.
+- Administrators, breaking:
+  - `[server].caddy` is now `[server].proxy`. The config uses `proxy = "-"`.
+  - The SIGHUP handler was not memory-safe, so 0.10 removed it. A config change needs a restart.
+  - `-size-histogram` is now `-analyze-storage text`. `-audit-log` has reordered columns and a new `-reason` option.
+  - A later release plans to drop the bundled web server from the Docker image for a built-in ACME client (`features = ["acme"]`, gated). The `proxy` endpoint stays.
+- End users, breaking:
+  - A PATCH with `_redirects` or `_headers` replaces them (it used to append). PATCH is off here.
+  - On a project site, a `_headers` source path and a `_redirects` target with a 2xx or 4xx code must start with the project path.
+- 0.10.1 (security): Forgejo-level repository redirects are no longer followed. A renamed or transferred repo publishes only under its new name, and the old site stays until takedown.
+- Correction to the Task 5 entry: the release notes do not mention `-delete-site`. Task 10 verified it live: `-delete-site <domain>` alone panics on a root site, which needs `<domain>/.index`.
+- The 60 s site cache comes from observation, not the release notes. Tests poll for at least a minute.
+- `docs/pages.md` "Bumping git-pages" and "Site files" carry these items.

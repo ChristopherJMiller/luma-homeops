@@ -34,7 +34,7 @@ branch, get a site. Namespace `pages`, Argo app `pages`, config in
 - `realliance.page` and `www.realliance.page` redirect to `https://realliance.realliance.page/` (302 for GET, 307 for other methods, path kept).
 - Any method except GET and HEAD returns 404 from Traefik. Nothing can upload.
 
-**Site files.** `_headers` may set only these: `Content-Security-Policy`, `Cross-Origin-Embedder-Policy`, `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`, `Access-Control-Allow-Origin`, `Permissions-Policy`, `X-Frame-Options`, `X-Robots-Tag`. `_redirects` and `404.html` work as in git-pages. The edge strips `Set-Cookie` and always sends `nosniff`, a strict referrer policy and HSTS without `includeSubDomains`.
+**Site files.** `_headers` may set only these: `Content-Security-Policy`, `Cross-Origin-Embedder-Policy`, `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`, `Access-Control-Allow-Origin`, `Permissions-Policy`, `X-Frame-Options`, `X-Robots-Tag`. `_redirects` and `404.html` work as in git-pages. On a project site (`/<repo>/`), a `_headers` source path must start with the project path (`/<repo>/*`), and so must a `_redirects` target that answers 2xx or 4xx (git-pages 0.10). The edge strips `Set-Cookie` and always sends `nosniff`, a strict referrer policy and HSTS without `includeSubDomains`.
 
 **Latency.** A push is live in about 6 s (the Task 10 drill). git-pages caches a site for 60 s, so poll for a minute before you call it broken.
 
@@ -58,7 +58,7 @@ jobs:
         env:
           GIT_CONFIG_COUNT: "1"
           GIT_CONFIG_KEY_0: http.extraHeader
-          GIT_CONFIG_VALUE_0: "Authorization: Bearer ${{ github.token }}"
+          GIT_CONFIG_VALUE_0: "Authorization: token ${{ github.token }}"
         run: |
           cd public
           git init -q -b pages
@@ -113,7 +113,7 @@ Deleting the `pages` branch or the repo does not unpublish. Only an Owner can, w
 3. `-unfreeze-domain <owner>.realliance.page` undoes it.
 4. The public edge returns 404 within about a minute (site cache).
 
-`PagesTakedownRequested` fires 6 hours after a delete event for a repo that had a site. The relay logs the site for public repos. A private repo's request carries no names, so list sites with the git-pages listing command. Making a repo private sends no event at all.
+`PagesTakedownRequested` fires when a delete event arrives for a repo that had a site, and stays up for 6 hours. The relay logs the site for public repos. Private repos are not checked, so every delete of a private repo fires it too. Their requests carry no names, so list sites with the git-pages listing command. Making a repo private sends no event at all.
 
 ## Flows
 
@@ -138,10 +138,10 @@ The WAN-IP hairpin is a dependency: if the WAN address changes and `cloudflaredd
 
 1. **Accept, then queue.** It verifies the HMAC, parses the event and answers `202`. Forwarding to git-pages happens later.
 2. **Coalesce per site.** Pushes to one site while it stays busy collapse into one. The latest wins, and a site never has two updates at once.
-3. **Hold after git-pages answers 202.** git-pages answers `202` when an update takes over 3 s. The relay holds that site until the update ends, so the next push cannot overlap. It sees the end as a change in the site's health `Last-Modified`. The `git_pages_site_updates` counter and a git-pages restart also end a hold. The deadline is 5 min. Polling stays at about 1 request a second.
+3. **Hold after git-pages answers 202.** git-pages answers `202` when an update takes over 3 s. The relay holds that site until the update ends, so the next push cannot overlap. It sees the end as a change in the site's health `Last-Modified`. The `git_pages_site_updates` counter and a git-pages restart also end a hold. The deadline is 5 min. Polling stays under about 1 request a second (health every 10 s, the counter every 3 s).
 4. **Aborts.** If git-pages restarts mid-update, the relay re-queues the push once (`aborted`). If that retry dies the same way, nothing forwards it again (`aborted_lost`): see Lost pushes.
 5. **Shutdown.** `preStop` sleeps 5 s, then SIGTERM drains the queue for up to 110 s. The relay logs each push it could not forward as `not forwarded at shutdown` (`may not have been forwarded at shutdown` if the push was in flight).
-6. **Limits.** Bodies up to 16 MiB (`too_large`, 413). A new site gets `busy` (503) only when 64 other sites already wait, or both body slots stay busy for 3 s. The relay trusts its ledger of forwarded updates only about 8 min after a start, so a failed update in that window holds its site for the full 5 min.
+6. **Limits.** Bodies up to 16 MiB (`too_large`, 413). The relay refuses a body that takes over 4 s to arrive (`bad_request`; Forgejo gives up at 5 s). A new site gets `busy` (503) only when 64 other sites already wait, or both body slots stay busy for 3 s. The relay trusts its ledger of forwarded updates only about 8 min after a start, so a failed update in that window holds its site for the full 5 min.
 
 **Metrics** (port 8080):
 - `pages_relay_events_total{outcome}`: `queued`, `coalesced`, `forwarded`, `upstream_error`, `too_large`, `busy`, `bad_request`, `bad_signature`, `unpublish_requested`, `ignored_event`, `ignored_name`, `ignored_no_site`, `ignored_private`, `ignored_ref`.
@@ -167,7 +167,7 @@ All in `cluster/pages/monitoring.yaml` (`pages-alerts`), all warning. Except `Pa
 | `PagesRelayQueueStuck` | Pushes wait 15 min and no worker has tried git-pages | `kubectl -n pages rollout restart deploy/pages-relay`, then redeliver what the shutdown log lists |
 | `PagesRelayPushLost` | The retry of an aborted push also died (`aborted_lost`) | See Lost pushes |
 
-`PagesRelayQueueStuck` and `PagesRelayPushLost` ship with the relay re-pin (`sha-0273bb3`). They are not live until that commit is on `main`.
+`PagesRelayQueueStuck` and `PagesRelayPushLost` are live (relay `sha-e7b3303`, deployed 2026-11-04).
 
 ## Lost pushes
 
@@ -194,7 +194,7 @@ A push also ends up lost, without an alert, when git-pages dies and the relay ca
 ## Bumping git-pages
 
 Renovate never merges git-pages or the relay by itself. To bump:
-1. Read every changelog between the pinned version and the target. Look for config key renames (0.10 renamed `caddy` to `proxy`) and changes to health, `-delete-site` and the update path.
+1. Read every changelog between the pinned version and the target. Look for config key renames and removed signals, and for changes to health, `-delete-site` and the update path. 0.10 renamed `[server].caddy` to `proxy` and removed SIGHUP (restart instead; the hashed ConfigMap does that). It also moved `-size-histogram` to `-analyze-storage text`, and 0.10.1 stopped following Forgejo repository redirects.
 2. Take only a release at least 2 weeks old, unless Chris waives it for a security fix.
 3. Update the `tag@sha256` pin (read the digest from the Codeberg registry).
 4. Re-run the acceptance suite and the takedown steps in the Takedown section.
