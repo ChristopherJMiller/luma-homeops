@@ -22,6 +22,8 @@ Keycloak on the CrownCloud VPS, repos `realliance/sso*`).
 | Bare repos (all git history), `[repository] ROOT=/repos` | PVC `forgejo-repos`, 50Gi, `rook-ceph-block` (HDD) | grows, read-mostly |
 | LFS, packages + container images, attachments, archives | B2 `realliance-forge-objects` (Realliance account), served **directly** from B2 (`SERVE_DIRECT`) | binaries never touch the SMR pool or the home uplink |
 
+See also `docs/pages.md` (Realliance Pages: the system webhook, the relay, `*.realliance.page`).
+
 "minio" in the config is Forgejo's name for any S3 server; there is no MinIO. Backblaze needs
 `MINIO_CHECKSUM_ALGORITHM=md5`. The objects key cannot delete versions: Forgejo deletes by hiding,
 and B2 purges hidden versions after 30 days.

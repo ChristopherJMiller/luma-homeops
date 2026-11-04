@@ -16,9 +16,11 @@ How public traffic reaches galaxy, and how to change it without breaking the oth
 
 Three things make a new app trivial, and all three are invariants — don't erode them:
 
-1. **DNS is one wildcard record per zone** (terraform, `cloudflare/dns/`) across the four edge zones: `chrismiller.xyz`, `realliance.net`, `werethemille.rs`, `buttert.art`. Any `<name>` in any of them already resolves to the edge. No record per app.
+1. **DNS is one wildcard record per zone** (terraform, `cloudflare/dns/`) across the five edge zones: `chrismiller.xyz`, `realliance.net`, `werethemille.rs`, `buttert.art`, `realliance.page`. Any `<name>` in any of them already resolves to the edge. No record per app.
 2. **TLS is one wildcard cert** (`traefik/wildcard-tls`, SANs `chrismiller.xyz, *.chrismiller.xyz, *.music.chrismiller.xyz, realliance.net, *.realliance.net, werethemille.rs, *.werethemille.rs, buttert.art, *.buttert.art`) served as Traefik's default TLSStore. No `spec.tls`, no `Certificate` per app. Adding a zone means adding its two names here — and nothing else.
 3. **Traefik is the default IngressClass.** `ingressClassName` is optional; set it anyway for grep-ability.
+
+**One exception to "Ingress only": `cluster/pages/edge.yaml`.** `*.realliance.page` (Realliance Pages, `docs/pages.md`) uses Traefik `IngressRoute`s, because an Ingress cannot match methods and the public route must be GET/HEAD only and must block `.git-pages` paths. They still carry no `tls` (the default TLSStore serves `wildcard-tls`). Do not copy this pattern for an ordinary app.
 
 ## Add a public app (the whole procedure)
 

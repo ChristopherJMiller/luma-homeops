@@ -105,3 +105,11 @@
 - Gate G before: 3 nodes Ready, Ceph HEALTH_WARN known, 145/145 active+clean, only rook/rook-cluster Degraded, no non-Running pods. After: Argo pages Synced/Healthy; snapshot diff = `realliance.page/` and `www.realliance.page/` 404 -> 302 to `https://realliance.realliance.page/`, nothing else; Traefik ERR 0.
 - Curl via .7: apex/www 302 path-kept; POST/PUT/DELETE/PATCH 404 with git-pages and relay counters unchanged; /.git-pages/manifest.json, archive.tar and health 404 (health: no site published); unknown owner 404 with no Set-Cookie and no Server; nosniff, referrer-policy and HSTS max-age=31536000 only; a.b host: no route (TLS name mismatch, 404 with -k).
 - Note: HEAD to the apex gets a 307 (Traefik's redirectRegex uses 307 for non-GET); GET is 302 as specified.
+
+## Task 11: docs (2026-11-04) - DONE
+
+- `docs/pages.md` written to the state after relay fix 2 (`0273bb3b`). `PagesRelayQueueStuck` and `PagesRelayPushLost` are in the docs as shipping with the local re-pin; they are live only once that commit is on `main`. The alert text links to `docs/pages.md` Lost pushes, which now exists.
+- Pointers added: `CLAUDE.md` (Pages row, `realliance.page` in the DNS row), `docs/forgejo.md`, `cloudflare/dns/README.md`, and the `edge-ingress` and `cloudflare-dns` skills (five zones, 11 SANs, the `edge.yaml` IngressRoute exception).
+- Ruling n2 applied: the plan's exact values (Task 9 block, D2, D6) and the `cluster/pages/edge.yaml` header now describe the fixed edge. The `edge.yaml` change is comment-only: `kubectl kustomize cluster/pages` output is byte-identical before and after.
+- Recorded for the system hook (Task 6 rollback and guard). The flip was one transaction: `UPDATE webhook SET is_system_webhook=true, is_active=true WHERE id=1 AND repo_id=0 AND owner_id=0 AND is_system_webhook=false AND type='forgejo'`, with exactly 1 row asserted. Roll back by setting both flags to false on the same row. Recreating a lost hook means the same flip on a hook made through the API, which creates default hooks only.
+- Open: Task 13 (PSL) waits on Chris to extend the `realliance.page` registration to 2 years or more.

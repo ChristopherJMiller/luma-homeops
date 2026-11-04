@@ -9,16 +9,20 @@ State lives in the shared Azure backend (`cloudflare-dns.tfstate`).
 chrismiller.xyz     A      <WAN IP>          proxied   ┐
 realliance.net      A      <WAN IP>          DNS-only  │ content kept current by
 werethemille.rs     A      <WAN IP>          DNS-only  │ cloudflareddns (WAN is DHCP)
-buttert.art         A      <WAN IP>          DNS-only  ┘
+buttert.art         A      <WAN IP>          DNS-only  │
+realliance.page     A      <WAN IP>          DNS-only  ┘
 *.chrismiller.xyz   CNAME  chrismiller.xyz   DNS-only  ┐
 *.realliance.net    CNAME  realliance.net    DNS-only  │ static — every hostname
 *.werethemille.rs   CNAME  werethemille.rs   DNS-only  │ reaches Traefik, which
-*.buttert.art       CNAME  buttert.art       DNS-only  ┘ routes by Host header
+*.buttert.art       CNAME  buttert.art       DNS-only  │ routes by Host header
+*.realliance.page   CNAME  realliance.page   DNS-only  ┘
 ```
 
 Adding a public app is **one `Ingress` with a host**. No DNS change, no
 annotation, no controller. Explicit records still beat the wildcard, so a
 single host can be made proxied later by adding a record here.
+
+Never add a TXT record on the `realliance.page` apex: the wildcard CNAME makes every owner's `_git-pages-*` challenge name resolve to it (`docs/pages.md`).
 
 This replaced external-dns (retired 2026-09) — 47 identical per-host CNAMEs
 managed by a controller with delete authority over public DNS, which wiped

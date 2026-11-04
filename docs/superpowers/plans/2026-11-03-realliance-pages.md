@@ -66,11 +66,11 @@ Re-check a Codeberg digest: get an anonymous token from `https://codeberg.org/v2
 ## Decisions this plan makes (spec gaps and contradictions)
 
 - **D1. Relay, not a direct system webhook.** git-pages selects the site of a webhook POST from the request's Host and path (`src/pages.go` `postPage` → `GetSite`), and the README says the URL "must be the root URL of the site". A Forgejo webhook has one fixed URL. So the spec's fallback applies, and the plan picks the relay over per-repo hooks: forge-bot's "repo defaults" job is deferred, and repo admins can delete per-repo hooks. Task 4 Step 1 re-confirms this before any code is written.
-- **D2. No POST through Traefik at all.** The relay reaches git-pages by its Service. Forgejo's webhook would hairpin through the router and arrive with a router or node source IP, so a "pod network only" allow-list could not work anyway. `*.realliance.page` routes match `Method(GET) || Method(HEAD)` only; every other method gets Traefik's 404, from everyone. This is tighter than the spec. Traefik has no method middleware, so the "POST restriction" is the router matcher, and its static test pins it.
+- **D2. No POST through Traefik at all.** The relay reaches git-pages by its Service. Forgejo's webhook would hairpin through the router and arrive with a router or node source IP, so a "pod network only" allow-list could not work anyway. `*.realliance.page` routes match `Method(GET) || Method(HEAD)` only; every other method gets Traefik's 404, from everyone. The apex and `www` route to `noop@internal`, not to git-pages. This is tighter than the spec. Traefik has no method middleware, so the "POST restriction" is the router matcher, and its static test pins it.
 - **D3. The quota is a hard cap in git-pages (128 MB, its default — Chris 2026-11-03).** The spec's builder check says git-pages has no size limit; that is wrong. `[limits].max-site-size` exists, defaults to **128 MB**, and is enforced on fetch and on manifest size. If unset, sites would silently cap at 128 MB. The plan sets `max-site-size = "128MB"`. A push past it is refused and the site keeps its last content. The "quota alert" becomes `PagesSiteUpdateFailing`, and no per-site size exporter is built: blobs are content-addressed and shared, so there is no per-site B2 prefix to measure. Acceptance 5 becomes: "a publish that would pass 128 MB is refused, the site is unchanged, and the alert fires".
 - **D4. Pin 0.10.1 from the start.** Chris waived the 2-week pin-age rule for this security release (2026-11-03); Task 5 ships it with `[server].proxy`; Task 12 is docs only.
 - **D5. B2 key without `deleteFiles`.** git-pages calls S3 `RemoveObject` without a version (staged manifest on every commit, site delete, unfreeze). On B2 that only *hides* the file, and the forge suite already proved a hide works without `deleteFiles` (`test_forge_objects_key_hides_but_cannot_destroy`). The key gets `listBuckets` (BucketExists → HeadBucket), `listFiles`, `readFiles` and `writeFiles`. A lifecycle rule purges hidden versions after 1 day, since the state is rebuildable. If the first publish logs a RemoveObject `AccessDenied`, add `deleteFiles` and ledger the ruling (Task 6 Step 7).
-- **D6. IngressRoute, not Ingress,** for `realliance.page`, because an Ingress cannot match methods. The routes carry no `tls` block: the websecure entrypoint has `http.tls=true` and the default TLSStore serves `wildcard-tls`, like every Ingress. The public route also excludes `/.git-pages/*` except `/.git-pages/health`. This blocks on-demand `archive.tar` (a CPU and uplink amplifier) and manifest enumeration.
+- **D6. IngressRoute, not Ingress,** for `realliance.page`, because an Ingress cannot match methods. The routes carry no `tls` block: the websecure entrypoint has `http.tls=true` and the default TLSStore serves `wildcard-tls`, like every Ingress. The public route also blocks any path containing `.git-pages` (any depth, case or `%2e` encoding) except exactly `/.git-pages/health`, so a project site's health is blocked too. This blocks on-demand `archive.tar` (a CPU and uplink amplifier) and manifest enumeration.
 - **D7. git-pages config choices:**
   - no `authorization` key, so forge-authorized PUT/PATCH/DELETE stay off (spec: no uploads in v1);
   - `features = []`, so `codeberg-pages-compat` is off;
@@ -530,14 +530,14 @@ allow-basic-auth = false
 Exact values:
 
 ```text
-pages-sites  match:    HostRegexp(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.realliance\.page$`) && (Method(`GET`) || Method(`HEAD`)) && (!PathPrefix(`/.git-pages/`) || Path(`/.git-pages/health`))
+pages-sites  match:    HostRegexp(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.realliance\.page$`) && (Method(`GET`) || Method(`HEAD`)) && (!PathRegexp(`(?i)(\.|%2e)git-pages`) || Path(`/.git-pages/health`))
              priority: 10   middlewares: [pages-headers]   services: [git-pages:3000]
 pages-apex   match:    Host(`realliance.page`) || Host(`www.realliance.page`)
-             priority: 100  middlewares: [pages-headers, pages-apex-redirect]   services: [git-pages:3000]
-pages-headers        headers: customResponseHeaders {Set-Cookie: "", Server: ""}; contentTypeNosniff: true;
+             priority: 100  middlewares: [pages-headers, pages-apex-redirect]   services: [noop@internal] (TraefikService; never reaches git-pages)
+pages-headers        headers: customResponseHeaders {Set-Cookie: "", Server: "", X-Server: ""}; contentTypeNosniff: true;
                      referrerPolicy: strict-origin-when-cross-origin; stsSeconds: 31536000;
                      stsIncludeSubdomains: false; stsPreload: false
-pages-apex-redirect  redirectRegex: regex ^https?://(?:www\.)?realliance\.page/(.*)$
+pages-apex-redirect  redirectRegex: regex ^https?://[^/]+/(.*)$   (host-agnostic: the router already gated the host)
                      replacement https://realliance.realliance.page/${1}; permanent: false
 ```
 

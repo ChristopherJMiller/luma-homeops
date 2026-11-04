@@ -4,9 +4,11 @@
 # :3000 and nothing else: the relay and git-pages' metrics port are never routed.
 # IngressRoute rather than Ingress because only a router matcher can restrict
 # methods (Traefik has no method middleware): every non-GET/HEAD request, from
-# anyone, gets Traefik's 404 and never reaches git-pages. The routes carry no
-# `tls`: the default TLSStore serves the shared wildcard-tls (it has the
-# realliance.page SANs since Task 8). No DNS record or Certificate here either.
+# anyone, gets Traefik's 404 and never reaches git-pages. Any path containing
+# .git-pages also gets that 404, except exactly /.git-pages/health (root only).
+# The apex and www never reach git-pages: they redirect via noop@internal.
+# The routes carry no `tls`: the default TLSStore serves the shared wildcard-tls
+# (it has the realliance.page SANs since Task 8). No DNS record or Certificate here.
 # Static tests: scripts/test_pages_manifests.py.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
