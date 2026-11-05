@@ -192,6 +192,12 @@ to `main` are blocked; only Owners may merge or approve; fast-forward is the onl
 signed commits land as they are), then an operator applies (README there). From a laptop:
 `fj -H git.realliance.net pr merge realliance-ops/forge#<n> -d`.
 
+**What the inventory owns.** All of `realliance-ops`, the `realliance` org and its teams, and the five
+shared `realliance` repos above, which it declares only for their branch and tag protections.
+Everything else in `realliance` belongs to its members: `members` can create repos (tested in
+`realliance/sso`), and tofu never touches a repo it doesn't declare. Every member has write access to
+those repos, unprotected unless their creator adds protection.
+
 **Signing policy (2026-11-05).** `realliance-ops` repos (`forge`, `forge-bot`, `ci-dispatch`): signed commits, fast-forward only. The five `realliance` repos (`brand`, `realliance.net`, `forgejo`, `pages`, `actions`): any commits on `main`, fast-forward (the default) or squash, but release tags stay signed and Owners-only. Consumers trust the signed tag (`git verify-tag`, then its tree), never `main`'s commits. The realliance.net release review checks the tag signature plus the range, not every commit.
 
 **Forgejo's signing key** "Realliance Forge <git@realliance.net>" (ID `50ACEA5F43099C00`; private
