@@ -127,17 +127,51 @@ Resend's free tier is 100 mails/day, shared with the SSO's invites and password 
 in-app notifications. Planned: Matrix (org webhooks) or a daily digest (forge-bot, phase 2c).
 The SSO test suite creates its throwaway users disabled-then-enabled so it never sends mail.
 
+## Sign-in redirect
+
+Sign-in goes straight to the Realliance SSO (Chris, 2026-11-05). Forgejo 15 has no setting for it
+(upstream [#3342](https://codeberg.org/forgejo/forgejo/issues/3342)), so an `IngressRoute` in
+`cluster/forgejo/signin-redirect.yaml` redirects `GET /user/login` to `/user/oauth2/realliance`,
+keeping `?redirect_to=`. It never restarts Forgejo. This is the one edge exception to the Ingress-only rule,
+because an Ingress cannot read a cookie.
+
+- A `flash` cookie turns it off. A failed SSO callback sets that cookie, so the user sees Forgejo's
+  error page instead of looping through Keycloak.
+- `?local=1` (any `?local`) turns it off and shows the stock login page, which has only the SSO button.
+- `POST /user/login`, the API, git and `/v2` never match. Forgejo still answers the POST with 403.
+- Rollback: revert the commit. Argo prunes both objects.
+- Test: `scripts/test_forgejo_signin_redirect.py` (pre-commit). After an edge change, run
+  `edge-snapshot.sh`: its probes cover the login page, the API and the registry.
+
 ## Break-glass
 
-The internal sign-in form is off; the only local account is `forgejo-admin` (password and an
-all-scopes API token in `realliance/sso-secrets` `forge/secrets.env`).
+The internal sign-in form is off (`ENABLE_INTERNAL_SIGNIN=false`) and so is basic authentication, so
+**no password signs in anywhere**, `forgejo-admin`'s included. The password form stays off. Forgejo has no
+web sign-in for the local administrator. With the SSO down, three things still work:
 
-```bash
-kubectl -n forgejo exec deploy/forgejo -c forgejo -- forgejo admin user list
-kubectl -n forgejo exec deploy/forgejo -c forgejo -- forgejo admin user change-password --username forgejo-admin --password …
-```
+1. **The API token of the administrator.** The key `FORGEJO_ADMIN_TOKEN` in `realliance/sso-secrets`
+   `forge/secrets.env` belongs to `forgejo-admin` and has all scopes. Send it as
+   `Authorization: token …`:
 
-If the SSO is down: existing sessions (7 days), tokens and SSH keep working; nobody new can sign in.
+   ```bash
+   T=$(grep '^FORGEJO_ADMIN_TOKEN=' forge/secrets.env | cut -d= -f2-)
+   curl -s -H "Authorization: token $T" https://git.realliance.net/api/v1/user   # login: forgejo-admin
+   ```
+
+2. **The Forgejo command-line tool on the pod.** It talks to the database directly:
+
+   ```bash
+   kubectl -n forgejo exec deploy/forgejo -c forgejo -- forgejo admin user list --admin
+   kubectl -n forgejo exec deploy/forgejo -c forgejo -- forgejo admin user generate-access-token --username forgejo-admin --scopes all --token-name breakglass-$(date +%F)
+   ```
+
+   Use it to mint a new token if you lose or revoke the stored one, and to inspect users. Store
+   any token you keep in `sso-secrets`. Revoke one you no longer need.
+3. **Existing sessions (7 days), tokens and SSH** keep working. Nobody new can sign in.
+
+A real web path would mean setting `ENABLE_INTERNAL_SIGNIN=true` in `forgejo-release.yaml`, which
+restarts the pod. Give `forgejo-admin` TOTP first, and sign in at `/user/login?local=1`. Not done:
+the decision is to keep the form off.
 
 ## Backups and restore
 
