@@ -31,7 +31,8 @@ local account `ops-ci` with the org secret `REGISTRY_TOKEN`. forge-bot's Go modu
 `git.realliance.net/realliance/forge-bot` until its next reviewed release. A runner connection
 matches jobs by repo id; to re-register one, use `--scope realliance-ops/<repo>`.
 The old package pusher `forge-ci` retired on 2026-11-04: it cannot sign in, holds no token
-and sits in no team, and team `realliance/ci` no longer exists. The account stays, so history keeps its author.
+and sits in no team. The account stays, so history keeps its author. Team `realliance/ci` went with it and
+returned on 2026-11-04 for `realliance-ci`, the site's package pusher (see realliance.net, below).
 
 See also `docs/pages.md` (Realliance Pages: the system webhook, the relay, `*.realliance.page`).
 
