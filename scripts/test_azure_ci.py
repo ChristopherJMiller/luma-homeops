@@ -398,14 +398,66 @@ def test_role_assignments_allow_listed():
         if principal == SP:
             assert scope in DISPATCHER_SCOPES, name
             assert has(body, "principal_type", '"ServicePrincipal"'), name
-    # Nothing else that grants: no other role-assignment or Graph-permission resource, no
-    # Authorization resource through azapi, and no Graph permission on the dispatcher's app.
-    for bad in ("azuread_app_role_assignment", "azuread_directory_role_assignment",
-                "azuread_directory_role_member", "azuread_service_principal_delegated_permission_grant",
-                "azurerm_role_management_policy", "azurerm_pim_"):
-        assert bad not in code, bad
-    assert not re.search(r'type\s*=\s*"Microsoft\.Authorization/', code)
-    assert "required_resource_access" not in block(code, "resource", "azuread_application", "dispatcher")
+    assert grant_findings(code) == []
+    # terraform also loads *.tf.json, which all_tf() doesn't read; there must be none.
+    assert not list(CI.glob("*.tf.json"))
+
+
+# Resource types that grant rights or can create a role assignment that ROLE_ASSIGNMENTS never
+# sees: Graph roles and permissions, PIM, and ARM template deployments (review I2, round 2 n3).
+GRANTING_TYPES = re.compile(
+    r"azuread_app_role_assignment|azuread_directory_role_assignment|azuread_directory_role_member"
+    r"|azuread_service_principal_delegated_permission_grant|azurerm_role_management_policy|azurerm_pim_\w+"
+    r"|azurerm_(resource_group|subscription|management_group|tenant)_template_deployment|azurerm_template_deployment"
+)
+
+# The one line of code that may name Microsoft.Authorization: the lock target's id (fence.tf).
+AUTHORIZATION_OK = ('dispatcher_assignment_id = "${azurerm_resource_group.ci.id}/providers/'
+                    'Microsoft.Authorization/roleAssignments/${local.dispatcher_assignment_name}"')
+
+
+def grant_findings(code: str) -> list[str]:
+    """Every construct in code (comments stripped) that could grant a right outside ROLE_ASSIGNMENTS."""
+    found = [f"resource {m.group(1)}" for m in re.finditer(r'^\s*resource\s+"([^"]+)"', code, re.M)
+             if GRANTING_TYPES.fullmatch(m.group(1))]
+    found += [f"module {m.group(1)}" for m in re.finditer(r'^\s*module\s+"([^"]+)"', code, re.M)]
+    # A shell-out can run `az role assignment create` behind terraform's back.
+    found += [f"provisioner {m.group(1)}" for m in re.finditer(r'^\s*provisioner\s+"([^"]+)"', code, re.M)]
+    found += ["data external" for _ in re.finditer(r'^\s*data\s+"external"', code, re.M)]
+    # azapi (any resource type) against Authorization or ARM deployments.
+    found += [f"azapi type {m.group(1)}" for m in
+              re.finditer(r'type\s*=\s*"(Microsoft\.(?:Authorization|Resources/deployments)[^"]*)"', code, re.I)]
+    for line in code.splitlines():
+        if "microsoft.authorization" in line.lower() and " ".join(line.split()) != AUTHORIZATION_OK:
+            found.append("Microsoft.Authorization outside the lock target's id")
+    if "required_resource_access" in code:
+        found.append("Graph permissions (required_resource_access)")
+    return found
+
+
+GRANT_SNIPPETS = {
+    "rg template deployment": 'resource "azurerm_resource_group_template_deployment" "x" {\n  name = "x"\n}\n',
+    "subscription template deployment": 'resource "azurerm_subscription_template_deployment" "x" {\n}\n',
+    "azapi role assignment": ('resource "azapi_resource" "x" {\n'
+                              '  type = "Microsoft.Authorization/roleAssignments@2022-04-01"\n}\n'),
+    "azapi deployment": 'resource "azapi_resource" "x" {\n  type = "Microsoft.Resources/deployments@2021-04-01"\n}\n',
+    "azapi action on an assignment": ('resource "azapi_resource_action" "x" {\n'
+                                      '  resource_id = "${azurerm_resource_group.ci.id}/providers/'
+                                      'Microsoft.Authorization/roleAssignments/x"\n}\n'),
+    "module": 'module "grants" {\n  source = "./grants"\n}\n',
+    "local-exec": 'resource "terraform_data" "x" {\n  provisioner "local-exec" {\n    command = "true"\n  }\n}\n',
+    "data external": 'data "external" "x" {\n  program = ["true"]\n}\n',
+    "Graph app role": 'resource "azuread_app_role_assignment" "x" {\n}\n',
+    "Graph permission": 'resource "azuread_application" "y" {\n  required_resource_access {\n  }\n}\n',
+}
+
+
+@pytest.mark.parametrize("name", sorted(GRANT_SNIPPETS))
+def test_grant_scan_catches(name):
+    """Round 2 n3: each granting construct, added to the real code, is a finding."""
+    code = re.sub(r"#.*", "", all_tf())
+    assert grant_findings(code) == []
+    assert grant_findings(code + "\n" + GRANT_SNIPPETS[name])
 
 
 def test_outputs_sensitive():
@@ -543,6 +595,7 @@ def test_tf_sh():
     assert "exec terraform" not in sh  # every run goes through the redacting filter
     assert re.search(r"^  trap '' INT TERM$", sh, re.M)  # a Ctrl-C mustn't end the filter mid-apply
     assert sh.rstrip().endswith('exit "$status"')
+    assert "[ -f /dev/stdout ]" in sh  # raw output only to a regular file (round 2 n2)
 
 
 @pytest.fixture
@@ -550,7 +603,9 @@ def tf_rig(tmp_path):
     """tf.sh in a scratch repo, with stub `az` and `terraform` first on PATH.
 
     The stub terraform prints a fresh UUID (upper and lower case) on both streams, its umask, and
-    exits with $STUB_RC. Nothing here touches Azure or the real module.
+    exits with $STUB_RC. With STUB_LOCK set it also prints Lock Info on stderr, as an "Error
+    acquiring the state lock" does. It touches $STUB_MARK, so a refused call is provably not run.
+    Nothing here touches Azure or the real module.
     """
     root = tmp_path / "repo"
     (root / "azure/ci").mkdir(parents=True)
@@ -565,16 +620,35 @@ def tf_rig(tmp_path):
         'echo "out $STUB_ID $STUB_UP args=$*"\n'
         'echo "err $STUB_ID $STUB_UP" >&2\n'
         'echo "umask $(umask)"\n'
+        'if [ -n "$STUB_LOCK" ]; then\n'
+        '  printf "Lock Info:\\n  ID:        %s\\n" "$STUB_LOCK" >&2\n'
+        '  printf "\\342\\224\\202   ID:        %s\\n" "$STUB_LOCK" >&2\n'
+        '  printf "  ID:        %s trailing\\n" "$STUB_LOCK" >&2\n'
+        '  printf "  Path:      x/%s\\n" "$STUB_LOCK" >&2\n'
+        'fi\n'
+        ': > "$STUB_MARK"\n'
         'exit "${STUB_RC:-0}"\n'
     )
     for f in ("az", "terraform"):
         (bin_ / f).chmod(0o755)
     ident = str(uuid.uuid4())
-    env = clean_env(PATH=f"{bin_}:{os.environ['PATH']}", STUB_ID=ident, STUB_UP=ident.upper())
+    mark = tmp_path / "ran"
+    env = clean_env(PATH=f"{bin_}:{os.environ['PATH']}", STUB_ID=ident, STUB_UP=ident.upper(), STUB_MARK=str(mark))
 
-    def run(*args, **extra):
-        return subprocess.run([str(root / "azure/ci/tf.sh"), *args], capture_output=True, text=True,
-                              env={**env, **extra})
+    def run(*args, to_file=False, **extra):
+        """Run tf.sh; stdout is a pipe, or with to_file a regular file whose text lands in .stdout."""
+        mark.unlink(missing_ok=True)
+        if not to_file:
+            r = subprocess.run([str(root / "azure/ci/tf.sh"), *args], capture_output=True, text=True,
+                               env={**env, **extra})
+        else:
+            out = tmp_path / "stdout"
+            with out.open("w") as fh:
+                r = subprocess.run([str(root / "azure/ci/tf.sh"), *args], stdout=fh, stderr=subprocess.PIPE,
+                                   text=True, env={**env, **extra})
+            r.stdout = out.read_text()
+        r.ran = mark.exists()
+        return r
 
     return run, ident
 
@@ -593,22 +667,77 @@ def test_tf_sh_redacts(tf_rig, args):
     assert "umask 0077" in r.stdout
 
 
-@pytest.mark.parametrize("args", [("output", "-raw", "dispatcher_client_id"), ("output", "-json"),
-                                  ("show", "-json", "x.tfplan")])
+RAW_FORMS = [("output", "-raw", "dispatcher_client_id"), ("output", "-json"), ("show", "-json", "x.tfplan"),
+             ("output", "-json=true"), ("output", "--raw", "x"), ("output", "-raw=1", "x"), ("show", "--json=TRUE", "p"),
+             ("-no-color", "output", "-raw", "x")]
+
+
+@pytest.mark.parametrize("args", RAW_FORMS)
 def test_tf_sh_data_paths_stay_raw(tf_rig, args):
-    """`output -raw|-json` and `show -json` feed pipes and 0600 files, so stdout stays exact.
-    stderr is still redacted, and the exit code survives."""
+    """Raw data paths to a regular file keep stdout exact. stderr is still redacted, and the exit
+    code survives."""
     run, ident = tf_rig
-    r = run(*args, STUB_RC="2")
-    assert r.returncode == 2
+    r = run(*args, to_file=True, STUB_RC="5")
+    assert r.returncode == 5 and r.ran
     assert r.stdout.startswith(f"out {ident} {ident.upper()} ")
     assert r.stderr.strip() == "err <id> <id>"
+
+
+@pytest.mark.parametrize("args", RAW_FORMS)
+def test_tf_sh_raw_refuses_non_file(tf_rig, args):
+    """Round 2 n2: raw output never reaches a pipe, a terminal, or a transcript. tf.sh refuses
+    before terraform runs."""
+    run, _ = tf_rig
+    r = run(*args)
+    assert r.returncode == 2 and not r.ran and r.stdout == ""
+    assert "regular file" in r.stderr
+
+
+@pytest.mark.parametrize("args", [("output", "-json=false"), ("show", "-json=0", "p"), ("plan", "-json")])
+def test_tf_sh_not_raw_forms_are_redacted(tf_rig, args):
+    """A false flag, or -json on a command whose output isn't a data path, stays filtered."""
+    run, _ = tf_rig
+    r = run(*args, STUB_RC="3")
+    assert r.returncode == 3 and r.ran and r.stdout.startswith("out <id> <id> ")
+
+
+@pytest.mark.parametrize("args", [("state", "pull"), ("state", "push", "x.tfstate"), ("-no-color", "state", "pull"),
+                                  ("-chdir=elsewhere", "plan"), ("-chdir", "elsewhere", "plan"),
+                                  ("--chdir=.", "output", "-raw", "x")])
+@pytest.mark.parametrize("to_file", [False, True])
+def test_tf_sh_refuses(tf_rig, args, to_file):
+    """Round 2 n2: tf.sh refuses `state pull|push` and `-chdir`, even into a file."""
+    run, _ = tf_rig
+    r = run(*args, to_file=to_file)
+    assert r.returncode == 2 and not r.ran and r.stdout == ""
+    assert r.stderr.startswith("tf.sh: ")
+
+
+def test_tf_sh_keeps_the_lock_id(tf_rig):
+    """Round 2 n1: Lock Info's `ID:` line stays exact for `force-unlock`; nothing else does."""
+    run, _ = tf_rig
+    lock = str(uuid.uuid4())
+    r = run("plan", STUB_LOCK=lock, STUB_RC="1")
+    assert r.returncode == 1
+    lines = r.stderr.splitlines()
+    assert f"  ID:        {lock}" in lines
+    assert f"\u2502   ID:        {lock}" in lines
+    assert "  ID:        <id> trailing" in lines and "  Path:      x/<id>" in lines
+    assert "err <id> <id>" in lines
 
 
 def test_tf_sh_refuses_without_az(tf_rig):
     run, _ = tf_rig
     r = run("plan", STUB_AZ_RC="1")
-    assert r.returncode == 1 and "not logged in" in r.stderr and "out " not in r.stdout
+    assert r.returncode == 1 and "not logged in" in r.stderr and not r.ran
+
+
+def test_readme_names_the_tf_sh_rules():
+    """The README tells Chris about the lock id, raw output to files, and the saved-plan rollback."""
+    text = (CI / "README.md").read_text()
+    assert "force-unlock" in text and "ID:" in text
+    assert "regular file" in text
+    assert "plan -destroy -out=" in text
 
 
 def test_variables():

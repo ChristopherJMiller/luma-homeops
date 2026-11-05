@@ -35,7 +35,7 @@ From `.superpowers/sdd/2026-11-05-runner-classes-phase-2/preflight.md` § 6. F1 
 | F13 | No ledger `Burn`/`PaidRunning`; the loop sums `Active()`; `PaidUse` and `PaidCommitted` share one helper | Tasks 10, 12, 14 |
 | F14 | No Azure id in a transcript: grep plans to counts and addresses, `-g`, `{subscriptionId}` | How changes land, Tasks 2–5 |
 | F15 | Task 7 starts on a hand-written fixture; Step 6 swaps in the real one | Task 7 |
-| F16 | No `instanceView` in the list → `Groups()` GETs each own group; `tag@digest` refused → `name@sha256:` | Tasks 4, 7, 18 |
+| F16 | No `instanceView` in the list → `Groups()` GETs each own group; the dispatcher always uses `name@sha256:` (Task 2 review N1) | Tasks 4, 7, 13, 18 |
 | F17 | `TestLiveLocked` with the service principal during the drill | Task 5 |
 | F18 | Raw meter asserts (±2 % sum), `$skip` allowed, a rounding-up decimal parser | Task 6 |
 | F19 | `model.Shape(c)` is the one shape table; `prices.Floor(c)` is a func; literals pinned on both sides, Task 16 checks they match | Tasks 3, 6, 7, 13, 16 |
@@ -59,6 +59,7 @@ From `.superpowers/sdd/2026-11-05-runner-classes-phase-2/preflight.md` § 6. F1 
 | F37 | The name grammar derives from `model`, one test; `claimed()`/`reconcileOne` use `ComputeName` | Tasks 7, 11 |
 | F38 | `TestBuiltBodiesPassTheGuard` lives in `internal/azure`; `internal/aci` imports no `internal/prices` | Task 13 |
 | F39 | An Azure-only read failure doesn't clear `ReadOK`; the fake's Deleting phase lasts at most 1 poll | Tasks 11, 14 |
+| T2-N1 | Review ruling (controller, 2026-11-05), following the digest-only Policy rule: the class image is always `ghcr.io/christopherjmiller/forgejo-runner-class@sha256:<64>`, never `tag@digest`. Policy's `like` is `…forgejo-runner-class@sha256:*`. Task 4 smokes that form and adds a `tag@digest` Policy negative. Task 13 refuses a tag. Task 18's regex is digest-only | E7, Pins, F16, Tasks 2, 4, 13, 18 |
 
 ## Global Constraints
 
@@ -97,7 +98,7 @@ From `.superpowers/sdd/2026-11-05-runner-classes-phase-2/preflight.md` § 6. F1 
 | Retail prices | `GET https://prices.azure.com/api/retail/prices?api-version=2023-01-01-preview&$filter=serviceName eq 'Container Instances' and armRegionName eq 'westus3' and priceType eq 'Consumption'` | public, no auth; Task 6 Step 1 captures the live answer as a fixture |
 | Terraform | `terraform` from the flake; `hashicorp/azurerm ~> 4.0`, `hashicorp/azuread 3.9.0` (entra's lock), `Azure/azapi ~> 2.0`, `hashicorp/time ~> 0.12`; exact versions at least 2 weeks old, committed in `azure/ci/.terraform.lock.hcl` | backend: `azure/bootstrap`'s storage account, key `realliance-ci.tfstate` |
 | Class image bases | the five `FROM` lines of `images/forgejo-runner/Dockerfile`, byte for byte | runner 13.2.1, golang 1.26.9, node 24.21.0, ko v0.19.1, debian trixie slim |
-| Class image | `ghcr.io/christopherjmiller/forgejo-runner-class:sha-<7>@sha256:<64>` | Task 1 |
+| Class image | `ghcr.io/christopherjmiller/forgejo-runner-class@sha256:<64>`, digest only (T2-N1). The `sha-<7>` tag names the build in the ledger and never appears in a pin | Task 1 |
 | Dispatcher | `git.realliance.net/realliance-ops/ci-dispatch:sha-<7>@sha256:<64>`, tag `v0.2.0` | Task 16 |
 | restic | `ghcr.io/restic/restic:0.19.1@sha256:2f0373803493361f9304a57150d464677f69a9dad487afec202105aafb2592f2` | `cluster/music-streaming/restic-backup-cronjob.yaml` |
 
@@ -196,7 +197,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   - any type but `containerGroups` (mode `Indexed`), and any location but `westus3`;
   - more than one container, or a shape other than 2/8 or 4/16;
   - an `ipAddress`, `subnetIds`, an identity, `osType` other than Linux, `restartPolicy` other than `Never`, Spot priority, volumes, `imageRegistryCredentials` or init containers;
-  - an image that doesn't match `like` `ghcr.io/christopherjmiller/forgejo-runner-class*` and `contains` `@sha256:` (Policy's `like` takes one wildcard only);
+  - an image that doesn't match `like` `ghcr.io/christopherjmiller/forgejo-runner-class@sha256:*` and `contains` `@sha256:`: the digest-only form, no tag and no other package (Policy's `like` takes one wildcard only; T2-N1);
   - a missing `forge-ci` or `expires-at` tag.
 
   Task 2 Step 1 checks every alias exists. A rule whose alias is missing is dropped and ledgered, and the dispatcher's guard still enforces it.
@@ -383,7 +384,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   {"region": "westus3", "ci_group": "rg-realliance-ci", "guard_group": "rg-realliance-ci-guard",
    "budget_ci_usd": 85, "budget_guard_usd": 5, "paid_cap_usd": 80,
    "shapes": [{"cpu": 2, "memory_gb": 8}, {"cpu": 4, "memory_gb": 16}],
-   "image_like": "ghcr.io/christopherjmiller/forgejo-runner-class*", "image_contains": "@sha256:",
+   "image_like": "ghcr.io/christopherjmiller/forgejo-runner-class@sha256:*", "image_contains": "@sha256:",
    "dropped_rules": [],
    "dispatcher_actions": ["Microsoft.ContainerInstance/containerGroups/read",
      "Microsoft.ContainerInstance/containerGroups/write", "Microsoft.ContainerInstance/containerGroups/delete",
@@ -487,7 +488,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   - two RGs, the fence, the service principal, two budgets and the sweeper; cost about $2 a month; the sweeper starts at once and finds nothing;
   - Gate G1 and G2 evidence from the ledger (F28): the apply touches no cluster object, but serializes with other plans' windows.
 
-  Rollback trigger: an apply error, or anything outside the two RGs. Rollback: Chris's `./azure/ci/tf.sh destroy`, after a STOP.
+  Rollback trigger: an apply error, or anything outside the two RGs. Rollback, after a STOP: `./azure/ci/tf.sh plan -destroy -out=$SCRATCH/destroy.tfplan`, read in the grep form, then Chris applies the saved plan with `./azure/ci/tf.sh apply $SCRATCH/destroy.tfplan`. `tf.sh`'s line filter hides `destroy`'s confirmation prompt, so it never runs without a saved plan.
 - [ ] **Step 2: Verify read-only** (F14 forms throughout).
   - The plan, in the grep form, reports `No changes.` (F33). If it shows `1 to change` on `azapi_resource` because the server normalised the definition, edit the template to the server's form and re-plan until it doesn't. That's a code change; Chris re-applies if it differs.
   - `az provider show -n Microsoft.ContainerInstance --query registrationState` is `Registered`. Check the API versions in Pins.
@@ -503,7 +504,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   ```
   Signed commit and push. Ledger dates only, never ids: the secret's expiry (creation + 180 d) and its **rotation date** (creation + 150 d, F26), the day the rotation STOP falls due.
 - [ ] **Step 4: Smoke, as Chris's identity** (pre-approved in Step 1's STOP; cost under $0.02). Create a `small` group `ci-smoke-<hex>`:
-  - the class pin, with both tags;
+  - the class pin in its digest-only form, `ghcr.io/christopherjmiller/forgejo-runner-class@sha256:<64>` (T2-N1). Policy denies any other form, Chris's identity included;
   - command `["/usr/local/bin/ci-class-entry","35m","small","smokehandle","https://git.realliance.net","00000000-0000-0000-0000-000000000000"]`;
   - `RUNNER_TOKEN` as a secure value holding a nonce, passed as `--secure-environment-variables @<umask-077 file holding RUNNER_TOKEN=<nonce>>`, never in argv.
 
@@ -512,9 +513,9 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   - a second group runs `["sh","-c","df -h / /run; nproc; free -g; curl -fsS -o /dev/null https://github.com"]`. Ledger its output (the free disk the fork build needs);
   - **egress metric check** (E17). Run `az monitor metrics list-definitions --resource <group> -g rg-realliance-ci --resource-type Microsoft.ContainerInstance/containerGroups --query "[].name.value"`; it lists `NetworkBytesTransmittedPerSecond`. Then `az rest` GET that metric for the second group (`{subscriptionId}` form, `api-version=2023-10-01&metricnames=NetworkBytesTransmittedPerSecond&aggregation=Average&interval=FULL&timespan=<created>/<now>`) returns one data point above 0. Ledger the metric's latency (seconds from the transfer to a non-zero point). If `interval=FULL` is refused, STOP: the sweeper's two-reads design (Task 3) needs a rework before Task 5;
   - `az container show` and `az container logs` of the first group, searched locally with `grep -F -f <nonce file>`. Expected: no match;
-  - save the raw ACI **list** (`az rest --url 'https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/rg-realliance-ci/providers/Microsoft.ContainerInstance/containerGroups?api-version=2023-05-01'`) to `$SCRATCH/aci-list.json`, mode 0600, and save a copy as the Task 7 fixture with every GUID replaced by zeros. Ledger whether the list carries `instanceView.state`, the container's `currentState`, its `exitCode` and its `finishTime`, and whether `tag@sha256` image references are accepted. The fallbacks are fixed now (F16):
+  - save the raw ACI **list** (`az rest --url 'https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/rg-realliance-ci/providers/Microsoft.ContainerInstance/containerGroups?api-version=2023-05-01'`) to `$SCRATCH/aci-list.json`, mode 0600, and save a copy as the Task 7 fixture with every GUID replaced by zeros. Ledger whether the list carries `instanceView.state`, the container's `currentState`, its `exitCode` and its `finishTime`. The fallback is fixed now (F16):
     - no `instanceView` in the list → Task 7's `Groups()` GETs each `GroupName` group after the list (request #3, already allowed), under the budget, with the `Azure` interface unchanged;
-    - `tag@digest` refused → the pin becomes `name@sha256:`, and Task 18's regex changes to match;
+    - the image is always `name@sha256:` (F16, T2-N1), so whether ACI accepts `tag@digest` no longer matters. Step 5 checks that Policy denies it;
   - delete both groups; `Monitor` until `az container list -g rg-realliance-ci --query "length(@)"` is `0`.
 - [ ] **Step 5: Policy negatives** (each refused at create, free). Expected `RequestDisallowedByPolicy` for each:
   - 1 vCPU/2 GiB;
@@ -522,7 +523,8 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   - `--ip-address Public`;
   - `--assign-identity`;
   - location `westus2`;
-  - no `forge-ci` tag.
+  - no `forge-ci` tag;
+  - the class image as `tag@digest`, `ghcr.io/christopherjmiller/forgejo-runner-class:sha-<7>@sha256:<64>` (T2-N1).
 
   Ledger each code. Any create that succeeds is a STOP: delete it, and fix the fence first.
 - [ ] **Step 6: Region check.** If Step 4 got a capacity refusal (`ServiceUnavailable`), STOP: moving to `westus2` is Chris's call (a terraform change and a re-apply).
@@ -974,14 +976,14 @@ func Body(s Spec) (secret.Value, error)   // the PUT body; shape from model.Shap
 - **`config.Load`** (F9). The key shape is `paid.classes.<c>`, as in `Paid.Classes`; Task 18's `config.yaml` uses the same shape:
   ```yaml
   paid:
-    image: ghcr.io/christopherjmiller/forgejo-runner-class:sha-…@sha256:…
+    image: ghcr.io/christopherjmiller/forgejo-runner-class@sha256:…
     price_max_age: 168h
     classes:
       small:  {runner_timeout: 30m, hard_stop: 40m, pickup: 6m}
       medium: {runner_timeout: 45m, hard_stop: 55m, pickup: 6m}
   ```
   - It accepts `small` and `medium` in `dry-run` or `on` only with `azure` set. Defaults fill missing `paid.classes.<c>` fields, so the block is optional. `large` other than `off` gets "no backend in phase 2".
-  - It refuses `hard_stop > 1h`, `hard_stop − PullAllowance ≤ runner_timeout`, `pickup ≥ hard_stop`, an image without `@sha256:`, and `poll` outside 10 s–5 min.
+  - It refuses `hard_stop > 1h`, `hard_stop − PullAllowance ≤ runner_timeout`, `pickup ≥ hard_stop`, an image that isn't exactly `ghcr.io/christopherjmiller/forgejo-runner-class@sha256:<64 hex>` (it refuses a tag, `tag@digest` included; T2-N1), and `poll` outside 10 s–5 min.
   - Defaults: `small` {30m, 40m, 6m} and `medium` {45m, 55m, 6m}.
 - **Metrics:**
   - backends `{small, aci}` and `{medium, aci}`; reap reasons `orphan-group` and `egress-cap` (E17); orphan kind `group`; APIs `azure`, `prices`;
@@ -1185,7 +1187,7 @@ func (w *Watcher) Run(ctx context.Context)                             // Egress
     - classes `small` and `medium` `dry-run`, `large` `off`, `tiny` as phase 1 left it;
     - `azure` = {`/etc/ci-dispatch/azure`, `rg-realliance-ci`, `westus3`, `rg-realliance-ci-guard`, `ci-sweeper`, `30s`};
     - `paid.classes.small` {30m, 40m, 6m} and `paid.classes.medium` {45m, 55m, 6m};
-    - `paid.image` matches `^ghcr\.io/christopherjmiller/forgejo-runner-class:sha-[0-9a-f]{7}@sha256:[0-9a-f]{64}$`, or `…forgejo-runner-class@sha256:[0-9a-f]{64}$` if Task 4 found `tag@digest` refused (F16). It starts with `fence.json`'s `image_like` prefix and contains its `image_contains`;
+    - `paid.image` matches `^ghcr\.io/christopherjmiller/forgejo-runner-class@sha256:[0-9a-f]{64}$`, digest only (F16, T2-N1). It matches `fence.json`'s `image_like` and contains its `image_contains`;
     - the file equals ci-dispatch's `internal/config/testdata/site-config.yaml` apart from the image digest. The executor checks this by hand when either changes (F9).
   - `test_paid_runner_timeouts_match_image`: `images/forgejo-runner-class/runner-<c>.yml`'s `runner.timeout` equals `paid.classes.<c>.runner_timeout`.
   - `test_azure_secret`: one SealedSecret `ci-dispatch-azure` with exactly the four keys, mounted read-only with mode 0440 under fsGroup 65532.

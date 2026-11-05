@@ -18,7 +18,20 @@ Chris applies; agents stop at plan.
 ./azure/ci/tf.sh apply "$SCRATCH/ci.tfplan"
 ```
 
-`tf.sh` swaps every UUID-shaped string for `<id>`, except on the stdout of `output -raw|-json` and `show -json`. Pipe those, never print them.
+Roll back with a saved destroy plan, read it, then apply that file:
+
+```sh
+./azure/ci/tf.sh plan -destroy -out="$SCRATCH/destroy.tfplan" | grep -E '^(Plan:|No changes|  # )'
+./azure/ci/tf.sh apply "$SCRATCH/destroy.tfplan"
+```
+
+What `tf.sh` does to output:
+
+- It swaps every UUID-shaped string for `<id>`, on both streams.
+- `output -raw|-json` and `show -json` keep their stdout exact, and run only when stdout is a regular file (`>` or `>>`). `tf.sh` refuses anything else: a terminal, a pipe, or an agent's transcript.
+- It refuses `state pull`, `state push` and `-chdir`.
+- It leaves Lock Info's `ID:` line alone. That's the state lock id, not an Azure id. After a crashed run, `./azure/ci/tf.sh force-unlock <ID>` takes it.
+- The filter works by line, so a prompt doesn't show, and `destroy` or an unsaved `apply` would wait unseen. Always apply a saved plan.
 
 ## The budgets end on 2030-12-31
 

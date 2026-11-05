@@ -94,7 +94,16 @@ Taken 2026-11-05.
 - **O2:** Renovate never automerges `azure/ci/**` (its own group, last rule). Don't merge PR #2620 (azurerm v5) during phase 2 without re-running the static and plan tests.
 - **Plan:** still `Plan: 19 to add, 0 to change, 0 to destroy.`, with the same addresses.
 
+### Task 2 fix round 2 (review 0/1/4, 2026-11-05)
+
+- **N1, plan amended (controller's ruling T2-N1):** the class image is always `ghcr.io/christopherjmiller/forgejo-runner-class@sha256:<64>`, never `tag@digest`. The amendment touches the plan's F16 row, a new T2-N1 row, the Pins row, E7, Task 2's Interfaces block, Task 4 Steps 4 and 5 (the smoke uses the digest-only form, and Policy must deny a `tag@digest` negative), Task 13 (refuses a tag) and Task 18 (a digest-only regex). Task 7's client already refuses `tag@digest`.
+- **n4, plan amended:** the Task 4 rollback is `./azure/ci/tf.sh plan -destroy -out=$SCRATCH/destroy.tfplan`, then Chris applies that saved plan.
+- **n1 to n3:** `tf.sh` writes raw output only to a regular file, refuses `state pull|push` and `-chdir`, and keeps Lock Info's `ID:` line. The grant scan also bans template deployments, azapi Authorization and deployment types, `module` blocks, provisioners and `data "external"`.
+- **Plan:** still `Plan: 19 to add, 0 to change, 0 to destroy.`, with the same addresses.
+
 ## Task 3
+
+- **Carry from Task 2's review:** `azure/ci/tests/restore.tftest.hcl`'s restore run must assert that the sweeper's body (the `azapi_resource` workflow definition) is known, so a restore plan leaves the sweeper unchanged.
 
 ## Task 4
 
