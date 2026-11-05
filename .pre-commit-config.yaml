@@ -77,6 +77,14 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_forge_fonts.py
         pass_filenames: false
         files: ^(cluster/forgejo/.*|cluster/applications/forgejo-release\.yaml|scripts/(test_forge_fonts\.py|sync-brand\.sh)|\.pre-commit-config\.yaml)$
+      # Forgejo sign-in goes straight to the SSO via a Traefik IngressRoute: GET only, flash-cookie and
+      # ?local guards, never a permanent redirect.
+      - id: forgejo-signin-redirect
+        name: Forgejo sign-in redirect static tests
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_forgejo_signin_redirect.py
+        pass_filenames: false
+        files: ^(cluster/forgejo/(signin-redirect|kustomization)\.yaml|scripts/test_forgejo_signin_redirect\.py|\.pre-commit-config\.yaml)$
       # Renovate must never automerge the forgejo-helm chart (a bump restarts Forgejo).
       - id: forgejo-renovate
         name: Forgejo chart Renovate guard

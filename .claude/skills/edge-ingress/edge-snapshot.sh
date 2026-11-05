@@ -58,6 +58,11 @@ GET mcp.chrismiller.xyz /.well-known/oauth-authorization-server
 GET dex.chrismiller.xyz /.well-known/oauth-authorization-server
 GET dex.chrismiller.xyz /.well-known/openid-configuration
 GET mcp.chrismiller.xyz /oauth/register
+GET git.realliance.net /user/login
+GET git.realliance.net /user/login?redirect_to=%2Fx
+GET git.realliance.net /user/login?local=1
+GET git.realliance.net /api/v1/version
+GET git.realliance.net /v2/
 POST mcp.chrismiller.xyz /oauth/register
 GET mcp.chrismiller.xyz /oauth/authorize
 POST realliance.realliance.page /
