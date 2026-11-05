@@ -66,7 +66,7 @@ repos:
       - id: realliance-net
         name: realliance.net runner static tests
         language: system
-        entry: python -m pytest -q -p no:cacheprovider scripts/test_runner_general.py
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_runner_general.py scripts/test_realliance_net_pin.py
         pass_filenames: false
         files: ^(cluster/(forgejo-runner-general|forgejo-runner|realliance\.net|applications|components/netpol)/.*|images/forgejo-runner-general/.*|scripts/test_(runner_general|realliance_net_pin)\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
       # Realliance Forge typography: no CDN/Google Fonts reference, every @font-face src ships in a

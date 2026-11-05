@@ -173,6 +173,12 @@
       "description": "HA core, in its own PR: read the breaking-changes section, pg_dumpall first, hactl lint in the new image (see docs/ha.md)."
     },
     {
+      "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["git.realliance.net/realliance/realliance.net"],
+      "automerge": false,
+      "description": "The Realliance website (cluster/realliance.net/home.yaml), built on the forge. Any realliance package token can re-push a tag, and :automergeDigest would deploy the re-pushed image unseen, so re-pin by hand after git verify-tag and a review of the release range."
+    },
+    {
       "matchManagers": ["argocd"],
       "matchFileNames": ["cluster/applications/forgejo-release.yaml"],
       "automerge": false,

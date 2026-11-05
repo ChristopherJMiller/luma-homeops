@@ -32,7 +32,13 @@ spec:
             medium: Memory
       containers:
         - name: home
-          image: quay.io/realliance/realliance.net:2.3@sha256:7405276fcd58b6ade36c76147a23dfaba6eac6287880c14e37160d032961e359
+          # Built by Forgejo Actions in realliance/realliance.net on the `general` runner.
+          # Manual re-pin after `git verify-tag` and review (CLAUDE.md sharp edge 6).
+          # Anonymous pulls go through the WAN hairpin and are 307'd to B2, so new pods
+          # cannot pull while Forgejo is down (pre-pulled on every node at release).
+          # Rollback is `git revert` of the re-pin (quay.io/realliance/realliance.net:2.3@sha256:7405276f...
+          # stays published).
+          image: git.realliance.net/realliance/realliance.net:2.4.0@sha256:c454fa03009763fcbf2835e1d0b01d2c8b9774acce0caa2d225a36530aaec4c9
           ports:
             - containerPort: 8080
               protocol: TCP
