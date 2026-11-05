@@ -35,13 +35,13 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Log in to GHCR
         if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -49,7 +49,7 @@ jobs:
 
       - name: Image metadata
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
         with:
           images: ${{ env.IMAGE }}
           tags: |
@@ -57,7 +57,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: images/forgejo-runner-class
           # amd64 only: every galaxy node is x86_64.
@@ -69,7 +69,9 @@ jobs:
           cache-to: type=gha,mode=max
 
       # Runs the published image: toolchain, root without Docker/Nix, and the entry contract
-      # (argv, token handling, refusals) against a stub forgejo-runner.
+      # (argv, token handling, refusals) against a stub forgejo-runner. The stub's
+      # /proc/self/environ is PID 1's environ after the entry's exec: the stub is
+      # a child of timeout, which became PID 1 and inherited the cleaned environment.
       - name: Smoke test the image
         if: github.event_name != 'pull_request'
         run: |
@@ -77,7 +79,7 @@ jobs:
           img="$(echo '${{ steps.meta.outputs.tags }}' | head -1)"
           docker run --rm --entrypoint sh "$img" -c '
             set -eux
-            forgejo-runner --version | grep -F 13.2.1
+            forgejo-runner --version | grep -Eq "(^|[^0-9.])13\.2\.1([^0-9.]|$)"
             go version | grep -F go1.26.
             node --version | grep -E "^v24\."
             ko version
@@ -128,5 +130,10 @@ jobs:
               [ -z "$o" ]
             }
             refuse x 30m small "a b" u u
+            refuse x 0m small h u u
+            refuse x 00m small h u u
+            refuse x 30m small h "" u
+            refuse x 30m small h u ""
+            refuse x 30m small h "$(printf "u\nv")" u
             refuse x 30m large h u u
             refuse "" 30m small h u u'

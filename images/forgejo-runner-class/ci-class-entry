@@ -25,9 +25,18 @@ if [ "${#3}" -gt 128 ]; then
 fi
 
 case "$1" in
+  # 0m and 00m would make timeout(1) wait forever: the hard stop is binding.
+  0m | 00m) echo "ci-class-entry: timeout must not be zero" >&2; exit 2 ;;
   [0-9]m | [0-9][0-9]m) ;;
   *) echo "ci-class-entry: bad timeout" >&2; exit 2 ;;
 esac
+
+# url and uuid: non-empty, no control characters (newline included).
+for v in "$4" "$5"; do
+  case "$v" in
+    "" | *[[:cntrl:]]*) echo "ci-class-entry: bad url or uuid" >&2; exit 2 ;;
+  esac
+done
 
 if [ -z "${RUNNER_TOKEN:-}" ]; then
   echo "ci-class-entry: RUNNER_TOKEN is empty" >&2
