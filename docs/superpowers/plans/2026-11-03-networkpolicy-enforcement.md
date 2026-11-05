@@ -62,7 +62,7 @@ Re-check a digest with: `curl -sSLI -H 'Accept: application/vnd.oci.image.index.
 ### Coordination with the forge-bot plan (`docs/superpowers/plans/2026-11-02-forge-bot-and-ci.md`)
 
 - `cluster/forgejo-runner/` is shared, and that plan's later tasks also change it (`efce651c` already changed the start command). Before Tasks 8 and 9, run `git log --oneline -- cluster/forgejo-runner` and re-read every non-secret file there, then build on what landed.
-- **Runner idle**, Expected `0`: `curl -sS 'https://git.realliance.net/api/v1/repos/realliance/forge-bot/actions/tasks?limit=20' | jq '[.workflow_runs[] | select(.status=="running" or .status=="waiting")] | length'`. Do this for every repo the runner serves (v1 serves only `realliance/forge-bot`). In the same STOP, ask Chris to hold forge-bot CI pushes for the window: strict mode cuts denied flows, and the pod restarts.
+- **Runner idle**: `for r in realliance-ops/forge-bot realliance-ops/ci-dispatch realliance/realliance.net; do curl -sSf "https://git.realliance.net/api/v1/repos/$r/actions/tasks?limit=20" | jq -e '[.workflow_runs[] | select(.status=="running" or .status=="waiting")] | length == 0' >/dev/null && echo "$r idle" || echo "$r BUSY OR ERROR"; done`. Expected three `idle` lines. `-f` makes a non-200 (the old `realliance/forge-bot` path answers 301) fail loudly instead of printing nothing, and `jq -e` fails on a non-empty result; any `BUSY OR ERROR` line, or empty output, is not a pass. `galaxy` serves the first two repos; the general runner (`forgejo-runner-general`) serves the third. A repo that moves again means this list is stale: re-check it against `docs/forgejo.md`. In the same STOP, ask Chris to hold forge-bot CI pushes for the window: strict mode cuts denied flows, and the pod restarts.
 
 ### Break-glass
 
@@ -426,7 +426,7 @@ Re-check a digest with: `curl -sSLI -H 'Accept: application/vnd.oci.image.index.
 - [ ] **Step 1: Coordinate and check preconditions.**
   - Run `git log --oneline -- cluster/forgejo-runner` and re-read the non-secret files there.
   - Check `B1_green_at` ≥ 24 h ago and `scripts/netpol-verify.sh canary` PASS now.
-  - Run the runner-idle command. Expected: `0`.
+  - Run the runner-idle command. Expected: three `idle` lines.
 - [ ] **Step 2: Write the failing static tests.**
   - `test_runner_policies_equal_spec_6_3`: the rendered NetworkPolicies in `forgejo-runner` are exactly `{default-deny, allow-dns, egress-internet-only}`. The union of their egress rules equals `SPEC_6_3_RULES`. No rule allows ingress.
   - `test_runner_gate`: `initContainers` names == `["netpol-gate"]`.
@@ -448,7 +448,7 @@ Re-check a digest with: `curl -sSLI -H 'Accept: application/vnd.oci.image.index.
     - write the JS to `"$TMPDIR/netpol-connect.js"` (the root filesystem is read-only);
     - `WAN_IP=$(node -e 'require("dns").lookup("git.realliance.net",{family:4},(e,a)=>{if(e)process.exit(1);console.log(a)})')`;
     - one check per row (dropped→`timeout`, open/dns→`open`), counting failures and printing `FAIL <row> got <x>`;
-    - `git ls-remote https://git.realliance.net/realliance/forge-bot HEAD`, `git ls-remote https://github.com/actions/checkout HEAD` and `go mod download golang.org/x/text@v0.20.0`;
+    - `git ls-remote https://git.realliance.net/realliance-ops/forge-bot HEAD`, `git ls-remote https://github.com/actions/checkout HEAD` and `go mod download golang.org/x/text@v0.20.0`;
     - `exit $fail`.
   - It pushes the script with `push_probe_workflow(FORGE_BOT_REPO, "galaxy", script)`, then asserts `_settled(...) == ["success"]` within `CYCLE_WAIT`, and deletes the branch in `finally`.
   - Run: `cd ~/Repos/realliance-sso && nix develop --command pytest tests/forge/test_forge_ci.py::test_runner_job_egress_confined -v`. Expected: FAIL (the probe run is `failure`).
@@ -465,7 +465,7 @@ Re-check a digest with: `curl -sSLI -H 'Accept: application/vnd.oci.image.index.
   - Run: `scripts/netpol-verify.sh runner`. Expected: `runner: PASS (19 rows, 16/16 deny-logged)` and `stray: PASS (…, policed: forgejo-runner,netpol-canary)`.
   - Re-run Step 4's gate one-liner. Expected: `rc=0` (timeout, so enforced).
   - Run: `cd ~/Repos/realliance-sso && nix develop --command pytest tests/forge/test_forge_ci.py -k "runner_job_egress_confined or probe_job_hardened_and_workspace_wiped" -v`. Expected: 2 passed.
-  - **Pipeline criterion:** if `realliance/forge-bot` has `.forgejo/workflows/` on `main`, re-run its latest run. Expected: `success`. If it does not (true on 2026-11-03), ledger that the full checkout/`go mod download`/test/ko-push pipeline is proven at forge-bot plan Task 16 Step 1.
+  - **Pipeline criterion:** if `realliance-ops/forge-bot` has `.forgejo/workflows/` on `main`, re-run its latest run. Expected: `success`. If it does not (true on 2026-11-03), ledger that the full checkout/`go mod download`/test/ko-push pipeline is proven at forge-bot plan Task 16 Step 1.
   - Run `scripts/netpol-verify.sh canary`. Expected: PASS. Then Gate G after.
 - [ ] **Step 12: Land the realliance-sso test.** Run `DISPLAY=:10.0 XAUTHORITY=$HOME/.Xauthority git commit -S -m "tests: forge CI runner job egress is confined (galaxy netpol B2)"` on the branch, then `gh pr create --fill`. **Chris:** merges, and only when he says so.
 - [ ] **Step 13: Ledger:** `B2_done=<UTC>`. Task 12 (B4) waits until ≥ +7 days.
@@ -477,7 +477,7 @@ Re-check a digest with: `curl -sSLI -H 'Accept: application/vnd.oci.image.index.
 **Interfaces:**
 - Consumes: `canary --node`, `runner`.
 
-- [ ] **Step 1: Preconditions.** Runner idle (`0`), CI hold agreed, Gate G. Then identify the runner node and its agent pod:
+- [ ] **Step 1: Preconditions.** Runner idle (three `idle` lines), CI hold agreed, Gate G. Then identify the runner node and its agent pod:
   `N=$(kubectl -n forgejo-runner get pod -l app.kubernetes.io/name=forgejo-runner -o jsonpath='{.items[0].spec.nodeName}'); kubectl -n kube-system get pod -l app=kube-network-policies --field-selector spec.nodeName=$N -o name`
 - [ ] **Step 2: STOP — ask Chris.** This deletes a `kube-system` pod. Say that the runner is unconfined during the gap, which is why it must be idle.
 - [ ] **Step 3: Delete it.** Run `date -u +%T; kubectl -n kube-system delete <that pod>` and ledger `t0`.
