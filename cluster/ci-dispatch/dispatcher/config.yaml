@@ -1,0 +1,51 @@
+---
+# ci-dispatch's configuration: the Config of internal/config, in snake_case; unknown keys are
+# refused. It becomes the hash-suffixed ConfigMap ci-dispatch-config, so any change here restarts
+# the pod. Public: no secret and no hidden org, team or group name. The two secrets are files
+# under /etc/ci-dispatch/secrets (SealedSecrets forgejo-token.yaml and usage-token.yaml).
+#
+# Move a class from dry-run to on only by editing `classes` here and watching the decision log
+# for a day (docs/ci.md). Only `tiny` can be anything but off in phase 1: config.Load refuses a
+# paid class in another mode.
+forgejo:
+  # The in-cluster Service (Forgejo pods, TCP 3000), never the public name through the router.
+  url: http://forgejo-http.forgejo.svc.cluster.local:3000
+  public_url: https://git.realliance.net # what the runners dial; this process never does
+  token_file: /etc/ci-dispatch/secrets/forgejo-token
+inventory:
+  # Owner-signed ci.yaml (limits, denies, class modes). The keyring is HERE, not in the inventory,
+  # so whoever can change the inventory cannot change who may sign it. It equals forge-bot's.
+  repo: realliance-ops/forge
+  branch: main
+  file: ci.yaml
+  keyring: /etc/ci-dispatch/keyring/owners.asc
+  fingerprints: /etc/ci-dispatch/keyring/fingerprints.txt
+classes:
+  tiny: dry-run
+  small: "off"
+  medium: "off"
+  large: "off"
+kube:
+  namespace: ci-tiny
+  host: https://kubernetes.default.svc
+  token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+  ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+tiny:
+  # The general runner's image, consumed unchanged (runner classes R2); scripts/test_ci_dispatch_manifests.py
+  # keeps it equal to cluster/forgejo-runner-general/deployment.yaml.
+  image: ghcr.io/christopherjmiller/forgejo-runner-general:sha-f9c09c5@sha256:567175795c431ad68271d20e344d162b5cd975e86c3b0e21c7666424c392ed7f
+  runner_config_map: ci-tiny-runner # tiny/runner-config.yaml; unsuffixed, the Job names it
+  runner_timeout: 15m # equals runner.timeout in that ConfigMap (a test checks)
+  hard_stop: 20m # the Job's activeDeadlineSeconds; the reservation per launch
+  # A runner that has not picked up its job after this is torn down and the launch retried.
+  # Task 3 measured warm starts at 1.3 s median and 2.4 s worst, so twice that is far below 3 min;
+  # the 3 min the spec fixes stays, which also covers the pod's first seconds before the enforcer
+  # enrols its IP (netpol-gate, NetworkPolicy plan B2). Task 19 Step 5 may still adjust it.
+  pickup: 3m
+interval: 5s
+sweep: 5m
+ledger: /data/ledger.db
+snapshots: /data/snapshots
+listen: ":8080"
+usage_listen: ":8081"
+usage_token_file: /etc/ci-dispatch/secrets/usage-token

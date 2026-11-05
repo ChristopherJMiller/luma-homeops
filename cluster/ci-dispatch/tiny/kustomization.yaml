@@ -1,0 +1,16 @@
+---
+# The `tiny` runner class's namespace: ci-dispatch creates one suspended Job, one Secret and one
+# ephemeral runner per waiting job, here. Pod Security `restricted`; a 3-pod quota; default-deny
+# with DNS and web-only egress (components). Run by ci-dispatch (../dispatcher).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ci-tiny
+resources:
+  - namespace.yaml
+  - resourcequota.yaml
+  - rbac.yaml
+  - runner-config.yaml
+components:
+  - ../../components/netpol/default-deny
+  - ../../components/netpol/allow-dns
+  - ../../components/netpol/egress-internet-web

@@ -1,0 +1,14 @@
+---
+# Three pods at once at most (the class's global limit is 2; one spare for a pickup retry), sized
+# from the pod's requests (250m / 512Mi each) and limits (2Gi memory each). The nodes are at
+# 85 % memory requests, so this is also the ceiling on what `tiny` can ever ask the scheduler for.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: ci-tiny
+spec:
+  hard:
+    pods: "3"
+    requests.cpu: 750m
+    requests.memory: 1536Mi
+    limits.memory: 6Gi

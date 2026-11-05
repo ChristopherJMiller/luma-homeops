@@ -1,0 +1,145 @@
+---
+# promtool tests for prometheusrule.yaml, run by scripts/test-ci-dispatch-alerts.sh. Not a manifest,
+# so kustomization.yaml does not list it. One firing and one quiet case per alert; the summaries
+# are copied from the rules, so a reworded alert fails here until this file follows.
+rule_files: [rules.yaml]
+evaluation_interval: 1m
+tests:
+  - name: CIDispatchStale fires when the loop stops succeeding
+    interval: 1m
+    input_series:
+      # The timestamp tracks the clock for 3 minutes, then freezes.
+      - series: 'ci_dispatch_loop_last_success_timestamp{namespace="ci-dispatch",job="ci-dispatch"}'
+        values: '0+60x3 180x40'
+    alert_rule_test:
+      - {eval_time: 6m, alertname: CIDispatchStale, exp_alerts: []}
+      - eval_time: 15m
+        alertname: CIDispatchStale
+        exp_alerts:
+          - exp_labels: {severity: warning, namespace: ci-dispatch, job: ci-dispatch}
+            exp_annotations:
+              summary: "ci-dispatch has not completed a loop with every read succeeding for 5 minutes (docs/ci.md)"
+  - name: CIDispatchStale is quiet while the loop keeps succeeding
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_loop_last_success_timestamp{namespace="ci-dispatch",job="ci-dispatch"}'
+        values: '0+60x40'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: CIDispatchStale, exp_alerts: []}
+      - {eval_time: 35m, alertname: CIDispatchStale, exp_alerts: []}
+  - name: CIDispatchStale fires when the metric is absent (never scraped, or the pod is gone)
+    interval: 1m
+    input_series:
+      - series: 'up{namespace="ci-dispatch",job="ci-dispatch"}'
+        values: '1x40'
+    alert_rule_test:
+      - {eval_time: 1m, alertname: CIDispatchStale, exp_alerts: []}
+      - eval_time: 5m
+        alertname: CIDispatchStale
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "ci-dispatch has not completed a loop with every read succeeding for 5 minutes (docs/ci.md)"
+  - name: CIDispatchLaunchFailing fires when a job is held as launch-failing
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_holds{namespace="ci-dispatch",class="tiny",reason="launch-failing"}'
+        values: '0x2 1x20'
+    alert_rule_test:
+      - {eval_time: 1m, alertname: CIDispatchLaunchFailing, exp_alerts: []}
+      - eval_time: 5m
+        alertname: CIDispatchLaunchFailing
+        exp_alerts:
+          - exp_labels: {severity: warning, reason: held}
+            exp_annotations:
+              summary: "ci-dispatch holds a job as launch-failing: three launches did not produce a runner (docs/ci.md)"
+  - name: CIDispatchLaunchFailing fires on launch errors that persist for 15 minutes
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="tiny",backend="kube",outcome="error"}'
+        values: '0+1x40'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: CIDispatchLaunchFailing, exp_alerts: []}
+      - eval_time: 25m
+        alertname: CIDispatchLaunchFailing
+        exp_alerts:
+          - exp_labels: {severity: warning, reason: errors}
+            exp_annotations:
+              summary: "ci-dispatch launches keep failing with errors (docs/ci.md)"
+  - name: CIDispatchLaunchFailing is quiet with no holds and a flat error counter
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_holds{namespace="ci-dispatch",class="tiny",reason="launch-failing"}'
+        values: '0x40'
+      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="tiny",backend="kube",outcome="error"}'
+        values: '3x40'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: CIDispatchLaunchFailing, exp_alerts: []}
+  - name: CIDispatchConfigUntrusted fires after 15 minutes unverified
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_config_verified{namespace="ci-dispatch",job="ci-dispatch"}'
+        values: '0x40'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: CIDispatchConfigUntrusted, exp_alerts: []}
+      - eval_time: 20m
+        alertname: CIDispatchConfigUntrusted
+        exp_alerts:
+          - exp_labels: {severity: warning, namespace: ci-dispatch, job: ci-dispatch}
+            exp_annotations:
+              summary: "ci-dispatch cannot verify the Owner-signed limits (ci.yaml): it runs on the last verified copy or the code defaults (docs/ci.md)"
+  - name: CIDispatchConfigUntrusted is quiet while verified
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_config_verified{namespace="ci-dispatch",job="ci-dispatch"}'
+        values: '1x40'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: CIDispatchConfigUntrusted, exp_alerts: []}
+  - name: CIDispatchOrphanCompute fires on an orphan that lasts 15 minutes
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_orphans{namespace="ci-dispatch",kind="job"}'
+        values: '1x40'
+      - series: 'ci_dispatch_orphans{namespace="ci-dispatch",kind="runner"}'
+        values: '0x40'
+    alert_rule_test:
+      - {eval_time: 10m, alertname: CIDispatchOrphanCompute, exp_alerts: []}
+      - eval_time: 20m
+        alertname: CIDispatchOrphanCompute
+        exp_alerts:
+          - exp_labels: {severity: warning, kind: job}
+            exp_annotations:
+              summary: "ci-dispatch sees a ci-tiny Job or runner it has no launch for, for 15 minutes; the reaper should have removed it (docs/ci.md)"
+  - name: CIDispatchOrphanCompute is quiet when every count is zero
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_orphans{namespace="ci-dispatch",kind="job"}'
+        values: '0x40'
+      - series: 'ci_dispatch_orphans{namespace="ci-dispatch",kind="runner"}'
+        values: '0x40'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: CIDispatchOrphanCompute, exp_alerts: []}
+  - name: CITinyQuotaFull fires when the pod quota stays full for 30 minutes
+    interval: 1m
+    input_series:
+      - series: 'kube_resourcequota{namespace="ci-tiny",resource="pods",type="used"}'
+        values: '3x70'
+      - series: 'kube_resourcequota{namespace="ci-tiny",resource="pods",type="hard"}'
+        values: '3x70'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: CITinyQuotaFull, exp_alerts: []}
+      - eval_time: 40m
+        alertname: CITinyQuotaFull
+        exp_alerts:
+          - exp_labels: {severity: warning, namespace: ci-tiny, resource: pods}
+            exp_annotations:
+              summary: "ci-tiny has used all 3 pods of its quota for 30 minutes; jobs are waiting for a free slot (docs/ci.md)"
+  - name: CITinyQuotaFull is quiet below the quota
+    interval: 1m
+    input_series:
+      - series: 'kube_resourcequota{namespace="ci-tiny",resource="pods",type="used"}'
+        values: '2x70'
+      - series: 'kube_resourcequota{namespace="ci-tiny",resource="pods",type="hard"}'
+        values: '3x70'
+    alert_rule_test:
+      - {eval_time: 40m, alertname: CITinyQuotaFull, exp_alerts: []}

@@ -1,0 +1,36 @@
+---
+# The forge through the router's NAT reflection, and the public internet. Never the cluster
+# (pods, Services, LB IPs, nodes), the LAN (BMCs, KVM, router, switch), the tailnet, or the
+# router's own services on the WAN address. NetworkPolicy spec section 6.3. The consumer sets
+# the namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-internet-only
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    # git.realliance.net resolves to the WAN address; the router reflects :443 to Traefik .7. The
+    # whole DHCP /25 is listed, so a lease change inside it doesn't break CI; only 443, because
+    # other ports on it are router input (zigbee2mqtt :8585, DNS :53).
+    - to:
+        - ipBlock:
+            cidr: 152.44.247.0/25
+      ports:
+        - {protocol: TCP, port: 443}
+    # The public internet: GitHub actions, Go proxy, npm, B2.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8 # pods 10.244.0.0/16, Services 10.96.0.0/12
+              - 100.64.0.0/10 # CGNAT, the tailnet behind the router
+              - 127.0.0.0/8
+              - 169.254.0.0/16 # link-local, metadata-style addresses
+              - 172.16.0.0/12
+              - 192.168.0.0/16 # LAN, nodes, BMCs, KVM, voice VLAN, switch OOB, LB IPs
+              - 224.0.0.0/4 # multicast
+              - 240.0.0.0/4
+              - 152.44.247.0/25 # our WAN /25: 443 only, above

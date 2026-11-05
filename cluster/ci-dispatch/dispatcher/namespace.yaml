@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ci-dispatch
+  annotations:
+    # Pruning a Namespace deletes its PVC whatever the PVC says (D5), and the PVC holds the usage
+    # ledger. A rollback renders nothing and leaves this behind.
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+  labels:
+    # The pod is distroless, non-root, read-only root, every capability dropped, RuntimeDefault seccomp.
+    pod-security.kubernetes.io/enforce: restricted

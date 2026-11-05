@@ -1,0 +1,22 @@
+---
+# forgejo-runner's config for the `tiny` class's `one-job` runners (mounted at /etc/ci-tiny by the
+# Job ci-dispatch creates). The name is fixed and unsuffixed: ci-dispatch's config names it
+# (tiny.runner_config_map). There is no `server.connections`: `one-job` takes its single
+# registration from the argv the dispatcher passes (--handle, --uuid, --token-url), and refuses more.
+# runner.timeout equals tiny.runner_timeout in the dispatcher's config.yaml (a test checks), and
+# stays below the Job's 20 min deadline.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ci-tiny-runner
+data:
+  config.yml: |
+    log:
+      level: info
+    runner:
+      capacity: 1
+      timeout: 15m
+    cache:
+      enabled: false
+    host:
+      workdir_parent: /work/act

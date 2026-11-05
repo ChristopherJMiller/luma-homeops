@@ -1,0 +1,18 @@
+---
+# http: /metrics and /healthz (the scrape). usage: the usage API, bearer token (ci-dispatch-usage).
+apiVersion: v1
+kind: Service
+metadata:
+  name: ci-dispatch
+  labels:
+    app.kubernetes.io/name: ci-dispatch
+spec:
+  selector:
+    app.kubernetes.io/name: ci-dispatch
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: usage
+      port: 8081
+      targetPort: usage

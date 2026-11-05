@@ -184,6 +184,12 @@
       "matchFileNames": ["cluster/applications/forgejo-release.yaml"],
       "automerge": false,
       "description": "The forgejo-helm chart (Forgejo stays on 15 LTS until the 19 LTS hop). Every chart bump changes the pod template or init scripts and restarts Forgejo, which cannot start while SSO discovery is down. Matched by file because the schemeless OCI repoURL gives no stable depName. Last in the list so it wins over the presets. See docs/forgejo.md."
+    },
+    {
+      "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["git.realliance.net/realliance-ops/ci-dispatch"],
+      "automerge": false,
+      "description": "The runner-class dispatcher (cluster/ci-dispatch/dispatcher/statefulset.yaml). It holds a Forgejo site-administrator token and creates Jobs and Secrets in ci-tiny, so a new image is a change to the CI trust boundary. :automergeDigest would otherwise deploy a re-pushed sha- tag unseen (a moved tag is a rebuild or a tamper; its PR is the alarm). Read the diff, then re-pin by hand. Keep this rule last in packageRules, after every rule that could match it (scripts/test_ci_dispatch_manifests.py checks)."
     }
   ],
   "customManagers": [

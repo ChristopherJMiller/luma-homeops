@@ -1,0 +1,12 @@
+---
+# ci-dispatch (runner classes phase 1): the dispatcher in `ci-dispatch` and the `tiny` class's
+# namespace in `ci-tiny`. Each sub-kustomization sets its own namespace. The Application is
+# cluster/applications/ci-dispatch.yaml (not listed until Task 18).
+#
+# Roll back by rendering nothing: `resources: []` here (Argo prunes the rest; the Namespace
+# ci-dispatch and its PVC are Prune=false,Delete=false, so the ledger survives).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - dispatcher
+  - tiny

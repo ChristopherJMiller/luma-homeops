@@ -1,0 +1,39 @@
+---
+# egress-internet-only narrowed to web ports, for pods that run other people's code (the `tiny`
+# runner class, ci-dispatch): the forge on 443 through the WAN /25 reflection, and the public
+# internet on TCP 80 and 443 only. Same not-internet list as egress-internet-only, so it can
+# never reach the cluster, the LAN, the tailnet or the router. Everything else (SSH, SMTP, raw
+# TCP) is dropped. The consumer sets the namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: egress-internet-web
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    # git.realliance.net resolves to the WAN address; the router reflects :443 to Traefik .7
+    # (checkout, the runner's task fetch, package pushes). Same rule as egress-internet-only.
+    - to:
+        - ipBlock:
+            cidr: 152.44.247.0/25
+      ports:
+        - {protocol: TCP, port: 443}
+    # The public internet, web ports only: GitHub actions, Go proxy, npm, B2.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8 # pods 10.244.0.0/16, Services 10.96.0.0/12
+              - 100.64.0.0/10 # CGNAT, the tailnet behind the router
+              - 127.0.0.0/8
+              - 169.254.0.0/16 # link-local, metadata-style addresses
+              - 172.16.0.0/12
+              - 192.168.0.0/16 # LAN, nodes, BMCs, KVM, voice VLAN, switch OOB, LB IPs
+              - 224.0.0.0/4 # multicast
+              - 240.0.0.0/4
+              - 152.44.247.0/25 # our WAN /25: 443 only, above
+      ports:
+        - {protocol: TCP, port: 80}
+        - {protocol: TCP, port: 443}

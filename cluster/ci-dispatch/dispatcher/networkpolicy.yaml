@@ -1,0 +1,55 @@
+---
+# ci-dispatch is default-deny in both directions (components default-deny and allow-dns), plus
+# exactly what it needs.
+# In:
+#   - Prometheus (namespace prometheus) scraping /metrics on TCP 8080. The usage API on 8081 has no
+#     in-cluster client yet, so it is not opened. kubelet's probes come from root on the node, which
+#     the enforcer exempts (NetworkPolicy spec section 3.4).
+# Out:
+#   - DNS (allow-dns);
+#   - Forgejo's API through the in-cluster Service forgejo-http:3000 (config.yaml forgejo.url);
+#   - the Kubernetes API, to the three node IPs on 6443 (D16).
+# It never dials git.realliance.net or the internet: public_url only builds links for the runners.
+# The enforcer judges the post-DNAT destination, so the Forgejo and API rules select pods and node
+# IPs, never ClusterIPs (NetworkPolicy spec sections 3.4 and 6.2).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ci-dispatch
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ci-dispatch
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # The scrape (servicemonitor.yaml): the namespace's automatic name label, on the metrics port only.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: prometheus
+      ports:
+        - {protocol: TCP, port: 8080}
+  egress:
+    # Forgejo's API: the pods behind forgejo-http, on their container port. Jobs, runner
+    # registration, the inventory's ci.yaml and its commit signatures all go through it.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: forgejo
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: forgejo
+              app.kubernetes.io/instance: forgejo
+      ports:
+        - {protocol: TCP, port: 3000}
+    # The Kubernetes API (https://kubernetes.default.svc): after DNAT the packet goes to one of the
+    # control-plane nodes, which is what the policy sees (D16). Jobs, Secrets and Pods in ci-tiny.
+    - to:
+        - ipBlock:
+            cidr: 192.168.0.240/32
+        - ipBlock:
+            cidr: 192.168.0.241/32
+        - ipBlock:
+            cidr: 192.168.0.242/32
+      ports:
+        - {protocol: TCP, port: 6443}

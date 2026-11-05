@@ -1,0 +1,23 @@
+---
+# `release: prometheus` is what makes Prometheus select this monitor; without it the monitor exists
+# and collects nothing, silently. The keep-list confines the target to its own series.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ci-dispatch
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ci-dispatch
+  namespaceSelector:
+    matchNames: [ci-dispatch]
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: ci_dispatch_.*|go_.*|process_.*|promhttp_.*
+          action: keep

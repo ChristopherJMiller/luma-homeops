@@ -1,0 +1,16 @@
+---
+# The usage ledger (SQLite, WAL) and its nightly snapshots (/data/snapshots, newest seven). It is
+# the record of what each owner has used, so a prune must never take it: Prune=false,Delete=false
+# here and on the Namespace (D5). SSD pool: SQLite fsyncs, and the SMR HDD pool is slow at that.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ci-dispatch-ledger
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false,Delete=false
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: rook-ceph-block-ssd
+  resources:
+    requests:
+      storage: 1Gi
