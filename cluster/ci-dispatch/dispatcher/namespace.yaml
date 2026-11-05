@@ -10,3 +10,6 @@ metadata:
   labels:
     # The pod is distroless, non-root, read-only root, every capability dropped, RuntimeDefault seccomp.
     pod-security.kubernetes.io/enforce: restricted
+    # PSA enforce judges Pods, not Jobs: warn and audit make a bad Job template visible on the POST.
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

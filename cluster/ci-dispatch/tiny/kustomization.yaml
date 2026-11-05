@@ -9,6 +9,8 @@ resources:
   - namespace.yaml
   - resourcequota.yaml
   - rbac.yaml
+  - serviceaccount.yaml
+  - limitrange.yaml
   - runner-config.yaml
 components:
   - ../../components/netpol/default-deny
