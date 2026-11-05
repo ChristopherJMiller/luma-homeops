@@ -212,7 +212,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   - A **definite refusal** made nothing, so the loop undoes at once with no DELETE. Definite refusals are `ErrNotCreated`-wrapped (F3): `ErrExists`, `ErrPolicy`, `ErrNoCapacity`, `ErrLocked`, `ErrRefused`, and every other 4xx.
 - **E11. Azure error classes and their undo outcomes** (F20, F23):
   - 403 `AuthorizationFailed` → `ErrLocked`. Paid classes wait `not-ready` and `ci_dispatch_azure_locked` reads 1. The undo outcome is `locked`, which `Tries` skips, with no back-off: `not-ready` already gates relaunches.
-  - `ContainerGroupQuotaReached`, `ServiceUnavailable` and the quota code the drill records → `ErrNoCapacity`. It gives `UndoHeld(id, at, 0)`, no try, on `gate.HeldBackoffAfter`'s schedule.
+  - `ContainerGroupQuotaReached`, 409 `ServiceUnavailable` and the quota code the drill records, each a 4xx, → `ErrNoCapacity`. It gives `UndoHeld(id, at, 0)`, no try, on `gate.HeldBackoffAfter`'s schedule. A 503 `ServiceUnavailable` is `ErrUnavailable`, like every 5xx, because a 5xx doesn't prove the PUT made nothing (Task 7 review I2). `azure.MaybeCreated(err)` marks a create that may have made a group.
   - `RequestDisallowedByPolicy` → `ErrPolicy`; `ErrRefused` (the guard) and every other 4xx (for example 400 `InvalidRequestContent`) → a definite refusal. Each is an error undo and a failed try, with phase 1's error back-off (`BackoffUntil`), logged at error.
   - 429, 5xx and transport errors → `ErrUnavailable`. For a create: absence first, then an error undo with the error back-off and a try. For a read: retried at the next poll.
 - **E12. The watcher** is a separate goroutine (`internal/watch`), off the loop's step lock. It refreshes prices, reads the sweeper's runs, and computes drift. The loop reads prices from the ledger.
@@ -662,7 +662,7 @@ The transport has `Proxy: nil`, as phase 1's Forgejo client does: it carries the
   - `TestCostQueryBodyExact`, `TestDailyCostParse` (columns found by name, USD only), `TestSweeperRunsParse` (a run without `endTime` gives `End` zero).
   - `TestErrorClasses` (table):
     - 403 `AuthorizationFailed` → `ErrLocked`;
-    - 409 `ContainerGroupQuotaReached`, 409 or 503 `ServiceUnavailable`, and Task 5's quota code → `ErrNoCapacity`;
+    - 409 `ContainerGroupQuotaReached`, 409 `ServiceUnavailable`, and Task 5's quota code → `ErrNoCapacity`; a 503 `ServiceUnavailable` → `ErrUnavailable` (review I2);
     - 400 `RequestDisallowedByPolicy` → `ErrPolicy`;
     - 404 → `ErrNotFound`;
     - 400 `InvalidRequestContent`, 409 `Conflict` and any other 4xx → `ErrRejected` (F20: every 4xx gets a class, and none is ambiguous);
