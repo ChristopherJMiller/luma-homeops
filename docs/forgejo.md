@@ -221,6 +221,49 @@ mirror whose key is a write deploy key on that one GitHub repo (no token). The p
 push-mirror resource; it is set up by hand, last re-created on 2026-11-03 after the move (GitHub
 deploy key `forgejo-ops`).
 
+## realliance.net and the general runner
+
+This forge builds and publishes the Realliance website. Galaxy deploys it by a manual re-pin.
+
+**Where things live.**
+
+- Source: `git.realliance.net/realliance/realliance.net`, one of the five shared repos. GitHub holds an archived copy with a pointer.
+- Workflow: `.forgejo/workflows/ci.yaml`, run on the `general` runner. It builds with Deno and crane, with no Docker, and pushes as `realliance-ci`.
+- Image: `git.realliance.net/realliance/realliance.net`, tags `X.Y.Z` and `sha-<7>`. CI never moves a tag.
+- Pin: `cluster/realliance.net/home.yaml`, as `X.Y.Z@sha256:…`. `scripts/test_realliance_net_pin.py` guards the rest of the Deployment.
+- Argo app `realliance-net` (`cluster/realliance.net/`), serving `realliance.net` and `www`.
+- Runner: ns `forgejo-runner-general` (`cluster/forgejo-runner-general/`).
+
+Who may change `main`, and the signing rules, are in the paragraphs **What the inventory owns** and **Signing policy** under Changing the structure. Only Owners and maintainers can push release tags (`[0-9]*`).
+
+**Release.**
+
+1. Merge a PR into `main`. Any member merges; direct pushes are off.
+2. An Owner pushes a signed tag, `git tag -s X.Y.Z`. CI publishes `X.Y.Z` and `sha-<7>`.
+3. Verify anonymously (`crane digest`), then pre-pull on each node with `talosctl image pull`.
+4. Re-pin in luma-homeops after `git verify-tag` and a review of the range from the previous tag. The review checks the signed tag plus the range, not every commit. Renovate never auto-merges this image.
+
+**Rollback.** `git revert` the re-pin. The previous pin is `git.realliance.net/realliance/realliance.net:2.3@sha256:7405276fcd58b6ade36c76147a23dfaba6eac6287880c14e37160d032961e359`, copied from Quay at the same digest. Chris retired Quay.
+
+**Runbook: the 5Mi trap.** The `home` pods have a 5Mi memory limit (kept on purpose). **Never `kubectl exec` into them:** the exec OOM-kills the pod. Inspect from outside: `kubectl logs`, `kubectl describe`, `curl` against the site. An OOMKilled that you did not cause is a rollback trigger.
+
+**Brand sync.** `scripts/sync-brand.sh --tag vX.Y.Z` pulls a signed `realliance/brand` tag. `brand/uses.txt` lists the assets in use, and `brand/release-signers.asc` plus `.fpr` hold the trusted signers (now Chris). Add a signer by committing both their key and their fingerprint.
+
+**The general runner.**
+
+- Allowlist: one repo-scoped connection per repo, today `realliance/realliance.net` only.
+- Add `realliance/brand` later: a new secret, then `forgejo-cli … register --scope realliance/brand --labels general --secret-stdin=-`, the derived connection in the runner config, reseal, push. STOP and ask Chris before the push.
+- Rotate: register again with a new secret, reseal, push, then delete the old runner row.
+- Never register it for `realliance-ops/forge-bot`. The two runners share nothing.
+- NetworkPolicy: none yet. It lands with the realliance.net plan's Part C, after the NetworkPolicy plan's B2.
+- Accepted risk: any `realliance` member can push a branch and run a workflow here. That workflow reads `SITE_REGISTRY_TOKEN` and can publish any `realliance` package. Galaxy sees an image only through a reviewed re-pin by digest. Revisit if anyone not fully trusted joins `/realliance`.
+- Not offered: ephemeral one-job runners, per-job volumes, quotas or a job deadline. The pod is long-lived, and its `HOME` persists between jobs until a restart.
+- Retiring it: drop the allowlisted connection and delete its runner row, remove `cluster/forgejo-runner-general/` and its Argo wiring, delete the repo secret `SITE_REGISTRY_TOKEN`, revoke the `realliance-ci` token and drop its entry in `sso-secrets`.
+
+**Tokens.** `SITE_REGISTRY_TOKEN` is a repo secret holding a `write:package` token for `realliance-ci`, a local account in team `realliance/ci` (packages only, no repos). Forgejo 15 cannot narrow it: it reaches every `realliance` package. Rotate it when any member leaves, as forge-bot's runbook does. The source is `REALLIANCE_NET_REGISTRY_TOKEN` in `sso-secrets`.
+
+**Dependencies.** New pods cannot pull while Forgejo is down. A WAN-IP change breaks node pulls until the router's reflection rules follow (the inherited hairpin limit).
+
 ## Template overrides (custom/)
 
 Forgejo has no plugin API; small UI changes are copies of upstream templates under
