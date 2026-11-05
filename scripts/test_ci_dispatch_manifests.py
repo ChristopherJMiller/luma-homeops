@@ -183,7 +183,11 @@ def test_namespaces_restricted(whole):
         names[ns["metadata"]["name"]] = ns
     assert set(names) == {"ci-dispatch", "ci-tiny"}
     for name, ns in names.items():
-        assert ns["metadata"]["labels"][PSA] == "restricted", f"{name} must enforce restricted"
+        labels = ns["metadata"]["labels"]
+        assert labels[PSA] == "restricted", f"{name} must enforce restricted"
+        assert labels[PSA.replace("enforce", "warn")] == "restricted"
+        assert labels[PSA.replace("enforce", "audit")] == "restricted"
+        assert PSA + "-version" not in labels, "an enforce-version pin would freeze the policy at an old version"
 
 
 def test_dispatcher_pod(dispatcher):
@@ -330,6 +334,7 @@ def test_config_values(dispatcher):
     else:
         assert re.match(r"^ghcr\.io/christopherjmiller/forgejo-runner-general:sha-[0-9a-f]{7}@sha256:[0-9a-f]{64}$", cfg["tiny"]["image"])
     assert cfg["kube"]["namespace"] == "ci-tiny"
+    assert _seconds(cfg["tiny"]["hard_stop"]) == 1200, "the spec's 20 min; config.Load caps it at 1h"
     assert _seconds(cfg["tiny"]["hard_stop"]) > _seconds(cfg["tiny"]["runner_timeout"])
     # Every path the config names is a path the pod mounts.
     sts = one(dispatcher, "StatefulSet", "ci-dispatch")
@@ -357,6 +362,122 @@ def test_keyring_matches_forge_bot(dispatcher):
         assert mine == (FORGE_BOT_KEYRING / name).read_bytes(), f"{name} differs from forge-bot's"
     cm = next(d for d in of(dispatcher, "ConfigMap") if d["metadata"]["name"].startswith("ci-dispatch-keyring-"))
     assert set(cm["data"]) == {"owners.asc", "fingerprints.txt"}
+
+
+def canon(rules: list[dict], key: str) -> list[str]:
+    """Each rule as sorted JSON, so the union compares as an exact multiset with no tolerance."""
+    out = []
+    for r in rules:
+        out.append(json.dumps(r, sort_keys=True))
+    return sorted(out)
+
+
+def union(docs: list[dict], namespace: str, direction: str, pod_labels: dict | None = None) -> list[str]:
+    """Every rule of every NetworkPolicy in `namespace` whose podSelector selects a pod with `pod_labels`
+    (None: the policy must select all pods), for `direction` ('ingress' or 'egress')."""
+    rules = []
+    for p in of(docs, "NetworkPolicy"):
+        if p["metadata"]["namespace"] != namespace:
+            continue
+        sel = p["spec"]["podSelector"].get("matchLabels", {})
+        if not all((pod_labels or {}).get(k) == v for k, v in sel.items()):
+            continue
+        rules += p["spec"].get(direction, [])
+    return canon(rules, direction)
+
+
+TINY_EGRESS = [
+    {  # DNS: CoreDNS pods only, port 53 UDP and TCP only
+        "to": [
+            {
+                "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}},
+                "podSelector": {"matchLabels": {"k8s-app": "kube-dns"}},
+            }
+        ],
+        "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
+    },
+    {  # the forge through the WAN /25 reflection: 443 only
+        "to": [{"ipBlock": {"cidr": "152.44.247.0/25"}}],
+        "ports": [{"protocol": "TCP", "port": 443}],
+    },
+    {  # the public internet: the not-internet ranges excepted, web ports only
+        "to": [{"ipBlock": {"cidr": "0.0.0.0/0", "except": NOT_INTERNET}}],
+        "ports": [{"protocol": "TCP", "port": 80}, {"protocol": "TCP", "port": 443}],
+    },
+]
+
+DISPATCHER_EGRESS = [
+    {
+        "to": [
+            {
+                "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}},
+                "podSelector": {"matchLabels": {"k8s-app": "kube-dns"}},
+            }
+        ],
+        "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
+    },
+    {
+        "to": [
+            {
+                "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "forgejo"}},
+                "podSelector": {
+                    "matchLabels": {"app.kubernetes.io/name": "forgejo", "app.kubernetes.io/instance": "forgejo"}
+                },
+            }
+        ],
+        "ports": [{"protocol": "TCP", "port": 3000}],
+    },
+    {
+        "to": [{"ipBlock": {"cidr": c}} for c in NODES],
+        "ports": [{"protocol": "TCP", "port": 6443}],
+    },
+]
+DISPATCHER_INGRESS = [
+    {
+        "from": [{"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "prometheus"}}}],
+        "ports": [{"protocol": "TCP", "port": 8080}],
+    }
+]
+
+
+def test_tiny_egress_union_exact(tiny):
+    """I1: the union of every rule that applies to a ci-tiny pod, peers and ports and excepts, exact.
+    A widening of any component (allow-dns to every pod, a dropped port list, one more port, a dropped
+    except) fails here, whoever owns the component's own test."""
+    assert union(tiny, "ci-tiny", "egress") == canon(TINY_EGRESS, "egress")
+    assert union(tiny, "ci-tiny", "ingress") == []
+    for p in of(tiny, "NetworkPolicy"):
+        if p["metadata"]["name"] == "allow-dns":
+            assert p["spec"]["policyTypes"] == ["Egress"]
+
+
+def test_dispatcher_union_exact(dispatcher):
+    labels = {"app.kubernetes.io/name": "ci-dispatch"}
+    assert union(dispatcher, "ci-dispatch", "egress", labels) == canon(DISPATCHER_EGRESS, "egress")
+    assert union(dispatcher, "ci-dispatch", "ingress", labels) == canon(DISPATCHER_INGRESS, "ingress")
+    for p in of(dispatcher, "NetworkPolicy"):
+        if p["metadata"]["name"] == "allow-dns":
+            assert p["spec"]["policyTypes"] == ["Egress"]
+
+
+def test_tiny_pod_cannot_raise_its_own_limits(tiny, whole):
+    """I2 (static part): the pod template is built by ci-dispatch's Go builder, so what this repo can
+    pin is the surroundings. Pod Security restricted refuses privileged, capabilities and host
+    namespaces (test_namespaces_restricted); the runner config offers no container or option
+    passthrough; the only RBAC in ci-tiny is the dispatcher's; no ServiceAccount token reaches a pod;
+    a LimitRange caps each container at the shape's own limits. The per-pod PID limit is the
+    kubelet's (a node-level gate, Task 19)."""
+    cfg = runner_config(tiny)
+    assert set(cfg) == {"log", "runner", "cache", "host"}
+    assert set(cfg["host"]) == {"workdir_parent"}
+    assert set(cfg["runner"]) == {"capacity", "timeout"}
+    assert "container" not in cfg and "envs" not in cfg["runner"] and "env_file" not in cfg["runner"]
+    for rb in of(whole, "RoleBinding"):
+        assert rb["subjects"] == [{"kind": "ServiceAccount", "name": "ci-dispatch", "namespace": "ci-dispatch"}]
+    assert of(whole, "ClusterRoleBinding") == []
+    assert one(tiny, "ServiceAccount", "default")["automountServiceAccountToken"] is False
+    lr = one(tiny, "LimitRange")
+    assert lr["spec"]["limits"] == [{"type": "Container", "max": {"cpu": "1", "memory": "2Gi"}}]
 
 
 def test_tiny_policies(tiny):

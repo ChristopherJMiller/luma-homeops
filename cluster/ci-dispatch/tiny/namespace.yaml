@@ -9,3 +9,6 @@ metadata:
     # Pod Security admission here. Drop this label and nothing else stops a privileged pod.
     # scripts/test_ci_dispatch_manifests.py::test_namespaces_restricted keeps it.
     pod-security.kubernetes.io/enforce: restricted
+    # PSA enforce judges Pods, not Jobs: warn and audit make a bad Job template visible on the POST.
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/audit: restricted

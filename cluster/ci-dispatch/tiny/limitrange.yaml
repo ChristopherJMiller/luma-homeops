@@ -1,0 +1,13 @@
+---
+# Behind the builder's fixed pod shape: no single container may ask for more than the shape's own
+# limits (1 CPU, 2Gi), so a template regression cannot take a node's cores or the whole quota.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: ci-tiny
+spec:
+  limits:
+    - type: Container
+      max:
+        cpu: "1"
+        memory: 2Gi
