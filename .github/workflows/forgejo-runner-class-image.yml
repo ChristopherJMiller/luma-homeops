@@ -1,0 +1,132 @@
+---
+name: forgejo-runner-class image
+
+# Small/medium CI runner class image for git.realliance.net (images/forgejo-runner-class):
+# the galaxy runner's toolchain plus make/curl/unzip, root, and the ci-class-entry script.
+# Tags :sha-<short> (immutable, what the consumer pins) and :latest.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - images/forgejo-runner-class/**
+      - images/forgejo-runner/Dockerfile
+      - .github/workflows/forgejo-runner-class-image.yml
+  pull_request:
+    paths:
+      - images/forgejo-runner-class/**
+      - images/forgejo-runner/Dockerfile
+      - .github/workflows/forgejo-runner-class-image.yml
+  workflow_dispatch:
+
+concurrency:
+  group: forgejo-runner-class-image-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository_owner }}/forgejo-runner-class
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: images/forgejo-runner-class
+          # amd64 only: every galaxy node is x86_64.
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Runs the published image: toolchain, root without Docker/Nix, and the entry contract
+      # (argv, token handling, refusals) against a stub forgejo-runner.
+      - name: Smoke test the image
+        if: github.event_name != 'pull_request'
+        run: |
+          set -eux
+          img="$(echo '${{ steps.meta.outputs.tags }}' | head -1)"
+          docker run --rm --entrypoint sh "$img" -c '
+            set -eux
+            forgejo-runner --version | grep -F 13.2.1
+            go version | grep -F go1.26.
+            node --version | grep -E "^v24\."
+            ko version
+            gcc --version >/dev/null
+            make --version >/dev/null
+            git --version
+            curl --version >/dev/null
+            unzip -v >/dev/null
+            timeout --version >/dev/null
+            test "$(id -u)" = 0
+            ! command -v docker && ! command -v nix'
+          docker run --rm --entrypoint sh "$img" -c '
+            set -eu
+            mkdir -p /tmp/stub
+            cat > /tmp/stub/forgejo-runner <<\EOS
+          #!/bin/sh
+          printf "%s\n" "$@"
+          grep -c RUNNER_TOKEN /proc/self/environ || true
+          stat -c %a /run/ci/token
+          if [ "$(cat /run/ci/token)" = "$NONCE" ]; then echo same; else echo differ; fi
+          EOS
+            chmod +x /tmp/stub/forgejo-runner
+            export PATH=/tmp/stub:$PATH NONCE="nonce-$(date +%s%N)"
+            out="$(RUNNER_TOKEN="$NONCE" ci-class-entry 30m small h_1 https://git.example/ 0a1b2c)"
+            want="one-job
+          --config
+          /etc/ci-class/runner-small.yml
+          --wait
+          --handle
+          h_1
+          --url
+          https://git.example/
+          --uuid
+          0a1b2c
+          --token-url
+          file:///run/ci/token
+          --label
+          small:host
+          0
+          600
+          same"
+            [ "$out" = "$want" ] || { echo "$out"; exit 1; }
+            refuse() {
+              # $1 = token; the rest = ci-class-entry arguments. Exit 2, nothing printed.
+              tok="$1"; shift
+              rc=0; o="$(RUNNER_TOKEN="$tok" ci-class-entry "$@" 2>/dev/null)" || rc=$?
+              [ "$rc" = 2 ]
+              [ -z "$o" ]
+            }
+            refuse x 30m small "a b" u u
+            refuse x 30m large h u u
+            refuse "" 30m small h u u'

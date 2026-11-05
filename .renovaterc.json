@@ -114,6 +114,12 @@
     },
     {
       "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["ghcr.io/christopherjmiller/forgejo-runner-class"],
+      "automerge": false,
+      "description": "Our small/medium CI runner class image (images/forgejo-runner-class, paid and sandboxed CI on ACI). Every job can read the runner's connection token, so a new image is a change to the CI trust boundary. :automergeDigest would otherwise deploy a re-pushed sha- tag unseen. Read the Dockerfile diff and the workflow's smoke test, then re-pin by hand."
+    },
+    {
+      "matchManagers": ["kubernetes"],
       "matchPackageNames": ["codeberg.org/git-pages/git-pages"],
       "automerge": false,
       "description": "Realliance Pages' server (cluster/pages/git-pages.yaml). git-pages is pre-1.0 and breaks config and site behaviour in minor releases (0.10.0 renamed [server].caddy and changed _headers/_redirects paths; 0.10.1 stopped following Forgejo redirects). Read every changelog in the bump range, take only releases at least 2 weeks old, and re-run the pages acceptance suite (realliance/sso tests/forge/test_forge_pages.py) after merging. git-pages rejects unknown config keys at start, so a renamed key is a CrashLoop."

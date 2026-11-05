@@ -105,6 +105,14 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_azure_ci.py
         pass_filenames: false
         files: ^(azure/ci/.*|scripts/test_azure_ci\.py|\.pre-commit-config\.yaml)$
+      # The small/medium CI runner class image (images/forgejo-runner-class): FROM lines equal to
+      # the galaxy runner's, root, toolchain, runner configs, entry-script contract, Renovate rule.
+      - id: runner-class
+        name: runner class image static tests
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_runner_class_image.py
+        pass_filenames: false
+        files: ^(images/forgejo-runner-class/.*|images/forgejo-runner/Dockerfile|scripts/test_runner_class_image\.py|\.github/workflows/forgejo-runner-class-image\.yml)$
       # scripts/netpol-verify.sh against a stub kubectl: a partial pod list or an
       # unparseable answer must FAIL, never pass vacuously.
       - id: netpol-verify-selftest
