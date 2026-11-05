@@ -192,8 +192,9 @@ to `main` are blocked; only Owners may merge or approve; fast-forward is the onl
 signed commits land as they are), then an operator applies (README there). From a laptop:
 `fj -H git.realliance.net pr merge realliance-ops/forge#<n> -d`.
 
-**What the inventory owns.** All of `realliance-ops`, the `realliance` org and its teams, and the five
-shared `realliance` repos above, which it declares only for their branch and tag protections.
+**What the inventory owns.** Everything in `realliance-ops`, the `realliance` org and its teams, and the
+five shared `realliance` repos named in the signing policy, which it declares only for their branch and
+tag protections.
 Everything else in `realliance` belongs to its members: `members` can create repos (tested in
 `realliance/sso`), and tofu never touches a repo it doesn't declare. Every member has write access to
 those repos, unprotected unless their creator adds protection.
