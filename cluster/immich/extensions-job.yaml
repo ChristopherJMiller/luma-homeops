@@ -39,7 +39,7 @@ spec:
           type: RuntimeDefault
       containers:
         - name: psql
-          image: public.ecr.aws/docker/library/postgres:16-alpine@sha256:e0e53cfa0884f3cc216a621033e4f38dceb49e52218ac77facc8e48f02973093
+          image: public.ecr.aws/docker/library/postgres:16-alpine@sha256:1fb72075a1de85a1d39de23c2da81baef1b71bf5c0b61a14cbbfdb072a6246d9
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
