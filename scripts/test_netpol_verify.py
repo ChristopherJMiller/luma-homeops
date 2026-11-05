@@ -224,12 +224,23 @@ MATRIX = SCRIPT.parent.parent / "cluster" / "netpol-canary" / "matrix.txt"
 PROBE = MATRIX.parent / "probe.sh"
 
 
-def canary_row_count() -> int:
-    """N: the matrix rows the canary runs (scope all or canary), counted from the repo's matrix.txt."""
+NODE_IP = {"top": "192.168.0.240", "middle": "192.168.0.241", "bottom": "192.168.0.242"}
+
+
+def own_bmcs() -> dict[str, str]:
+    """probe.sh's NODE_BMCS default, node -> its own BMC (test_netpol_manifests pins it to bmcctl)."""
+    m = re.search(r"NODE_BMCS:-([a-z0-9.= ]+)\}", PROBE.read_text())
+    return dict(pair.split("=", 1) for pair in m.group(1).split())
+
+
+def canary_row_count(node: str | None = None) -> int:
+    """N for a node: the canary rows (scope all or canary) of the repo's matrix.txt, less the row that
+    dials that node's own BMC. With no node, every canary row."""
+    skip = own_bmcs().get(node) if node else None
     n = 0
     for raw in MATRIX.read_text().splitlines():
         row = raw.split()
-        if row and not row[0].startswith("#") and row[1] in ("all", "canary"):
+        if row and not row[0].startswith("#") and row[1] in ("all", "canary") and row[2] != skip:
             n += 1
     return n
 
@@ -238,7 +249,7 @@ def probe_pod(name: str, node: str, phase: str = "Running", deleting: bool = Fal
     meta = {"name": name}
     if deleting:
         meta["deletionTimestamp"] = "2026-11-05T18:50:00Z"
-    return {"metadata": meta, "spec": {"nodeName": node}, "status": {"phase": phase}}
+    return {"metadata": meta, "spec": {"nodeName": node}, "status": {"phase": phase, "hostIP": NODE_IP.get(node, "192.168.0.240")}}
 
 
 def probe_table(node: str, rows: int, fail: int = 0) -> str:
@@ -273,29 +284,42 @@ def baseline(tmp: Path) -> subprocess.CompletedProcess:
 
 def three_probes(**overrides) -> tuple[list[dict], dict[str, tuple[str, int]]]:
     """Three Running probe pods on three nodes, each answering every row. overrides: pod -> (out, rc)."""
-    n = canary_row_count()
     pods = [probe_pod(f"netpol-probe-{node}", node) for node in NODES]
-    execs = {f"netpol-probe-{node}": (probe_table(node, n), 0) for node in NODES}
+    execs = {f"netpol-probe-{node}": (probe_table(node, canary_row_count(node)), 0) for node in NODES}
     execs.update(overrides)
     return pods, execs
 
 
 def test_matrix_row_count_is_derived():
-    """N is whatever matrix.txt holds; the baseline, canary and runner checks print it (F8)."""
+    """N is whatever matrix.txt holds; the baseline, canary and runner checks print it (F8). Each node
+    skips the one row that dials its own BMC."""
     assert canary_row_count() > 0
+    for node in NODES:
+        assert canary_row_count(node) == canary_row_count() - 1, node
 
 
 def test_baseline_passes(tmp_path):
-    n = canary_row_count()
     r = baseline(baseline_fixtures(tmp_path, *three_probes()))
     assert r.returncode == 0, r.stdout + r.stderr
+    deadline = int(re.search(r"^PROBE_DEADLINE_DEFAULT=(\d+)$", PROBE.read_text(), re.M).group(1))
     for node in NODES:
+        n = canary_row_count(node)
         assert f"PASS {node} {n}/{n} rows answer" in r.stdout
         assert f"SUMMARY {n}/{n} baseline node={node}" in r.stdout, "each pod's table is printed"
-    assert r.stdout.rstrip().splitlines()[-1] == f"baseline: PASS (3 nodes × {n} rows answer)"
-    # The exec timeout follows N: every row and the WAN lookup at probe.sh's deadline, plus 30 s.
-    deadline = int(re.search(r"^PROBE_DEADLINE_DEFAULT=(\d+)$", PROBE.read_text(), re.M).group(1))
-    assert f"baseline: {n} rows per pod, exec timeout {(n + 1) * deadline + 30} s" in r.stdout
+        # Each node's exec timeout follows its N: every row and the WAN lookup at the deadline, plus 30 s.
+        assert f"baseline: {node} {n} rows, exec timeout {(n + 1) * deadline + 30} s" in r.stdout
+    counts = {canary_row_count(node) for node in NODES}
+    assert len(counts) == 1, "every node skips exactly one BMC row"
+    assert r.stdout.rstrip().splitlines()[-1] == f"baseline: PASS (3 nodes × {counts.pop()} rows answer)"
+
+
+def test_baseline_each_node_checks_its_own_count(tmp_path):
+    """middle reporting every row (it did not skip its own BMC: a stale ConfigMap) is a FAIL."""
+    pods, execs = three_probes(**{"netpol-probe-middle": (probe_table("middle", canary_row_count()), 0)})
+    r = baseline(baseline_fixtures(tmp_path, pods, execs))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "FAIL middle" in r.stdout
+    assert "PASS top" in r.stdout and "PASS bottom" in r.stdout
 
 
 def test_baseline_no_probe_pods_is_exit_2(tmp_path):
@@ -339,7 +363,7 @@ def test_baseline_ignores_a_terminating_pod(tmp_path):
 
 def test_baseline_dead_target_fails(tmp_path):
     """One row that neither connects nor gets a refusal: the row Task 6 Step 8 exists to catch."""
-    n = canary_row_count()
+    n = canary_row_count("middle")
     pods, execs = three_probes(**{"netpol-probe-middle": (probe_table("middle", n, fail=1), 1)})
     r = baseline(baseline_fixtures(tmp_path, pods, execs))
     assert r.returncode == 1, r.stdout + r.stderr
@@ -350,7 +374,7 @@ def test_baseline_dead_target_fails(tmp_path):
 
 def test_baseline_stale_matrix_fails(tmp_path):
     """A pod that ran one row fewer than the repo's matrix (a stale ConfigMap) is a FAIL."""
-    n = canary_row_count()
+    n = canary_row_count("top")
     pods, execs = three_probes(**{"netpol-probe-top": (probe_table("top", n - 1), 0)})
     r = baseline(baseline_fixtures(tmp_path, pods, execs))
     assert r.returncode == 1, r.stdout + r.stderr
@@ -367,7 +391,7 @@ def test_baseline_exec_error_fails(tmp_path):
 
 def test_baseline_summary_from_another_node_fails(tmp_path):
     """NODE_NAME in the pod must be the node the API says it runs on."""
-    n = canary_row_count()
+    n = canary_row_count("top")
     pods, execs = three_probes(**{"netpol-probe-top": (probe_table("middle", n), 0)})
     r = baseline(baseline_fixtures(tmp_path, pods, execs))
     assert r.returncode == 1, r.stdout + r.stderr

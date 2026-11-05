@@ -34,8 +34,9 @@
 #
 # baseline -- B1a, before any canary policy (§6.4 "Baseline first"). The three
 # netpol-probe pods each run `probe.sh once baseline`, in parallel, and every
-# row the canary runs (N, counted from the repo's matrix.txt, never a literal,
-# F8) must answer: open, or refused for a must-drop target. A target that does
+# row the canary runs there must answer: open, or refused for a must-drop
+# target. Each node checks its own N: matrix.txt expanded with that pod's node
+# name and host IP, less its own BMC (never a literal, F8). A target that does
 # neither would pass as "timeout" once policy is in, so it FAILs here. A pod
 # whose count differs (a stale ConfigMap) FAILs too. Exit 2 unless exactly 3
 # Running probe pods sit on 3 distinct nodes. It skips a pod with a
@@ -164,27 +165,21 @@ idle() {
 }
 
 baseline() {
-  local root probe matrix rows limit n live running nodes pod node rc summary npass nfail fail=0
+  local root probe matrix n live running nodes pod node hostip rows limit rc summary npass nfail fail=0 counts
   root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
   probe=$root/cluster/netpol-canary/probe.sh
   matrix=$root/cluster/netpol-canary/matrix.txt
   [ -f "$probe" ] && [ -f "$matrix" ] || die "missing $probe or $matrix"
   # shellcheck source=/dev/null
   . "$probe"
-  # N, the rows each pod runs. The addresses only let the variables expand; the count is what matters.
-  HOST_IP=192.168.0.240 WAN_IP=192.0.2.1 probe_rows "$matrix" canary > "$tmp/rows" || die "matrix.txt does not expand"
-  rows=$(wc -l < "$tmp/rows")
-  count_or_fail "the matrix row count" "$rows"
-  [ "$rows" -gt 0 ] || die "matrix.txt has no canary rows"
-  limit=$(exec_timeout "$rows")
 
   kc -n "$CANARY_NS" get pods -l "$PROBE_SELECTOR" -o json > "$tmp/probes.json" 2> /dev/null \
     || die "cannot list pods in $CANARY_NS; is KUBECONFIG right?"
   n=$(items_len "$tmp/probes.json"); count_or_fail "the probe pod count" "$n"
-  # name node phase, for every pod without a deletionTimestamp
+  # name node phase hostIP, for every pod without a deletionTimestamp
   jq -r '.items[] | select(.metadata.deletionTimestamp == null)
-      | [.metadata.name, (.spec.nodeName // "-"), (.status.phase // "-")] | @tsv' "$tmp/probes.json" > "$tmp/probes.tsv" 2> /dev/null \
-    || parse_fail "the probe pod list"
+      | [.metadata.name, (.spec.nodeName // "-"), (.status.phase // "-"), (.status.hostIP // "-")] | @tsv' \
+    "$tmp/probes.json" > "$tmp/probes.tsv" 2> /dev/null || parse_fail "the probe pod list"
   live=$(wc -l < "$tmp/probes.tsv")
   [ "$live" -gt 0 ] || die "no netpol-probe pods in $CANARY_NS"
   running=$(awk -F'\t' '$3 == "Running"' "$tmp/probes.tsv" | wc -l)
@@ -194,9 +189,22 @@ baseline() {
     die "need exactly $CANARY_NODES Running netpol-probe pods on $CANARY_NODES nodes (found $live, $running Running, on $nodes nodes)"
   fi
 
+  # Each pod's N: the rows its probe.sh runs there (its node's variables, less its own BMC).
+  # WAN_IP is a placeholder; only the count matters.
+  while IFS=$'\t' read -r pod node _ hostip; do
+    if NODE_NAME=$node HOST_IP=$hostip WAN_IP=192.0.2.1 probe_rows "$matrix" canary > "$tmp/$pod.rows" 2> /dev/null; then
+      wc -l < "$tmp/$pod.rows" > "$tmp/$pod.n"
+    else
+      echo "?" > "$tmp/$pod.n"
+    fi
+  done < "$tmp/probes.tsv"
+
   # The three in parallel. </dev/null keeps kubectl off the loop's input.
-  echo "baseline: $rows rows per pod, exec timeout ${limit} s"
-  while IFS=$'\t' read -r pod node _; do
+  while IFS=$'\t' read -r pod node _ _; do
+    rows=$(cat "$tmp/$pod.n")
+    if [[ ! "$rows" =~ ^[0-9]+$ ]] || [ "$rows" -eq 0 ]; then echo "baseline: $node: matrix.txt does not expand"; continue; fi
+    limit=$(exec_timeout "$rows")
+    echo "baseline: $node $rows rows, exec timeout ${limit} s"
     (
       timeout "$limit" kubectl -n "$CANARY_NS" exec "$pod" -c probe -- bash /etc/netpol-probe/probe.sh once baseline \
         > "$tmp/$pod.out" 2> "$tmp/$pod.err" < /dev/null
@@ -205,28 +213,39 @@ baseline() {
   done < "$tmp/probes.tsv"
   wait
 
-  while IFS=$'\t' read -r pod node _; do
+  counts=""
+  while IFS=$'\t' read -r pod node _ _; do
+    rows=$(cat "$tmp/$pod.n")
     rc=$(cat "$tmp/$pod.rc" 2> /dev/null)
     echo "== $node $pod (exit ${rc:-?})"
-    cat "$tmp/$pod.out"
+    cat "$tmp/$pod.out" 2> /dev/null
     [ ! -s "$tmp/$pod.err" ] || head -n 5 "$tmp/$pod.err" | sed 's/^/   stderr: /'
-    summary=$(grep '^SUMMARY ' "$tmp/$pod.out" | tail -n 1)
-    npass=$(grep -c '^PASS ' "$tmp/$pod.out")
-    nfail=$(grep -c '^FAIL ' "$tmp/$pod.out")
-    if [ "${rc:-}" = 0 ] && [ "$summary" = "SUMMARY $rows/$rows baseline node=$node" ] \
-      && [ "$npass" -eq "$rows" ] && [ "$nfail" -eq 0 ]; then
+    summary=$(grep '^SUMMARY ' "$tmp/$pod.out" 2> /dev/null | tail -n 1)
+    npass=$(grep -c '^PASS ' "$tmp/$pod.out" 2> /dev/null)
+    nfail=$(grep -c '^FAIL ' "$tmp/$pod.out" 2> /dev/null)
+    if [[ "$rows" =~ ^[0-9]+$ ]] && [ "$rows" -gt 0 ] && [ "${rc:-}" = 0 ] \
+      && [ "$summary" = "SUMMARY $rows/$rows baseline node=$node" ] \
+      && [ "${npass:-0}" -eq "$rows" ] && [ "${nfail:-0}" -eq 0 ]; then
       echo "PASS $node $rows/$rows rows answer"
     else
-      echo "FAIL $node exit=${rc:-?} pass=$npass/$rows fail=$nfail summary='${summary:-none}'"
+      echo "FAIL $node exit=${rc:-?} pass=${npass:-0}/$rows fail=${nfail:-0} summary='${summary:-none}'"
       fail=1
     fi
+    counts+="$node $rows, "
   done < "$tmp/probes.tsv"
+  counts=${counts%, }
 
+  # One N for every node prints as "3 nodes × N"; otherwise each node's.
+  if [ "$(awk -F'\t' '{ print $1 }' "$tmp/probes.tsv" | while read -r pod; do cat "$tmp/$pod.n"; done | sort -u | wc -l)" -eq 1 ]; then
+    counts="$CANARY_NODES nodes × $(cat "$tmp/$(head -n 1 "$tmp/probes.tsv" | cut -f1).n") rows"
+  else
+    counts="$CANARY_NODES nodes: $counts rows"
+  fi
   if [ "$fail" -eq 0 ]; then
-    echo "baseline: PASS ($CANARY_NODES nodes × $rows rows answer)"
+    echo "baseline: PASS ($counts answer)"
     return 0
   fi
-  echo "baseline: FAIL ($CANARY_NODES nodes × $rows rows)"
+  echo "baseline: FAIL ($counts)"
   return 1
 }
 
@@ -300,6 +319,31 @@ selftest() {
   printf '%s\n' 'dropped all $PEER_IP 10250 - n' > "$tmp_st/peer.txt"
   rc 2 "rows PEER_IP, HOST_IP unset" env -u HOST_IP bash -c '. "$1"; probe_rows "$2" runner' _ "$probe" "$tmp_st/peer.txt"
   rc 2 "rows PEER_IP, HOST_IP not a node" env HOST_IP=10.0.0.1 bash -c '. "$1"; probe_rows "$2" runner' _ "$probe" "$tmp_st/peer.txt"
+
+  # A probe skips its own node's BMC (middle cannot reach its own); every BMC is still dialled from
+  # the other two nodes, and with NODE_NAME unknown probe_rows skips nothing (fail closed).
+  local m=$root/cluster/netpol-canary/matrix.txt bmc node from all
+  eq "own BMC of top" "$(probe_own_bmc top)" 192.168.0.119
+  eq "own BMC of middle" "$(probe_own_bmc middle)" 192.168.0.117
+  eq "own BMC of bottom" "$(probe_own_bmc bottom)" 192.168.0.151
+  rc 1 "own BMC of a non-node" probe_own_bmc n1
+  rc 1 "own BMC of nothing" probe_own_bmc ""
+  case $(NODE_NAME=middle HOST_IP=192.168.0.241 WAN_IP=9.9.9.9 probe_rows "$m" canary) in
+    *"192.168.0.117 443"*) bad "rows skip own BMC" ;;
+    *"192.168.0.119 443"*"192.168.0.151 443"*) ok "rows skip own BMC" ;;
+    *) bad "rows skip own BMC (other BMCs missing)" ;;
+  esac
+  all=$(NODE_NAME= HOST_IP=192.168.0.241 WAN_IP=9.9.9.9 probe_rows "$m" canary | wc -l)
+  eq "rows, NODE_NAME unset, skip nothing" "$(env -u NODE_NAME HOST_IP=192.168.0.241 WAN_IP=9.9.9.9 bash -c '. "$1"; probe_rows "$2" canary' _ "$probe" "$m" | wc -l)" "$all"
+  for bmc in 192.168.0.119 192.168.0.117 192.168.0.151; do
+    from=0
+    for node in top:192.168.0.240 middle:192.168.0.241 bottom:192.168.0.242; do
+      # Captured first: under pipefail, grep -q exiting early would fail the pipeline (SIGPIPE).
+      case $(NODE_NAME=${node%%:*} HOST_IP=${node#*:} WAN_IP=9.9.9.9 probe_rows "$m" canary) in *" $bmc 443 "*) from=$((from + 1)) ;; esac
+    done
+    eq "BMC $bmc dialled from two nodes" "$from" 2
+  done
+  eq "rows on middle, one fewer" "$(NODE_NAME=middle HOST_IP=192.168.0.241 WAN_IP=9.9.9.9 probe_rows "$m" canary | wc -l)" $((all - 1))
 
   # F9: runs start PROBE_INTERVAL apart, and never less than 5 s apart.
   eq "sleep 300 after a 54 s run" "$(probe_sleep_for 300 54)" 246

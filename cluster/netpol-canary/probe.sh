@@ -7,7 +7,8 @@
 # Sourceable: it runs main only when executed. Env: MATRIX (default
 # /etc/netpol-probe/matrix.txt), PROBE_SCOPE (canary|runner, default canary),
 # PROBE_MODE (loop only, default enforced), PROBE_INTERVAL, HOST_IP, NODE_NAME,
-# NODE_IPS (for $PEER_IP; default top, middle and bottom), AGNHOST (default /agnhost),
+# NODE_IPS (for $PEER_IP; default top, middle and bottom), NODE_BMCS (each node's own BMC, which
+# its probe skips), AGNHOST (default /agnhost),
 # PROBE_DEADLINE (how many seconds a tool may run before probe.sh kills it, default 10),
 # READY_FILE (default /tmp/ready).
 # Rows run sequentially: parallel agnhost processes would need ~20x the memory.
@@ -51,11 +52,30 @@ probe_peer_ip() {
   return 1
 }
 
+# probe_own_bmc NODE_NAME -> that node's own BMC IP, or nothing (return 1). A node may be unable
+# to reach its own BMC: middle cannot (its NC-SI port drops unicast from the host, 2026-10-30), so
+# that row would time out at baseline and then pass as "dropped" without proving anything. Each
+# probe skips its own BMC, and the other two nodes still dial it. The default must match
+# tools/bmcctl/src/bmcctl/nodes.py (a static test checks it).
+probe_own_bmc() {
+  local node=$1 pairs pair
+  read -r -a pairs <<< "${NODE_BMCS:-top=192.168.0.119 middle=192.168.0.117 bottom=192.168.0.151}"
+  for pair in "${pairs[@]}"; do
+    if [ -n "$node" ] && [ "${pair%%=*}" = "$node" ]; then
+      echo "${pair#*=}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # probe_rows MATRIX SCOPE -> expanded rows ("expect scope host port backend note...").
 # SCOPE canary = all+canary rows, runner = all rows. Returns 2 if a selected row needs an unset variable.
+# Skips the row that dials this node's own BMC (NODE_NAME; with no known node it skips nothing).
 probe_rows() {
-  local matrix=$1 scope=$2 expect rscope host port backend note line
+  local matrix=$1 scope=$2 expect rscope host port backend note line own_bmc
   local rc=0
+  own_bmc=$(probe_own_bmc "${NODE_NAME-}" < /dev/null) || own_bmc=""
   while read -r expect rscope host port backend note; do
     case $expect in '' | '#'*) continue ;; esac
     case $scope:$rscope in
@@ -67,6 +87,7 @@ probe_rows() {
       '$PEER_IP') host=$(probe_peer_ip "${HOST_IP-}") || { echo "probe_rows: no peer node for HOST_IP '${HOST_IP-}' (row \$PEER_IP:$port)" >&2; rc=2; continue; } ;;
       '$WAN_IP') [ -n "${WAN_IP-}" ] || { echo "probe_rows: WAN_IP unset (row $host:$port)" >&2; rc=2; continue; }; host=$WAN_IP ;;
     esac
+    [ -z "$own_bmc" ] || [ "$host" != "$own_bmc" ] || continue
     line="$expect $rscope $host $port $backend${note:+ $note}"
     echo "$line"
   done < "$matrix"

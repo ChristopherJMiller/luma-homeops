@@ -16,6 +16,8 @@
 # node and every node gets dialled; $WAN_IP is git.realliance.net's A record, resolved on
 # every run. A selected row with the variable unset is an error.
 # BMC IPs are copied from cluster/ipmi-exporter/scrapeconfig.yaml; a test keeps them in step.
+# Each probe skips the row for its own node's BMC (probe.sh probe_own_bmc, from bmcctl's map), so
+# the other two nodes dial each BMC.
 
 dns     all     kubernetes.default.svc.cluster.local  53     -  cluster DNS (CoreDNS)
 open    canary  netpol-echo.netpol-canary.svc.cluster.local  9376  -  echo server, same namespace
@@ -23,9 +25,9 @@ dropped canary  netpol-echo.netpol-canary.svc.cluster.local  9377  netpol-canary
 dropped canary  netpol-echo-pod.netpol-canary.svc.cluster.local  9378  netpol-canary/netpol-echo-pod  echo pod IP direct (headless Service, no DNAT), a port it does not serve: refused at baseline
 open    all     git.realliance.net  443  -  forge via the WAN /25 and NAT reflection
 open    all     1.1.1.1             443  -  public internet
-dropped all     192.168.0.117  443    -  BMC (top/middle, unmapped, #2603)
-dropped all     192.168.0.119  443    -  BMC (top/middle, unmapped, #2603)
-dropped all     192.168.0.151  443    -  BMC (bottom)
+dropped all     192.168.0.117  443    -  BMC (middle's own; middle skips it)
+dropped all     192.168.0.119  443    -  BMC (top's own; top skips it)
+dropped all     192.168.0.151  443    -  BMC (bottom's own; bottom skips it)
 dropped all     192.168.0.2    80     -  KVM
 dropped all     192.168.0.2    443    -  KVM
 dropped all     192.168.0.1    22     -  router SSH

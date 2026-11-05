@@ -44,6 +44,7 @@ cluster/applications/netpol-canary.yaml as it is. The canary tests then skip
 the deployed-state checks.
 """
 
+import ast
 import hashlib
 import json
 import re
@@ -134,6 +135,8 @@ READY_RE = r'test -n "\$\(find /tmp/ready -mmin -(\d+) 2>/dev/null\)"'
 # agnhost connect --timeout=3s and dig +time=3: a run takes at most 3 s per row, plus the WAN lookup.
 ROW_TIMEOUT_S = 3
 DHCP_VARS = "router/ansible/group_vars/vyos_routers.yml"
+# bmcctl's node -> BMC map, the record of which BMC belongs to which node.
+BMCCTL_NODES = "tools/bmcctl/src/bmcctl/nodes.py"
 
 # pre-commit hooks that rewrite files; none may touch the vendored manifest.
 REWRITING_HOOKS = {"yamlfmt", "end-of-file-fixer", "trailing-whitespace", "mixed-line-ending", "fix-byte-order-marker"}
@@ -645,3 +648,33 @@ def test_probe_node_ips_match_dhcp_reservations():
     dhcp = yaml.safe_load((REPO / DHCP_VARS).read_text())["dhcp"]["static_mappings"]
     ips = {m["name"]: m["ip"] for m in dhcp}
     assert defaults[0].split() == [ips["top"], ips["middle"], ips["bottom"]]
+
+
+def bmcctl_nodes() -> dict[str, tuple[str, str]]:
+    """name -> (node IP, BMC IP) from bmcctl's NODES, read with ast (this imports and runs nothing)."""
+    tree = ast.parse((REPO / BMCCTL_NODES).read_text())
+    nodes = {}
+    for call in ast.walk(tree):
+        if isinstance(call, ast.Call) and getattr(call.func, "id", None) == "Node":
+            name, ip, bmc = (ast.literal_eval(a) for a in call.args)
+            nodes[name] = (ip, bmc)
+    assert nodes, f"no Node(...) entries in {BMCCTL_NODES}"
+    return nodes
+
+
+def test_probe_own_bmcs_match_bmcctl():
+    """probe.sh skips the probe node's own BMC: middle cannot reach its own (its NC-SI port drops
+    unicast from the host, 2026-10-30), so that row would time out at baseline and then pass as
+    "dropped" without proving anything. The NODE_BMCS default must be bmcctl's map, and its BMCs the matrix's BMC
+    rows, so each BMC is still dialled from the other two nodes."""
+    defaults = re.findall(r"NODE_BMCS:-([a-z0-9.= ]+)\}", (REPO / CANARY_DIR / "probe.sh").read_text())
+    assert len(defaults) == 1, "probe.sh must default NODE_BMCS in exactly one place"
+    own = dict(pair.split("=", 1) for pair in defaults[0].split())
+    nodes = bmcctl_nodes()
+    assert own == {name: bmc for name, (_, bmc) in nodes.items()}
+
+    bmc_rows = {r[2] for r in canary_rows() if "BMC" in r[5:]}
+    assert bmc_rows == set(own.values()), f"matrix BMC rows {sorted(bmc_rows)} != bmcctl BMCs {sorted(own.values())}"
+    # The NODE_IPS default (the $PEER_IP ring) is bmcctl's node IPs in the same order.
+    ring = re.findall(r"NODE_IPS:-([0-9. ]+)\}", (REPO / CANARY_DIR / "probe.sh").read_text())[0].split()
+    assert ring == [nodes[n][0] for n in ("top", "middle", "bottom")]

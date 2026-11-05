@@ -40,14 +40,15 @@ repos:
       # Any cluster/ change runs it: a component or a namespace can change what
       # a policy selects without touching the policy's own file. It accepts the
       # marked rollback (render nothing); the test file's docstring has the edit.
-      # It also runs on a change to the router's DHCP reservations, which the
-      # canary's node IPs (probe.sh NODE_IPS) must match.
+      # It also runs on a change to the router's DHCP reservations or to
+      # bmcctl's node map, which the canary's node IPs and BMCs (probe.sh
+      # NODE_IPS, NODE_BMCS) must match.
       - id: netpol-manifests
         name: NetworkPolicy enforcer and policy static tests
         language: system
         entry: python -m pytest -q -p no:cacheprovider scripts/test_netpol_manifests.py
         pass_filenames: false
-        files: ^(cluster/.*|router/ansible/group_vars/vyos_routers\.yml|scripts/test_netpol_manifests\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
+        files: ^(cluster/.*|router/ansible/group_vars/vyos_routers\.yml|tools/bmcctl/src/bmcctl/nodes\.py|scripts/test_netpol_manifests\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
       # Realliance Pages' fixed values: the git-pages 0.10.1 pin and config (128 MB
       # cap, proxy not caddy, header allowlist), pod hardening for PodSecurity
       # restricted, the relay's env, monitors and alerts, Renovate rules, and the
