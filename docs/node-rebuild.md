@@ -24,6 +24,9 @@ Facts this relies on, checked 2026-10-27:
 - **A cold cache strands nothing.** All 110 running images still resolved upstream.
   A rebuilt node pulls everything again; docker.io pulls go through the in-cluster
   mirror at .231.
+  One exception: the realliance.net site pulls `git.realliance.net/realliance/realliance.net` from
+  the in-cluster Forgejo, so a rebuilt node cannot start a new site pod while Forgejo is down
+  (both `home` replicas can share a node; no anti-affinity, no PDB).
 - **The kubelet serving CSR is approved automatically**
   (`kubelet-serving-cert-approver`).
 - **The Rook mon recovers by itself.** With an empty `/var/lib/rook/mon-X`, its

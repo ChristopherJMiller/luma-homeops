@@ -73,7 +73,7 @@ Realliance SSO decides everything; never grant access in Forgejo by hand.
   the SSO, they also change it in Forgejo (Settings → Account → Emails; no confirmation mail needed).
 - People without a last name are fine (SSO last name is optional).
 
-### Removing someone (two steps — both, every time)
+### Removing someone (two steps, plus a third for `realliance` members)
 
 forge-sync (periodic reconciliation) is deferred, so the SSO change alone is **not** enough: a
 person who can no longer sign in never triggers the sign-in sync, and their SSH keys and access
@@ -84,7 +84,9 @@ tokens keep working.
    `PATCH /api/v1/admin/users/<name>` with `prohibit_login: true`, `login_name`, `source_id`).
    This blocks their web session ("Account is suspended"), API tokens and SSH immediately.
 
-Reversing both restores everything. Until step 2 is done, access lingers — that is the known gap.
+3. If the person was a `realliance` member, rotate `SITE_REGISTRY_TOKEN` (see Rotating `SITE_REGISTRY_TOKEN` under realliance.net). Any member can read it through a branch-push workflow, and a registry push with it deploys to galaxy.
+
+Reversing steps 1 and 2 restores everything (step 3 is not reversible). Until step 2 is done, access lingers — that is the known gap.
 `tests/forge/test_forge_access.py::test_offboarding_blocks_web_token_and_ssh_and_is_reversible`
 proves the procedure.
 
@@ -243,8 +245,16 @@ Who may change `main`, and the signing rules, are in the paragraphs **What the i
 2. An Owner pushes a signed tag, `git tag -s X.Y.Z`. CI publishes `X.Y.Z` and `sha-<7>`.
 3. Renovate opens the re-pin PR in luma-homeops (`X.Y.Z@sha256:…`) and automerges it; Argo rolls `deploy/home`. Pre-pulling on each node (`talosctl image pull`) is optional; without it, new pods need Forgejo up.
 4. To check a release by hand: `git verify-tag X.Y.Z` and the range from the previous tag.
+5. If anyone deletes a package version from the registry (any member can, including the live pin and the rollback `2.3`), rebuild the tag locally and push it: the build is reproducible, so it gives the same digest.
 
-**Rollback.** `git revert` the re-pin. The previous pin is `git.realliance.net/realliance/realliance.net:2.3@sha256:7405276fcd58b6ade36c76147a23dfaba6eac6287880c14e37160d032961e359`, copied from Quay at the same digest. Chris retired Quay.
+**Rollback.** Roll forward to the old pin; do not `git revert` the re-pin (it conflicts with later comment edits, and it can bring back the Quay line). Renovate would also re-propose the bad release within the hour, so pause it in the same commit.
+
+1. Edit `cluster/realliance.net/home.yaml`: set `image:` to `git.realliance.net/realliance/realliance.net:2.3@sha256:7405276fcd58b6ade36c76147a23dfaba6eac6287880c14e37160d032961e359`.
+2. In the same commit, add a temporary rule to `.renovaterc.json`, **after** the site rule (a later rule wins): `{ "matchManagers": ["kubernetes"], "matchPackageNames": ["git.realliance.net/realliance/realliance.net"], "enabled": false, "description": "TEMPORARY: rolled back from <bad version>; remove once the fix is released." }`. This pauses every site update, so a fixed release waits too. The softer option is `"dependencyDashboardApproval": true` plus `"automerge": false` in the same rule: Renovate still opens PRs, but nothing deploys until Chris approves one.
+3. Push. Argo rolls `deploy/home` back; watch it with `kubectl -n realliance-net rollout status deploy/home`.
+4. Once the fix ships and you have reviewed it, **remove the temporary rule** in the commit that re-pins to the fixed `X.Y.Z`. A rule left behind silently stops the site from ever updating.
+
+The registry copy of `2.3` has the same digest as Quay's. Quay no longer serves as a source: nothing pulls from it, and the repo stays until Chris deletes it.
 
 **Runbook: the 5Mi trap.** The `home` pods have a 5Mi memory limit (kept on purpose). **Never `kubectl exec` into them:** the exec OOM-kills the pod. Inspect from outside: `kubectl logs`, `kubectl describe`, `curl` against the site. An OOMKilled that you did not cause is a rollback trigger.
 
@@ -259,9 +269,23 @@ Who may change `main`, and the signing rules, are in the paragraphs **What the i
 - NetworkPolicy: none yet. It lands with the realliance.net plan's Part C, after the NetworkPolicy plan's B2.
 - Accepted risk: any `realliance` member can push a branch and run a workflow here. That workflow reads `SITE_REGISTRY_TOKEN` and can publish any `realliance` package. Renovate automerges new `X.Y.Z` registry tags, so that member's push also deploys to galaxy. Chris accepted this on 2026-11-05. The fix, if anyone not fully trusted joins `/realliance`: gate the automerge on a provenance check (signed git tag + reproducible rebuild digest).
 - Not offered: ephemeral one-job runners, per-job volumes, quotas or a job deadline. The pod is long-lived, and its `HOME` persists between jobs until a restart.
-- Retiring it: drop the allowlisted connection and delete its runner row, remove `cluster/forgejo-runner-general/` and its Argo wiring, delete the repo secret `SITE_REGISTRY_TOKEN`, revoke the `realliance-ci` token and drop its entry in `sso-secrets`.
+- Retiring it, in this order (the site's publishing and the runner are separate things; a move to another runner class still needs the token and secret):
+  1. Change `runs-on: general` in the site's `ci.yaml` first, or jobs wait forever and nothing publishes.
+  2. Drop the allowlisted connection and delete its runner row.
+  3. Remove `cluster/forgejo-runner-general/`, its Argo wiring, `images/forgejo-runner-general/` and the GitHub image workflow. In the same commit drop `scripts/test_runner_general.py` and its `realliance-net` pre-commit hook entry (the test cannot render without the directory), and the Renovate rule for the runner image.
+  4. Argo prunes the namespace and the PVC; the storage class keeps the volume as a Released PV. That delete is an S4 ask, then a manual PV delete.
+  5. Remove the sso test `test_forge_runner_general.py`.
+  6. Only if the site stops publishing too: delete the repo secret `SITE_REGISTRY_TOKEN`, revoke the `realliance-ci` token and drop its `sso-secrets` entry (this also fails the sso `test_realliance_ci_*` and `test_site_registry_token_scope` tests, so remove them with it).
 
-**Tokens.** `SITE_REGISTRY_TOKEN` is a repo secret holding a `write:package` token for `realliance-ci`, a local account in team `realliance/ci` (packages only, no repos). Forgejo 15 cannot narrow it: it reaches every `realliance` package. Rotate it when any member leaves, as forge-bot's runbook does. The source is `REALLIANCE_NET_REGISTRY_TOKEN` in `sso-secrets`.
+**Tokens.** `SITE_REGISTRY_TOKEN` is a repo secret holding a `write:package` token for `realliance-ci`, a local account in team `realliance/ci` (packages only, no repos). Forgejo 15 cannot narrow it: it reaches every `realliance` package. Rotate it when any member leaves (a member can read it through a branch-push workflow), and when it may have leaked. The source is `REALLIANCE_NET_REGISTRY_TOKEN` in `sso-secrets`. The procedure is in Rotating `SITE_REGISTRY_TOKEN`, below.
+
+**Rotating `SITE_REGISTRY_TOKEN`.** The sso test `tests/forge/test_forge_ci.py` expects `realliance-ci` to hold exactly one token, named `realliance-net-registry`, and Forgejo token names are unique per user. The old token goes first, and publishing is down until the new one is in. Do it when no site CI run is in flight, and never put a token value in chat or a commit message.
+
+1. Delete the old token (`DELETE /api/v1/users/realliance-ci/tokens/realliance-net-registry`, as an administrator). Every copy stops working now.
+2. Mint the new one with the same name and scope `write:package` (`forgejo admin user generate-access-token --username realliance-ci --token-name realliance-net-registry --scopes write:package --raw`), and pipe it straight into the next two steps.
+3. Set the repo secret: `PUT /api/v1/repos/realliance/realliance.net/actions/secrets/SITE_REGISTRY_TOKEN`.
+4. Store it in `sso-secrets` as `REALLIANCE_NET_REGISTRY_TOKEN`, then commit that repo.
+5. Run the sso one-token test (`tests/forge/test_forge_ci.py`), then re-run the site's latest CI job from the forge UI and check that it publishes.
 
 **Dependencies.** New pods cannot pull while Forgejo is down. A WAN-IP change breaks node pulls until the router's reflection rules follow (the inherited hairpin limit).
 
