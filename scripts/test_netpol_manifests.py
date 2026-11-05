@@ -33,6 +33,15 @@ Application is unchanged, keep checking the vendored sha256, and skip the
 deployed-state invariants. `resources: []` WITHOUT the marker fails: an
 accidental empty render must never pass. To redeploy, `git revert` the
 rollback commit.
+
+Rolling back the canary
+-----------------------
+Same rule and marker for cluster/netpol-canary/kustomization.yaml. Below its
+header comment it becomes exactly the marker line, `apiVersion:`, `kind:` and
+`resources: []`: delete everything after the `resources:` list (the ConfigMap
+generator, and from Task 7 on its components and patches). Leave
+cluster/applications/netpol-canary.yaml as it is. The canary tests then skip
+the deployed-state checks.
 """
 
 import hashlib
@@ -112,6 +121,20 @@ ENFORCER_METRICS = {
     "kube_network_policies_unresolved_ip_count",
 }
 
+CANARY_DIR = "cluster/netpol-canary"
+CANARY_APP = "cluster/applications/netpol-canary.yaml"
+CANARY_NS = "netpol-canary"
+CANARY_KINDS = ["ConfigMap", "DaemonSet", "Deployment", "Namespace", "Service", "Service"]
+# The form, not the value: Renovate automerges agnhost digests (:automergeDigest).
+AGNHOST_RE = r"registry\.k8s\.io/e2e-test-images/agnhost:[0-9][0-9.]*@sha256:[0-9a-f]{64}"
+PROBE_ENV = ["PROBE_MODE", "PROBE_INTERVAL", "HOST_IP", "NODE_NAME", "MATRIX"]
+# Chris's pick (2026-11-03): one run every 300 s, Ready while /tmp/ready is under 11 minutes old.
+PROBE_INTERVAL = "300"
+READY_RE = r'test -n "\$\(find /tmp/ready -mmin -(\d+) 2>/dev/null\)"'
+# agnhost connect --timeout=3s and dig +time=3: a run takes at most 3 s per row, plus the WAN lookup.
+ROW_TIMEOUT_S = 3
+DHCP_VARS = "router/ansible/group_vars/vyos_routers.yml"
+
 # pre-commit hooks that rewrite files; none may touch the vendored manifest.
 REWRITING_HOOKS = {"yamlfmt", "end-of-file-fixer", "trailing-whitespace", "mixed-line-ending", "fix-byte-order-marker"}
 
@@ -142,7 +165,7 @@ def has_marker(text: str) -> bool:
     return any(line.strip() == ROLLBACK_MARKER for line in text.splitlines())
 
 
-def enforcer_state(app_dir=ENFORCER_DIR) -> str:
+def app_state(app_dir) -> str:
     """'deployed' or 'rolled-back' (the marked rollback in the module docstring).
 
     Fails on anything else: an empty render without the marker, the marker on a
@@ -164,7 +187,7 @@ def enforcer_state(app_dir=ENFORCER_DIR) -> str:
 
 
 def require_deployed():
-    if enforcer_state() == "rolled-back":
+    if app_state(ENFORCER_DIR) == "rolled-back":
         pytest.skip(f"rolled back: {ENFORCER_DIR} renders nothing ({ROLLBACK_MARKER})")
 
 
@@ -182,11 +205,15 @@ def deployed_kustomization() -> str:
     return DEPLOYED_KUSTOMIZATION if has_marker(text) else text
 
 
-def enforcer_copy(tmp_path: Path, kustomization: str) -> Path:
-    d = tmp_path / "kube-network-policies"
-    shutil.copytree(REPO / ENFORCER_DIR, d)
+def app_copy(tmp_path: Path, app_dir: str, kustomization: str) -> Path:
+    d = tmp_path / Path(app_dir).name
+    shutil.copytree(REPO / app_dir, d)
     (d / "kustomization.yaml").write_text(kustomization)
     return d
+
+
+def enforcer_copy(tmp_path: Path, kustomization: str) -> Path:
+    return app_copy(tmp_path, ENFORCER_DIR, kustomization)
 
 
 # --- always, deployed or rolled back -------------------------------------------
@@ -198,12 +225,12 @@ def test_upstream_vendored_byte_identical():
 
 def test_enforcer_state():
     """The tree is either deployed or in the marked rollback, never an unmarked empty render."""
-    assert enforcer_state() in {"deployed", "rolled-back"}
+    assert app_state(ENFORCER_DIR) in {"deployed", "rolled-back"}
 
 
 def test_rollback_edit_is_recognised(tmp_path):
     d = enforcer_copy(tmp_path, rolled_back_text(deployed_kustomization()))
-    assert enforcer_state(d) == "rolled-back"
+    assert app_state(d) == "rolled-back"
     assert render(d) == []
 
 
@@ -211,21 +238,21 @@ def test_unmarked_empty_render_fails(tmp_path):
     k = deployed_kustomization()
     d = enforcer_copy(tmp_path, rolled_back_text(k).replace(ROLLBACK_MARKER + "\n", ""))
     with pytest.raises(AssertionError, match="no rollback marker"):
-        enforcer_state(d)
+        app_state(d)
 
 
 def test_marker_on_a_rendering_kustomization_fails(tmp_path):
     k = deployed_kustomization()
     d = enforcer_copy(tmp_path, k.replace("\napiVersion:", f"\n{ROLLBACK_MARKER}\napiVersion:", 1))
     with pytest.raises(AssertionError, match="resources must be"):
-        enforcer_state(d)
+        app_state(d)
 
 
 def test_rollback_that_keeps_patches_fails(tmp_path):
     k = rolled_back_text(deployed_kustomization())
     d = enforcer_copy(tmp_path, k + "patches:\n  - path: daemonset-patch.yaml\n")
     with pytest.raises(AssertionError, match="keeps only"):
-        enforcer_state(d)
+        app_state(d)
 
 
 def test_enforcer_app():
@@ -408,3 +435,212 @@ def test_canary_matrix_bmcs_match_ipmi_scrapeconfig():
             bmcs.add(row[2])
     assert bmcs, "matrix has no BMC rows"
     assert bmcs == scraped, f"matrix BMCs {sorted(bmcs)} != scraped {sorted(scraped)}"
+
+
+# --- the canary (cluster/netpol-canary, plan Tasks 6 and 7) ---------------------
+
+
+def named(docs: list[dict], kind: str, name: str) -> dict:
+    found = [d for d in docs if d.get("kind") == kind and d["metadata"]["name"] == name]
+    assert len(found) == 1, f"expected exactly one {kind}/{name}, got {len(found)}"
+    return found[0]
+
+
+def require_canary_deployed():
+    if app_state(CANARY_DIR) == "rolled-back":
+        pytest.skip(f"rolled back: {CANARY_DIR} renders nothing ({ROLLBACK_MARKER})")
+
+
+def canary_rows() -> list[list[str]]:
+    """The matrix.txt rows the canary runs (scope all or canary), split into columns."""
+    rows = []
+    for raw in (REPO / CANARY_DIR / "matrix.txt").read_text().splitlines():
+        row = raw.split()
+        if row and not row[0].startswith("#") and row[1] in ("all", "canary"):
+            rows.append(row)
+    return rows
+
+
+def hardened_container(pod: dict, what: str) -> dict:
+    """PodSecurity restricted, plus no token, no service links and no host namespaces.
+    Returns the pod's one container."""
+    sc = pod["securityContext"]
+    assert sc["runAsNonRoot"] is True and sc["runAsUser"] == 1000, what
+    assert sc["seccompProfile"] == {"type": "RuntimeDefault"}, what
+    assert pod["automountServiceAccountToken"] is False, what
+    assert pod["enableServiceLinks"] is False, what
+    for key in ("hostNetwork", "hostPID", "hostIPC", "initContainers", "ephemeralContainers"):
+        assert not pod.get(key), f"{what}: {key} must not be set"
+    assert not [v for v in pod.get("volumes", []) if "hostPath" in v], f"{what}: no hostPath"
+    (c,) = pod["containers"]
+    assert re.fullmatch(AGNHOST_RE, c["image"]), f"{what}: {c['image']!r} is not a digest-pinned agnhost"
+    csc = c["securityContext"]
+    assert csc["allowPrivilegeEscalation"] is False, what
+    assert csc["readOnlyRootFilesystem"] is True, what
+    assert csc["capabilities"] == {"drop": ["ALL"]}, what
+    assert "privileged" not in csc, what
+    return c
+
+
+def probe_container(docs: list[dict]) -> dict:
+    return named(docs, "DaemonSet", "netpol-probe")["spec"]["template"]["spec"]["containers"][0]
+
+
+def test_canary_state():
+    """Deployed or in the marked rollback, never an unmarked empty render."""
+    assert app_state(CANARY_DIR) in {"deployed", "rolled-back"}
+
+
+def test_canary_rollback_edit_is_recognised(tmp_path):
+    text = (REPO / CANARY_DIR / "kustomization.yaml").read_text()
+    if has_marker(text):
+        pytest.skip("the canary is rolled back already")
+    d = app_copy(tmp_path, CANARY_DIR, rolled_back_text(text))
+    assert app_state(d) == "rolled-back"
+    assert render(d) == []
+
+
+def test_canary_app():
+    """Same in both states: a rollback never edits or deletes the Application."""
+    app = yaml.safe_load((REPO / CANARY_APP).read_text())
+    assert app["kind"] == "Application"
+    assert app["metadata"] == {"name": "netpol-canary", "namespace": "argo-cd"}, "no finalizers"
+    assert app["spec"]["source"]["path"] == CANARY_DIR
+    assert app["spec"]["destination"] == {"server": "https://kubernetes.default.svc", "namespace": CANARY_NS}
+    sync = app["spec"]["syncPolicy"]
+    assert sync["automated"] == {"prune": True, "selfHeal": True, "allowEmpty": True}
+    assert sync["syncOptions"] == ["CreateNamespace=true", "PrunePropagationPolicy=foreground", "PruneLast=true"]
+
+    root = yaml.safe_load((REPO / "cluster/applications/kustomization.yaml").read_text())
+    assert Path(CANARY_APP).name in root["resources"]
+
+
+def test_canary_kustomization_sets_no_namespace():
+    """F5: a kustomization-level namespace would move Task 7's PrometheusRule out of `prometheus`.
+    Every object names netpol-canary itself (test_canary_workloads checks the render)."""
+    require_canary_deployed()
+    k = yaml.safe_load((REPO / CANARY_DIR / "kustomization.yaml").read_text())
+    assert "namespace" not in k
+
+
+def test_canary_workloads():
+    require_canary_deployed()
+    docs = render(CANARY_DIR)
+    assert sorted(d["kind"] for d in docs) == CANARY_KINDS
+    # B1a: the baseline runs with no policy at all. Task 7 adds them.
+    assert not [d for d in docs if d["kind"] == "NetworkPolicy"], "B1a renders no NetworkPolicy"
+
+    ns = one(docs, "Namespace")
+    assert ns["metadata"]["name"] == CANARY_NS
+    assert ns["metadata"]["labels"]["pod-security.kubernetes.io/enforce"] == "restricted"
+    for d in docs:
+        if d["kind"] != "Namespace":
+            assert d["metadata"].get("namespace") == CANARY_NS, f"{d['kind']}/{d['metadata']['name']}"
+
+    workloads = {"netpol-probe": named(docs, "DaemonSet", "netpol-probe"), "netpol-echo": named(docs, "Deployment", "netpol-echo")}
+    for name, w in workloads.items():
+        labels = {"app.kubernetes.io/name": name}
+        assert labels.items() <= w["metadata"]["labels"].items(), name
+        assert w["spec"]["selector"] == {"matchLabels": labels}, name
+        assert labels.items() <= w["spec"]["template"]["metadata"]["labels"].items(), name
+
+    # The probe.
+    pod = workloads["netpol-probe"]["spec"]["template"]["spec"]
+    c = hardened_container(pod, "netpol-probe")
+    assert c["command"] == ["bash", "/etc/netpol-probe/probe.sh", "loop"]
+    assert "args" not in c
+    assert sorted(e["name"] for e in c["env"]) == sorted(PROBE_ENV)
+    env = {e["name"]: e for e in c["env"]}
+    assert env["PROBE_MODE"]["value"] == "baseline"
+    assert env["PROBE_INTERVAL"]["value"] == PROBE_INTERVAL
+    assert env["HOST_IP"]["valueFrom"] == {"fieldRef": {"fieldPath": "status.hostIP"}}
+    assert env["NODE_NAME"]["valueFrom"] == {"fieldRef": {"fieldPath": "spec.nodeName"}}
+    assert env["MATRIX"]["value"] == "/etc/netpol-probe/matrix.txt"
+    assert c["resources"] == {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}
+    rp = c["readinessProbe"]
+    cmd = rp["exec"]["command"]
+    assert len(cmd) == 3 and cmd[:2] == ["sh", "-c"] and re.fullmatch(READY_RE, cmd[2]), cmd
+    assert rp["periodSeconds"] == 15
+    # A failing canary is the signal, not something to restart.
+    assert "livenessProbe" not in c and "startupProbe" not in c
+
+    mounts = {m["mountPath"]: m for m in c["volumeMounts"]}
+    vols = {v["name"]: v for v in pod["volumes"]}
+    assert set(mounts) == {"/etc/netpol-probe", "/tmp"}
+    assert "emptyDir" in vols[mounts["/tmp"]["name"]]
+    assert mounts["/etc/netpol-probe"]["readOnly"] is True
+    cm_name = vols[mounts["/etc/netpol-probe"]["name"]]["configMap"]["name"]
+    assert re.fullmatch(r"netpol-probe-[a-z0-9]+", cm_name), "the generator's hashed name: a matrix change rolls the pods"
+    cm = named(docs, "ConfigMap", cm_name)
+    assert cm["data"] == {f: (REPO / CANARY_DIR / f).read_text() for f in ("probe.sh", "matrix.txt")}
+
+    # The echo server.
+    echo = workloads["netpol-echo"]
+    assert echo["spec"]["replicas"] == 1
+    e = hardened_container(echo["spec"]["template"]["spec"], "netpol-echo")
+    assert e["args"] == ["porter"] and "command" not in e
+    assert e["env"] == [{"name": "SERVE_PORT_9376", "value": "open"}, {"name": "SERVE_PORT_9377", "value": "closed"}]
+    assert e["readinessProbe"]["tcpSocket"] == {"port": 9376}
+    assert "livenessProbe" not in e and "startupProbe" not in e
+    assert e["resources"] == {"requests": {"cpu": "5m", "memory": "16Mi"}, "limits": {"memory": "64Mi"}}
+    assert sorted(p["containerPort"] for p in e["ports"]) == [9376, 9377]
+
+    sel = {"app.kubernetes.io/name": "netpol-echo"}
+    svc = named(docs, "Service", "netpol-echo")
+    assert svc["spec"].get("type", "ClusterIP") == "ClusterIP" and svc["spec"].get("clusterIP") != "None"
+    assert svc["spec"]["selector"] == sel
+    assert sorted((p["port"], p.get("protocol", "TCP")) for p in svc["spec"]["ports"]) == [(9376, "TCP"), (9377, "TCP")]
+    # Headless: its name resolves to the echo pod's own IP, for the matrix row that dials the pod directly.
+    pod_svc = named(docs, "Service", "netpol-echo-pod")
+    assert pod_svc["spec"]["clusterIP"] == "None"
+    assert pod_svc["spec"]["selector"] == sel
+
+
+def test_canary_matrix_targets_exist():
+    """Rows naming a netpol-canary Service name one this kustomization renders. The row through
+    the headless Service dials the echo pod's IP on a port the echo neither serves nor names. The
+    pod refuses it at baseline, and once Task 7's policies are in only the egress rule's
+    10.0.0.0/8 except can drop it."""
+    require_canary_deployed()
+    docs = render(CANARY_DIR)
+    services = {d["metadata"]["name"]: d for d in docs if d["kind"] == "Service"}
+    echo = named(docs, "Deployment", "netpol-echo")["spec"]["template"]["spec"]["containers"][0]
+    served = {p["containerPort"] for p in echo["ports"]}
+    rows = [r for r in canary_rows() if r[2].endswith(f".{CANARY_NS}.svc.cluster.local")]
+    assert rows, "the matrix has no echo rows"
+    headless = 0
+    for expect, scope, host, port, backend, *_ in rows:
+        svc = host.split(".")[0]
+        assert svc in services, f"{host} is not a Service in {CANARY_DIR}"
+        assert scope == "canary", f"{host}: only the canary can reach the echo server"
+        if services[svc]["spec"].get("clusterIP") == "None":
+            headless += 1
+            assert expect == "dropped" and int(port) not in served, f"{host}:{port}"
+            assert backend == f"{CANARY_NS}/{svc}"
+    assert headless == 1, "exactly one row dials the echo pod's IP"
+
+
+def test_probe_readiness_window_covers_interval():
+    """F9: Ready must outlast one interval plus one full run, and at least two intervals.
+
+    The probe touches /tmp/ready after each passing run and starts runs max(5, interval - run)
+    apart, so two healthy touches are at most interval + run apart. A run is bounded by every row
+    and the WAN lookup at their 3 s timeouts. Preflight F9 proposed 3 intervals, calibrated on the
+    60 s option; Chris's 300 s pick came with an 11-minute window (2.2 intervals), so 2 is the floor.
+    """
+    require_canary_deployed()
+    c = probe_container(render(CANARY_DIR))
+    interval = int({e["name"]: e for e in c["env"]}["PROBE_INTERVAL"]["value"])
+    window = int(re.fullmatch(READY_RE, c["readinessProbe"]["exec"]["command"][2]).group(1)) * 60
+    run = ROW_TIMEOUT_S * (len(canary_rows()) + 1)
+    assert window >= 2 * interval, f"readiness window {window}s < 2 x {interval}s"
+    assert window > interval + run, f"readiness window {window}s <= interval {interval}s + run {run}s"
+
+
+def test_probe_node_ips_match_dhcp_reservations():
+    """probe.sh's default NODE_IPS ($PEER_IP rows) is top, middle, bottom, as the router reserves them."""
+    defaults = re.findall(r"NODE_IPS:-([0-9. ]+)\}", (REPO / CANARY_DIR / "probe.sh").read_text())
+    assert len(defaults) == 1, "probe.sh must default NODE_IPS in exactly one place"
+    dhcp = yaml.safe_load((REPO / DHCP_VARS).read_text())["dhcp"]["static_mappings"]
+    ips = {m["name"]: m["ip"] for m in dhcp}
+    assert defaults[0].split() == [ips["top"], ips["middle"], ips["bottom"]]

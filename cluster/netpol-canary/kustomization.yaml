@@ -1,0 +1,26 @@
+---
+# netpol-canary: the permanent NetworkPolicy canary (design §6.4). A probe DaemonSet, one pod per
+# node because each node's agent enforces on its own, runs probe.sh over matrix.txt; an echo
+# server gives it a target in its own namespace. B1a (plan Task 6): no policy yet, so the probe
+# runs in baseline mode. Task 7 adds the policy components and switches it to enforced.
+#
+# No kustomization-level namespace (preflight F5): Task 7's PrometheusRule lives in `prometheus`,
+# so every object names netpol-canary itself, and the generator below does too.
+#
+# Roll back by rendering nothing, never by deleting cluster/applications/netpol-canary.yaml.
+# Below this header the file becomes exactly the marker `# netpol: rolled back (Global
+# Constraints)`, apiVersion, kind and `resources: []`, with everything after the resources list
+# deleted. Argo prunes it all (allowEmpty). The netpol-manifests hook accepts only that shape.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - probe.yaml
+  - echo.yaml
+# The name gets a content hash, so a change to probe.sh or matrix.txt rolls the probe pods.
+configMapGenerator:
+  - name: netpol-probe
+    namespace: netpol-canary
+    files:
+      - probe.sh
+      - matrix.txt

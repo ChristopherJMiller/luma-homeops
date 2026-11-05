@@ -11,7 +11,10 @@ reaching galaxy.
 
 What it pins: `idle` PASSes only when every scheduled agent is Ready, listed and
 judged PASS. A partial pod list, a failed parse or empty jq output is a FAIL
-(exit 1), never a vacuous PASS.
+(exit 1), never a vacuous PASS. `baseline` runs only against exactly three
+Running probe pods on three nodes (else exit 2), and PASSes only when every pod
+reports every canary row of the repo's matrix.txt (N rows, counted here, never
+a literal) as answering.
 """
 
 import json
@@ -62,6 +65,10 @@ answer() { [ -f "$1" ] || { echo "Error from server (NotFound): stub has no $1" 
 args=" $* "
 case "$args" in
   *" networkpolicies "*) answer "$F/np.json" ;;
+  *" netpol-canary get pods "*) answer "$F/probe-pods.json" ;;
+  *" exec "*) p=${args#* exec }; p=${p%% *}
+    [ -f "$F/exec/$p.rc" ] || { echo "Error from server (NotFound): pods \"$p\" not found" >&2; exit 1; }
+    cat "$F/exec/$p"; exit "$(cat "$F/exec/$p.rc")" ;;
   *" daemonset "*) answer "$F/ds.json" ;;
   *" get pods "*) answer "$F/pods.json" ;;
   *" --raw "*) p=${args#*/pods/}; answer "$F/metrics/${p%%:*}" ;;
@@ -208,3 +215,155 @@ def test_selftest_passes():
     r = subprocess.run([str(SCRIPT), "selftest"], capture_output=True, text=True, timeout=120)
     assert r.returncode == 0, r.stdout + r.stderr
     assert "selftest: PASS" in r.stdout
+
+
+# --- baseline ----------------------------------------------------------------------
+
+MATRIX = SCRIPT.parent.parent / "cluster" / "netpol-canary" / "matrix.txt"
+
+
+def canary_row_count() -> int:
+    """N: the matrix rows the canary runs (scope all or canary), counted from the repo's matrix.txt."""
+    n = 0
+    for raw in MATRIX.read_text().splitlines():
+        row = raw.split()
+        if row and not row[0].startswith("#") and row[1] in ("all", "canary"):
+            n += 1
+    return n
+
+
+def probe_pod(name: str, node: str, phase: str = "Running", deleting: bool = False) -> dict:
+    meta = {"name": name}
+    if deleting:
+        meta["deletionTimestamp"] = "2026-11-05T18:50:00Z"
+    return {"metadata": meta, "spec": {"nodeName": node}, "status": {"phase": phase}}
+
+
+def probe_table(node: str, rows: int, fail: int = 0) -> str:
+    """What `probe.sh once baseline` prints: one line per row, then SUMMARY."""
+    lines = [f"PASS dropped open 192.168.0.{i}:443 row {i}" for i in range(rows - fail)]
+    lines += [f"FAIL dropped timeout 192.168.0.{200 + i}:443 dead target" for i in range(fail)]
+    lines.append(f"SUMMARY {rows - fail}/{rows} baseline node={node}")
+    return "\n".join(lines) + "\n"
+
+
+def baseline_fixtures(tmp: Path, pods: list[dict], execs: dict[str, tuple[str, int]]) -> Path:
+    """Agent fixtures stay empty; probe pods and each pod's exec answer (stdout, exit code)."""
+    fixtures(tmp, ds_doc=None, pods=[])
+    f = tmp / "fx"
+    (f / "probe-pods.json").write_text(json.dumps({"items": pods}))
+    (f / "exec").mkdir()
+    for name, (out, rc) in execs.items():
+        (f / "exec" / name).write_text(out)
+        (f / "exec" / f"{name}.rc").write_text(str(rc))
+    return tmp
+
+
+def baseline(tmp: Path) -> subprocess.CompletedProcess:
+    env = dict(os.environ)
+    env.update(
+        PATH=f"{tmp / 'bin'}:{env['PATH']}",
+        NETPOL_FIXTURES=str(tmp / "fx"),
+        KUBECONFIG=str(tmp / "no-such-kubeconfig"),
+    )
+    return subprocess.run([str(SCRIPT), "baseline"], env=env, capture_output=True, text=True, timeout=60)
+
+
+def three_probes(**overrides) -> tuple[list[dict], dict[str, tuple[str, int]]]:
+    """Three Running probe pods on three nodes, each answering every row. overrides: pod -> (out, rc)."""
+    n = canary_row_count()
+    pods = [probe_pod(f"netpol-probe-{node}", node) for node in NODES]
+    execs = {f"netpol-probe-{node}": (probe_table(node, n), 0) for node in NODES}
+    execs.update(overrides)
+    return pods, execs
+
+
+def test_matrix_row_count_is_derived():
+    """N is whatever matrix.txt holds; the baseline, canary and runner checks print it (F8)."""
+    assert canary_row_count() > 0
+
+
+def test_baseline_passes(tmp_path):
+    n = canary_row_count()
+    r = baseline(baseline_fixtures(tmp_path, *three_probes()))
+    assert r.returncode == 0, r.stdout + r.stderr
+    for node in NODES:
+        assert f"PASS {node} {n}/{n} rows answer" in r.stdout
+        assert f"SUMMARY {n}/{n} baseline node={node}" in r.stdout, "each pod's table is printed"
+    assert r.stdout.rstrip().splitlines()[-1] == f"baseline: PASS (3 nodes × {n} rows answer)"
+
+
+def test_baseline_no_probe_pods_is_exit_2(tmp_path):
+    r = baseline(baseline_fixtures(tmp_path, [], {}))
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "no netpol-probe pods" in r.stderr
+    assert "baseline: PASS" not in r.stdout
+
+
+def test_baseline_two_pods_is_exit_2(tmp_path):
+    pods, execs = three_probes()
+    r = baseline(baseline_fixtures(tmp_path, pods[:2], execs))
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "exactly 3 Running netpol-probe pods on 3 nodes" in r.stderr
+
+
+def test_baseline_two_nodes_is_exit_2(tmp_path):
+    pods, execs = three_probes()
+    pods[2]["spec"]["nodeName"] = pods[1]["spec"]["nodeName"]
+    r = baseline(baseline_fixtures(tmp_path, pods, execs))
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "exactly 3 Running netpol-probe pods on 3 nodes" in r.stderr
+
+
+def test_baseline_pending_pod_is_exit_2(tmp_path):
+    pods, execs = three_probes()
+    pods[0]["status"]["phase"] = "Pending"
+    r = baseline(baseline_fixtures(tmp_path, pods, execs))
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "exactly 3 Running netpol-probe pods on 3 nodes" in r.stderr
+
+
+def test_baseline_ignores_a_terminating_pod(tmp_path):
+    """baseline neither counts a rollout's outgoing pod (deletionTimestamp set) nor runs anything in it."""
+    pods, execs = three_probes()
+    pods.append(probe_pod("netpol-probe-old", "top", deleting=True))
+    r = baseline(baseline_fixtures(tmp_path, pods, execs))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "netpol-probe-old" not in r.stdout
+
+
+def test_baseline_dead_target_fails(tmp_path):
+    """One row that neither connects nor gets a refusal: the row Task 6 Step 8 exists to catch."""
+    n = canary_row_count()
+    pods, execs = three_probes(**{"netpol-probe-middle": (probe_table("middle", n, fail=1), 1)})
+    r = baseline(baseline_fixtures(tmp_path, pods, execs))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "FAIL dropped timeout 192.168.0.200:443 dead target" in r.stdout
+    assert "FAIL middle" in r.stdout
+    assert "baseline: PASS" not in r.stdout
+
+
+def test_baseline_stale_matrix_fails(tmp_path):
+    """A pod that ran one row fewer than the repo's matrix (a stale ConfigMap) is a FAIL."""
+    n = canary_row_count()
+    pods, execs = three_probes(**{"netpol-probe-top": (probe_table("top", n - 1), 0)})
+    r = baseline(baseline_fixtures(tmp_path, pods, execs))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "FAIL top" in r.stdout
+
+
+def test_baseline_exec_error_fails(tmp_path):
+    """No table at all (exec refused, probe.sh missing): a FAIL, never a vacuous PASS."""
+    pods, execs = three_probes(**{"netpol-probe-bottom": ("", 1)})
+    r = baseline(baseline_fixtures(tmp_path, pods, execs))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "FAIL bottom" in r.stdout
+
+
+def test_baseline_summary_from_another_node_fails(tmp_path):
+    """NODE_NAME in the pod must be the node the API says it runs on."""
+    n = canary_row_count()
+    pods, execs = three_probes(**{"netpol-probe-top": (probe_table("middle", n), 0)})
+    r = baseline(baseline_fixtures(tmp_path, pods, execs))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "FAIL top" in r.stdout

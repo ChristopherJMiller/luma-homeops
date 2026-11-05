@@ -1,0 +1,81 @@
+---
+# netpol-probe: one canary pod per node. probe.sh's loop runs every row of matrix.txt every
+# PROBE_INTERVAL seconds, start to start, and touches /tmp/ready after a run in which every row
+# passed, so Ready means the last run matched.
+# - PROBE_MODE baseline (B1a, no policy yet): every row must answer, which proves that each
+#   must-drop target is alive before Task 7's policies make it time out. Task 7 sets enforced.
+# - Interval 300 s (Chris, 2026-11-03). The readiness window (-mmin -11) must outlast an interval
+#   plus a full run; scripts/test_netpol_manifests.py checks the pair (F9).
+# - No liveness probe: a failing canary is the signal, not something to restart.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: netpol-probe
+  namespace: netpol-canary
+  labels:
+    app.kubernetes.io/name: netpol-probe
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: netpol-probe
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: netpol-probe
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: probe
+          # agnhost has bash, dig and `agnhost connect`, the connect tool of upstream's NetworkPolicy e2e tests.
+          image: registry.k8s.io/e2e-test-images/agnhost:2.66.1@sha256:6e2eef87d0dc77e070a7549bc5fdfa290c0fefe3359eb33c2ad1eda692fe66a4
+          command: [bash, /etc/netpol-probe/probe.sh, loop]
+          env:
+            - name: PROBE_MODE
+              value: baseline
+            - name: PROBE_INTERVAL
+              value: "300"
+            - name: HOST_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.hostIP
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: MATRIX
+              value: /etc/netpol-probe/matrix.txt
+          readinessProbe:
+            exec:
+              command: [sh, -c, 'test -n "$(find /tmp/ready -mmin -11 2>/dev/null)"']
+            periodSeconds: 15
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: config
+              mountPath: /etc/netpol-probe
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: config
+          configMap:
+            name: netpol-probe
+        - name: tmp
+          emptyDir:
+            sizeLimit: 16Mi

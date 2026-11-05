@@ -4,6 +4,7 @@
 #
 #   scripts/netpol-verify.sh idle
 #   scripts/netpol-verify.sh selftest
+#   scripts/netpol-verify.sh baseline
 #
 # Exit 0 = pass, 1 = at least one FAIL (an answer that does not parse is a FAIL
 # too, never a vacuous pass), 2 = the check could not run or is meaningless (no
@@ -30,6 +31,15 @@
 #     "syncing nftables rules" line carrying an error.
 # The queue metrics come from a collector that runs every 30 s and first runs
 # before the queue is bound, so run this at least a minute after the pod is Ready.
+#
+# baseline -- B1a, before any canary policy (§6.4 "Baseline first"). The three
+# netpol-probe pods each run `probe.sh once baseline`, in parallel, and every
+# row the canary runs (N, counted from the repo's matrix.txt, never a literal,
+# F8) must answer: open, or refused for a must-drop target. A target that does
+# neither would pass as "timeout" once policy is in, so it FAILs here. A pod
+# whose count differs (a stale ConfigMap) FAILs too. Exit 2 unless exactly 3
+# Running probe pods sit on 3 distinct nodes. It skips a pod with a
+# deletionTimestamp (a rollout's outgoing pod).
 set -uo pipefail
 
 : "${KUBECONFIG:=/tmp/galaxy-kubeconfig}"; export KUBECONFIG
@@ -40,10 +50,17 @@ QUEUE=98
 # Flags the agent must log at start (pkg/cmd + klog's -v), as name=value.
 FLAGS=(fail-open=true log-verdicts=deny disable-nri=true nfqueue-id=98 metrics-bind-address=:9080 v=1)
 
-usage() { echo "usage: $0 idle|selftest" >&2; exit 2; }
+CANARY_NS=netpol-canary
+PROBE_SELECTOR=app.kubernetes.io/name=netpol-probe
+CANARY_NODES=3
+# One `probe.sh once` in a pod. A healthy run takes seconds; every row at its 10 s PROBE_DEADLINE
+# would take about 270 s for 26 rows.
+EXEC_TIMEOUT=300
+
+usage() { echo "usage: $0 idle|selftest|baseline" >&2; exit 2; }
 die() { echo "ERROR: $*" >&2; exit 2; }
 # The cluster answered, but not with what we can judge: a FAIL, not "could not run".
-parse_fail() { echo "FAIL parse: $*"; echo "idle: FAIL (unparseable answer)"; exit 1; }
+parse_fail() { echo "FAIL parse: $*"; echo "${CHECK:-idle}: FAIL (unparseable answer)"; exit 1; }
 count_or_fail() { [[ "$2" =~ ^[0-9]+$ ]] || parse_fail "$1 is '$2', not a count"; }
 kc() { timeout 60 kubectl --request-timeout=50s "$@"; }
 # Length of a list response's .items; errors (so the caller FAILs) when .items is not an array.
@@ -146,6 +163,71 @@ idle() {
   return 1
 }
 
+baseline() {
+  local root probe matrix rows n live running nodes pod node rc summary npass nfail fail=0
+  root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+  probe=$root/cluster/netpol-canary/probe.sh
+  matrix=$root/cluster/netpol-canary/matrix.txt
+  [ -f "$probe" ] && [ -f "$matrix" ] || die "missing $probe or $matrix"
+  # shellcheck source=/dev/null
+  . "$probe"
+  # N, the rows each pod runs. The addresses only let the variables expand; the count is what matters.
+  HOST_IP=192.168.0.240 WAN_IP=192.0.2.1 probe_rows "$matrix" canary > "$tmp/rows" || die "matrix.txt does not expand"
+  rows=$(wc -l < "$tmp/rows")
+  count_or_fail "the matrix row count" "$rows"
+  [ "$rows" -gt 0 ] || die "matrix.txt has no canary rows"
+
+  kc -n "$CANARY_NS" get pods -l "$PROBE_SELECTOR" -o json > "$tmp/probes.json" 2> /dev/null \
+    || die "cannot list pods in $CANARY_NS; is KUBECONFIG right?"
+  n=$(items_len "$tmp/probes.json"); count_or_fail "the probe pod count" "$n"
+  # name node phase, for every pod without a deletionTimestamp
+  jq -r '.items[] | select(.metadata.deletionTimestamp == null)
+      | [.metadata.name, (.spec.nodeName // "-"), (.status.phase // "-")] | @tsv' "$tmp/probes.json" > "$tmp/probes.tsv" 2> /dev/null \
+    || parse_fail "the probe pod list"
+  live=$(wc -l < "$tmp/probes.tsv")
+  [ "$live" -gt 0 ] || die "no netpol-probe pods in $CANARY_NS"
+  running=$(awk -F'\t' '$3 == "Running"' "$tmp/probes.tsv" | wc -l)
+  nodes=$(awk -F'\t' '$3 == "Running" { print $2 }' "$tmp/probes.tsv" | sort -u | wc -l)
+  if [ "$live" -ne "$CANARY_NODES" ] || [ "$running" -ne "$CANARY_NODES" ] || [ "$nodes" -ne "$CANARY_NODES" ]; then
+    sed 's/^/  /' "$tmp/probes.tsv" >&2
+    die "need exactly $CANARY_NODES Running netpol-probe pods on $CANARY_NODES nodes (found $live, $running Running, on $nodes nodes)"
+  fi
+
+  # The three in parallel. </dev/null keeps kubectl off the loop's input.
+  while IFS=$'\t' read -r pod node _; do
+    (
+      timeout "$EXEC_TIMEOUT" kubectl -n "$CANARY_NS" exec "$pod" -c probe -- bash /etc/netpol-probe/probe.sh once baseline \
+        > "$tmp/$pod.out" 2> "$tmp/$pod.err" < /dev/null
+      echo $? > "$tmp/$pod.rc"
+    ) &
+  done < "$tmp/probes.tsv"
+  wait
+
+  while IFS=$'\t' read -r pod node _; do
+    rc=$(cat "$tmp/$pod.rc" 2> /dev/null)
+    echo "== $node $pod (exit ${rc:-?})"
+    cat "$tmp/$pod.out"
+    [ ! -s "$tmp/$pod.err" ] || head -n 5 "$tmp/$pod.err" | sed 's/^/   stderr: /'
+    summary=$(grep '^SUMMARY ' "$tmp/$pod.out" | tail -n 1)
+    npass=$(grep -c '^PASS ' "$tmp/$pod.out")
+    nfail=$(grep -c '^FAIL ' "$tmp/$pod.out")
+    if [ "${rc:-}" = 0 ] && [ "$summary" = "SUMMARY $rows/$rows baseline node=$node" ] \
+      && [ "$npass" -eq "$rows" ] && [ "$nfail" -eq 0 ]; then
+      echo "PASS $node $rows/$rows rows answer"
+    else
+      echo "FAIL $node exit=${rc:-?} pass=$npass/$rows fail=$nfail summary='${summary:-none}'"
+      fail=1
+    fi
+  done < "$tmp/probes.tsv"
+
+  if [ "$fail" -eq 0 ]; then
+    echo "baseline: PASS ($CANARY_NODES nodes × $rows rows answer)"
+    return 0
+  fi
+  echo "baseline: FAIL ($CANARY_NODES nodes × $rows rows)"
+  return 1
+}
+
 # deny_match LOGFILE SRC_POD DST -> 0 if some line of an agent's log is a deny verdict from
 # SRC_POD (ns/name, anchored: ...-abcde never matches ...-abcdef) to DST, which is IP:PORT
 # (port anchored) or IP: (any port). Regex metacharacters, the dots in an IP, are escaped.
@@ -198,21 +280,89 @@ selftest() {
   case $(HOST_IP=192.168.0.242 probe_rows "$fixture" canary) in
     *"192.168.0.242 50000"*) ok "rows HOST_IP expanded" ;; *) bad "rows HOST_IP expanded" ;;
   esac
-  case $(WAN_IP=9.9.9.9 HOST_IP=1.1.1.1 probe_rows "$root/cluster/netpol-canary/matrix.txt" canary) in
+  case $(WAN_IP=9.9.9.9 HOST_IP=192.168.0.240 probe_rows "$root/cluster/netpol-canary/matrix.txt" canary) in
     *"9.9.9.9 8585"*) ok "rows WAN_IP expanded" ;; *) bad "rows WAN_IP expanded" ;;
   esac
+
+  # $PEER_IP: the node after HOST_IP in NODE_IPS, wrapping (top -> middle -> bottom -> top).
+  eq "peer of top" "$(probe_peer_ip 192.168.0.240)" 192.168.0.241
+  eq "peer of middle" "$(probe_peer_ip 192.168.0.241)" 192.168.0.242
+  eq "peer of bottom" "$(probe_peer_ip 192.168.0.242)" 192.168.0.240
+  rc 1 "peer of a non-node" probe_peer_ip 10.0.0.1
+  rc 1 "peer of nothing" probe_peer_ip ""
+  eq "peer NODE_IPS override" "$(NODE_IPS="a b" probe_peer_ip b)" a
+  rc 1 "peer of a lone node" env NODE_IPS=a bash -c '. "$1"; probe_peer_ip a' _ "$probe"
+  case $(HOST_IP=192.168.0.242 WAN_IP=9.9.9.9 probe_rows "$root/cluster/netpol-canary/matrix.txt" canary) in
+    *"192.168.0.240 10250"*) ok "rows PEER_IP expanded" ;; *) bad "rows PEER_IP expanded" ;;
+  esac
+  printf '%s\n' 'dropped all $PEER_IP 10250 - n' > "$tmp_st/peer.txt"
+  rc 2 "rows PEER_IP, HOST_IP unset" env -u HOST_IP bash -c '. "$1"; probe_rows "$2" runner' _ "$probe" "$tmp_st/peer.txt"
+  rc 2 "rows PEER_IP, HOST_IP not a node" env HOST_IP=10.0.0.1 bash -c '. "$1"; probe_rows "$2" runner' _ "$probe" "$tmp_st/peer.txt"
+
+  # F9: runs start PROBE_INTERVAL apart, and never less than 5 s apart.
+  eq "sleep 300 after a 54 s run" "$(probe_sleep_for 300 54)" 246
+  eq "sleep 300 after a 0 s run" "$(probe_sleep_for 300 0)" 300
+  eq "sleep floor, run near interval" "$(probe_sleep_for 60 58)" 5
+  eq "sleep floor, run past interval" "$(probe_sleep_for 60 200)" 5
+
+  # Stub tools: agnhost variants, and a dig that answers nothing (no WAN lookup offline).
+  local stub=$tmp_st/stub t0 t1
+  mkdir -p "$stub"
+  printf '#!/bin/sh\nexit 0\n' > "$stub/agnhost-open"
+  printf '#!/bin/sh\ncat > /dev/null\nexit 0\n' > "$stub/agnhost-reads-stdin"
+  printf '#!/bin/sh\nexec sleep 30\n' > "$stub/agnhost-hangs"
+  printf '#!/bin/sh\ntouch "$MARK"\nexec sleep 3\n' > "$stub/agnhost-slow"
+  printf '#!/bin/sh\nexit 0\n' > "$stub/dig"
+  chmod +x "$stub"/*
+  printf '%s\n' 'open all 127.0.0.1 1 - a' 'dropped all 127.0.0.2 2 - b' 'dropped all 127.0.0.3 3 - c' > "$tmp_st/three.txt"
+
+  # A tool that reads stdin must not eat the remaining rows.
+  eq "rows keep their stdin" "$(MATRIX=$tmp_st/three.txt AGNHOST=$stub/agnhost-reads-stdin NODE_NAME=n1 probe_once baseline | tail -n 1)" \
+    "SUMMARY 3/3 baseline node=n1"
+  # PROBE_DEADLINE cuts off a hung tool, and the row counts as other: never a timeout, so never a pass.
+  t0=$(date +%s)
+  eq "hung tool is other" "$(PROBE_DEADLINE=1 AGNHOST=$stub/agnhost-hangs probe_check dropped 127.0.0.1 1)" other
+  t1=$(date +%s)
+  [ $((t1 - t0)) -le 4 ] && ok "hung tool cut off ($((t1 - t0)) s)" || bad "hung tool cut off (took $((t1 - t0)) s)"
+
+  # loop: TERM ends it at once (exit 0), asleep or mid-run. In a pod bash is PID 1 and ignores
+  # TERM without a trap. bash also defers a trap until a foreground command ends, so the loop runs
+  # both the run and the sleep in the background and waits on them.
+  term_loop() { # term_loop NAME AGNHOST FILE_THAT_SHOWS_IT_STARTED
+    local name=$1 agn=$2 mark=$3 lp code
+    rm -f "$tmp_st/ready" "$tmp_st/mark"
+    (
+      export PATH="$stub:$PATH" MATRIX=$tmp_st/three.txt AGNHOST=$agn MARK=$tmp_st/mark READY_FILE=$tmp_st/ready \
+        PROBE_MODE=baseline PROBE_INTERVAL=300 NODE_NAME=n1
+      exec bash "$probe" loop
+    ) > "$tmp_st/loop-$name.out" 2>&1 &
+    lp=$!
+    for _ in $(seq 100); do [ -e "$mark" ] && break; sleep 0.1; done
+    if [ ! -e "$mark" ]; then bad "loop TERM $name (never started)"; kill -KILL "$lp" 2> /dev/null; wait "$lp" 2> /dev/null; return; fi
+    kill -TERM "$lp"
+    for _ in $(seq 20); do kill -0 "$lp" 2> /dev/null || break; sleep 0.1; done
+    if kill -0 "$lp" 2> /dev/null; then
+      bad "loop TERM $name (still running 2 s later)"; kill -KILL "$lp"; wait "$lp" 2> /dev/null; return
+    fi
+    wait "$lp"; code=$?
+    eq "loop TERM $name exit" "$code" 0
+  }
+  term_loop asleep "$stub/agnhost-open" "$tmp_st/ready"
+  term_loop mid-run "$stub/agnhost-slow" "$tmp_st/mark"
 
   # probe_once with the network stubbed out: judging, summary line and exit code.
   (
     probe_check() { case $1 in dropped) echo timeout ;; *) echo open ;; esac; }
-    export MATRIX=$root/cluster/netpol-canary/matrix.txt HOST_IP=10.0.0.1 WAN_IP=10.0.0.2 NODE_NAME=n1 PROBE_SCOPE=canary
+    export MATRIX=$root/cluster/netpol-canary/matrix.txt HOST_IP=192.168.0.242 WAN_IP=10.0.0.2 NODE_NAME=n1 PROBE_SCOPE=canary
     out=$(probe_once enforced); r=$?
     n=$(grep -c '^PASS ' <<< "$out")
-    [ "$r" -eq 0 ] && grep -q "^SUMMARY $n/$n enforced node=n1\$" <<< "$out"
-  ) && ok "probe_once pass" || bad "probe_once pass"
+    # Every canary row ran: the count comes from matrix.txt, never a literal (F8).
+    want=$(awk '$1 !~ /^#/ && NF && ($2 == "all" || $2 == "canary")' "$MATRIX" | wc -l)
+    [ "$r" -eq 0 ] && [ "$n" -eq "$want" ] && grep -q "^SUMMARY $n/$n enforced node=n1\$" <<< "$out"
+  ) && ok "probe_once pass, every canary row" || bad "probe_once pass, every canary row"
   (
     probe_check() { case $1 in dropped) echo refused ;; *) echo open ;; esac; }
-    export MATRIX=$root/cluster/netpol-canary/matrix.txt HOST_IP=10.0.0.1 WAN_IP=10.0.0.2 NODE_NAME=n1 PROBE_SCOPE=canary
+    export MATRIX=$root/cluster/netpol-canary/matrix.txt HOST_IP=192.168.0.242 WAN_IP=10.0.0.2 NODE_NAME=n1 PROBE_SCOPE=canary
     out=$(probe_once enforced); r=$?
     [ "$r" -ne 0 ] && grep -q '^FAIL dropped refused ' <<< "$out" && grep -q '^SUMMARY [0-9]*/[0-9]* enforced' <<< "$out"
   ) && ok "probe_once fail on refused" || bad "probe_once fail on refused"
@@ -236,7 +386,8 @@ selftest() {
   for t in netpol-echo.netpol-canary.svc.cluster.local:9377 192.168.0.117:443 192.168.0.119:443 192.168.0.151:443 \
       192.168.0.2:80 192.168.0.2:443 192.168.0.1:22 10.96.0.1:443 192.168.0.240:6443 \
       forgejo-http.forgejo.svc.cluster.local:3000 192.168.0.7:443 192.168.0.8:1883 192.168.0.230:2049 \
-      192.168.0.231:5000 192.168.0.240:50000 '$HOST_IP:50000' '$WAN_IP:8585'; do
+      192.168.0.231:5000 192.168.0.240:50000 '$HOST_IP:50000' '$WAN_IP:8585' \
+      192.168.0.5:6443 '$PEER_IP:10250' '$PEER_IP:50000' 192.168.0.1:53 netpol-echo-pod.netpol-canary.svc.cluster.local:9378; do
     has dropped "$(printf '%s' "${t%:*}" | sed 's/[.$]/\\&/g')" "${t##*:}"
   done
 
@@ -271,6 +422,15 @@ selftest() {
     eq "js dns localhost" "$(node "$js" dns localhost)" open
     eq "js dns invalid" "$(node "$js" dns no-such-host.invalid)" other:ENOTFOUND
     eq "js via node -e" "$(node -e "$(cat "$js")" tcp 127.0.0.1 1)" refused
+    # Bad arguments print other:usage. Never a stack trace, a dial to localhost, or a guess.
+    eq "js usage: no host" "$(node "$js" tcp 2> /dev/null)" other:usage
+    eq "js usage: no port" "$(node "$js" tcp 127.0.0.1 2> /dev/null)" other:usage
+    eq "js usage: port not a number" "$(node "$js" tcp 127.0.0.1 http 2> /dev/null)" other:usage
+    eq "js usage: port 0" "$(node "$js" tcp 127.0.0.1 0 2> /dev/null)" other:usage
+    eq "js usage: port too big" "$(node "$js" tcp 127.0.0.1 65536 2> /dev/null)" other:usage
+    eq "js usage: extra argument" "$(node "$js" tcp 127.0.0.1 1 x 2> /dev/null)" other:usage
+    eq "js usage: dns, no host" "$(node "$js" dns 2> /dev/null)" other:usage
+    eq "js usage: no mode" "$(node "$js" 2> /dev/null)" other:usage
   else
     bad "node not found (netpol-connect.js untested)"
   fi
@@ -280,8 +440,10 @@ selftest() {
 }
 
 [ "$#" -eq 1 ] || usage
+CHECK=$1
 case "$1" in
   idle) idle ;;
   selftest) selftest ;;
+  baseline) baseline ;;
   *) usage ;;
 esac
