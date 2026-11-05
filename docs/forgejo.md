@@ -197,6 +197,8 @@ key in `sso-secrets` `forge/signing-key.asc`, sealed as `forgejo-signing`) signs
 edits. Without it Forgejo refuses *every* merge into a branch that requires signed commits
 ("won't sign: nokey"). `[repository.signing]` drops Forgejo's default 2FA condition — MFA is at the SSO.
 
+**First merge into a repo imported from GitHub:** when the base head carries GitHub's web-flow signature, which Forgejo can't verify, a branch with `require_signed_commits` refuses even a fast-forward (`won't sign: basesigned`). The fix is an inventory PR that turns `require_signed_commits` off, the merge, then the revert and apply at once; after that the head is Owner-signed (realliance.net, 2026-11-04, open for under a minute).
+
 **`fj` (forgejo-cli) login:** `fj -H git.realliance.net auth login` signs in through the SSO in a
 browser. It needs the public OAuth app "forgejo-cli (fj)" (owned by `forgejo-admin`, redirect
 `http://127.0.0.1:26218/`) and this line in `~/.config/forgejo-cli/client_ids`:
