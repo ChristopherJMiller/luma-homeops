@@ -19,6 +19,7 @@ a literal) as answering.
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -220,6 +221,7 @@ def test_selftest_passes():
 # --- baseline ----------------------------------------------------------------------
 
 MATRIX = SCRIPT.parent.parent / "cluster" / "netpol-canary" / "matrix.txt"
+PROBE = MATRIX.parent / "probe.sh"
 
 
 def canary_row_count() -> int:
@@ -291,6 +293,9 @@ def test_baseline_passes(tmp_path):
         assert f"PASS {node} {n}/{n} rows answer" in r.stdout
         assert f"SUMMARY {n}/{n} baseline node={node}" in r.stdout, "each pod's table is printed"
     assert r.stdout.rstrip().splitlines()[-1] == f"baseline: PASS (3 nodes × {n} rows answer)"
+    # The exec timeout follows N: every row and the WAN lookup at probe.sh's deadline, plus 30 s.
+    deadline = int(re.search(r"^PROBE_DEADLINE_DEFAULT=(\d+)$", PROBE.read_text(), re.M).group(1))
+    assert f"baseline: {n} rows per pod, exec timeout {(n + 1) * deadline + 30} s" in r.stdout
 
 
 def test_baseline_no_probe_pods_is_exit_2(tmp_path):

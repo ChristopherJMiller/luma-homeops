@@ -12,6 +12,9 @@
 # READY_FILE (default /tmp/ready).
 # Rows run sequentially: parallel agnhost processes would need ~20x the memory.
 
+# The default PROBE_DEADLINE. scripts/netpol-verify.sh sizes its exec timeout from it.
+PROBE_DEADLINE_DEFAULT=10
+
 # probe_classify EXIT STDERR -> open|timeout|refused|other
 probe_classify() {
   local code=$1 err=${2-}
@@ -74,7 +77,7 @@ probe_rows() {
 # tool. The outer `timeout` catches a hang: it kills the tool, and the row counts as other,
 # never as a pass.
 probe_check() {
-  local expect=$1 host=$2 port=$3 out err code deadline=${PROBE_DEADLINE:-10}
+  local expect=$1 host=$2 port=$3 out err code deadline=${PROBE_DEADLINE:-$PROBE_DEADLINE_DEFAULT}
   if [ "$expect" = dns ]; then
     out=$(timeout "$deadline" dig +short +time=3 +tries=1 "$host" 2> /dev/null | grep -v '^;' || true)
     if [ -n "$out" ]; then echo open; else echo other; fi
@@ -105,7 +108,7 @@ probe_once() {
 
 # probe_wan_ip -> git.realliance.net's A record, or nothing
 probe_wan_ip() {
-  timeout "${PROBE_DEADLINE:-10}" dig +short +time=3 +tries=1 git.realliance.net A 2> /dev/null \
+  timeout "${PROBE_DEADLINE:-$PROBE_DEADLINE_DEFAULT}" dig +short +time=3 +tries=1 git.realliance.net A 2> /dev/null \
     | grep -E '^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1
 }
 

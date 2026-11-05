@@ -53,9 +53,9 @@ FLAGS=(fail-open=true log-verdicts=deny disable-nri=true nfqueue-id=98 metrics-b
 CANARY_NS=netpol-canary
 PROBE_SELECTOR=app.kubernetes.io/name=netpol-probe
 CANARY_NODES=3
-# One `probe.sh once` in a pod. A healthy run takes seconds; every row at its 10 s PROBE_DEADLINE
-# would take about 270 s for 26 rows.
-EXEC_TIMEOUT=300
+# exec_timeout ROWS -> seconds to allow one `probe.sh once` in a pod: every row and the WAN lookup
+# at probe.sh's deadline, plus 30 s. A healthy run takes seconds. Needs probe.sh sourced.
+exec_timeout() { echo $((($1 + 1) * PROBE_DEADLINE_DEFAULT + 30)); }
 
 usage() { echo "usage: $0 idle|selftest|baseline" >&2; exit 2; }
 die() { echo "ERROR: $*" >&2; exit 2; }
@@ -164,7 +164,7 @@ idle() {
 }
 
 baseline() {
-  local root probe matrix rows n live running nodes pod node rc summary npass nfail fail=0
+  local root probe matrix rows limit n live running nodes pod node rc summary npass nfail fail=0
   root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
   probe=$root/cluster/netpol-canary/probe.sh
   matrix=$root/cluster/netpol-canary/matrix.txt
@@ -176,6 +176,7 @@ baseline() {
   rows=$(wc -l < "$tmp/rows")
   count_or_fail "the matrix row count" "$rows"
   [ "$rows" -gt 0 ] || die "matrix.txt has no canary rows"
+  limit=$(exec_timeout "$rows")
 
   kc -n "$CANARY_NS" get pods -l "$PROBE_SELECTOR" -o json > "$tmp/probes.json" 2> /dev/null \
     || die "cannot list pods in $CANARY_NS; is KUBECONFIG right?"
@@ -194,9 +195,10 @@ baseline() {
   fi
 
   # The three in parallel. </dev/null keeps kubectl off the loop's input.
+  echo "baseline: $rows rows per pod, exec timeout ${limit} s"
   while IFS=$'\t' read -r pod node _; do
     (
-      timeout "$EXEC_TIMEOUT" kubectl -n "$CANARY_NS" exec "$pod" -c probe -- bash /etc/netpol-probe/probe.sh once baseline \
+      timeout "$limit" kubectl -n "$CANARY_NS" exec "$pod" -c probe -- bash /etc/netpol-probe/probe.sh once baseline \
         > "$tmp/$pod.out" 2> "$tmp/$pod.err" < /dev/null
       echo $? > "$tmp/$pod.rc"
     ) &
@@ -349,6 +351,38 @@ selftest() {
   }
   term_loop asleep "$stub/agnhost-open" "$tmp_st/ready"
   term_loop mid-run "$stub/agnhost-slow" "$tmp_st/mark"
+
+  # loop, start to start (F9): with an 8 s interval and a 2 s run, the second run starts about 8 s
+  # after the first. Sleeping a whole interval after each run would make it about 10 s. (Interval
+  # minus run must clear the 5 s floor, or the floor sets the gap. The loop counts whole seconds,
+  # so the gap is 7 s now and then.)
+  local lp gap
+  printf '#!/bin/sh\ndate +%%s.%%N >> "$MARK"\nsleep 2\nexit 0\n' > "$stub/agnhost-2s"
+  chmod +x "$stub/agnhost-2s"
+  printf '%s\n' 'open all 127.0.0.1 1 - a' > "$tmp_st/one.txt"
+  rm -f "$tmp_st/starts"
+  (
+    export PATH="$stub:$PATH" MATRIX=$tmp_st/one.txt AGNHOST=$stub/agnhost-2s MARK=$tmp_st/starts \
+      READY_FILE=$tmp_st/ready PROBE_MODE=baseline PROBE_INTERVAL=8 NODE_NAME=n1
+    exec bash "$probe" loop
+  ) > "$tmp_st/loop-cadence.out" 2>&1 &
+  lp=$!
+  for _ in $(seq 150); do
+    [ -f "$tmp_st/starts" ] && [ "$(wc -l < "$tmp_st/starts")" -ge 2 ] && break
+    sleep 0.1
+  done
+  kill -TERM "$lp" 2> /dev/null; wait "$lp" 2> /dev/null
+  gap=$(awk 'NR == 1 { a = $1 } NR == 2 { printf "%.1f", $1 - a }' "$tmp_st/starts" 2> /dev/null)
+  if [ -n "$gap" ] && awk -v g="$gap" 'BEGIN { exit !(g >= 6.5 && g <= 9) }'; then
+    ok "loop start to start ($gap s apart, interval 8 s, run 2 s)"
+  else
+    bad "loop start to start (second run ${gap:-never} s after the first, want about 8)"
+  fi
+
+  # baseline's exec timeout grows with the row count: (rows + 1) x the probe's deadline + 30 s.
+  eq "exec timeout, 26 rows" "$(exec_timeout 26)" $((27 * PROBE_DEADLINE_DEFAULT + 30))
+  eq "exec timeout, 40 rows" "$(exec_timeout 40)" $((41 * PROBE_DEADLINE_DEFAULT + 30))
+  [ "$(exec_timeout 27)" -gt "$(exec_timeout 26)" ] && ok "exec timeout grows with rows" || bad "exec timeout grows with rows"
 
   # probe_once with the network stubbed out: judging, summary line and exit code.
   (

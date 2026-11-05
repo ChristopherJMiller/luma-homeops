@@ -598,9 +598,10 @@ def test_canary_workloads():
 
 def test_canary_matrix_targets_exist():
     """Rows naming a netpol-canary Service name one this kustomization renders. The row through
-    the headless Service dials the echo pod's IP on a port the echo neither serves nor names. The
-    pod refuses it at baseline, and once Task 7's policies are in only the egress rule's
-    10.0.0.0/8 except can drop it."""
+    the headless Service dials the echo pod's IP directly (no DNAT) on a port the echo neither
+    serves nor names, so the pod refuses it at baseline. Under Task 7's planned policies both the
+    probe's egress and the echo's ingress drop it. Task 7 plans to let the echo's ingress accept
+    TCP 9378 from the probe, so that the row isolates the probe's egress."""
     require_canary_deployed()
     docs = render(CANARY_DIR)
     services = {d["metadata"]["name"]: d for d in docs if d["kind"] == "Service"}
