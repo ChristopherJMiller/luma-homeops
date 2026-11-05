@@ -1,0 +1,27 @@
+{
+  "displayName": "Realliance CI: the class image, by digest",
+  "description": "Runner classes spec, layer 5. Every container runs ghcr.io/christopherjmiller/forgejo-runner-class pinned by digest. Policy's like takes one wildcard, so the digest is a second contains check.",
+  "mode": "Indexed",
+  "policyRule": {
+    "if": {
+      "allOf": [
+        {"field": "type", "equals": "Microsoft.ContainerInstance/containerGroups"},
+        {
+          "count": {
+            "field": "Microsoft.ContainerInstance/containerGroups/containers[*]",
+            "where": {
+              "anyOf": [
+                {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].image", "notLike": "ghcr.io/christopherjmiller/forgejo-runner-class*"},
+                {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].image", "notContains": "@sha256:"}
+              ]
+            }
+          },
+          "greater": 0
+        }
+      ]
+    },
+    "then": {
+      "effect": "deny"
+    }
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "displayName": "Realliance CI: no network, identity, storage, or extra containers",
+  "description": "Runner classes spec, layer 5. A job's container group has no IP address, no subnet, no managed identity, no volume, no registry credential, and no init container. It runs Linux, restart policy Never, Regular priority (Spot is unavailable here).",
+  "mode": "Indexed",
+  "policyRule": {
+    "if": {
+      "allOf": [
+        {"field": "type", "equals": "Microsoft.ContainerInstance/containerGroups"},
+        {
+          "anyOf": [
+            {"field": "Microsoft.ContainerInstance/containerGroups/ipAddress", "exists": "true"},
+            {"count": {"field": "Microsoft.ContainerInstance/containerGroups/subnetIds[*]"}, "greater": 0},
+            {
+              "allOf": [
+                {"field": "identity.type", "exists": "true"},
+                {"field": "identity.type", "notEquals": "None"}
+              ]
+            },
+            {"field": "Microsoft.ContainerInstance/containerGroups/osType", "notEquals": "Linux"},
+            {"field": "Microsoft.ContainerInstance/containerGroups/restartPolicy", "notEquals": "Never"},
+            {
+              "allOf": [
+                {"field": "Microsoft.ContainerInstance/containerGroups/priority", "exists": "true"},
+                {"field": "Microsoft.ContainerInstance/containerGroups/priority", "notEquals": "Regular"}
+              ]
+            },
+            {"count": {"field": "Microsoft.ContainerInstance/containerGroups/volumes[*]"}, "greater": 0},
+            {"count": {"field": "Microsoft.ContainerInstance/containerGroups/imageRegistryCredentials[*]"}, "greater": 0},
+            {"count": {"field": "Microsoft.ContainerInstance/containerGroups/initContainers[*]"}, "greater": 0}
+          ]
+        }
+      ]
+    },
+    "then": {
+      "effect": "deny"
+    }
+  }
+}

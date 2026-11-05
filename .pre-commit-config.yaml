@@ -95,6 +95,16 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_forgejo_renovate.py
         pass_filenames: false
         files: ^(scripts/test_forgejo_renovate\.py|\.renovaterc\.json|cluster/applications/forgejo-release\.yaml)$
+      # Paid CI on ACI (azure/ci/): fence.json's values, every Policy rule, the dispatcher's exact
+      # role, the credential's lifetime, and no Azure id in a public file (runner classes phase 2,
+      # Tasks 2 and 3). The plan-level tests run only with AZURE_CI_PLAN_JSON set (the test file's
+      # docstring). It never opens ci.secret.auto.tfvars.
+      - id: azure-ci
+        name: azure/ci fence static tests
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_azure_ci.py
+        pass_filenames: false
+        files: ^(azure/ci/.*|scripts/test_azure_ci\.py|\.pre-commit-config\.yaml)$
       # scripts/netpol-verify.sh against a stub kubectl: a partial pod list or an
       # unparseable answer must FAIL, never pass vacuously.
       - id: netpol-verify-selftest

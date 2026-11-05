@@ -1,0 +1,14 @@
+{
+  "displayName": "Realliance CI: westus3 only",
+  "description": "Runner classes spec, layer 5. Job compute runs in westus3 only. Phase 0 checked its prices and quota.",
+  "mode": "Indexed",
+  "policyRule": {
+    "if": {
+      "field": "location",
+      "notIn": ["westus3"]
+    },
+    "then": {
+      "effect": "deny"
+    }
+  }
+}
