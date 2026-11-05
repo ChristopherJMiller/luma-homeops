@@ -12,11 +12,17 @@ The plan-level tests run only when AZURE_CI_PLAN_JSON names the output of
 That file holds the subscription id and other Azure ids, so it stays in a mode-0700 scratch dir.
 Plan-level checks compare ids silently and fail through pytest.fail with an id-free message, so a
 failure never prints one. These tests never open a `*.secret.*` file.
+
+test_terraform_tests runs azure/ci/tests/*.tftest.hcl (mocked providers, nothing reaches Azure) from
+a copy of the module without the secret tfvars. It needs `./azure/ci/tf.sh init` to have fetched
+the providers, and skips with that hint when they're missing.
 """
 
+import fnmatch
 import json
 import os
 import re
+import shutil
 import subprocess
 import uuid
 from pathlib import Path
@@ -38,7 +44,7 @@ EXPECTED_FENCE = {
     "budget_guard_usd": 5,
     "paid_cap_usd": 80,
     "shapes": [{"cpu": 2, "memory_gb": 8}, {"cpu": 4, "memory_gb": 16}],
-    "image_like": "ghcr.io/christopherjmiller/forgejo-runner-class*",
+    "image_like": "ghcr.io/christopherjmiller/forgejo-runner-class@sha256:*",
     "image_contains": "@sha256:",
     "dropped_rules": [],
     "dispatcher_actions": [
@@ -54,7 +60,9 @@ POLICY_FILES = {"types", "location", "aci-shape", "aci-isolation", "aci-image", 
 
 # E7's isolation rules, one deny condition each. Task 2 Step 1 found every alias on 2026-11-05;
 # `identity` has no alias and uses Policy's built-in `identity.type` field. fence.json's `dropped_rules`
-# lists a rule whose alias goes missing, and the dispatcher's guard still enforces that rule.
+# lists a rule whose alias goes missing, and the dispatcher's guard still enforces that rule. The last
+# three go beyond E7 (Task 2 review m1, controller's call): a legacy network profile, and a profile or
+# standby pool whose compute the shape and image rules never see.
 ISOLATION = {
     "ipAddress": {"field": f"{CG}/ipAddress", "exists": "true"},
     "subnetIds": {"count": {"field": f"{CG}/subnetIds[*]"}, "greater": 0},
@@ -67,6 +75,9 @@ ISOLATION = {
     "volumes": {"count": {"field": f"{CG}/volumes[*]"}, "greater": 0},
     "imageRegistryCredentials": {"count": {"field": f"{CG}/imageRegistryCredentials[*]"}, "greater": 0},
     "initContainers": {"count": {"field": f"{CG}/initContainers[*]"}, "greater": 0},
+    "networkProfile": {"field": f"{CG}/networkProfile.id", "exists": "true"},
+    "containerGroupProfile": {"field": f"{CG}/containerGroupProfile", "exists": "true"},
+    "standbyPoolProfile": {"field": f"{CG}/standbyPoolProfile", "exists": "true"},
 }
 
 TYPE_GATE = {"field": "type", "equals": CG}
@@ -89,10 +100,32 @@ EXPECTED_ADDRESSES = {
     "azuread_application_password.dispatcher",
 }
 
+SP = "azuread_service_principal.dispatcher.object_id"
+CI_GROUP = "azurerm_resource_group.ci.id"
+
+# Every role assignment in azure/ci, anywhere in any .tf file: {name: (principal, role, scope)}. A new
+# one fails test_role_assignments_allow_listed until it's added here on purpose. Task 3 adds the
+# sweeper identity's assignment and the history reader.
+ROLE_ASSIGNMENTS = {
+    "dispatcher": (SP, ("role_definition_id", "azurerm_role_definition.dispatcher.role_definition_resource_id"),
+                   CI_GROUP),
+    "dispatcher_cost_reader": (SP, ("role_definition_name", '"Cost Management Reader"'), CI_GROUP),
+}
+
+# Where the dispatcher's service principal may hold any role (E8). Task 3 adds the sweeper workflow,
+# for the history reader.
+DISPATCHER_SCOPES = {CI_GROUP}
+
 GUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
 
 
 # --- helpers ---------------------------------------------------------------------------------------
+
+
+def clean_env(**extra: str) -> dict[str, str]:
+    """os.environ without GIT_*. Under `git commit`, hooks inherit GIT_DIR and GIT_INDEX_FILE, and a
+    `git init` in a scratch dir would then re-initialise this repository (it once set core.bare)."""
+    return {**{k: v for k, v in os.environ.items() if not k.startswith("GIT_")}, **extra}
 
 
 def fence() -> dict:
@@ -244,26 +277,69 @@ def test_budgets():
         thresholds = sorted(int(t) for t in re.findall(r"^\s*threshold\s*=\s*(\d+)\s*$", b, re.M))
         assert thresholds == [80, 100], key
         assert len(re.findall(r"^\s*contact_emails\s*=\s*var\.alert_emails\s*$", b, re.M)) == 2
+        # Both notifications on, as literals (review m4): `enabled = false` or a variable fails here.
+        assert re.findall(r"^\s*enabled\s*=\s*(.+?)\s*$", b, re.M) == ["true", "true"], key
+    # The budgets stop at one end date, which the README's reminder names (review m6).
+    ends = set(re.findall(r'^\s*end_date\s*=\s*"(\d{4}-\d{2}-\d{2})T', main, re.M))
+    assert len(ends) == 1
+    end = ends.pop()
+    assert f"## The budgets end on {end}" in (CI / "README.md").read_text()
 
 
 # --- the dispatcher's identity and role (layer 5) --------------------------------------------------
 
 
 def test_dispatcher_assignment_named():
-    """F6: a fixed uuidv5 name, so a restore re-creates the id the sweeper deletes."""
-    body = block(tf("fence.tf"), "resource", "azurerm_role_assignment", "dispatcher")
-    assert has(body, "name", 'uuidv5("url", "realliance-ci/dispatcher-assignment")')
+    """F6 and review I1: a fixed uuidv5 name, and an id built from it, never read from the resource.
+
+    The output and the sweeper read local.dispatcher_assignment_id, so a restore plan after a lock
+    knows the id (the CI group still exists) and changes nothing but the assignment.
+    """
+    text = tf("fence.tf")
+    loc = _body(text, re.search(r"^locals\s*\{", text, re.M).end())
+    assert has(loc, "dispatcher_assignment_name", 'uuidv5("url", "realliance-ci/dispatcher-assignment")')
+    assert has(loc, "dispatcher_assignment_id", '"${azurerm_resource_group.ci.id}/providers/Microsoft.Authorization'
+                                                '/roleAssignments/${local.dispatcher_assignment_name}"')
+    body = block(text, "resource", "azurerm_role_assignment", "dispatcher")
+    assert has(body, "name", "local.dispatcher_assignment_name")
     assert has(body, "role_definition_id", "azurerm_role_definition.dispatcher.role_definition_resource_id")
+    assert has(body, "condition", "lower(self.id) == lower(local.dispatcher_assignment_id)")
     out = outputs(tf("outputs.tf"))["dispatcher_assignment_id"]
-    assert has(out, "value", "azurerm_role_assignment.dispatcher.id")
+    assert has(out, "value", "local.dispatcher_assignment_id")
+    # Nothing reads the assignment's computed id, which is unknown in a restore plan.
+    assert "azurerm_role_assignment.dispatcher.id" not in re.sub(r"#.*", "", all_tf())
 
 
 def test_sweeper_takes_dispatcher_assignment_id():
-    """The sweeper's template gets the lock's target from the assignment resource (Task 3)."""
+    """The sweeper's template gets the lock's target from the deterministic local (Task 3)."""
     if not (CI / "sweeper.tf").exists():
         pytest.skip("sweeper.tf arrives with Task 3, which makes this test unconditional")
-    assert re.search(r"dispatcher_assignment_id\s*=\s*azurerm_role_assignment\.dispatcher\.id",
-                     tf("sweeper.tf"))
+    assert re.search(r"dispatcher_assignment_id\s*=\s*local\.dispatcher_assignment_id\b", tf("sweeper.tf"))
+
+
+def test_terraform_tests(tmp_path):
+    """azure/ci/tests/*.tftest.hcl with mocked providers (review I1).
+
+    The restore scenario: with the CI group's id known and the assignment's unknown, plan time
+    already knows the lock's target. The postcondition accepts the deterministic id in any case and
+    refuses another. Runs from a copy without ci.secret.auto.tfvars, which terraform test would
+    otherwise load.
+    """
+    data = CI / ".terraform"
+    if not (data / "providers").is_dir():
+        pytest.skip("run ./azure/ci/tf.sh init first: terraform test needs the providers")
+    mod = tmp_path / "ci"
+    mod.mkdir()
+    for src in [*CI.glob("*.tf"), CI / "fence.json", CI / ".terraform.lock.hcl"]:
+        shutil.copy2(src, mod / src.name)
+    for d in ("policies", "tests"):
+        shutil.copytree(CI / d, mod / d)
+    assert list((mod / "tests").glob("*.tftest.hcl"))
+    r = subprocess.run(["terraform", "test", "-no-color"], cwd=mod, capture_output=True, text=True,
+                       env=clean_env(TF_DATA_DIR=str(data)))
+    if r.returncode != 0:
+        pytest.fail("terraform test failed:\n" + GUID.sub("<id>", r.stdout + r.stderr)[-4000:])
+    assert "0 failed" in r.stdout
 
 
 def test_dispatcher_role_exact():
@@ -275,6 +351,10 @@ def test_dispatcher_role_exact():
     for empty in ("not_actions", "data_actions", "not_data_actions"):
         assert has(body, empty, "[]"), empty
     assert has(body, "assignable_scopes", "[azurerm_resource_group.ci.id]")
+    # Exactly one permissions block, written out (review I2): a second block or a dynamic one could
+    # widen the role past these lines.
+    assert len(re.findall(r"^\s*permissions\s*\{", body, re.M)) == 1
+    assert not re.search(r'dynamic\s+"permissions"', body)
     # E8: no exec, logs, start, stop, Authorization or wildcard right; compute writes stay in ACI.
     for a in f["dispatcher_actions"]:
         assert "*" not in a and not a.startswith("Microsoft.Authorization/"), a
@@ -294,17 +374,38 @@ def test_password_lifetime():
 
 
 def test_assignments_scoped_to_ci_group():
-    text = tf("fence.tf")
-    found = blocks(text, "resource", "azurerm_role_assignment")
-    assert set(found) == {"dispatcher", "dispatcher_cost_reader"}
-    for name, body in found.items():
-        assert has(body, "scope", "azurerm_resource_group.ci.id"), name
-        assert has(body, "principal_id", "azuread_service_principal.dispatcher.object_id"), name
-        assert has(body, "principal_type", '"ServicePrincipal"'), name
-    assert has(found["dispatcher_cost_reader"], "role_definition_name", '"Cost Management Reader"')
-    code = re.sub(r"#.*", "", text)
+    """fence.tf grants nothing at subscription or management-group scope."""
+    code = re.sub(r"#.*", "", tf("fence.tf"))
     for bad in ("/subscriptions/", "azurerm_subscription", "subscription_id", "management_group"):
         assert bad not in code, bad
+
+
+def test_role_assignments_allow_listed():
+    """Review I2: every role assignment in every .tf file is in ROLE_ASSIGNMENTS, exactly.
+
+    The dispatcher's service principal holds roles only at DISPATCHER_SCOPES. An assignment
+    declared in main.tf, or any new one, fails until it's added on purpose.
+    """
+    code = re.sub(r"#.*", "", all_tf())
+    found = blocks(code, "resource", "azurerm_role_assignment")
+    assert set(found) == set(ROLE_ASSIGNMENTS)
+    for name, body in found.items():
+        principal, (role_key, role), scope = ROLE_ASSIGNMENTS[name]
+        assert has(body, "principal_id", principal), name
+        assert has(body, role_key, role), name
+        assert has(body, "scope", scope), name
+        assert not re.search(r"^\s*(count|for_each)\s*=", body, re.M), name
+        if principal == SP:
+            assert scope in DISPATCHER_SCOPES, name
+            assert has(body, "principal_type", '"ServicePrincipal"'), name
+    # Nothing else that grants: no other role-assignment or Graph-permission resource, no
+    # Authorization resource through azapi, and no Graph permission on the dispatcher's app.
+    for bad in ("azuread_app_role_assignment", "azuread_directory_role_assignment",
+                "azuread_directory_role_member", "azuread_service_principal_delegated_permission_grant",
+                "azurerm_role_management_policy", "azurerm_pim_"):
+        assert bad not in code, bad
+    assert not re.search(r'type\s*=\s*"Microsoft\.Authorization/', code)
+    assert "required_resource_access" not in block(code, "resource", "azuread_application", "dispatcher")
 
 
 def test_outputs_sensitive():
@@ -344,7 +445,7 @@ def test_policies_deny():
     kept = [ISOLATION[k] for k in ISOLATION if k not in f["dropped_rules"]]
     assert canon(iso["allOf"][1]["anyOf"]) == canon(kept)
 
-    assert f["image_like"].count("*") == 1 and f["image_like"].endswith("*")
+    assert f["image_like"].count("*") == 1 and f["image_like"].endswith("@sha256:*")
     assert policy("aci-image")["policyRule"]["if"] == {"allOf": [TYPE_GATE, {
         "count": {"field": f"{CG}/containers[*]", "where": {"anyOf": [
             {"field": f"{CG}/containers[*].image", "notLike": f["image_like"]},
@@ -359,6 +460,36 @@ def test_policies_deny():
     ]}
 
 
+def like(value: str, pattern: str) -> bool:
+    """Azure Policy's `like`: case-insensitive, `*` is the only wildcard."""
+    return re.fullmatch(".*".join(re.escape(p) for p in pattern.split("*")), value, re.I) is not None
+
+
+def test_image_rule_admits_digest_form_only():
+    """Review m2 (controller's call): only `forgejo-runner-class@sha256:…`, the form the dispatcher
+    sends (F16). Evaluates the rule in policies/aci-image.json against sample images."""
+    where = policy("aci-image")["policyRule"]["if"]["allOf"][1]["count"]["where"]["anyOf"]
+    pattern = next(c["notLike"] for c in where if "notLike" in c)
+    needle = next(c["notContains"] for c in where if "notContains" in c)
+
+    def denied(image: str) -> bool:
+        return not like(image, pattern) or needle not in image
+
+    digest = "@sha256:" + "0" * 64
+    repo = "ghcr.io/christopherjmiller/forgejo-runner-class"
+    assert not denied(repo + digest)
+    for image in (
+        repo + ":sha-1234567" + digest,  # tag and digest: ACI refuses it, and the fence does too
+        repo + ":latest",
+        repo,
+        repo + "-evil" + digest,  # another package in the same namespace
+        "ghcr.io/christopherjmiller/forgejo-runner" + digest,
+        "ghcr.io/someone-else/forgejo-runner-class" + digest,
+        "docker.io/library/alpine" + digest,
+    ):
+        assert denied(image), image
+
+
 def test_initiative_assigned_to_ci_group():
     text = tf("fence.tf")
     defs = block(text, "resource", "azurerm_policy_definition", "fence")
@@ -371,7 +502,7 @@ def test_initiative_assigned_to_ci_group():
     a = block(text, "resource", "azurerm_resource_group_policy_assignment", "fence")
     assert has(a, "resource_group_id", "azurerm_resource_group.ci.id")
     assert has(a, "policy_definition_id", "azurerm_policy_set_definition.fence.id")
-    assert not re.search(r"^\s*enforce\s*=\s*false", a, re.M)
+    assert has(a, "enforce", "true")
 
 
 # --- files and hooks -------------------------------------------------------------------------------
@@ -408,7 +539,76 @@ def test_tf_sh():
     assert "az account show >/dev/null 2>&1 ||" in sh
     assert re.search(r"grep -q '\^subscription_id' \"\$secret\"", sh)
     assert 'secret="$repo/azure/ci/ci.secret.auto.tfvars"' in sh
-    assert sh.rstrip().endswith('exec terraform "$@"')
+    assert re.search(r"^umask 077$", sh, re.M)
+    assert "exec terraform" not in sh  # every run goes through the redacting filter
+    assert re.search(r"^  trap '' INT TERM$", sh, re.M)  # a Ctrl-C mustn't end the filter mid-apply
+    assert sh.rstrip().endswith('exit "$status"')
+
+
+@pytest.fixture
+def tf_rig(tmp_path):
+    """tf.sh in a scratch repo, with stub `az` and `terraform` first on PATH.
+
+    The stub terraform prints a fresh UUID (upper and lower case) on both streams, its umask, and
+    exits with $STUB_RC. Nothing here touches Azure or the real module.
+    """
+    root = tmp_path / "repo"
+    (root / "azure/ci").mkdir(parents=True)
+    shutil.copy2(CI / "tf.sh", root / "azure/ci/tf.sh")
+    (root / "azure/ci/ci.secret.auto.tfvars").write_text('subscription_id = "stub"\n')
+    subprocess.run(["git", "init", "-q", str(root)], check=True, cwd=tmp_path, env=clean_env())
+    bin_ = tmp_path / "bin"
+    bin_.mkdir()
+    (bin_ / "az").write_text("#!/bin/sh\nexit \"${STUB_AZ_RC:-0}\"\n")
+    (bin_ / "terraform").write_text(
+        "#!/bin/sh\n"
+        'echo "out $STUB_ID $STUB_UP args=$*"\n'
+        'echo "err $STUB_ID $STUB_UP" >&2\n'
+        'echo "umask $(umask)"\n'
+        'exit "${STUB_RC:-0}"\n'
+    )
+    for f in ("az", "terraform"):
+        (bin_ / f).chmod(0o755)
+    ident = str(uuid.uuid4())
+    env = clean_env(PATH=f"{bin_}:{os.environ['PATH']}", STUB_ID=ident, STUB_UP=ident.upper())
+
+    def run(*args, **extra):
+        return subprocess.run([str(root / "azure/ci/tf.sh"), *args], capture_output=True, text=True,
+                              env={**env, **extra})
+
+    return run, ident
+
+
+@pytest.mark.parametrize("args", [("plan", "-no-color"), ("apply", "x.tfplan"), ("show", "x.tfplan"),
+                                  ("output",), ("state", "list")])
+def test_tf_sh_redacts(tf_rig, args):
+    """Review m5: no UUID-shaped string leaves tf.sh on either stream, and the exit code survives."""
+    run, ident = tf_rig
+    r = run(*args, STUB_RC="3")
+    assert r.returncode == 3
+    for stream in (r.stdout, r.stderr):
+        if GUID.search(stream):
+            pytest.fail(f"a UUID-shaped string got through tf.sh {' '.join(args)}")
+    assert r.stdout.startswith("out <id> <id> ") and r.stderr.strip() == "err <id> <id>"
+    assert "umask 0077" in r.stdout
+
+
+@pytest.mark.parametrize("args", [("output", "-raw", "dispatcher_client_id"), ("output", "-json"),
+                                  ("show", "-json", "x.tfplan")])
+def test_tf_sh_data_paths_stay_raw(tf_rig, args):
+    """`output -raw|-json` and `show -json` feed pipes and 0600 files, so stdout stays exact.
+    stderr is still redacted, and the exit code survives."""
+    run, ident = tf_rig
+    r = run(*args, STUB_RC="2")
+    assert r.returncode == 2
+    assert r.stdout.startswith(f"out {ident} {ident.upper()} ")
+    assert r.stderr.strip() == "err <id> <id>"
+
+
+def test_tf_sh_refuses_without_az(tf_rig):
+    run, _ = tf_rig
+    r = run("plan", STUB_AZ_RC="1")
+    assert r.returncode == 1 and "not logged in" in r.stderr and "out " not in r.stdout
 
 
 def test_variables():
@@ -424,8 +624,39 @@ def test_pre_commit_hook():
     hooks = [h for r in cfg["repos"] if r["repo"] == "local" for h in r["hooks"]]
     hook = next(h for h in hooks if h["id"] == "azure-ci")
     assert hook["entry"] == "python -m pytest -q -p no:cacheprovider scripts/test_azure_ci.py"
-    assert hook["files"] == r"^(azure/ci/.*|scripts/test_azure_ci\.py|\.pre-commit-config\.yaml)$"
+    assert hook["files"] == r"^(azure/ci/.*|scripts/test_azure_ci\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$"
     assert hook["pass_filenames"] is False and hook["language"] == "system"
+
+
+def could_match_azure_ci(rule: dict) -> bool:
+    """Conservative: it returns True unless a matcher in the rule provably excludes azure/ci's providers."""
+    files = ["azure/ci/main.tf", "azure/ci/.terraform.lock.hcl"]
+    names = ["hashicorp/azurerm", "hashicorp/azuread", "hashicorp/time", "Azure/azapi", "azurerm", "azuread",
+             "time", "azapi"]
+    if "matchManagers" in rule and "terraform" not in rule["matchManagers"]:
+        return False
+    if "matchDatasources" in rule and "terraform-provider" not in rule["matchDatasources"]:
+        return False
+    if "matchFileNames" in rule and not any(fnmatch.fnmatch(f, p) for f in files for p in rule["matchFileNames"]):
+        return False
+    for key in ("matchPackageNames", "matchDepNames"):
+        if key in rule and not any(fnmatch.fnmatch(n, p) or p.strip("/") in n for n in names for p in rule[key]):
+            return False
+    return True
+
+
+def test_renovate_never_automerges_azure_ci():
+    """Review O2: no provider bump reaches the fence unreviewed (:automergeMinor would merge one)."""
+    rules = json.loads((REPO / ".renovaterc.json").read_text())["packageRules"]
+    idx = [i for i, r in enumerate(rules) if r.get("matchFileNames") == ["azure/ci/**"]]
+    assert len(idx) == 1
+    rule = rules[idx[0]]
+    assert rule["automerge"] is False
+    # Its own group: in group:allNonMajor its automerge: false would hold up every other bump.
+    assert rule.get("groupName") and rule.get("groupSlug")
+    # After every rule that could match: no later rule turns automerge back on.
+    for r in rules[idx[0] + 1:]:
+        assert not (could_match_azure_ci(r) and r.get("automerge") is True), r.get("description", r)
 
 
 def test_fmt():
@@ -458,6 +689,10 @@ def refs(res: dict, attr: str) -> list[str]:
 
 @needs_plan
 def test_plan_creates_only(plan):
+    """The first apply's plan only (review m4): after Task 4, a plan has prior state and this skips."""
+    prior = plan.get("prior_state", {}).get("values", {}).get("root_module", {}).get("resources", [])
+    if any(r.get("mode") == "managed" for r in prior):
+        pytest.skip("the plan has prior managed state; test_plan_creates_only covers the first apply only")
     ch = changes(plan)
     assert set(ch) == EXPECTED_ADDRESSES
     not_create = sorted(a for a, c in ch.items() if c["change"]["actions"] != ["create"])
@@ -485,6 +720,15 @@ def test_plan_sp_has_two_assignments_in_ci_group(plan):
     want = str(uuid.uuid5(uuid.NAMESPACE_URL, "realliance-ci/dispatcher-assignment"))
     if after["azurerm_role_assignment.dispatcher"].get("name") != want:
         pytest.fail("the dispatcher assignment's planned name is not uuidv5(url, realliance-ci/dispatcher-assignment)")
+
+
+@needs_plan
+def test_plan_lock_target_is_deterministic(plan):
+    """Review I1: the output reads the local, and no expression reads the assignment's id."""
+    out = plan["configuration"]["root_module"]["outputs"]["dispatcher_assignment_id"]["expression"]
+    assert out.get("references") == ["local.dispatcher_assignment_id"]
+    blob = json.dumps(plan["configuration"])
+    assert "azurerm_role_assignment.dispatcher.id" not in blob
 
 
 @needs_plan

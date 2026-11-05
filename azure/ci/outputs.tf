@@ -20,7 +20,7 @@ output "dispatcher_client_secret" {
 }
 
 output "dispatcher_assignment_id" {
-  description = "The custom-role assignment the sweeper's lock deletes (F6, F30)."
-  value       = azurerm_role_assignment.dispatcher.id
+  description = "The custom-role assignment the sweeper's lock deletes (F6, F30). Deterministic: see fence.tf."
+  value       = local.dispatcher_assignment_id
   sensitive   = true
 }

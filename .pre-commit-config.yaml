@@ -97,14 +97,15 @@ repos:
         files: ^(scripts/test_forgejo_renovate\.py|\.renovaterc\.json|cluster/applications/forgejo-release\.yaml)$
       # Paid CI on ACI (azure/ci/): fence.json's values, every Policy rule, the dispatcher's exact
       # role, the credential's lifetime, and no Azure id in a public file (runner classes phase 2,
-      # Tasks 2 and 3). The plan-level tests run only with AZURE_CI_PLAN_JSON set (the test file's
-      # docstring). It never opens ci.secret.auto.tfvars.
+      # Tasks 2 and 3). Also tf.sh's redaction, the mocked `terraform test` restore scenario, and the
+      # Renovate rule that keeps provider bumps from automerging. The plan-level tests run only with
+      # AZURE_CI_PLAN_JSON set (the test file's docstring). It never opens ci.secret.auto.tfvars.
       - id: azure-ci
         name: azure/ci fence static tests
         language: system
         entry: python -m pytest -q -p no:cacheprovider scripts/test_azure_ci.py
         pass_filenames: false
-        files: ^(azure/ci/.*|scripts/test_azure_ci\.py|\.pre-commit-config\.yaml)$
+        files: ^(azure/ci/.*|scripts/test_azure_ci\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
       # The small/medium CI runner class image (images/forgejo-runner-class): FROM lines equal to
       # the galaxy runner's, root, toolchain, runner configs, entry-script contract, Renovate rule.
       - id: runner-class

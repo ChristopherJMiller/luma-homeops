@@ -1,5 +1,5 @@
-# Both values come from ci.secret.auto.tfvars (git-crypt), as azure/logging does (E9). Sensitive keeps
-# them out of plan output.
+# Both values come from ci.secret.auto.tfvars (git-crypt), as azure/logging does (E9).
+# Sensitive keeps them out of plan output.
 
 variable "subscription_id" {
   description = "Azure subscription id."

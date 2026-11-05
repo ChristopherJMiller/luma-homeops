@@ -86,9 +86,19 @@ Taken 2026-11-05.
   - `azuread_application.dispatcher`, `azuread_service_principal.dispatcher`, `azuread_application_password.dispatcher`, `time_rotating.dispatcher`
 - **Tests:** `scripts/test_azure_ci.py`, 17 static tests pass. With `AZURE_CI_PLAN_JSON`, 20 pass and 1 skips (`test_sweeper_takes_dispatcher_assignment_id`, which Task 3 makes unconditional). 13 mutations each fail at least one test.
 
+### Task 2 fix round 1 (review 0/2/6, 2026-11-05)
+
+- **I1, plan text amended:** the plan's Task 2 (`test_dispatcher_assignment_named`) and Task 5 Step 5 now say the sweeper takes its id from the deterministic local `local.dispatcher_assignment_id`, not from the resource. A postcondition checks that Azure's id matches.
+- **m1 (controller's call):** `aci-isolation` also denies `networkProfile.id`, `containerGroupProfile` and `standbyPoolProfile`, beyond E7. All three aliases exist (read 2026-11-05).
+- **m2 (controller's call):** `image_like` is `ghcr.io/christopherjmiller/forgejo-runner-class@sha256:*`, the digest-only form the dispatcher sends (F16), with no tag and no other package. `containers[*].command` stays unfenced, as the spec accepts.
+- **O2:** Renovate never automerges `azure/ci/**` (its own group, last rule). Don't merge PR #2620 (azurerm v5) during phase 2 without re-running the static and plan tests.
+- **Plan:** still `Plan: 19 to add, 0 to change, 0 to destroy.`, with the same addresses.
+
 ## Task 3
 
 ## Task 4
+
+- **Carry from Task 2 (review m3):** confirm a Policy deny before the dispatcher secret ships.
 
 ## Task 5
 

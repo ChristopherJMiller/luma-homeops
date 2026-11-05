@@ -9,7 +9,7 @@
     {"cpu": 2, "memory_gb": 8},
     {"cpu": 4, "memory_gb": 16}
   ],
-  "image_like": "ghcr.io/christopherjmiller/forgejo-runner-class*",
+  "image_like": "ghcr.io/christopherjmiller/forgejo-runner-class@sha256:*",
   "image_contains": "@sha256:",
   "dropped_rules": [],
   "dispatcher_actions": [

@@ -2,8 +2,9 @@
 # the dispatcher's custom role and its service principal (runner classes phase 2, Task 2).
 #
 # Spec: the "Budget enforcement and backstops" section of
-# docs/superpowers/specs/2026-11-04-runner-classes-design.md. This module implements layers 5 (the role and Policy on the CI group) and 8 (the CI
-# group's budget). Layer 9, the $120 subscription budget, stays in azure/logging/.
+# docs/superpowers/specs/2026-11-04-runner-classes-design.md. This module implements layers 5
+# (the role and Policy on the CI group) and 8 (the CI group's budget). Layer 9, the $120
+# subscription budget, stays in azure/logging/.
 #
 # Every number lives in fence.json, which scripts/test_azure_ci.py pins.
 #

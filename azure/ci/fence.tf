@@ -11,6 +11,11 @@ locals {
     for f in fileset("${path.module}/policies", "*.json") :
     trimsuffix(f, ".json") => jsondecode(file("${path.module}/policies/${f}"))
   }
+
+  # The lock's target (F6). Both come from constants and the CI group's id, never from the
+  # assignment itself, so they're known at plan time whenever the group exists.
+  dispatcher_assignment_name = uuidv5("url", "realliance-ci/dispatcher-assignment")
+  dispatcher_assignment_id   = "${azurerm_resource_group.ci.id}/providers/Microsoft.Authorization/roleAssignments/${local.dispatcher_assignment_name}"
 }
 
 # Layer 5, Policy. Custom definitions live at subscription scope, and only the initiative's
@@ -108,11 +113,16 @@ resource "azuread_application_password" "dispatcher" {
 }
 
 # Layer 5, role: the custom role on the CI group. This is the assignment the sweeper's lock deletes
-# (Task 3), so it has a fixed name (F6). A restore re-creates the same id the sweeper's definition
-# names, and no GUID sits in a file. The Policy assignment goes first, so the dispatcher never holds
-# write rights in an unfenced group.
+# (Task 3), so it has a fixed name (F6), and no GUID sits in a file. Its id is the deterministic
+# local.dispatcher_assignment_id, which the output and the sweeper read instead of this resource's
+# computed id: after a lock the RG still exists, so a restore plan knows the id and leaves the
+# sweeper unchanged (1 to add, 0 to change). The postcondition proves Azure agrees.
+#
+# depends_on orders creation, not enforcement: a new Policy assignment can take up to 30 min to
+# deny. What keeps the dispatcher out of an unfenced group is that its secret ships only after
+# Task 4 has seen a Policy deny.
 resource "azurerm_role_assignment" "dispatcher" {
-  name               = uuidv5("url", "realliance-ci/dispatcher-assignment")
+  name               = local.dispatcher_assignment_name
   scope              = azurerm_resource_group.ci.id
   role_definition_id = azurerm_role_definition.dispatcher.role_definition_resource_id
   principal_id       = azuread_service_principal.dispatcher.object_id
@@ -120,6 +130,13 @@ resource "azurerm_role_assignment" "dispatcher" {
   description        = "ci-dispatch: launch and delete paid CI container groups. The sweeper's lock deletes this assignment; a terraform apply restores it."
 
   depends_on = [azurerm_resource_group_policy_assignment.fence]
+
+  lifecycle {
+    postcondition {
+      condition     = lower(self.id) == lower(local.dispatcher_assignment_id)
+      error_message = "The dispatcher's role assignment id differs from local.dispatcher_assignment_id, which the sweeper's lock deletes."
+    }
+  }
 }
 
 # Cost Management Reader on the CI group, for the daily drift check. The lock leaves it in place, so
