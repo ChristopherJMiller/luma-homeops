@@ -76,21 +76,13 @@ def test_rest_of_the_deployment_unchanged(docs: list[dict], container: dict) -> 
         assert ann["traefik.ingress.kubernetes.io/router.middlewares"] == "realliance-net-set-csp@kubernetescrd"
 
 
-def test_renovate_never_automerges_site() -> None:
+def test_renovate_automerges_site_releases_only() -> None:
+    """Chris chose automerge of new X.Y.Z releases (2026-11-05); sha-* and other tags never match."""
     rules = json.loads((REPO / ".renovaterc.json").read_text())["packageRules"]
     mine = [
-        i for i, r in enumerate(rules)
-        if r.get("matchManagers") == ["kubernetes"]
-        and r.get("matchPackageNames") == [IMAGE_NAME]
-        and r.get("automerge") is False
+        r for r in rules
+        if r.get("matchManagers") == ["kubernetes"] and r.get("matchPackageNames") == [IMAGE_NAME]
     ]
-    assert len(mine) == 1, "need exactly one automerge:false rule for the site image"
-    # No rule after it may turn automerge back on for a rule that could match the image.
-    for r in rules[mine[0] + 1:]:
-        if r.get("automerge") is not True:
-            continue
-        managers = r.get("matchManagers")
-        names = r.get("matchPackageNames")
-        assert (managers is not None and "kubernetes" not in managers) or (
-            names is not None and IMAGE_NAME not in names
-        ), f"later rule can re-enable automerge: {r.get('description', r)}"
+    assert len(mine) == 1, "need exactly one rule for the site image"
+    assert mine[0].get("automerge") is True
+    assert mine[0].get("allowedVersions") == "/^[0-9]+\\.[0-9]+\\.[0-9]+$/"

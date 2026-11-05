@@ -175,8 +175,9 @@
     {
       "matchManagers": ["kubernetes"],
       "matchPackageNames": ["git.realliance.net/realliance/realliance.net"],
-      "automerge": false,
-      "description": "The Realliance website (cluster/realliance.net/home.yaml), built on the forge. Any realliance package token can re-push a tag, and :automergeDigest would deploy the re-pushed image unseen, so re-pin by hand after git verify-tag and a review of the release range."
+      "allowedVersions": "/^[0-9]+\\.[0-9]+\\.[0-9]+$/",
+      "automerge": true,
+      "description": "The Realliance website (cluster/realliance.net/home.yaml), built on the forge. Chris chose automerge of new X.Y.Z releases (2026-11-05). Accepted risk: Renovate sees registry tags, and any realliance member can push one, so a member's registry push deploys. The upgrade path is a provenance check (signed git tag + reproducible rebuild digest) gating this automerge."
     },
     {
       "matchManagers": ["argocd"],

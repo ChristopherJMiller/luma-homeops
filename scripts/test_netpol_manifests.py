@@ -259,8 +259,14 @@ def test_enforcer_renovate():
     notes = " ".join(g.get("prBodyNotes", []))
     for must in ("install.yaml", "UPSTREAM_SHA256", "release notes", "canary"):
         assert must in notes, f"prBodyNotes must mention {must!r}"
-    later = [r for r in rules[idx[0] + 1:] if r.get("automerge") is True]
-    assert not later, "no later packageRule may turn automerge back on"
+    # A later rule matters only if it could match the enforcer image: no package-name filter, or one
+    # naming it. Rules pinned to other images (the site's automerge, 2026-11-05) cannot re-enable it.
+    later = [
+        r for r in rules[idx[0] + 1:]
+        if r.get("automerge") is True
+        and ("matchPackageNames" not in r or ENFORCER_IMAGE in r["matchPackageNames"])
+    ]
+    assert not later, "no later packageRule that could match the enforcer may turn automerge back on"
 
     vendored = f"{ENFORCER_DIR}/upstream-install.yaml"
     off = [i for i, r in enumerate(rules) if r.get("matchFileNames") == [vendored]]

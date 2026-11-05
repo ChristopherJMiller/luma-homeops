@@ -224,7 +224,7 @@ deploy key `forgejo-ops`).
 
 ## realliance.net and the general runner
 
-This forge builds and publishes the Realliance website. Galaxy deploys it by a manual re-pin.
+This forge builds and publishes the Realliance website. Renovate re-pins galaxy to each new `X.Y.Z` release and automerges it.
 
 **Where things live.**
 
@@ -241,8 +241,8 @@ Who may change `main`, and the signing rules, are in the paragraphs **What the i
 
 1. Merge a PR into `main`. Any member merges; direct pushes are off.
 2. An Owner pushes a signed tag, `git tag -s X.Y.Z`. CI publishes `X.Y.Z` and `sha-<7>`.
-3. Verify anonymously (`crane digest`), then pre-pull on each node with `talosctl image pull`.
-4. Re-pin in luma-homeops after `git verify-tag` and a review of the range from the previous tag. The review checks the signed tag plus the range, not every commit. Renovate never auto-merges this image.
+3. Renovate opens the re-pin PR in luma-homeops (`X.Y.Z@sha256:…`) and automerges it; Argo rolls `deploy/home`. Pre-pulling on each node (`talosctl image pull`) is optional; without it, new pods need Forgejo up.
+4. To check a release by hand: `git verify-tag X.Y.Z` and the range from the previous tag.
 
 **Rollback.** `git revert` the re-pin. The previous pin is `git.realliance.net/realliance/realliance.net:2.3@sha256:7405276fcd58b6ade36c76147a23dfaba6eac6287880c14e37160d032961e359`, copied from Quay at the same digest. Chris retired Quay.
 
@@ -257,7 +257,7 @@ Who may change `main`, and the signing rules, are in the paragraphs **What the i
 - Rotate: register again with a new secret, reseal, push, then delete the old runner row.
 - Never register it for `realliance-ops/forge-bot`. The two runners share nothing.
 - NetworkPolicy: none yet. It lands with the realliance.net plan's Part C, after the NetworkPolicy plan's B2.
-- Accepted risk: any `realliance` member can push a branch and run a workflow here. That workflow reads `SITE_REGISTRY_TOKEN` and can publish any `realliance` package. Galaxy sees an image only through a reviewed re-pin by digest. Revisit if anyone not fully trusted joins `/realliance`.
+- Accepted risk: any `realliance` member can push a branch and run a workflow here. That workflow reads `SITE_REGISTRY_TOKEN` and can publish any `realliance` package. Renovate automerges new `X.Y.Z` registry tags, so that member's push also deploys to galaxy. Chris accepted this on 2026-11-05. The fix, if anyone not fully trusted joins `/realliance`: gate the automerge on a provenance check (signed git tag + reproducible rebuild digest).
 - Not offered: ephemeral one-job runners, per-job volumes, quotas or a job deadline. The pod is long-lived, and its `HOME` persists between jobs until a restart.
 - Retiring it: drop the allowlisted connection and delete its runner row, remove `cluster/forgejo-runner-general/` and its Argo wiring, delete the repo secret `SITE_REGISTRY_TOKEN`, revoke the `realliance-ci` token and drop its entry in `sso-secrets`.
 
