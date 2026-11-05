@@ -324,7 +324,8 @@ Every item here is *(Claude's call)*.
   verified, `tiny` runs on built-in defaults and the paid classes stay off.
 
 ```yaml
-# realliance-ops/forge: ci.yaml. Names resolve to ids at each load; an unknown name fails the load.
+# realliance-ops/forge: ci.yaml. Limits bind to the numeric id; the name is a label for people, and a
+# stale or missing name is a finding, never a load failure.
 defaults:
   paid_usd_per_period: 10
   paid_concurrent: 2
@@ -336,8 +337,8 @@ global:
   tiny_concurrent: 2
 classes: {tiny: on, small: on, medium: on, large: on}
 owners:
-  realliance: {paid_usd_per_period: 30, tiny_concurrent: 2}
-deny: []                     # every class, tiny included
+  realliance: {id: 52, paid_usd_per_period: 30, tiny_concurrent: 2}
+deny: []                     # every class, tiny included; entries are {name, id}
 ```
 
 ### Reaper

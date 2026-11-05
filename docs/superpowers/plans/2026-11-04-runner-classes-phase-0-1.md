@@ -755,10 +755,10 @@ Also built here (moved from Task 13, F3):
   - `defaults` as the spec;
   - `global` as the spec, except `tiny_concurrent: 1` (F14: raise it to 2 after a clean day);
   - `classes: {tiny: on, small: off, medium: off, large: off}`;
-  - `owners: {realliance: {tiny_concurrent: 2}, forgejo-admin: {tiny_minutes_per_day: 20}}` (D11);
+  - `owners: {realliance: {id: 52, tiny_concurrent: 2}, forgejo-admin: {id: 1, tiny_minutes_per_day: 20}}` (D11; ids are authoritative, Task 7 round 2);
   - `deny: []`;
-  - a header comment: names resolve to ids at each load, an unknown name fails the load, the ceilings live in code, and only an Owner-signed head counts.
-- [ ] **Step 2: Check locally** with a scratch Go test in `~/Repos/ci-dispatch` that runs `limits.Parse` on the file. The same test then runs `Resolve` read-only against the live forge, with `CI_DISPATCH_FORGEJO_TOKEN` from the environment, so a mistyped owner fails now. Expected: PASS.
+  - a header comment: limits bind to the numeric id, the name is a label (a stale or missing name is a finding, never a load failure), the ceilings live in code, and only an Owner-signed head counts.
+- [ ] **Step 2: Check locally** with a scratch Go test in `~/Repos/ci-dispatch` that runs `limits.Parse` on the file. The same test then runs `Resolve` read-only against the live forge, with `CI_DISPATCH_FORGEJO_TOKEN` from the environment, so a wrong id or stale name shows now. Expected: PASS, with no `owner-name-*` findings.
 - [ ] **Step 3: Commit signed, push, open the PR.** **Chris:** merges fast-forward. Nothing to apply: tofu ignores the file.
 
 ### Task 16: The acceptance suite, written first (`realliance/sso`)
