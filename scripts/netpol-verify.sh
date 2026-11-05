@@ -7,6 +7,7 @@
 #   scripts/netpol-verify.sh baseline
 #   scripts/netpol-verify.sh canary [--node NAME]
 #   scripts/netpol-verify.sh stray [--since DUR]      DUR like 15m (the default), 2h
+#   scripts/netpol-verify.sh alert
 #
 # Exit 0 = pass, 1 = at least one FAIL (an answer that does not parse is a FAIL
 # too, never a vacuous pass), 2 = the check could not run or is meaningless (no
@@ -30,7 +31,7 @@
 #   - the sum of packet_count == 0 (the series only exist after a first packet,
 #     so absent counts as 0);
 #   - its log shows the flags we set, and no klog E/F line and no
-#     "syncing nftables rules" line carrying an error.
+#     "syncing nftables rules" line (any case) carrying an error= key.
 # The queue metrics come from a collector that runs every 30 s and first runs
 # before the queue is bound, so run this at least a minute after the pod is Ready.
 #
@@ -47,17 +48,23 @@
 # canary -- B1b and after (§9.2): each probe pod (or the one on --node) runs
 # `probe.sh once enforced`, in parallel, and must pass every row. Its table must
 # match the repo's expansion row by row, so a stale ConfigMap FAILs. Then every
-# dropped row needs a deny line in some agent's log from the last 10 minutes,
-# from that pod: to the literal host:port when the row's backend is "-", or else
-# to any EndpointSlice address of the backend (the post-DNAT destination, §3.4
-# item 1). A timeout that no agent logged is a FAIL: the packet may never have
-# reached an enforcer. Then `stray` over the same logs. Prints
-# `<node> rows <p>/<N> deny-logged <d>/<D>` per pod. Exit 2 unless the pods are
-# there (3 Running on 3 nodes, or 1 on --node).
+# dropped row needs a deny line, stamped after this run began, from that pod, in
+# the row's direction (row_direction): to the literal host:port when the row's
+# backend is "-", or else to one of the backend's post-DNAT IP:PORTs (§3.4 item
+# 1, backend_dsts), port anchored, and from a connect attempt (source port) of
+# its own (claim_rows). A timeout that no agent logged is a FAIL: the
+# packet may never have reached an enforcer. Then `stray` over the same lines.
+# Prints `<node> rows <p>/<N> deny-logged <d>/<D>` per pod. Exit 2 unless the
+# pods are there (3 Running on 3 nodes, or 1 on --node).
 #
 # stray -- every deny line in every agent's log for --since must name a pod
-# (srcPod or dstPod) in a namespace that has a NetworkPolicy (Review Focus 3).
-# Prints up to 10 `STRAY <line>`, then the verdict.
+# (srcPod or dstPod) in a namespace that has a NetworkPolicy (Review Focus 3),
+# and each policed pod it names must have a pod IP and exist now (stray_check).
+# It reads each agent's previous container too, and FAILs when a log does not
+# reach back to --since (a rotated file, a replaced pod). Prints a `window` line
+# per agent, up to 10 `STRAY [why] <line>`, then the verdict.
+#
+# alert -- Prometheus has loaded the NetpolCanaryFailing rule, checked by name (alert()).
 set -uo pipefail
 
 : "${KUBECONFIG:=/tmp/galaxy-kubeconfig}"; export KUBECONFIG
@@ -75,7 +82,7 @@ CANARY_NODES=3
 # at probe.sh's deadline, plus 30 s. A healthy run takes seconds. Needs probe.sh sourced.
 exec_timeout() { echo $((($1 + 1) * PROBE_DEADLINE_DEFAULT + 30)); }
 
-usage() { echo "usage: $0 idle | selftest | baseline | canary [--node NAME] | stray [--since DUR]" >&2; exit 2; }
+usage() { echo "usage: $0 idle | selftest | baseline | canary [--node NAME] | stray [--since DUR] | alert" >&2; exit 2; }
 die() { echo "ERROR: $*" >&2; exit 2; }
 # The cluster answered, but not with what we can judge: a FAIL, not "could not run".
 parse_fail() { echo "FAIL parse: $*"; echo "${CHECK:-idle}: FAIL (unparseable answer)"; exit 1; }
@@ -117,7 +124,7 @@ idle() {
   [ "$rows" -eq "$n" ] || parse_fail "$rows pod rows for $n pods"
 
   while IFS=$'\t' read -r pod node ready restarts; do
-    local why=() m="$tmp/$pod.metrics" log="$tmp/$pod.log" v f total drops pid="?" packets="?" fl="?"
+    local why=() m="$tmp/$pod.metrics" log="$tmp/$pod.log" v f total drops pid="?" packets="?" fl="?" sync
     [ "$ready" = True ] || why+=("not-ready")
     if [[ ! "$restarts" =~ ^[0-9]+$ ]]; then why+=("restarts-unparseable=$restarts")
     elif [ "$restarts" -ne 0 ]; then why+=("restarts=$restarts"); fi
@@ -148,7 +155,10 @@ idle() {
         grep -Eq "\"flag\" name=\"${f%%=*}\" value=\"?${f#*=}\"?( |\$)" "$log" || { why+=("flag-${f%%=*}"); fl=bad; }
       done
       grep -Eq '^[EF][0-9]{4} ' "$log" && why+=("klog-error-lines=$(grep -Ec '^[EF][0-9]{4} ' "$log")")
-      grep -F '"syncing nftables rules"' "$log" | grep -q 'error' && why+=("nftables-sync-error")
+      # Captured, then tested: a pipeline into grep -q could die of SIGPIPE on a long log and miss it.
+      # Upstream logs "Syncing nftables rules" at each sync and "syncing nftables rules" error=... on failure.
+      sync=$(grep -iF 'syncing nftables rules' "$log")
+      grep -Eq '(^| )error=' <<< "$sync" && why+=("nftables-sync-error")
     else
       why+=("logs-unreadable")
     fi
@@ -266,35 +276,182 @@ baseline() {
   return 1
 }
 
-# deny_match LOGFILE SRC_POD DST -> 0 if some line of an agent's log is a deny verdict from
-# SRC_POD (ns/name, anchored: ...-abcde never matches ...-abcdef) to DST, which is IP:PORT
-# (port anchored) or IP: (any port). Regex metacharacters, the dots in an IP, are escaped.
-# The last grep reads all its input (no -q): under pipefail, an early exit would stop the greps
-# before it with SIGPIPE and turn a match into a miss.
+# deny_match LOGFILE SRC_POD DST [DIRECTION] -> 0 if some line of an agent's log is a deny verdict
+# from SRC_POD (ns/name, anchored: ...-abcde never matches ...-abcdef) to DST, which is IP:PORT
+# (port anchored) or IP: (any port), judged in DIRECTION (egress or ingress) when one is given.
+# Regex metacharacters, the dots in an IP, are escaped. The last grep reads all its input (no -q):
+# under pipefail, an early exit would stop the greps before it with SIGPIPE and turn a match into
+# a miss.
 deny_match() {
-  local log=$1 src dst
+  local log=$1 src dst dirre=.
   src=$(printf '%s' "$2" | sed 's/[][\.*^$(){}?+|\\]/\\&/g')
   dst=$(printf '%s' "$3" | sed 's/[][\.*^$(){}?+|\\]/\\&/g')
   case $3 in *: ) ;; *) dst+='("| |$)' ;; esac
+  [ -z "${4-}" ] || dirre="(^| )direction=\"?${4}\"?( |\$)"
   grep -F '"Packet verdict"' "$log" \
     | grep -E '(^| )verdict="?deny"?( |$)' \
     | grep -E "(^| )srcPod=\"?${src}\"?( |\$)" \
+    | grep -E "$dirre" \
     | grep -E "(^| )dst=\"?${dst}" > /dev/null
 }
 
-# agent_logs SINCE -> $tmp/agents.log, every agent's log for the last SINCE. Exit 2 when there is
-# no agent or kubectl cannot read a log: a missing log would hide deny lines.
+# The direction a dropped row's deny must carry. The probe's egress denies a target that no policy
+# selects. The 9377 echo row isolates the other side (§9.2): probe-egress-to-echo allows
+# 9377, so only the echo's ingress can drop it. The 9378 row stays egress: echo-ingress-from-probe
+# allows 9378, so only the probe's egress can drop it. scripts/test_netpol_verify.py keeps these
+# keys in matrix.txt.
+ROW_INGRESS=(netpol-echo.netpol-canary.svc.cluster.local:9377)
+row_direction() {
+  local r
+  for r in "${ROW_INGRESS[@]}"; do [ "$1" != "$r" ] || { echo ingress; return 0; }; done
+  echo egress
+}
+
+# deny_attempts LOG -> one "srcPod<TAB>srcPort<TAB>dst<TAB>direction" per deny line. The enforcer
+# judges before SNAT, so a connect attempt keeps one source port across its SYN retransmits, even
+# when kube-proxy sends each SYN to another backend: the source port names the attempt.
+deny_attempts() {
+  grep -F '"Packet verdict"' "$1" | awk '
+    function val(key,   s, v) {
+      s = " " $0
+      if (!match(s, " " key "=\"?[^\" ]*")) return ""
+      v = substr(s, RSTART + length(key) + 2, RLENGTH - length(key) - 2)
+      sub(/^"/, "", v)
+      return v
+    }
+    val("verdict") == "deny" { sp = val("src"); sub(/^.*:/, "", sp); print val("srcPod") "\t" sp "\t" val("dst") "\t" val("direction") }'
+}
+
+# claim_rows REQS ATTEMPTS -> "row<TAB>1|0" per row of REQS ("row<TAB>direction<TAB>dst,dst,...").
+# ATTEMPTS is one pod's deny_attempts. Each must-drop row needs its own logged attempt: a deny in
+# the row's direction to one of its destinations, from a source port that no row overlapping it
+# has claimed. Rows with the same destinations and direction (top's .240:50000 twice) are the same
+# traffic and share one claim. Narrower rows claim first, so the literal 192.168.0.240:6443 row and
+# the 10.96.0.1:443 row (which can land on .240:6443) need two attempts between them. When the
+# agents logged only one, the wider row reads NOT-LOGGED. Greedy matching is exact while overlapping rows nest,
+# as they do in matrix.txt.
+claim_rows() {
+  awk -F'\t' '
+    function overlaps(a, b,   n, arr, i) {
+      n = split(cands[a], arr, ",")
+      for (i = 1; i <= n; i++) if ((b, arr[i]) in incand) return 1
+      return 0
+    }
+    FNR == NR {
+      key = $2 "|" $3
+      if (!(key in rid)) {
+        nreq++; rid[key] = nreq; rdir[nreq] = $2; cands[nreq] = $3
+        ncand[nreq] = split($3, c, ",")
+        for (i = 1; i <= ncand[nreq]; i++) incand[nreq, c[i]] = 1
+      }
+      rowreq[++nrows] = rid[key]; rowid[nrows] = $1
+      next
+    }
+    { nl++; lsp[nl] = $2; ldst[nl] = $3; ldir[nl] = $4 }
+    END {
+      for (i = 1; i <= nreq; i++) ord[i] = i
+      for (i = 1; i <= nreq; i++)
+        for (j = i + 1; j <= nreq; j++)
+          if (ncand[ord[j]] < ncand[ord[i]] || (ncand[ord[j]] == ncand[ord[i]] && ord[j] < ord[i])) { t = ord[i]; ord[i] = ord[j]; ord[j] = t }
+      for (o = 1; o <= nreq; o++) {
+        r = ord[o]; ok[r] = 0
+        for (l = 1; l <= nl && !ok[r]; l++) {
+          if (ldir[l] != rdir[r] || !((r, ldst[l]) in incand)) continue
+          blocked = 0
+          for (q = 1; q <= nreq; q++) if (((q, lsp[l]) in claimed) && overlaps(q, r)) { blocked = 1; break }
+          if (!blocked) { claimed[r, lsp[l]] = 1; ok[r] = 1 }
+        }
+      }
+      for (k = 1; k <= nrows; k++) print rowid[k] "\t" (ok[rowreq[k]] ? 1 : 0)
+    }' "$1" "$2"
+}
+
+# backend_dsts NS SVC PORT -> one IP:PORT per endpoint address: where a dial to the Service on PORT
+# lands after kube-proxy's DNAT, which is what the enforcer judges (design §3.4 item 1). PORT picks
+# the Service port, its name picks the EndpointSlice port. A headless Service does no DNAT, so the
+# probe dials the pod on PORT itself. Nothing on a port the Service lacks: such a row can never match.
+backend_dsts() {
+  local ns=$1 svc=$2 port=$3 f=$tmp/eps/$1_$2
+  mkdir -p "$tmp/eps"
+  [ -s "$f.svc.json" ] || kc -n "$ns" get service "$svc" -o json > "$f.svc.json" 2> /dev/null < /dev/null \
+    || die "cannot read Service $ns/$svc"
+  [ -s "$f.eps.json" ] || kc -n "$ns" get endpointslices -l "kubernetes.io/service-name=$svc" -o json > "$f.eps.json" 2> /dev/null < /dev/null \
+    || die "cannot read the EndpointSlices of $ns/$svc"
+  jq -r --argjson port "$port" --slurpfile svc "$f.svc.json" '
+      ($svc[0].spec) as $s
+      | if $s.clusterIP == "None" then .items[] | .endpoints[]? | .addresses[0] | "\(.):\($port)"
+        else ([$s.ports[]? | select(.port == $port) | (.name // "")] | first) as $name
+          | if $name == null then empty
+            else .items[] | ([.ports[]? | select((.name // "") == $name) | .port] | first) as $tp
+              | select($tp != null) | .endpoints[]? | .addresses[0] | "\(.):\($tp)"
+            end
+        end' "$f.eps.json" 2> /dev/null | sort -u || parse_fail "the Service or EndpointSlices of $ns/$svc"
+}
+
+# dur_seconds 15m -> 900 (DUR is N s, m or h)
+dur_seconds() {
+  local n=${1%[smh]}
+  case $1 in *s) echo "$n" ;; *m) echo $((n * 60)) ;; *h) echo $((n * 3600)) ;; esac
+}
+
+# klog_epoch LINE -> the seconds since the epoch of LINE's klog header ([IWEF]MMDD HH:MM:SS, UTC),
+# in the latest year that is not in the future. Returns 1 for a line that is not klog.
+klog_epoch() {
+  local y t now
+  [[ ${1-} =~ ^[IWEF]([0-9]{2})([0-9]{2})\ ([0-9]{2}:[0-9]{2}:[0-9]{2}) ]] || return 1
+  y=$(date -u +%Y) now=$(date -u +%s)
+  t=$(date -u -d "$y-${BASH_REMATCH[1]}-${BASH_REMATCH[2]} ${BASH_REMATCH[3]}" +%s 2> /dev/null) || return 1
+  [ "$t" -le $((now + 300)) ] || t=$(date -u -d "$((y - 1))-${BASH_REMATCH[1]}-${BASH_REMATCH[2]} ${BASH_REMATCH[3]}" +%s)
+  echo "$t"
+}
+
+# klog_since KEY < LOG -> the lines stamped at or after KEY ("MMDD HH:MM:SS", UTC). A klog header
+# has no year, so a window across New Year reads short, which fails closed.
+klog_since() { awk -v k="$1" 'substr($0, 2, 4) " " substr($0, 7, 8) >= k'; }
+
+# agent_logs SINCE -> $tmp/agents.log, every agent's log for the last SINCE, with the previous
+# container's when the agent restarted. Also $tmp/coverage.tsv: pod, node, seconds covered, and the
+# log's start. kubectl reads only a container's current log file, so a rotated file, a lost
+# previous container, or a pod the DaemonSet replaced leaves the start of the window unread; only
+# the coverage shows it. Exit 2 when there is no agent or kubectl cannot read a current log.
 agent_logs() {
-  local n pod
+  local since=$1 n pod node restarts started from start prev
   kc -n "$NS" get pods -l "$SELECTOR" -o json > "$tmp/agents.json" 2> /dev/null || die "cannot list pods in $NS; is KUBECONFIG right?"
   n=$(items_len "$tmp/agents.json"); count_or_fail "the agent pod count" "$n"
   [ "$n" -gt 0 ] || die "no kube-network-policies agent pods"
-  jq -r '.items[].metadata.name' "$tmp/agents.json" > "$tmp/agents.txt" 2> /dev/null || parse_fail "the agent pod list"
+  jq -r '.items[] | [.metadata.name, (.spec.nodeName // "-"),
+      ([.status.containerStatuses[]? | select(.name == "kube-network-policies") | .restartCount][0] // 0),
+      ([.status.containerStatuses[]? | select(.name == "kube-network-policies") | .state.running.startedAt][0] // "-")] | @tsv' \
+    "$tmp/agents.json" > "$tmp/agents.tsv" 2> /dev/null || parse_fail "the agent pod list"
   : > "$tmp/agents.log"
-  while read -r pod; do
-    kc -n "$NS" logs "$pod" -c kube-network-policies --since="$1" >> "$tmp/agents.log" 2> /dev/null < /dev/null \
+  : > "$tmp/coverage.tsv"
+  while IFS=$'\t' read -r pod node restarts started; do
+    kc -n "$NS" logs "$pod" -c kube-network-policies --since="$since" > "$tmp/$pod.cur" 2> /dev/null < /dev/null \
       || die "cannot read the log of $NS/$pod"
-  done < "$tmp/agents.txt"
+    # The current file's first line: where this log starts.
+    kc -n "$NS" logs "$pod" -c kube-network-policies --limit-bytes=4096 > "$tmp/$pod.head" 2> /dev/null < /dev/null \
+      || die "cannot read the log of $NS/$pod"
+    from=$(klog_epoch "$(head -n 1 "$tmp/$pod.head")") || from=""
+    start=$(date -u -d "$started" +%s 2> /dev/null) || start=""
+    : > "$tmp/$pod.prev"
+    # The file starts with the container (kubelet has not rotated it), and an earlier container ran: read
+    # that one too, and the log starts where its file does.
+    if [ -n "$from" ] && [ -n "$start" ] && [ "$from" -le $((start + 60)) ] && [[ "$restarts" =~ ^[1-9][0-9]*$ ]]; then
+      if kc -n "$NS" logs "$pod" -c kube-network-policies --previous --since="$since" > "$tmp/$pod.prev" 2> /dev/null < /dev/null \
+        && kc -n "$NS" logs "$pod" -c kube-network-policies --previous --limit-bytes=4096 > "$tmp/$pod.prevhead" 2> /dev/null < /dev/null \
+        && prev=$(klog_epoch "$(head -n 1 "$tmp/$pod.prevhead")"); then
+        from=$prev
+      else
+        : > "$tmp/$pod.prev"
+      fi
+    fi
+    cat "$tmp/$pod.prev" "$tmp/$pod.cur" >> "$tmp/agents.log"
+    if [ -n "$from" ]; then
+      printf '%s\t%s\t%s\t%s\n' "$pod" "$node" $(($(date -u +%s) - from)) "$(date -u -d "@$from" +%FT%TZ)" >> "$tmp/coverage.tsv"
+    else
+      printf '%s\t%s\t0\tunknown\n' "$pod" "$node" >> "$tmp/coverage.tsv"
+    fi
+  done < "$tmp/agents.tsv"
 }
 
 # policed_namespaces -> sets POLICED: the namespaces with at least one NetworkPolicy, comma-separated.
@@ -304,46 +461,90 @@ policed_namespaces() {
     "$tmp/np.json" 2> /dev/null) || parse_fail "the NetworkPolicy list"
 }
 
-# stray_check LOG -> up to 10 "STRAY <line>", then the verdict; 0 only if no line is stray.
-# Every deny line must name a pod (srcPod or dstPod, ns/name) in a namespace in $POLICED. "external"
-# names no pod. A line naming neither means the enforcer judged traffic that no policy selects: a
-# node IP enrolled by mistake (#380), a stale IP-to-pod mapping, or a policy selecting what it
-# should not (Review Focus 3).
+# policed_pods -> $tmp/pods-now.txt: ns/name of every pod that exists now in a policed namespace.
+policed_pods() {
+  local ns
+  : > "$tmp/pods-now.txt"
+  for ns in ${POLICED//,/ }; do
+    kc -n "$ns" get pods -o json > "$tmp/nspods.json" 2> /dev/null < /dev/null || die "cannot list pods in $ns"
+    jq -r --arg ns "$ns" '.items[] | "\($ns)/\(.metadata.name)"' "$tmp/nspods.json" >> "$tmp/pods-now.txt" 2> /dev/null \
+      || parse_fail "the pod list of $ns"
+  done
+}
+
+# stray_check LOG -> prints up to 10 "STRAY [why] <line>" and sets DENY_N and STRAY_N; 0 only if no
+# line is stray (Review Focus 3). Each deny line must name a pod (srcPod or dstPod, ns/name) in a
+# namespace in $POLICED, and each side it names there must have a pod IP (10.244.0.0/16) and a pod
+# that exists now ($tmp/pods-now.txt). "external" names no pod. A line naming no policed pod means
+# the enforcer judged traffic that no policy selects. A node IP on the policed side is the #380
+# class (a hostNetwork pod enrolled). A pod that is gone can be a stale IP-to-pod mapping, or a pod
+# deleted inside the window: run `stray` with a window that starts after the last rollout there.
 stray_check() {
-  local n k
   grep -F '"Packet verdict"' "$1" | grep -E '(^| )verdict="?deny"?( |$)' > "$tmp/deny.txt"
-  n=$(wc -l < "$tmp/deny.txt")
-  awk -v policed="$POLICED" '
-    function ns(key,   s, v) {
+  DENY_N=$(wc -l < "$tmp/deny.txt")
+  awk -v policed="$POLICED" -v podsfile="$tmp/pods-now.txt" '
+    function val(key,   s, v) {
       s = " " $0
       if (!match(s, " " key "=\"?[^\" ]*")) return ""
       v = substr(s, RSTART + length(key) + 2, RLENGTH - length(key) - 2)
       sub(/^"/, "", v)
-      if (index(v, "/") == 0) return ""
-      return substr(v, 1, index(v, "/") - 1)
+      return v
     }
-    BEGIN { m = split(policed, p, ","); for (i = 1; i <= m; i++) if (p[i] != "") ok[p[i]] = 1 }
-    { s = ns("srcPod"); d = ns("dstPod"); if (!((s in ok) || (d in ok))) print }
+    function nsof(p) { return index(p, "/") ? substr(p, 1, index(p, "/") - 1) : "" }
+    BEGIN {
+      m = split(policed, p, ",")
+      for (i = 1; i <= m; i++) if (p[i] != "") ok[p[i]] = 1
+      while ((getline l < podsfile) > 0) live[l] = 1
+    }
+    {
+      why = ""; sides = 0
+      for (k = 1; k <= 2; k++) {
+        pod = val(k == 1 ? "srcPod" : "dstPod")
+        ip = val(k == 1 ? "src" : "dst"); sub(/:[0-9]+$/, "", ip)
+        if (!(nsof(pod) in ok)) continue
+        sides++
+        if (index(ip, "10.244.") != 1) why = why "; " pod " has ip " ip ", outside 10.244.0.0/16"
+        else if (!(pod in live)) why = why "; " pod " is gone"
+      }
+      if (sides == 0) why = "; no pod in a policed namespace"
+      if (why != "") print "[" substr(why, 3) "] " $0
+    }
   ' "$tmp/deny.txt" > "$tmp/stray.txt"
-  k=$(wc -l < "$tmp/stray.txt")
+  STRAY_N=$(wc -l < "$tmp/stray.txt")
   head -n 10 "$tmp/stray.txt" | sed 's/^/STRAY /'
-  if [ "$k" -eq 0 ]; then
-    echo "stray: PASS ($n deny lines, policed: ${POLICED:-none})"
-    return 0
-  fi
-  echo "stray: FAIL ($k of $n deny lines stray, policed: ${POLICED:-none})"
-  return 1
+  [ "$STRAY_N" -eq 0 ]
 }
 
 stray() {
+  local want short=0 pod node covered from rc=0
+  want=$(dur_seconds "$1")
   agent_logs "$1"
   policed_namespaces
-  stray_check "$tmp/agents.log"
+  policed_pods
+  while IFS=$'\t' read -r pod node covered from; do
+    if [ "$covered" -ge "$want" ]; then
+      echo "window $node $pod: covered, log from $from"
+    else
+      echo "window $node $pod: SHORT, $covered s of $want s (log from $from)"
+      short=$((short + 1))
+    fi
+  done < "$tmp/coverage.tsv"
+  stray_check "$tmp/agents.log" || rc=1
+  if [ "$rc" -eq 0 ] && [ "$short" -eq 0 ]; then
+    echo "stray: PASS ($DENY_N deny lines, policed: ${POLICED:-none})"
+    return 0
+  fi
+  if [ "$short" -eq 0 ]; then
+    echo "stray: FAIL ($STRAY_N of $DENY_N deny lines stray, policed: ${POLICED:-none})"
+  else
+    echo "stray: FAIL ($STRAY_N of $DENY_N deny lines stray, $short agent logs short of $1, policed: ${POLICED:-none})"
+  fi
+  return 1
 }
 
 canary() {
   local only=$1 root probe matrix n live running nodes want pod node hostip rows limit rc summary npass nfail
-  local fail=0 row line expect host port backend lexpect lhp logged d dn order ip ens esvc
+  local fail=0 row line expect host port backend lexpect lhp logged d dn order w b p dir t0 i
   root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
   probe=$root/cluster/netpol-canary/probe.sh
   matrix=$root/cluster/netpol-canary/matrix.txt
@@ -381,6 +582,9 @@ canary() {
       || die "matrix.txt does not expand for $node"
   done < "$tmp/probes.tsv"
 
+  # Only deny lines stamped after this run began count, less 30 s for clock skew between here and
+  # the nodes. An earlier run's lines, or a deleted pod's, prove nothing about this one.
+  t0=$(date -u -d "@$(($(date -u +%s) - 30))" '+%m%d %H:%M:%S')
   while IFS=$'\t' read -r pod node _ _; do
     rows=$(wc -l < "$tmp/$pod.rows")
     limit=$(exec_timeout "$rows")
@@ -395,15 +599,16 @@ canary() {
 
   # Read after the runs, so their deny lines are in.
   agent_logs 10m
+  klog_since "$t0" < "$tmp/agents.log" > "$tmp/agents.run"
   policed_namespaces
-  # Post-DNAT destinations (design §3.4 item 1): each backend's EndpointSlice addresses.
-  mkdir -p "$tmp/eps"
-  cat "$tmp"/*.rows | awk '$1 == "dropped" && $5 != "-" { print $5 }' | sort -u > "$tmp/backends.txt"
-  while IFS=/ read -r ens esvc; do
-    kc -n "$ens" get endpointslices -l "kubernetes.io/service-name=$esvc" \
-      -o jsonpath='{range .items[*].endpoints[*]}{.addresses[0]}{"\n"}{end}' > "$tmp/eps/${ens}_$esvc" 2> /dev/null < /dev/null \
-      || die "cannot read the EndpointSlices of $ens/$esvc"
+  policed_pods
+  # Post-DNAT destinations for each backend row: IP:PORT, port anchored.
+  mkdir -p "$tmp/dst"
+  cat "$tmp"/*.rows | awk '$1 == "dropped" && $5 != "-" { print $5, $4 }' | sort -u > "$tmp/backends.txt"
+  while read -r b p; do
+    backend_dsts "${b%%/*}" "${b#*/}" "$p" > "$tmp/dst/${b%%/*}_${b#*/}_$p"
   done < "$tmp/backends.txt"
+  deny_attempts "$tmp/agents.run" > "$tmp/attempts.tsv"
 
   while IFS=$'\t' read -r pod node _ _; do
     rows=$(wc -l < "$tmp/$pod.rows")
@@ -416,9 +621,12 @@ canary() {
     npass=$(grep -c '^PASS ' "$tmp/$pod.lines")
     nfail=$(grep -c '^FAIL ' "$tmp/$pod.lines")
     # Row i of the repo's expansion against line i of the pod's table: a stale ConfigMap shows here.
-    d=0 dn=0 order=ok
+    d=0 dn=0 order=ok i=0
     [ "$(wc -l < "$tmp/$pod.lines")" -eq "$rows" ] || order="the pod ran $(wc -l < "$tmp/$pod.lines") rows, the repo has $rows"
+    : > "$tmp/$pod.reqs"
+    : > "$tmp/$pod.labels"
     while IFS=$'\t' read -r row line; do
+      i=$((i + 1))
       read -r expect _ host port backend _ <<< "$row"
       read -r _ lexpect _ lhp _ <<< "$line"
       if [ "$host" = '$WAN_IP' ]; then
@@ -428,25 +636,26 @@ canary() {
       fi
       [ "$expect" = dropped ] || continue
       dn=$((dn + 1))
-      logged=0
+      # What this row's deny must name: the literal host:port the pod dialled, or each post-DNAT
+      # IP:PORT of its backend, port anchored.
       if [ -z "$lhp" ]; then
-        :
+        w=""
       elif [ "$backend" = - ]; then
-        deny_match "$tmp/agents.log" "$CANARY_NS/$pod" "$lhp" && logged=1
+        w=$lhp
       else
-        while read -r ip; do
-          [ -n "$ip" ] || continue
-          if deny_match "$tmp/agents.log" "$CANARY_NS/$pod" "$ip:"; then logged=1; break; fi
-        done < "$tmp/eps/${backend%%/*}_${backend#*/}"
+        w=$(paste -sd, "$tmp/dst/${backend%%/*}_${backend#*/}_$port")
       fi
-      if [ "$logged" -eq 1 ]; then
-        d=$((d + 1))
-      elif [ "$backend" = - ]; then
-        echo "NOT-LOGGED ${lhp:-$host:$port} (no deny line from $CANARY_NS/$pod)"
-      else
-        echo "NOT-LOGGED ${lhp:-$host:$port} (backend $backend: $(paste -sd, "$tmp/eps/${backend%%/*}_${backend#*/}"))"
-      fi
+      printf '%s\t%s\t%s\n' "$i" "$(row_direction "$host:$port")" "$w" >> "$tmp/$pod.reqs"
+      printf '%s\t%s\t%s\n' "$i" "${lhp:-$host:$port}" "${backend/#-/the literal}" >> "$tmp/$pod.labels"
     done < <(paste -d$'\t' "$tmp/$pod.rows" "$tmp/$pod.lines")
+    awk -F'\t' -v p="$CANARY_NS/$pod" '$1 == p' "$tmp/attempts.tsv" > "$tmp/$pod.attempts"
+    claim_rows "$tmp/$pod.reqs" "$tmp/$pod.attempts" > "$tmp/$pod.claims"
+    while IFS=$'\t' read -r i logged; do
+      if [ "$logged" = 1 ]; then d=$((d + 1)); continue; fi
+      IFS=$'\t' read -r _ dir w < <(awk -F'\t' -v i="$i" '$1 == i' "$tmp/$pod.reqs")
+      IFS=$'\t' read -r _ lhp b < <(awk -F'\t' -v i="$i" '$1 == i' "$tmp/$pod.labels")
+      echo "NOT-LOGGED $lhp (no $dir deny of its own from $CANARY_NS/$pod to $b: ${w:-none})"
+    done < "$tmp/$pod.claims"
     echo "$node rows $npass/$rows deny-logged $d/$dn"
     if [ "${rc:-}" = 0 ] && [ "$summary" = "SUMMARY $rows/$rows enforced node=$node" ] && [ "$npass" -eq "$rows" ] \
       && [ "$nfail" -eq 0 ] && [ "$order" = ok ] && [ "$d" -eq "$dn" ] && [ "$rows" -gt 0 ]; then
@@ -457,7 +666,12 @@ canary() {
     fi
   done < "$tmp/probes.tsv"
 
-  stray_check "$tmp/agents.log" || fail=1
+  if stray_check "$tmp/agents.run"; then
+    echo "stray: PASS ($DENY_N deny lines, policed: ${POLICED:-none})"
+  else
+    echo "stray: FAIL ($STRAY_N of $DENY_N deny lines stray, policed: ${POLICED:-none})"
+    fail=1
+  fi
 
   [ "$want" -eq 1 ] && n="1 node" || n="$want nodes"
   if [ "$fail" -eq 0 ]; then
@@ -465,6 +679,32 @@ canary() {
     return 0
   fi
   echo "canary: FAIL ($n)"
+  return 1
+}
+
+# alert -- Prometheus loads and evaluates NetpolCanaryFailing. check-prometheus-rules.sh exits 0 when every
+# selected rule loads, so a PrometheusRule that is missing or unlabelled passes it unseen. This
+# asks Prometheus for the rule by name: one group named netpol-canary, from the live object's uid
+# file, the rule's health ok and its `for` as written.
+alert() {
+  local uid forsec got
+  kc -n prometheus get prometheusrule netpol-canary -o json > "$tmp/pr.json" 2> /dev/null \
+    || die "cannot read PrometheusRule prometheus/netpol-canary"
+  uid=$(jq -r '.metadata.uid // empty' "$tmp/pr.json" 2> /dev/null) || parse_fail "the PrometheusRule"
+  forsec=$(dur_seconds "$(jq -r '[.spec.groups[].rules[] | select(.alert == "NetpolCanaryFailing") | .for][0] // empty' "$tmp/pr.json" 2> /dev/null)")
+  kc get --raw '/api/v1/namespaces/prometheus/services/prometheus-operated:9090/proxy/api/v1/rules?rule_name[]=NetpolCanaryFailing' \
+    > "$tmp/rules.json" 2> /dev/null || die "cannot query Prometheus rules"
+  got=$(jq -r --arg file "prometheus-netpol-canary-$uid.yaml" '
+      [.data.groups[] | select(.name == "netpol-canary") | . as $g | .rules[] | select(.name == "NetpolCanaryFailing")
+        | [($g.file | split("/") | last) == $file, .health, .state, (.duration | tostring)] | @tsv] | .[]' \
+    "$tmp/rules.json" 2> /dev/null) || parse_fail "the rules API answer"
+  if [ -n "$uid" ] && [ -n "$forsec" ] && [ "$(wc -l <<< "$got")" -eq 1 ] && [ "$got" = "$(printf 'true\tok\t%s\t%s' "$(cut -f3 <<< "$got")" "$forsec")" ]; then
+    echo "PASS group netpol-canary from prometheus-netpol-canary-$uid.yaml: NetpolCanaryFailing health=ok state=$(cut -f3 <<< "$got") for=${forsec}s"
+    echo "alert: PASS"
+    return 0
+  fi
+  echo "FAIL group netpol-canary: want one NetpolCanaryFailing from prometheus-netpol-canary-${uid:-?}.yaml, health ok, for ${forsec:-?}s; got '${got:-nothing}' (uid-file health state for)"
+  echo "alert: FAIL"
   return 1
 }
 
@@ -731,7 +971,7 @@ selftest() {
 CHECK=$1
 shift
 case "$CHECK" in
-  idle | selftest | baseline) [ "$#" -eq 0 ] || usage; "$CHECK" ;;
+  idle | selftest | baseline | alert) [ "$#" -eq 0 ] || usage; "$CHECK" ;;
   canary)
     if [ "$#" -eq 0 ]; then canary ""
     elif [ "$#" -eq 2 ] && [ "$1" = --node ] && [ -n "$2" ]; then canary "$2"

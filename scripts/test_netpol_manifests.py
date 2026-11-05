@@ -910,3 +910,20 @@ def test_no_policy_in_forbidden_namespaces():
     assert CANARY_DIR in dirs, "the canary renders policies, so the scan must find it"
     found = [v for d in dirs for v in policy_violations(render(d))]
     assert found == []
+
+
+def test_argo_cd_chart_policies_stay_off():
+    """Argo is the rollback path while enforcement rolls out, so its chart's NetworkPolicies stay off
+    until plan Task 12 (B4); A2 turned them off (ledger). policy_dirs renders kustomizations only and
+    cannot see a Helm-sourced policy, so this pins the value (review M4). The umbrella chart's values
+    reach the dependency under its name, so the dependency must stay `argo-cd` with no alias, and the
+    Application must not override the value. A chart bump that renames the key needs A2's render
+    check again: `helm template` before and after, counting NetworkPolicies."""
+    chart = yaml.safe_load((REPO / "cluster/argo-cd/Chart.yaml").read_text())
+    (dep,) = [d for d in chart["dependencies"] if d["name"] == "argo-cd"]
+    assert "alias" not in dep, "an alias moves the values key; update this test and values.yaml together"
+    values = yaml.safe_load((REPO / "cluster/argo-cd/values.yaml").read_text())
+    assert values["argo-cd"]["global"]["networkPolicy"]["create"] is False
+    app = yaml.safe_load((REPO / "cluster/applications/argo-cd.yaml").read_text())
+    assert app["spec"]["source"]["path"] == "cluster/argo-cd"
+    assert "networkPolicy" not in json.dumps(app["spec"]["source"].get("helm", {})), "the Application must not override it"

@@ -25,6 +25,7 @@ import json
 import os
 import re
 import subprocess
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -69,10 +70,14 @@ F=$NETPOL_FIXTURES
 answer() { [ -f "$1" ] || { echo "Error from server (NotFound): stub has no $1" >&2; exit 1; }; cat "$1"; }
 args=" $* "
 echo "$*" >> "$F/calls.log"
+ns=${args#* -n }; ns=${ns%% *}
 case "$args" in
   *" networkpolicies "*) answer "$F/np.json" ;;
-  *" endpointslices "*) ns=${args#* -n }; ns=${ns%% *}; svc=${args#*kubernetes.io/service-name=}; svc=${svc%% *}
-    answer "$F/eps/${ns}_${svc}" ;;
+  *" get prometheusrule "*) answer "$F/pr.json" ;;
+  *" --raw /api/v1/namespaces/prometheus/services/"*) answer "$F/rules.json" ;;
+  *" get service "*) svc=${args#* get service }; answer "$F/svc/${ns}_${svc%% *}" ;;
+  *" endpointslices "*) svc=${args#*kubernetes.io/service-name=}; answer "$F/eps/${ns}_${svc%% *}" ;;
+  *" get pods -o json "*) answer "$F/nspods/$ns.json" ;;
   *" netpol-canary get pods "*) answer "$F/probe-pods.json" ;;
   *" exec "*) p=${args#* exec }; p=${p%% *}
     [ -f "$F/exec/$p.rc" ] || { echo "Error from server (NotFound): pods \"$p\" not found" >&2; exit 1; }
@@ -80,7 +85,11 @@ case "$args" in
   *" daemonset "*) answer "$F/ds.json" ;;
   *" get pods "*) answer "$F/pods.json" ;;
   *" --raw "*) p=${args#*/pods/}; answer "$F/metrics/${p%%:*}" ;;
-  *" logs "*) p=${args#* logs }; answer "$F/logs/${p%% *}" ;;
+  *" logs "*) p=${args#* logs }; f=$F/logs/${p%% *}
+    case "$args" in *" --previous "*) f=$f.previous ;; esac
+    [ -f "$f" ] || { echo "Error from server (BadRequest): previous terminated container not found" >&2; exit 1; }
+    case "$args" in *" --limit-bytes="*) n=${args#* --limit-bytes=}; head -c "${n%% *}" "$f"; exit 0 ;; esac
+    cat "$f" ;;
   *) echo "stub kubectl: unexpected call: $*" >&2; exit 1 ;;
 esac
 """
@@ -88,8 +97,9 @@ esac
 NODES = ["bottom", "top", "middle"]
 
 
-def pod(name: str, node: str, ready: bool = True, restarts: int = 0) -> dict:
-    """One agent pod, reduced to the fields `idle` reads (shape captured live)."""
+def pod(name: str, node: str, ready: bool = True, restarts: int = 0, started: str = "2026-11-03T18:35:10Z") -> dict:
+    """One agent pod, reduced to the fields `idle` and `stray` read (shape captured live). The default
+    start matches LOG_START's first line."""
     return {
         "metadata": {"name": name},
         "spec": {"nodeName": node},
@@ -99,7 +109,8 @@ def pod(name: str, node: str, ready: bool = True, restarts: int = 0) -> dict:
                 {"type": "Ready", "status": "True" if ready else "False"},
                 {"type": "PodScheduled", "status": "True"},
             ],
-            "containerStatuses": [{"name": "kube-network-policies", "restartCount": restarts}],
+            "containerStatuses": [{"name": "kube-network-policies", "restartCount": restarts,
+                                   "state": {"running": {"startedAt": started}}}],
         },
     }
 
@@ -410,6 +421,9 @@ def test_baseline_summary_from_another_node_fails(tmp_path):
 WAN_IP = "152.44.247.88"
 POLICED = [{"metadata": {"name": "default-deny", "namespace": "netpol-canary"}},
            {"metadata": {"name": "allow-dns", "namespace": "netpol-canary"}}]
+ECHO_POD = "netpol-echo-5b67965c7c-rmnfq"
+ECHO_9377 = "netpol-echo.netpol-canary.svc.cluster.local:9377"
+ECHO_9378 = "netpol-echo-pod.netpol-canary.svc.cluster.local:9378"
 
 
 def expand(node: str) -> list[list[str]]:
@@ -420,10 +434,51 @@ def expand(node: str) -> list[list[str]]:
     return [line.split() for line in r.stdout.splitlines()]
 
 
-def backends() -> dict[str, list[str]]:
-    """ns/svc -> fake EndpointSlice IPs, one distinct /32 per backend in the matrix."""
-    names = sorted({row[4] for row in expand("top") if row[4] != "-"})
-    return {b: [f"10.244.9.{i + 1}", f"10.244.8.{i + 1}"] for i, b in enumerate(names)}
+def backend_ports() -> dict[str, set[int]]:
+    """ns/svc -> the row ports the matrix dials it on."""
+    out: dict[str, set[int]] = {}
+    for row in expand("top"):
+        if row[4] != "-":
+            out.setdefault(row[4], set()).add(int(row[3]))
+    return out
+
+
+def backends(live_like: bool = False) -> dict[str, tuple[dict, dict]]:
+    """ns/svc -> (Service, EndpointSlice list) for every backend in the matrix.
+
+    By default each backend has its own fake pod IPs and a target port 1000 above the Service port
+    (DNAT). live_like: what galaxy has (2026-11-05): default/kubernetes is the three node IPs on 6443,
+    which other rows also dial, and both echo Services sit on the one echo pod IP with 9376/9377."""
+    out = {}
+    for i, (b, ports) in enumerate(sorted(backend_ports().items())):
+        ips = [f"10.244.9.{i + 1}", f"10.244.8.{i + 1}"]
+        svc_ports = [{"name": f"p{p}", "port": p, "targetPort": p + 1000} for p in sorted(ports)]
+        eps_ports = [{"name": f"p{p}", "port": p + 1000} for p in sorted(ports)]
+        cluster_ip = f"10.96.9.{i + 1}"
+        if b == "netpol-canary/netpol-echo-pod":
+            cluster_ip = "None"
+        if live_like and b == "default/kubernetes":
+            ips = ["192.168.0.240", "192.168.0.241", "192.168.0.242"]
+            svc_ports, eps_ports = [{"name": "https", "port": 443, "targetPort": 6443}], [{"name": "https", "port": 6443}]
+        if b.startswith("netpol-canary/") and (live_like or b.endswith("-pod")):
+            ips = ["10.244.0.201"]
+            svc_ports = [{"name": "open", "port": 9376, "targetPort": "open"}, {"name": "closed", "port": 9377, "targetPort": "closed"}]
+            eps_ports = [{"name": "closed", "port": 9377}, {"name": "open", "port": 9376}]
+        svc = {"spec": {"clusterIP": cluster_ip, "ports": svc_ports}}
+        eps = {"items": [{"ports": eps_ports, "endpoints": [{"addresses": [ip]} for ip in ips]}]}
+        out[b] = (svc, eps)
+    return out
+
+
+def resolve(objs: dict, backend: str, port: int) -> list[str]:
+    """The post-DNAT IP:PORTs of a dial to BACKEND on PORT, as the test expects them."""
+    svc, eps = objs[backend]
+    ips = [e["addresses"][0] for s in eps["items"] for e in s["endpoints"]]
+    if svc["spec"]["clusterIP"] == "None":
+        return [f"{ip}:{port}" for ip in ips]
+    (name,) = [p["name"] for p in svc["spec"]["ports"] if p["port"] == port]
+    (tp,) = [p["port"] for p in eps["items"][0]["ports"] if p["name"] == name]
+    return [f"{ip}:{tp}" for ip in ips]
 
 
 def enforced_table(node: str, rows: list[list[str]], fail_refused: str | None = None) -> str:
@@ -440,42 +495,70 @@ def enforced_table(node: str, rows: list[list[str]], fail_refused: str | None = 
     return "\n".join(lines) + "\n"
 
 
-def deny_line(src_pod: str, dst: str, dst_pod: str = "external") -> str:
-    return (f'I1105 21:30:00.000000       1 verdictlog.go:179] "Packet verdict" id=7 verdict="deny" family="IPv4" '
-            f'protocol="TCP" src="10.244.3.9:40000" dst="{dst}" srcPod="{src_pod}" dstPod="{dst_pod}" '
-            f'direction="egress" evaluator="x"')
+def klog_now(ago_s: int = 0) -> str:
+    return (datetime.now(timezone.utc) - timedelta(seconds=ago_s)).strftime("I%m%d %H:%M:%S.%f")
 
 
-def deny_lines(pod_name: str, rows: list[list[str]], skip: str | None = None) -> list[str]:
-    """One deny line per dropped row: the literal destination, or the backend's first endpoint IP
-    on a translated port (the post-DNAT destination)."""
-    eps, out = backends(), []
-    for expect, _scope, host, port, backend, *_ in rows:
+def deny_line(src_pod: str, dst: str, dst_pod: str = "external", direction: str = "egress",
+              src: str = "10.244.3.9:40000", ago_s: int = 0) -> str:
+    return (f'{klog_now(ago_s)}       1 verdictlog.go:172] "Packet verdict" id=7 verdict="deny" family="IPv4" '
+            f'protocol="TCP" src="{src}" dst="{dst}" srcPod="{src_pod}" dstPod="{dst_pod}" '
+            f'direction="{direction}" evaluator="StandardNetworkPolicy"')
+
+
+def deny_lines(pod_name: str, rows: list[list[str]], objs: dict, skip: str | None = None) -> list[str]:
+    """Each dropped row's attempt as the enforcer logs it: one source port per row, three SYNs, to the
+    literal destination or to the backend's post-DNAT IP:PORTs in turn (kube-proxy picks a backend
+    per SYN); ingress at the echo for the 9377 row, egress otherwise."""
+    out = []
+    for i, (expect, _scope, host, port, backend, *_) in enumerate(rows):
         if expect != "dropped" or f"{host}:{port}" == skip:
             continue
-        dst = f"{host}:{port}" if backend == "-" else f"{eps[backend][0]}:8443"
-        out.append(deny_line(f"netpol-canary/{pod_name}", dst))
+        dsts = [f"{host}:{port}"] if backend == "-" else resolve(objs, backend, int(port))
+        src = f"10.244.3.9:{41000 + i}"
+        for syn in range(3):
+            dst = dsts[syn % len(dsts)]
+            if f"{host}:{port}" == ECHO_9377:
+                out.append(deny_line(f"netpol-canary/{pod_name}", dst, dst_pod=f"netpol-canary/{ECHO_POD}",
+                                     direction="ingress", src=src))
+            else:
+                out.append(deny_line(f"netpol-canary/{pod_name}", dst, src=src))
     return out
 
 
-def canary_fixtures(tmp: Path, *, nodes=NODES, tables=None, rcs=None, extra_log=(), skip=None, np_items=POLICED) -> Path:
+def write_backends(f: Path, objs: dict) -> None:
+    (f / "svc").mkdir(exist_ok=True)
+    (f / "eps").mkdir(exist_ok=True)
+    for b, (svc, eps) in objs.items():
+        ns, name = b.split("/")
+        (f / "svc" / f"{ns}_{name}").write_text(json.dumps(svc))
+        (f / "eps" / f"{ns}_{name}").write_text(json.dumps(eps))
+
+
+def write_ns_pods(f: Path, ns: str, names: list[str]) -> None:
+    (f / "nspods").mkdir(exist_ok=True)
+    (f / "nspods" / f"{ns}.json").write_text(json.dumps({"items": [{"metadata": {"name": n}} for n in names]}))
+
+
+def canary_fixtures(tmp: Path, *, nodes=NODES, tables=None, rcs=None, extra_log=(), skip=None, np_items=POLICED,
+                    live_like=False, drop_lines=()) -> Path:
     """Probe pods on NODES answering enforced runs, three agents whose logs hold the deny lines,
-    EndpointSlices for every backend. tables/rcs: pod -> override; skip: (pod, host:port) not logged."""
+    each backend's Service and EndpointSlices. tables/rcs: pod -> override; skip: (pod, host:port) not
+    logged; drop_lines: substrings whose deny lines are removed."""
     fixtures(tmp, ds_doc=ds(3, 3), pods=agents(3), np_items=np_items)
     f = tmp / "fx"
+    objs = backends(live_like)
+    write_backends(f, objs)
+    write_ns_pods(f, "netpol-canary", [f"netpol-probe-{n}" for n in nodes] + [ECHO_POD])
     (f / "probe-pods.json").write_text(json.dumps({"items": [probe_pod(f"netpol-probe-{n}", n) for n in nodes]}))
     (f / "exec").mkdir()
-    (f / "eps").mkdir()
-    for b, ips in backends().items():
-        ns, svc = b.split("/")
-        (f / "eps" / f"{ns}_{svc}").write_text("\n".join(ips) + "\n")
     lines = []
     for n in nodes:
         name, rows = f"netpol-probe-{n}", expand(n)
         (f / "exec" / name).write_text((tables or {}).get(name, enforced_table(n, rows)))
         (f / "exec" / f"{name}.rc").write_text(str((rcs or {}).get(name, 0)))
-        lines += deny_lines(name, rows, skip=skip[1] if skip and skip[0] == name else None)
-    lines += list(extra_log)
+        lines += deny_lines(name, rows, objs, skip=skip[1] if skip and skip[0] == name else None)
+    lines = [x for x in lines if not any(s in x for s in drop_lines)] + list(extra_log)
     # Spread over the three agents: canary reads every agent's log.
     for i, a in enumerate(agents(3)):
         (f / "logs" / a["metadata"]["name"]).write_text(LOG_START + "".join(x + "\n" for x in lines[i::3]))
@@ -493,8 +576,9 @@ def dropped_count(node: str) -> int:
     return sum(r[0] == "dropped" for r in expand(node))
 
 
-def test_canary_passes(tmp_path):
-    r = run(canary_fixtures(tmp_path), "canary")
+@pytest.mark.parametrize("live_like", [False, True])
+def test_canary_passes(tmp_path, live_like):
+    r = run(canary_fixtures(tmp_path, live_like=live_like), "canary")
     assert r.returncode == 0, r.stdout + r.stderr
     for node in NODES:
         n, d = len(expand(node)), dropped_count(node)
@@ -521,13 +605,121 @@ def test_canary_unlogged_row_fails(tmp_path):
 def test_canary_backend_row_needs_an_endpoint_ip(tmp_path):
     """A deny line to the ClusterIP itself does not count: the enforcer sees the post-DNAT
     backend (design §3.4 item 1), so the row's backend IPs are what must appear."""
-    rows = expand("top")
     t = canary_fixtures(tmp_path, skip=("netpol-probe-top", "10.96.0.1:443"),
                         extra_log=[deny_line("netpol-canary/netpol-probe-top", "10.96.0.1:443")])
     r = run(t, "canary")
     assert r.returncode == 1, r.stdout + r.stderr
     assert "NOT-LOGGED 10.96.0.1:443" in r.stdout
-    assert any(row[2] == "10.96.0.1" for row in rows)
+
+
+def test_canary_backend_row_needs_its_target_port(tmp_path):
+    """The right endpoint IP on another port is some other row's packet (review I1): a backend row
+    matches IP:PORT, the Service port's target, port anchored."""
+    objs = backends()
+    (ip_port,) = resolve(objs, "forgejo/forgejo-http", 3000)[:1]
+    ip = ip_port.rsplit(":", 1)[0]
+    t = canary_fixtures(tmp_path, skip=("netpol-probe-top", "forgejo-http.forgejo.svc.cluster.local:3000"),
+                        extra_log=[deny_line("netpol-canary/netpol-probe-top", f"{ip}:9999")])
+    r = run(t, "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    (line,) = [x for x in r.stdout.splitlines() if x.startswith("NOT-LOGGED ")]
+    assert line.startswith("NOT-LOGGED forgejo-http.forgejo.svc.cluster.local:3000 (no egress deny of its own from "
+                           "netpol-canary/netpol-probe-top to forgejo/forgejo-http: "), line
+    assert ip_port in line and f"{ip}:9999" not in line
+
+
+def test_canary_clusterip_row_not_satisfied_by_node_ip_rows(tmp_path):
+    """Live shapes (review I1): default/kubernetes is the three node IPs, which the $HOST_IP,
+    $PEER_IP and .240 rows also dial. With no deny line for top's 10.96.0.1:443 row, those rows'
+    lines (other ports) must not stand in for it."""
+    r = run(canary_fixtures(tmp_path, live_like=True, skip=("netpol-probe-top", "10.96.0.1:443")), "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    n, d = len(expand("top")), dropped_count("top")
+    assert f"top rows {n}/{n} deny-logged {d - 1}/{d}" in r.stdout
+    assert "NOT-LOGGED 10.96.0.1:443" in r.stdout
+
+
+def test_canary_node_ip_row_not_satisfied_by_the_clusterip_row(tmp_path):
+    """The counterpart (review I1): 10.96.0.1:443 can land on 192.168.0.240:6443, the literal row's
+    own destination. With no deny line from the literal row's attempt, the ClusterIP row's lines
+    cannot prove both rows: each needs an attempt (a source port) of its own."""
+    r = run(canary_fixtures(tmp_path, live_like=True, skip=("netpol-probe-bottom", "192.168.0.240:6443")), "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    n, d = len(expand("bottom")), dropped_count("bottom")
+    assert f"bottom rows {n}/{n} deny-logged {d - 1}/{d}" in r.stdout
+    assert "canary: PASS" not in r.stdout
+
+
+def test_canary_clusterip_row_all_syns_to_the_same_node_passes(tmp_path):
+    """kube-proxy may send all three SYNs of the ClusterIP attempt to .240, the literal row's own
+    destination: two attempts (two source ports) to .240:6443 still prove both rows."""
+    objs = backends(True)
+    lines = []
+    for n in NODES:
+        rows = expand(n)
+        lines += [x.replace("192.168.0.241:6443", "192.168.0.240:6443").replace("192.168.0.242:6443", "192.168.0.240:6443")
+                  for x in deny_lines(f"netpol-probe-{n}", rows, objs)]
+    t = canary_fixtures(tmp_path, live_like=True, drop_lines=("Packet verdict",), extra_log=lines)
+    r = run(t, "canary")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.rstrip().splitlines()[-1] == "canary: PASS (3 nodes)"
+
+
+def test_canary_echo_9377_not_satisfied_by_9378(tmp_path):
+    """Live shapes (review I1): both echo Services are the one pod IP. With no deny line for
+    middle's 9377 row, the 9378 row's line must not stand in for it."""
+    r = run(canary_fixtures(tmp_path, live_like=True, skip=("netpol-probe-middle", ECHO_9377)), "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    n, d = len(expand("middle")), dropped_count("middle")
+    assert f"middle rows {n}/{n} deny-logged {d - 1}/{d}" in r.stdout
+    assert f"NOT-LOGGED {ECHO_9377}" in r.stdout
+
+
+def test_canary_echo_9377_must_be_an_ingress_deny(tmp_path):
+    """§9.2: the 9377 drop proves the echo's ingress default-deny. An egress deny on the right
+    five-tuple would mean the probe's egress dropped it, which the policies say cannot happen."""
+    rows = expand("bottom")
+    (dst,) = resolve(backends(True), "netpol-canary/netpol-echo", 9377)
+    t = canary_fixtures(tmp_path, live_like=True, skip=("netpol-probe-bottom", ECHO_9377),
+                        extra_log=[deny_line("netpol-canary/netpol-probe-bottom", dst, direction="egress")])
+    r = run(t, "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert f"NOT-LOGGED {ECHO_9377} (no ingress deny" in r.stdout
+    assert any(f"{r_[2]}:{r_[3]}" == ECHO_9377 for r_ in rows)
+
+
+def test_canary_echo_9378_must_be_an_egress_deny(tmp_path):
+    """The 9378 row isolates the probe's egress (option a): an ingress deny there means the echo's
+    ingress dropped it, so the probe's egress let it through."""
+    (dst,) = resolve(backends(True), "netpol-canary/netpol-echo-pod", 9378)
+    assert dst == "10.244.0.201:9378", "headless: no DNAT, the row's own port"
+    t = canary_fixtures(tmp_path, live_like=True, skip=("netpol-probe-top", ECHO_9378),
+                        extra_log=[deny_line("netpol-canary/netpol-probe-top", dst, dst_pod=f"netpol-canary/{ECHO_POD}",
+                                             direction="ingress")])
+    r = run(t, "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert f"NOT-LOGGED {ECHO_9378} (no egress deny" in r.stdout
+
+
+def test_canary_ignores_lines_before_its_run(tmp_path):
+    """A deny line from before this run (an earlier loop, a pod since deleted) proves nothing about it."""
+    wan = f"{WAN_IP}:8585"
+    t = canary_fixtures(tmp_path, skip=("netpol-probe-top", wan),
+                        extra_log=[deny_line("netpol-canary/netpol-probe-top", wan, ago_s=600)])
+    r = run(t, "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert f"NOT-LOGGED {wan}" in r.stdout
+
+
+def test_row_directions_name_matrix_rows():
+    """ROW_INGRESS in netpol-verify.sh names canary rows that exist and are must-drop: exactly the
+    9377 echo row. Every other dropped row, 9378 included, wants an egress deny."""
+    m = re.search(r"^ROW_INGRESS=\(([^)]*)\)$", SCRIPT.read_text(), re.M)
+    assert m, "netpol-verify.sh must define ROW_INGRESS=(...) on one line"
+    keys = m.group(1).split()
+    assert keys == [ECHO_9377]
+    dropped = {f"{r[2]}:{r[3]}" for r in expand("top") if r[0] == "dropped"}
+    assert set(keys) <= dropped and ECHO_9378 in dropped
 
 
 def test_canary_refused_row_fails(tmp_path):
@@ -593,22 +785,34 @@ def test_canary_unknown_node_is_exit_2(tmp_path):
     assert "need exactly 1 Running netpol-probe pod on nowhere" in r.stderr
 
 
-def stray_fixtures(tmp: Path, lines: list[str], np_items=POLICED) -> Path:
-    fixtures(tmp, ds_doc=ds(3, 3), pods=agents(3), np_items=np_items)
-    for a in agents(3):
-        (tmp / "fx" / "logs" / a["metadata"]["name"]).write_text(LOG_START + "".join(x + "\n" for x in lines))
-        lines = []
+STRAY_PODS = ["netpol-probe-x", "netpol-echo-y", "p"]
+
+
+def stray_fixtures(tmp: Path, lines: list[str], np_items=POLICED, pods_now=STRAY_PODS, agent_pods=None,
+                   logs=None, previous=None) -> Path:
+    """Agents, their logs (the deny lines go to the first agent), and the pods now in netpol-canary.
+    agent_pods/logs/previous: override the agents, a log per agent, a previous container's log."""
+    ap = agent_pods or agents(3)
+    fixtures(tmp, ds_doc=ds(3, 3), pods=ap, np_items=np_items)
+    write_ns_pods(tmp / "fx", "netpol-canary", list(pods_now))
+    for i, a in enumerate(ap):
+        name = a["metadata"]["name"]
+        text = (logs or {}).get(name, LOG_START + ("".join(x + "\n" for x in lines) if i == 0 else ""))
+        (tmp / "fx" / "logs" / name).write_text(text)
+        if previous and name in previous:
+            (tmp / "fx" / "logs" / f"{name}.previous").write_text(previous[name])
     return tmp
 
 
 def test_stray_passes(tmp_path):
     lines = [deny_line("netpol-canary/netpol-probe-x", "192.168.0.2:80"),
              # An ingress denial: the source is outside, the destination is a policed pod.
-             deny_line("external", "10.244.3.7:9377", dst_pod="netpol-canary/netpol-echo-y")]
+             deny_line("external", "10.244.3.7:9377", dst_pod="netpol-canary/netpol-echo-y", direction="ingress")]
     r = run(stray_fixtures(tmp_path, lines), "stray")
     assert r.returncode == 0, r.stdout + r.stderr
     assert r.stdout.rstrip().splitlines()[-1] == "stray: PASS (2 deny lines, policed: netpol-canary)"
     assert "--since=15m" in (tmp_path / "fx" / "calls.log").read_text()
+    assert sum(line.startswith("window ") and ": covered, log from " in line for line in r.stdout.splitlines()) == 3
 
 
 def test_stray_since(tmp_path):
@@ -628,7 +832,27 @@ def test_stray_fails(tmp_path, src, dst_pod):
     r = run(stray_fixtures(tmp_path, lines), "stray")
     assert r.returncode == 1, r.stdout + r.stderr
     assert sum(line.startswith("STRAY ") for line in r.stdout.splitlines()) == 1
+    assert "STRAY [no pod in a policed namespace] " in r.stdout
     assert r.stdout.rstrip().splitlines()[-1] == "stray: FAIL (1 of 2 deny lines stray, policed: netpol-canary)"
+
+
+def test_stray_gone_pod_fails(tmp_path):
+    """A policed pod that does not exist now: a stale IP-to-pod mapping (review M2), or a pod deleted
+    inside the window."""
+    lines = [deny_line("netpol-canary/netpol-probe-old", "192.168.0.2:80")]
+    r = run(stray_fixtures(tmp_path, lines), "stray")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "STRAY [netpol-canary/netpol-probe-old is gone] " in r.stdout
+
+
+def test_stray_node_ip_on_policed_side_fails(tmp_path):
+    """A policed pod named with a node IP (a hostNetwork pod enrolled, the #380 class)."""
+    lines = [deny_line("netpol-canary/netpol-probe-x", "192.168.0.2:80", src="192.168.0.241:41000"),
+             deny_line("external", "192.168.0.242:9376", dst_pod="netpol-canary/netpol-echo-y", direction="ingress")]
+    r = run(stray_fixtures(tmp_path, lines), "stray")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "STRAY [netpol-canary/netpol-probe-x has ip 192.168.0.241, outside 10.244.0.0/16] " in r.stdout
+    assert "STRAY [netpol-canary/netpol-echo-y has ip 192.168.0.242, outside 10.244.0.0/16] " in r.stdout
 
 
 def test_stray_prints_at_most_ten(tmp_path):
@@ -652,8 +876,127 @@ def test_stray_no_agents_is_exit_2(tmp_path):
     assert "no kube-network-policies agent pods" in r.stderr
 
 
-@pytest.mark.parametrize("args", [["stray", "--since"], ["stray", "15m"], ["canary", "--node"], ["canary", "top"], ["idle", "x"]])
+def iso_ago(s: int) -> str:
+    return (datetime.now(timezone.utc) - timedelta(seconds=s)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def log_from(ago_s: int) -> str:
+    """An agent log whose first line is AGO_S seconds old."""
+    return f'{klog_now(ago_s)}       1 main.go:62] "called" args=[]\n{klog_now(ago_s)}       1 controller.go:505] "Syncing nftables rules"\n'
+
+
+def test_stray_short_window_fails(tmp_path):
+    """An agent that started 5 minutes ago with no earlier container (the DaemonSet replaced the pod):
+    its log covers 300 s of the 900 s asked (review M3). Silence there is not a pass."""
+    ap = agents(3)
+    ap[1] = pod("kube-network-policies-1", NODES[1], started=iso_ago(300))
+    r = run(stray_fixtures(tmp_path, [], agent_pods=ap, logs={"kube-network-policies-1": log_from(300)}), "stray")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert re.search(r"^window top kube-network-policies-1: SHORT, 3\d\d s of 900 s ", r.stdout, re.M), r.stdout
+    assert r.stdout.rstrip().splitlines()[-1] == "stray: FAIL (0 of 0 deny lines stray, 1 agent logs short of 15m, policed: netpol-canary)"
+
+
+def test_stray_rotated_log_fails(tmp_path):
+    """The container has run 2 h, but its current log file starts 5 min ago (kubelet rotated it)."""
+    ap = agents(3)
+    ap[2] = pod("kube-network-policies-2", NODES[2], started=iso_ago(7200))
+    r = run(stray_fixtures(tmp_path, [], agent_pods=ap, logs={"kube-network-policies-2": log_from(300)}), "stray")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "window middle kube-network-policies-2: SHORT" in r.stdout
+
+
+def test_stray_reads_the_previous_container(tmp_path):
+    """The agent restarted in place 5 min ago: the previous container's log covers the rest of the
+    window, and a stray line there counts."""
+    ap = agents(3)
+    ap[0] = pod("kube-network-policies-0", NODES[0], restarts=1, started=iso_ago(300))
+    prev = log_from(7200) + deny_line("media/mm-plex-0", "192.168.0.1:53", ago_s=600) + "\n"
+    t = stray_fixtures(tmp_path, [], agent_pods=ap, logs={"kube-network-policies-0": log_from(300)},
+                       previous={"kube-network-policies-0": prev})
+    r = run(t, "stray")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "window bottom kube-network-policies-0: covered, log from " in r.stdout
+    assert "STRAY [no pod in a policed namespace] " in r.stdout and "media/mm-plex-0" in r.stdout
+    assert r.stdout.rstrip().splitlines()[-1] == "stray: FAIL (1 of 1 deny lines stray, policed: netpol-canary)"
+    assert "--previous" in (tmp_path / "fx" / "calls.log").read_text()
+
+
+@pytest.mark.parametrize("args", [["stray", "--since"], ["stray", "15m"], ["canary", "--node"], ["canary", "top"],
+                                  ["idle", "x"], ["alert", "x"]])
 def test_bad_arguments_are_exit_2(tmp_path, args):
     r = run(stray_fixtures(tmp_path, []), *args)
     assert r.returncode == 2, r.stdout + r.stderr
     assert "usage:" in r.stderr
+
+
+# --- idle: the nftables sync-error check (review M1) ---------------------------
+
+SYNC_ERROR = 'I1105 22:00:00.000000       1 controller.go:976] "syncing nftables rules" logger="nftables-sync" error="netlink receive: no such file or directory"'
+
+
+@pytest.mark.parametrize("line", [
+    SYNC_ERROR,                                                   # upstream's own shape (controller.go:976, v1.1.3)
+    SYNC_ERROR.replace('"syncing nftables', '"Syncing nftables'),  # the case the start/elapsed lines use
+])
+def test_idle_nftables_sync_error_fails(tmp_path, line):
+    r = idle(fixtures(tmp_path, ds_doc=ds(1, 1), pods=agents(1), log=LOG_START + line + "\n"))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "nftables-sync-error" in r.stdout
+
+
+def test_idle_nftables_sync_error_on_a_long_log_fails(tmp_path):
+    """The error first, then 20 000 sync lines: a `| grep -q` would end early and SIGPIPE the grep
+    before it, and the pipeline would read as no error."""
+    ok_line = 'I1105 22:00:01.000000       1 controller.go:508] "Syncing nftables rules" logger="nftables-sync" elapsed="1.1ms"\n'
+    r = idle(fixtures(tmp_path, ds_doc=ds(1, 1), pods=agents(1), log=LOG_START + SYNC_ERROR + "\n" + ok_line * 20000))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "nftables-sync-error" in r.stdout
+
+
+# --- alert: NetpolCanaryFailing loaded, by name (review M5) ---------------------
+
+PR_UID = "20c3e774-98d0-463e-b0af-d2ce96f98526"
+
+
+def alert_fixtures(tmp: Path, groups=None, uid=PR_UID, pr=True) -> Path:
+    fixtures(tmp, ds_doc=None, pods=[])
+    f = tmp / "fx"
+    if pr:
+        (f / "pr.json").write_text(json.dumps({"metadata": {"uid": uid}, "spec": {"groups": [{"name": "netpol-canary", "rules": [
+            {"alert": "NetpolCanaryFailing", "for": "15m", "expr": "x"}]}]}}))
+    if groups is None:
+        groups = [{"name": "netpol-canary", "file": f"/etc/prometheus/rules/prometheus-netpol-canary-{PR_UID}.yaml",
+                   "rules": [{"name": "NetpolCanaryFailing", "health": "ok", "state": "inactive", "duration": 900}]}]
+    (f / "rules.json").write_text(json.dumps({"status": "success", "data": {"groups": groups}}))
+    return tmp
+
+
+def test_alert_passes(tmp_path):
+    r = run(alert_fixtures(tmp_path), "alert")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert f"PASS group netpol-canary from prometheus-netpol-canary-{PR_UID}.yaml: NetpolCanaryFailing health=ok state=inactive for=900s" in r.stdout
+    assert r.stdout.rstrip().splitlines()[-1] == "alert: PASS"
+    assert "rule_name[]=NetpolCanaryFailing" in (tmp_path / "fx" / "calls.log").read_text()
+
+
+@pytest.mark.parametrize("groups", [
+    [],                                                                                       # not loaded
+    [{"name": "netpol-canary", "file": "/r/prometheus-netpol-canary-0000.yaml",               # a stale file
+      "rules": [{"name": "NetpolCanaryFailing", "health": "ok", "state": "inactive", "duration": 900}]}],
+    [{"name": "netpol-canary", "file": f"/r/prometheus-netpol-canary-{PR_UID}.yaml",          # broken
+      "rules": [{"name": "NetpolCanaryFailing", "health": "err", "state": "inactive", "duration": 900}]}],
+    [{"name": "netpol-canary", "file": f"/r/prometheus-netpol-canary-{PR_UID}.yaml",          # another for:
+      "rules": [{"name": "NetpolCanaryFailing", "health": "ok", "state": "inactive", "duration": 600}]}],
+    [{"name": "other", "file": f"/r/prometheus-netpol-canary-{PR_UID}.yaml",                  # another group
+      "rules": [{"name": "NetpolCanaryFailing", "health": "ok", "state": "inactive", "duration": 900}]}],
+])
+def test_alert_fails(tmp_path, groups):
+    r = run(alert_fixtures(tmp_path, groups=groups), "alert")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert r.stdout.rstrip().splitlines()[-1] == "alert: FAIL"
+
+
+def test_alert_without_the_object_is_exit_2(tmp_path):
+    r = run(alert_fixtures(tmp_path, pr=False), "alert")
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "cannot read PrometheusRule prometheus/netpol-canary" in r.stderr
