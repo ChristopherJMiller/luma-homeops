@@ -137,6 +137,8 @@ CANARY_ALERT_EXPR = (
     'kube_daemonset_status_number_ready{namespace="netpol-canary",daemonset="netpol-probe"}'
     ' < kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"}'
     ' or absent(kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"})'
+    # A DaemonSet that schedules nothing (review M5): A < B and absent() are both false then.
+    ' or kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"} == 0'
 )
 
 # The reusable policy components (design §6.2). Each renders one NetworkPolicy named after its
