@@ -2,8 +2,9 @@
 # netpol-probe: one canary pod per node. probe.sh's loop runs every row of matrix.txt every
 # PROBE_INTERVAL seconds, start to start, and touches /tmp/ready after a run in which every row
 # passed, so Ready means the last run matched.
-# - PROBE_MODE baseline (B1a, no policy yet): every row must answer, which proves that each
-#   must-drop target is alive before Task 7's policies make it time out. Task 7 sets enforced.
+# - PROBE_MODE enforced (B1b, plan Task 7): dns and open rows must connect, and every must-drop
+#   row must time out; a refusal means the packet got through. B1a ran baseline, which proved each
+#   must-drop target answers with no policy in place (ledger, B1a_at).
 # - Interval 300 s (Chris, 2026-11-03). The readiness window (-mmin -11) must outlast an interval
 #   plus a full run; scripts/test_netpol_manifests.py checks the pair (F9).
 # - No liveness probe: a failing canary is the signal, not something to restart.
@@ -38,7 +39,7 @@ spec:
           command: [bash, /etc/netpol-probe/probe.sh, loop]
           env:
             - name: PROBE_MODE
-              value: baseline
+              value: enforced
             - name: PROBE_INTERVAL
               value: "300"
             - name: HOST_IP

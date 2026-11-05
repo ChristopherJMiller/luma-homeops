@@ -125,7 +125,63 @@ ENFORCER_METRICS = {
 CANARY_DIR = "cluster/netpol-canary"
 CANARY_APP = "cluster/applications/netpol-canary.yaml"
 CANARY_NS = "netpol-canary"
-CANARY_KINDS = ["ConfigMap", "DaemonSet", "Deployment", "Namespace", "Service", "Service"]
+CANARY_KINDS = sorted(
+    ["ConfigMap", "DaemonSet", "Deployment", "Namespace", "PrometheusRule", "Service", "Service"] + ["NetworkPolicy"] * 5
+)
+CANARY_POLICIES = {"default-deny", "allow-dns", "egress-internet-only", "probe-egress-to-echo", "echo-ingress-from-probe"}
+PROBE_LABELS = {"app.kubernetes.io/name": "netpol-probe"}
+ECHO_LABELS = {"app.kubernetes.io/name": "netpol-echo"}
+# Chris (2026-11-05): three missed 300 s intervals before it fires.
+CANARY_ALERT_FOR = "15m"
+CANARY_ALERT_EXPR = (
+    'kube_daemonset_status_number_ready{namespace="netpol-canary",daemonset="netpol-probe"}'
+    ' < kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"}'
+    ' or absent(kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"})'
+)
+
+# The reusable policy components (design §6.2). Each renders one NetworkPolicy named after its
+# directory, with no namespace: the consumer sets it.
+COMPONENTS_DIR = "cluster/components/netpol"
+COMPONENTS = ["default-deny", "allow-dns", "egress-internet-only"]
+
+# §6.3's three egress rules, copied literally: DNS, the WAN /25 on TCP 443, and the internet less
+# ten CIDRs. allow-dns and egress-internet-only together must hold exactly these.
+SPEC_6_3_RULES = [
+    {
+        "to": [
+            {
+                "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}},
+                "podSelector": {"matchLabels": {"k8s-app": "kube-dns"}},
+            }
+        ],
+        "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
+    },
+    {
+        "to": [{"ipBlock": {"cidr": "152.44.247.0/25"}}],
+        "ports": [{"protocol": "TCP", "port": 443}],
+    },
+    {
+        "to": [
+            {
+                "ipBlock": {
+                    "cidr": "0.0.0.0/0",
+                    "except": [
+                        "0.0.0.0/8",
+                        "10.0.0.0/8",
+                        "100.64.0.0/10",
+                        "127.0.0.0/8",
+                        "169.254.0.0/16",
+                        "172.16.0.0/12",
+                        "192.168.0.0/16",
+                        "224.0.0.0/4",
+                        "240.0.0.0/4",
+                        "152.44.247.0/25",
+                    ],
+                }
+            }
+        ],
+    },
+]
 # The form, not the value: Renovate automerges agnhost digests (:automergeDigest).
 AGNHOST_RE = r"registry\.k8s\.io/e2e-test-images/agnhost:[0-9][0-9.]*@sha256:[0-9a-f]{64}"
 PROBE_ENV = ["PROBE_MODE", "PROBE_INTERVAL", "HOST_IP", "NODE_NAME", "MATRIX"]
@@ -530,14 +586,13 @@ def test_canary_workloads():
     require_canary_deployed()
     docs = render(CANARY_DIR)
     assert sorted(d["kind"] for d in docs) == CANARY_KINDS
-    # B1a: the baseline runs with no policy at all. Task 7 adds them.
-    assert not [d for d in docs if d["kind"] == "NetworkPolicy"], "B1a renders no NetworkPolicy"
 
     ns = one(docs, "Namespace")
     assert ns["metadata"]["name"] == CANARY_NS
     assert ns["metadata"]["labels"]["pod-security.kubernetes.io/enforce"] == "restricted"
     for d in docs:
-        if d["kind"] != "Namespace":
+        # The PrometheusRule lives in `prometheus` (test_canary_alert).
+        if d["kind"] not in ("Namespace", "PrometheusRule"):
             assert d["metadata"].get("namespace") == CANARY_NS, f"{d['kind']}/{d['metadata']['name']}"
 
     workloads = {"netpol-probe": named(docs, "DaemonSet", "netpol-probe"), "netpol-echo": named(docs, "Deployment", "netpol-echo")}
@@ -554,7 +609,8 @@ def test_canary_workloads():
     assert "args" not in c
     assert sorted(e["name"] for e in c["env"]) == sorted(PROBE_ENV)
     env = {e["name"]: e for e in c["env"]}
-    assert env["PROBE_MODE"]["value"] == "baseline"
+    # B1b (Task 7): the policies are in, so must-drop rows must time out.
+    assert env["PROBE_MODE"]["value"] == "enforced"
     assert env["PROBE_INTERVAL"]["value"] == PROBE_INTERVAL
     assert env["HOST_IP"]["valueFrom"] == {"fieldRef": {"fieldPath": "status.hostIP"}}
     assert env["NODE_NAME"]["valueFrom"] == {"fieldRef": {"fieldPath": "spec.nodeName"}}
@@ -602,9 +658,8 @@ def test_canary_workloads():
 def test_canary_matrix_targets_exist():
     """Rows naming a netpol-canary Service name one this kustomization renders. The row through
     the headless Service dials the echo pod's IP directly (no DNAT) on a port the echo neither
-    serves nor names, so the pod refuses it at baseline. Under Task 7's planned policies both the
-    probe's egress and the echo's ingress drop it. Task 7 plans to let the echo's ingress accept
-    TCP 9378 from the probe, so that the row isolates the probe's egress."""
+    serves nor names, so the pod refuses it at baseline. echo-ingress-from-probe accepts TCP 9378
+    from the probe (test_canary_policies), so the row isolates the probe's egress."""
     require_canary_deployed()
     docs = render(CANARY_DIR)
     services = {d["metadata"]["name"]: d for d in docs if d["kind"] == "Service"}
@@ -678,3 +733,180 @@ def test_probe_own_bmcs_match_bmcctl():
     # The NODE_IPS default (the $PEER_IP ring) is bmcctl's node IPs in the same order.
     ring = re.findall(r"NODE_IPS:-([0-9. ]+)\}", (REPO / CANARY_DIR / "probe.sh").read_text())[0].split()
     assert ring == [nodes[n][0] for n in ("top", "middle", "bottom")]
+
+
+# --- policy components and the canary's policies (plan Task 7) ------------------
+
+
+def policies(docs: list[dict]) -> dict[str, dict]:
+    nps = [d for d in docs if d.get("kind") == "NetworkPolicy"]
+    by_name = {d["metadata"]["name"]: d for d in nps}
+    assert len(by_name) == len(nps), "two NetworkPolicies share a name"
+    return by_name
+
+
+def test_components_match_spec():
+    """Each component renders one NetworkPolicy named after its directory, selecting every pod,
+    with no namespace (the consumer sets it). Together they hold exactly §6.3's egress rules."""
+    rules = []
+    for name in COMPONENTS:
+        d = f"{COMPONENTS_DIR}/{name}"
+        k = yaml.safe_load((REPO / d / "kustomization.yaml").read_text())
+        assert k == {
+            "apiVersion": "kustomize.config.k8s.io/v1alpha1",
+            "kind": "Component",
+            "resources": ["networkpolicy.yaml"],
+        }, d
+        text = (REPO / d / "networkpolicy.yaml").read_text()
+        head = text.split("\napiVersion:", 1)[0]
+        assert re.search(r"^# \S", head, re.M), f"{d}: say what the pod needs in a comment above the policy (§6.2)"
+
+        (np,) = [x for x in render(d) if x["kind"] == "NetworkPolicy"]
+        assert len(render(d)) == 1, f"{d} renders only its NetworkPolicy"
+        assert np["metadata"] == {"name": name}, f"{d}: no namespace, labels or annotations"
+        spec = np["spec"]
+        assert spec["podSelector"] == {}, d
+        assert "ingress" not in spec, f"{d}: these components only restrict or allow egress"
+        if name == "default-deny":
+            assert spec == {"podSelector": {}, "policyTypes": ["Ingress", "Egress"]}
+        else:
+            assert spec["policyTypes"] == ["Egress"], d
+            rules += spec["egress"]
+    assert policies_egress(render(f"{COMPONENTS_DIR}/allow-dns")) == SPEC_6_3_RULES[:1]
+    assert policies_egress(render(f"{COMPONENTS_DIR}/egress-internet-only")) == SPEC_6_3_RULES[1:]
+    assert rules == SPEC_6_3_RULES
+
+
+def policies_egress(docs: list[dict]) -> list[dict]:
+    return [r for d in docs if d["kind"] == "NetworkPolicy" for r in d["spec"].get("egress", [])]
+
+
+def test_canary_policies():
+    """The canary consumes the three components, plus its own two policies. probe-egress-to-echo
+    allows 9376 and 9377, so the 9377 drop can only be the echo's ingress default-deny (§9.2).
+    echo-ingress-from-probe allows 9376 and the unserved 9378 (option a, Task 6 review), so only
+    the probe's egress can drop the direct pod-IP row."""
+    require_canary_deployed()
+    k = yaml.safe_load((REPO / CANARY_DIR / "kustomization.yaml").read_text())
+    assert k["components"] == [f"../components/netpol/{c}" for c in COMPONENTS]
+    keys = list(k)
+    # F5 and the rollback edit: rolled_back_text drops everything after the resources list.
+    assert keys.index("resources") < keys.index("components") and keys.index("resources") < keys.index("patches")
+
+    docs = render(CANARY_DIR)
+    nps = policies(docs)
+    assert set(nps) == CANARY_POLICIES
+    for name, np in nps.items():
+        assert np["metadata"]["namespace"] == CANARY_NS, name
+    for c in COMPONENTS:
+        (want,) = render(f"{COMPONENTS_DIR}/{c}")
+        assert nps[c]["spec"] == want["spec"], f"{c}: the canary must use the component unchanged"
+
+    probe_tpl = named(docs, "DaemonSet", "netpol-probe")["spec"]["template"]["metadata"]["labels"]
+    echo_tpl = named(docs, "Deployment", "netpol-echo")["spec"]["template"]["metadata"]["labels"]
+    assert PROBE_LABELS.items() <= probe_tpl.items() and ECHO_LABELS.items() <= echo_tpl.items()
+
+    out = nps["probe-egress-to-echo"]["spec"]
+    assert out["podSelector"] == {"matchLabels": PROBE_LABELS}
+    assert out["policyTypes"] == ["Egress"]
+    (rule,) = out["egress"]
+    assert rule["to"] == [{"podSelector": {"matchLabels": ECHO_LABELS}}]
+    assert [(p["protocol"], p["port"]) for p in rule["ports"]] == [("TCP", 9376), ("TCP", 9377)]
+
+    inn = nps["echo-ingress-from-probe"]["spec"]
+    assert inn["podSelector"] == {"matchLabels": ECHO_LABELS}
+    assert inn["policyTypes"] == ["Ingress"]
+    (rule,) = inn["ingress"]
+    assert rule["from"] == [{"podSelector": {"matchLabels": PROBE_LABELS}}]
+    assert [(p["protocol"], p["port"]) for p in rule["ports"]] == [("TCP", 9376), ("TCP", 9378)]
+
+    # The echo serves 9377, which the policy keeps out; the policy lets 9378 in, which nothing serves.
+    echo = named(docs, "Deployment", "netpol-echo")["spec"]["template"]["spec"]["containers"][0]
+    served = {p["containerPort"] for p in echo["ports"]}
+    assert 9377 in served and 9378 not in served
+
+
+def test_canary_alert():
+    """NetpolCanaryFailing: a PrometheusRule (ConfigMap rules never load) in `prometheus`, labelled
+    `release: prometheus` or the ruleSelector never picks it up."""
+    require_canary_deployed()
+    pr = named(render(CANARY_DIR), "PrometheusRule", "netpol-canary")
+    assert pr["metadata"]["namespace"] == "prometheus"
+    assert pr["metadata"]["labels"]["release"] == "prometheus"
+    (group,) = pr["spec"]["groups"]
+    assert group["name"] == "netpol-canary"
+    (rule,) = group["rules"]
+    assert rule["alert"] == "NetpolCanaryFailing"
+    assert rule["expr"] == CANARY_ALERT_EXPR
+    assert rule["for"] == CANARY_ALERT_FOR
+    assert rule["labels"] == {"severity": "warning"}
+    assert rule["annotations"]["summary"] and rule["annotations"]["description"]
+
+
+# Namespaces where no NetworkPolicy may select pods (Global Constraints; design §6.2).
+# dns and rabbitmq-system leave this set only through plan Task 14.
+FORBIDDEN = {
+    "kube-system",
+    "rook",
+    "metallb-system",
+    "prometheus",
+    "argo-cd",
+    "telephony",
+    "home-assistant",
+    "dns",
+    "rabbitmq-system",
+}
+
+
+def policy_violations(docs: list[dict]) -> list[str]:
+    """One message per NetworkPolicy with no namespace (it would land wherever Argo's destination
+    points) or in a FORBIDDEN namespace."""
+    out = []
+    for d in docs:
+        if d.get("kind") != "NetworkPolicy":
+            continue
+        meta = d.get("metadata") or {}
+        name, ns = meta.get("name", "?"), meta.get("namespace")
+        if not ns:
+            out.append(f"NetworkPolicy {name} has no namespace; set it in the consumer (F5)")
+        elif ns in FORBIDDEN:
+            out.append(f"NetworkPolicy {ns}/{name}: no policy may select pods in {ns}")
+    return out
+
+
+def test_forbidden_guard_detects():
+    docs = [
+        {"kind": "NetworkPolicy", "metadata": {"name": "bad", "namespace": "rook"}},
+        {"kind": "NetworkPolicy", "metadata": {"name": "nowhere"}},
+        {"kind": "NetworkPolicy", "metadata": {"name": "fine", "namespace": CANARY_NS}},
+        {"kind": "ConfigMap", "metadata": {"name": "not-a-policy", "namespace": "rook"}},
+    ]
+    found = policy_violations(docs)
+    assert len(found) == 2, found
+    assert any("rook/bad" in v for v in found) and any("nowhere" in v for v in found)
+
+
+def policy_dirs() -> list[str]:
+    """Every kustomization directory under cluster/, except the components themselves, holding a
+    non-secret YAML file that mentions a NetworkPolicy or a netpol component."""
+    dirs = []
+    for k in sorted((REPO / "cluster").rglob("kustomization.yaml")):
+        d = k.parent
+        rel = d.relative_to(REPO).as_posix()
+        if rel == COMPONENTS_DIR.rsplit("/", 1)[0] or rel.startswith(COMPONENTS_DIR.rsplit("/", 1)[0] + "/"):
+            continue
+        for f in sorted(d.rglob("*")):
+            if not f.is_file() or f.suffix not in (".yaml", ".yml") or ".secret." in f.name:
+                continue
+            text = f.read_text(errors="replace")
+            if "kind: NetworkPolicy" in text or "components/netpol" in text:
+                dirs.append(rel)
+                break
+    return dirs
+
+
+def test_no_policy_in_forbidden_namespaces():
+    dirs = policy_dirs()
+    assert CANARY_DIR in dirs, "the canary renders policies, so the scan must find it"
+    found = [v for d in dirs for v in policy_violations(render(d))]
+    assert found == []

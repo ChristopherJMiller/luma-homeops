@@ -1,0 +1,11 @@
+---
+# Default-deny for every pod in the consumer's namespace, both directions: a pod gets only what
+# another policy there allows (design §6.2). Kubelet probes still pass, because root on the node
+# is exempt (§3.4 item 3).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]

@@ -1,6 +1,6 @@
 ---
 # netpol-echo: the canary's target in its own namespace, agnhost porter. Both ports listen. The
-# replies name what Task 7's ingress policy allows: 9376 says open (allowed from the probe) and
+# replies name what echo-ingress-from-probe allows: 9376 says open (allowed from the probe) and
 # 9377 says closed (denied). Readiness is the kubelet's tcpSocket check, and root on the node is
 # exempt from policy (design §3.4 item 3), so it must keep passing under default-deny.
 apiVersion: apps/v1
@@ -80,10 +80,8 @@ spec:
 ---
 # Headless: the name resolves to the echo pod's own IP, for the matrix row that dials the pod
 # directly (no DNAT) on 9378, which nothing serves. With no policy the pod refuses the connection,
-# which proves it answers. The row covers the direct pod-IP path: under Task 7's planned policies
-# both the probe's egress and the echo's ingress drop it. Task 7 plans to let the echo's ingress
-# accept TCP 9378 from the probe, so that only the probe's egress can drop the row; a leak would
-# then show as a refusal, which fails.
+# which proves it answers. echo-ingress-from-probe accepts TCP 9378 from the probe, so only the
+# probe's egress can drop the row; a leak shows as a refusal, which fails.
 apiVersion: v1
 kind: Service
 metadata:

@@ -1,0 +1,23 @@
+---
+# DNS for every pod in the consumer's namespace: CoreDNS on UDP and TCP 53, and nothing else
+# (design §6.3). The enforcer judges after kube-proxy's DNAT, so the rule selects the CoreDNS pods
+# and never the 10.96.0.10 ClusterIP.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    # DNS. Policy sees the CoreDNS pod IPs (post-DNAT), not the 10.96.0.10 ClusterIP.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - {protocol: UDP, port: 53}
+        - {protocol: TCP, port: 53}

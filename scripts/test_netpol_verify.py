@@ -14,7 +14,11 @@ judged PASS. A partial pod list, a failed parse or empty jq output is a FAIL
 (exit 1), never a vacuous PASS. `baseline` runs only against exactly three
 Running probe pods on three nodes (else exit 2), and PASSes only when every pod
 reports every canary row of the repo's matrix.txt (N rows, counted here, never
-a literal) as answering.
+a literal) as answering. `canary` (B1b) PASSes only when every pod's enforced
+run passes every row in the repo's order, every dropped row has a deny line from
+that pod to the row's literal destination or to a backend's EndpointSlice IP,
+and `stray` passes: every deny line names a pod in a namespace that has a
+NetworkPolicy.
 """
 
 import json
@@ -64,8 +68,11 @@ STUB = r"""#!/usr/bin/env bash
 F=$NETPOL_FIXTURES
 answer() { [ -f "$1" ] || { echo "Error from server (NotFound): stub has no $1" >&2; exit 1; }; cat "$1"; }
 args=" $* "
+echo "$*" >> "$F/calls.log"
 case "$args" in
   *" networkpolicies "*) answer "$F/np.json" ;;
+  *" endpointslices "*) ns=${args#* -n }; ns=${ns%% *}; svc=${args#*kubernetes.io/service-name=}; svc=${svc%% *}
+    answer "$F/eps/${ns}_${svc}" ;;
   *" netpol-canary get pods "*) answer "$F/probe-pods.json" ;;
   *" exec "*) p=${args#* exec }; p=${p%% *}
     [ -f "$F/exec/$p.rc" ] || { echo "Error from server (NotFound): pods \"$p\" not found" >&2; exit 1; }
@@ -396,3 +403,257 @@ def test_baseline_summary_from_another_node_fails(tmp_path):
     r = baseline(baseline_fixtures(tmp_path, pods, execs))
     assert r.returncode == 1, r.stdout + r.stderr
     assert "FAIL top" in r.stdout
+
+
+# --- canary and stray (B1b) -----------------------------------------------------
+
+WAN_IP = "152.44.247.88"
+POLICED = [{"metadata": {"name": "default-deny", "namespace": "netpol-canary"}},
+           {"metadata": {"name": "allow-dns", "namespace": "netpol-canary"}}]
+
+
+def expand(node: str) -> list[list[str]]:
+    """The rows probe.sh runs on NODE: its own probe_rows over the repo's matrix.txt."""
+    env = dict(os.environ, NODE_NAME=node, HOST_IP=NODE_IP[node], WAN_IP=WAN_IP)
+    r = subprocess.run(["bash", "-c", '. "$1"; probe_rows "$2" canary', "_", str(PROBE), str(MATRIX)],
+                       env=env, capture_output=True, text=True, check=True)
+    return [line.split() for line in r.stdout.splitlines()]
+
+
+def backends() -> dict[str, list[str]]:
+    """ns/svc -> fake EndpointSlice IPs, one distinct /32 per backend in the matrix."""
+    names = sorted({row[4] for row in expand("top") if row[4] != "-"})
+    return {b: [f"10.244.9.{i + 1}", f"10.244.8.{i + 1}"] for i, b in enumerate(names)}
+
+
+def enforced_table(node: str, rows: list[list[str]], fail_refused: str | None = None) -> str:
+    """What `probe.sh once enforced` prints when every row passes, or with one dropped row refused."""
+    lines, npass = [], 0
+    for expect, _scope, host, port, _backend, *note in rows:
+        got = "timeout" if expect == "dropped" else "open"
+        verdict = "PASS"
+        if f"{host}:{port}" == fail_refused:
+            got, verdict = "refused", "FAIL"
+        npass += verdict == "PASS"
+        lines.append(f"{verdict} {expect} {got} {host}:{port} {' '.join(note)}".rstrip())
+    lines.append(f"SUMMARY {npass}/{len(rows)} enforced node={node}")
+    return "\n".join(lines) + "\n"
+
+
+def deny_line(src_pod: str, dst: str, dst_pod: str = "external") -> str:
+    return (f'I1105 21:30:00.000000       1 verdictlog.go:179] "Packet verdict" id=7 verdict="deny" family="IPv4" '
+            f'protocol="TCP" src="10.244.3.9:40000" dst="{dst}" srcPod="{src_pod}" dstPod="{dst_pod}" '
+            f'direction="egress" evaluator="x"')
+
+
+def deny_lines(pod_name: str, rows: list[list[str]], skip: str | None = None) -> list[str]:
+    """One deny line per dropped row: the literal destination, or the backend's first endpoint IP
+    on a translated port (the post-DNAT destination)."""
+    eps, out = backends(), []
+    for expect, _scope, host, port, backend, *_ in rows:
+        if expect != "dropped" or f"{host}:{port}" == skip:
+            continue
+        dst = f"{host}:{port}" if backend == "-" else f"{eps[backend][0]}:8443"
+        out.append(deny_line(f"netpol-canary/{pod_name}", dst))
+    return out
+
+
+def canary_fixtures(tmp: Path, *, nodes=NODES, tables=None, rcs=None, extra_log=(), skip=None, np_items=POLICED) -> Path:
+    """Probe pods on NODES answering enforced runs, three agents whose logs hold the deny lines,
+    EndpointSlices for every backend. tables/rcs: pod -> override; skip: (pod, host:port) not logged."""
+    fixtures(tmp, ds_doc=ds(3, 3), pods=agents(3), np_items=np_items)
+    f = tmp / "fx"
+    (f / "probe-pods.json").write_text(json.dumps({"items": [probe_pod(f"netpol-probe-{n}", n) for n in nodes]}))
+    (f / "exec").mkdir()
+    (f / "eps").mkdir()
+    for b, ips in backends().items():
+        ns, svc = b.split("/")
+        (f / "eps" / f"{ns}_{svc}").write_text("\n".join(ips) + "\n")
+    lines = []
+    for n in nodes:
+        name, rows = f"netpol-probe-{n}", expand(n)
+        (f / "exec" / name).write_text((tables or {}).get(name, enforced_table(n, rows)))
+        (f / "exec" / f"{name}.rc").write_text(str((rcs or {}).get(name, 0)))
+        lines += deny_lines(name, rows, skip=skip[1] if skip and skip[0] == name else None)
+    lines += list(extra_log)
+    # Spread over the three agents: canary reads every agent's log.
+    for i, a in enumerate(agents(3)):
+        (f / "logs" / a["metadata"]["name"]).write_text(LOG_START + "".join(x + "\n" for x in lines[i::3]))
+    return tmp
+
+
+def run(tmp: Path, *args: str) -> subprocess.CompletedProcess:
+    env = dict(os.environ)
+    env.update(PATH=f"{tmp / 'bin'}:{env['PATH']}", NETPOL_FIXTURES=str(tmp / "fx"),
+               KUBECONFIG=str(tmp / "no-such-kubeconfig"))
+    return subprocess.run([str(SCRIPT), *args], env=env, capture_output=True, text=True, timeout=120)
+
+
+def dropped_count(node: str) -> int:
+    return sum(r[0] == "dropped" for r in expand(node))
+
+
+def test_canary_passes(tmp_path):
+    r = run(canary_fixtures(tmp_path), "canary")
+    assert r.returncode == 0, r.stdout + r.stderr
+    for node in NODES:
+        n, d = len(expand(node)), dropped_count(node)
+        assert n == canary_row_count(node)
+        assert f"{node} rows {n}/{n} deny-logged {d}/{d}" in r.stdout
+    assert re.search(r"^stray: PASS \(\d+ deny lines, policed: netpol-canary\)$", r.stdout, re.M), r.stdout
+    assert r.stdout.rstrip().splitlines()[-1] == "canary: PASS (3 nodes)"
+    calls = (tmp_path / "fx" / "calls.log").read_text()
+    assert "--since=10m" in calls and "once enforced" in calls
+
+
+def test_canary_unlogged_row_fails(tmp_path):
+    """A row that timed out but that no agent logged as denied (a dead target, a route that never
+    reached the enforcer) is a FAIL."""
+    wan = f"{WAN_IP}:8585"
+    r = run(canary_fixtures(tmp_path, skip=("netpol-probe-middle", wan)), "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    n, d = len(expand("middle")), dropped_count("middle")
+    assert f"middle rows {n}/{n} deny-logged {d - 1}/{d}" in r.stdout
+    assert f"NOT-LOGGED {wan}" in r.stdout
+    assert "canary: PASS" not in r.stdout
+
+
+def test_canary_backend_row_needs_an_endpoint_ip(tmp_path):
+    """A deny line to the ClusterIP itself does not count: the enforcer sees the post-DNAT
+    backend (design §3.4 item 1), so the row's backend IPs are what must appear."""
+    rows = expand("top")
+    t = canary_fixtures(tmp_path, skip=("netpol-probe-top", "10.96.0.1:443"),
+                        extra_log=[deny_line("netpol-canary/netpol-probe-top", "10.96.0.1:443")])
+    r = run(t, "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "NOT-LOGGED 10.96.0.1:443" in r.stdout
+    assert any(row[2] == "10.96.0.1" for row in rows)
+
+
+def test_canary_refused_row_fails(tmp_path):
+    rows = expand("bottom")
+    table = enforced_table("bottom", rows, fail_refused="192.168.0.1:22")
+    r = run(canary_fixtures(tmp_path, tables={"netpol-probe-bottom": table}, rcs={"netpol-probe-bottom": 1}), "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "FAIL dropped refused 192.168.0.1:22" in r.stdout
+    n = len(rows)
+    assert f"bottom rows {n - 1}/{n} " in r.stdout
+
+
+def test_canary_stale_matrix_fails(tmp_path):
+    """A pod whose rows differ from the repo's matrix (a stale ConfigMap) is a FAIL, even if its own
+    run passed."""
+    rows = expand("top")
+    stale = enforced_table("top", rows[:-1])
+    r = run(canary_fixtures(tmp_path, tables={"netpol-probe-top": stale}), "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "canary: PASS" not in r.stdout
+
+
+def test_canary_rows_differ_fails(tmp_path):
+    """Same count, other rows: middle's pod ran top's expansion (top's BMC skipped, top's host IP).
+    Only the row-by-row check against the repo catches it."""
+    rows = expand("top")
+    assert len(rows) == len(expand("middle")) and rows != expand("middle")
+    table = enforced_table("middle", rows)
+    r = run(canary_fixtures(tmp_path, tables={"netpol-probe-middle": table}), "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert re.search(r"^FAIL middle .*order=row ", r.stdout, re.M), r.stdout
+    assert "canary: PASS" not in r.stdout
+
+
+def test_canary_stray_line_fails(tmp_path):
+    t = canary_fixtures(tmp_path, extra_log=[deny_line("media/mm-plex-0", "192.168.0.1:53")])
+    r = run(t, "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert re.search(r"^STRAY .*srcPod=\"media/mm-plex-0\"", r.stdout, re.M), r.stdout
+    assert "stray: FAIL" in r.stdout
+    assert "canary: PASS" not in r.stdout
+
+
+def test_canary_two_pods_is_exit_2(tmp_path):
+    r = run(canary_fixtures(tmp_path, nodes=NODES[:2]), "canary")
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "need exactly 3 Running netpol-probe pods on 3 nodes" in r.stderr
+    assert "canary: PASS" not in r.stdout
+
+
+def test_canary_one_node(tmp_path):
+    r = run(canary_fixtures(tmp_path), "canary", "--node", "middle")
+    assert r.returncode == 0, r.stdout + r.stderr
+    n, d = len(expand("middle")), dropped_count("middle")
+    assert f"middle rows {n}/{n} deny-logged {d}/{d}" in r.stdout
+    assert "top rows" not in r.stdout and "bottom rows" not in r.stdout
+    assert r.stdout.rstrip().splitlines()[-1] == "canary: PASS (1 node)"
+
+
+def test_canary_unknown_node_is_exit_2(tmp_path):
+    r = run(canary_fixtures(tmp_path), "canary", "--node", "nowhere")
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "need exactly 1 Running netpol-probe pod on nowhere" in r.stderr
+
+
+def stray_fixtures(tmp: Path, lines: list[str], np_items=POLICED) -> Path:
+    fixtures(tmp, ds_doc=ds(3, 3), pods=agents(3), np_items=np_items)
+    for a in agents(3):
+        (tmp / "fx" / "logs" / a["metadata"]["name"]).write_text(LOG_START + "".join(x + "\n" for x in lines))
+        lines = []
+    return tmp
+
+
+def test_stray_passes(tmp_path):
+    lines = [deny_line("netpol-canary/netpol-probe-x", "192.168.0.2:80"),
+             # An ingress denial: the source is outside, the destination is a policed pod.
+             deny_line("external", "10.244.3.7:9377", dst_pod="netpol-canary/netpol-echo-y")]
+    r = run(stray_fixtures(tmp_path, lines), "stray")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.stdout.rstrip().splitlines()[-1] == "stray: PASS (2 deny lines, policed: netpol-canary)"
+    assert "--since=15m" in (tmp_path / "fx" / "calls.log").read_text()
+
+
+def test_stray_since(tmp_path):
+    r = run(stray_fixtures(tmp_path, []), "stray", "--since", "2h")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "--since=2h" in (tmp_path / "fx" / "calls.log").read_text()
+    assert "stray: PASS (0 deny lines, policed: netpol-canary)" in r.stdout
+
+
+@pytest.mark.parametrize("src,dst_pod", [
+    ("media/mm-plex-0", "external"),        # a pod in a namespace with no policy
+    ("external", "external"),               # a node IP or anything else nobody selected (#380 class)
+    ("netpol-canary-x/pod", "external"),    # namespace prefix must not count
+])
+def test_stray_fails(tmp_path, src, dst_pod):
+    lines = [deny_line("netpol-canary/netpol-probe-x", "192.168.0.2:80"), deny_line(src, "192.168.0.1:53", dst_pod=dst_pod)]
+    r = run(stray_fixtures(tmp_path, lines), "stray")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert sum(line.startswith("STRAY ") for line in r.stdout.splitlines()) == 1
+    assert r.stdout.rstrip().splitlines()[-1] == "stray: FAIL (1 of 2 deny lines stray, policed: netpol-canary)"
+
+
+def test_stray_prints_at_most_ten(tmp_path):
+    lines = [deny_line("media/p", f"192.168.0.1:{i}") for i in range(1, 13)]
+    r = run(stray_fixtures(tmp_path, lines), "stray")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert sum(line.startswith("STRAY ") for line in r.stdout.splitlines()) == 10
+    assert "stray: FAIL (12 of 12 deny lines stray" in r.stdout
+
+
+def test_stray_no_policies_means_every_deny_is_stray(tmp_path):
+    r = run(stray_fixtures(tmp_path, [deny_line("netpol-canary/p", "192.168.0.2:80")], np_items=()), "stray")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "policed: none" in r.stdout
+
+
+def test_stray_no_agents_is_exit_2(tmp_path):
+    fixtures(tmp_path, ds_doc=ds(0, 0), pods=[], np_items=POLICED)
+    r = run(tmp_path, "stray")
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "no kube-network-policies agent pods" in r.stderr
+
+
+@pytest.mark.parametrize("args", [["stray", "--since"], ["stray", "15m"], ["canary", "--node"], ["canary", "top"], ["idle", "x"]])
+def test_bad_arguments_are_exit_2(tmp_path, args):
+    r = run(stray_fixtures(tmp_path, []), *args)
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "usage:" in r.stderr
