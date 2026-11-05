@@ -192,12 +192,14 @@ to `main` are blocked; only Owners may merge or approve; fast-forward is the onl
 signed commits land as they are), then an operator applies (README there). From a laptop:
 `fj -H git.realliance.net pr merge realliance-ops/forge#<n> -d`.
 
+**Signing policy (2026-11-05).** `realliance-ops` repos (`forge`, `forge-bot`, `ci-dispatch`): signed commits, fast-forward only. The five `realliance` repos (`brand`, `realliance.net`, `forgejo`, `pages`, `actions`): any commits on `main`, fast-forward (the default) or squash, but release tags stay signed and Owners-only. Consumers trust the signed tag (`git verify-tag`, then its tree), never `main`'s commits. The realliance.net release review checks the tag signature plus the range, not every commit.
+
 **Forgejo's signing key** "Realliance Forge <git@realliance.net>" (ID `50ACEA5F43099C00`; private
 key in `sso-secrets` `forge/signing-key.asc`, sealed as `forgejo-signing`) signs merges and web
-edits. Without it Forgejo refuses *every* merge into a branch that requires signed commits
+edits. Without it Forgejo refuses *every* merge into a branch that requires signed commits (now only the ops repos)
 ("won't sign: nokey"). `[repository.signing]` drops Forgejo's default 2FA condition — MFA is at the SSO.
 
-**First merge into a repo imported from GitHub:** when the base head carries GitHub's web-flow signature, which Forgejo can't verify, a branch with `require_signed_commits` refuses even a fast-forward (`won't sign: basesigned`). The fix is an inventory PR that turns `require_signed_commits` off, the merge, then the revert and apply at once; after that the head is Owner-signed (realliance.net, 2026-11-04, open for under a minute).
+**First merge into a repo imported from GitHub (ops repos only now; the `realliance` repos need no signatures):** when the base head carries GitHub's web-flow signature, which Forgejo can't verify, a branch with `require_signed_commits` refuses even a fast-forward (`won't sign: basesigned`). The fix is an inventory PR that turns `require_signed_commits` off, the merge, then the revert and apply at once; after that the head is Owner-signed (realliance.net, 2026-11-04, open for under a minute).
 
 **`fj` (forgejo-cli) login:** `fj -H git.realliance.net auth login` signs in through the SSO in a
 browser. It needs the public OAuth app "forgejo-cli (fj)" (owned by `forgejo-admin`, redirect
