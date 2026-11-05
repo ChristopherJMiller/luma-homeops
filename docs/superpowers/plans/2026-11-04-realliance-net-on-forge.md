@@ -585,7 +585,7 @@ resource "forgejo_branch_protection" "realliance_net_main" {
   - `refusing to move` means the build is not reproducible: **STOP**, investigate, and never re-pin from it.
 - [ ] **Step 4: Anonymous checks from rowlett (no credentials).**
   - `crane digest git.realliance.net/realliance/realliance.net:2.4.0`. Expected: `D`.
-  - `curl -sSI` a HEAD on the manifest (realm from `curl -sSI https://git.realliance.net/v2/`, anonymous pull token). Expected: `200`, `docker-content-digest: D`, a Docker v2 manifest content-type.
+  - `curl -sSI` a HEAD on the manifest (realm from `curl -sSI https://git.realliance.net/v2/`, anonymous pull token). Expected: `200`, `docker-content-digest: D`, content-type `application/vnd.oci.image.manifest.v1+json` (OCI, inherited from the nginx base; review M7).
   - A GET on the manifest with `-D -` and no redirect following. Expected: `307` to `s3.us-east-005.backblazeb2.com`. Following it, `sha256sum` of the body equals `D`.
   - `scripts/check-image.sh git.realliance.net/realliance/realliance.net:2.4.0`. Expected: PASS.
 - [ ] **Step 5: Link the package.** Administrator `POST /api/v1/packages/realliance/container/realliance.net/-/link/realliance.net`. Expected: `201`.
