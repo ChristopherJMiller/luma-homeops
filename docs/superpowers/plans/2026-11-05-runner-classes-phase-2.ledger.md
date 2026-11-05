@@ -101,6 +101,20 @@ Taken 2026-11-05.
 - **n1 to n3:** `tf.sh` writes raw output only to a regular file, refuses `state pull|push` and `-chdir`, and keeps Lock Info's `ID:` line. The grant scan also bans template deployments, azapi Authorization and deployment types, `module` blocks, provisioners and `data "external"`.
 - **Plan:** still `Plan: 19 to add, 0 to change, 0 to destroy.`, with the same addresses.
 
+### Task 2 fix round 3 (review 0/2/4, 2026-11-05)
+
+- **R1, plan amended (controller's ruling):**
+  - Task 4 Step 4 spells out one compliant body: the digest-only image, `--cpu 2 --memory 8 --os-type Linux --restart-policy Never --tags forge-ci=1 expires-at=<…>`, `westus3`, and no IP, identity, registry credential or volume.
+  - Every Step 5 negative is that body with exactly one change, and Step 5 ledgers each denying `policyDefinitionReferenceId` against the expected rule.
+  - Steps 4 and 5 start 30 min after the apply, and Step 5 waits for a successful smoke.
+- **R2, plan amended:** raw `tf.sh` forms need `--to FILE` or `--append FILE`, written by `tf.sh` at 0600. `tf.sh` refuses them without one, whatever stdout is (an agent's transcript can be a regular file). Task 4 Step 3's loop uses `--append forge/secrets.env`, and Task 2 Step 4 uses `--to $SCRATCH/plan.json`.
+- **m-a to m-d:**
+  - `tf.sh` refuses any `TF_CLI_ARGS*`, and also `TF_LOG*` (plan's call: a trace prints request bodies).
+  - The static suite refuses override files, and fails on a duplicate block name.
+  - The README uses `force-unlock -force`.
+  - The plan's Task 2 text (the hook regex, the `tf.sh` description) is current.
+- **Plan:** still `Plan: 19 to add, 0 to change, 0 to destroy.`, with the same addresses.
+
 ## Task 3
 
 - **Carry from Task 2's review:** `azure/ci/tests/restore.tftest.hcl`'s restore run must assert that the sweeper's body (the `azapi_resource` workflow definition) is known, so a restore plan leaves the sweeper unchanged.

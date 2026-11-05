@@ -167,7 +167,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
 - **Azure output** reaches the ledger or the transcript only through `-o none` or a `--query` of named, id-free fields (F14).
   - Scope commands by name (`az role assignment list -g rg-realliance-ci`).
   - Write ARM URLs with az's placeholder, never the id in argv (`az rest --url 'https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/…'`).
-  - Terraform plan files and their JSON (`./azure/ci/tf.sh show -json`) stay in `$SCRATCH`, mode 0600.
+  - Terraform plan files and their JSON (`./azure/ci/tf.sh --to $SCRATCH/plan.json show -json …`) stay in `$SCRATCH`, mode 0600.
 - **No GUID in public files:** a static test (Task 2, Task 18) fails on any UUID-shaped string in `azure/ci/` or `cluster/ci-dispatch/` outside `*.secret.*` and lock files.
 - **Go:** `GO="taskset -c 0-3 nix develop $HOME/Repos/luma-homeops --command env GOMAXPROCS=4 go"`, then `$GO test -race -p=4 ./...`. No local Docker; CI builds images.
 - `SCRATCH=~/Repos/luma-homeops/.superpowers/sdd/2026-11-05-runner-classes-phase-2/scratch` (git-ignored).
@@ -376,7 +376,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
 - Create: `azure/ci/main.tf` (providers with `resource_provider_registrations = "none"`; backend key `realliance-ci.tfstate`; both RGs, the RG ignoring `tags["ci-sweeper-over-at"]`; both budgets; `azurerm_resource_provider_registration` for whichever of `Microsoft.ContainerInstance` and `Microsoft.Logic` Step 1 finds unregistered).
 - Create: `azure/ci/fence.tf` (Policy definitions, the initiative and its assignment on the CI group; role definition `Realliance CI dispatcher`; `azuread_application`, `azuread_service_principal`, `time_rotating` at 150 days, `azuread_application_password` with `end_date = timeadd(time_rotating.dispatcher.id, "4320h")`; assignments of the custom role and of `Cost Management Reader`, both scoped to the CI group. The custom-role assignment has the fixed `name = uuidv5("url", "realliance-ci/dispatcher-assignment")` (F6), so a restore re-creates the same id and no GUID sits in a file).
 - Create: `azure/ci/variables.tf`, `outputs.tf` (`dispatcher_client_id`, `tenant_id`, `dispatcher_client_secret` and `dispatcher_assignment_id`, all `sensitive`; F30), `fence.json`, `policies/{types,location,aci-shape,aci-isolation,aci-image,tags}.json`, `tf.sh`, `ci.secret.auto.tfvars` (`subscription_id`, `alert_emails`, written by a `python -I` script from `azure/logging/logging.secret.auto.tfvars`, never opened), `scripts/test_azure_ci.py`.
-- Edit: `.pre-commit-config.yaml` (hook `azure-ci` on `^(azure/ci/.*|scripts/test_azure_ci\.py|\.pre-commit-config\.yaml)$`).
+- Edit: `.pre-commit-config.yaml` (hook `azure-ci` on `^(azure/ci/.*|scripts/test_azure_ci\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$`; `.renovaterc.json` joined in review round 1 for the provider rule).
 
 **Interfaces:**
 - Produces `fence.json`, which every value a test pins comes from. Terraform reads it with `jsondecode(file(...))`:
@@ -391,7 +391,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
      "Microsoft.Insights/metrics/read"],
    "egress": {"cap_bytes": 10000000000, "micro_per_gb": 87000, "metric": "NetworkBytesTransmittedPerSecond"}}
   ```
-- `tf.sh` copies `azure/entra/tf.sh`: it checks `az account show`, refuses unless `ci.secret.auto.tfvars` reads as cleartext (git-crypt unlocked, checked with `grep -q '^subscription_id'`), and runs `exec terraform "$@"`.
+- `tf.sh` starts from `azure/entra/tf.sh`: it checks `az account show`, and refuses unless `ci.secret.auto.tfvars` reads as cleartext (git-crypt unlocked, checked with `grep -q '^subscription_id'`). Since Task 2's review it runs terraform behind a filter that turns every UUID into `<id>` (Lock Info's `ID:` line excepted), with `umask 077`. Raw forms (`output -raw|-json`, `show -json`) need `--to FILE` or `--append FILE` first, and it refuses `state pull|push`, `-chdir`, `TF_CLI_ARGS*` and `TF_LOG*`. `azure/ci/README.md` has the rules.
 - **Rotation (F26).** At 150 days `time_rotating` replaces the password, and that same apply destroys the old one. The dispatcher fails auth until the new secret is deployed, so rotation is one STOP run back to back: Chris's apply, the pipe into sso-secrets (Task 4 Step 3's form), reseal, and the deploy push. Task 4 Step 3 ledgers the 150-day date.
 
 - [ ] **Step 1: Check the Policy aliases** (read-only):
@@ -414,7 +414,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
 
   Run them. Expected: FAIL.
 - [ ] **Step 3: Write the terraform** that passes them. Comments state the spec layer each resource implements (layers 5, 8 and 9).
-- [ ] **Step 4: Plan.** Run `./azure/ci/tf.sh init`, then the plan in How changes land's grep form (F14). Then run `umask 077; ./azure/ci/tf.sh show -json $SCRATCH/ci.tfplan > $SCRATCH/plan.json`, and the tests with `AZURE_CI_PLAN_JSON=$SCRATCH/plan.json`. Expected: PASS, and `Plan: <N> to add, 0 to change, 0 to destroy.` Ledger N and the addresses, nothing else from the plan.
+- [ ] **Step 4: Plan.** Run `./azure/ci/tf.sh init`, then the plan in How changes land's grep form (F14). Then run `./azure/ci/tf.sh --to $SCRATCH/plan.json show -json $SCRATCH/ci.tfplan` (0600), and the tests with `AZURE_CI_PLAN_JSON=$SCRATCH/plan.json`. Expected: PASS, and `Plan: <N> to add, 0 to change, 0 to destroy.` Ledger N and the addresses, nothing else from the plan.
 - [ ] **Step 5: Commit and push** (code only; nothing applied yet).
 
 ### Task 3: `azure/ci/`, the sweeper and its lock
@@ -498,35 +498,45 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   ```bash
   cd ~/Repos/realliance-sso-secrets
   for k in tenant_id:TENANT_ID dispatcher_client_id:CLIENT_ID dispatcher_client_secret:CLIENT_SECRET; do
-    { printf 'CI_DISPATCH_AZURE_%s=' "${k##*:}"; ~/Repos/luma-homeops-ci2/azure/ci/tf.sh output -raw "${k%%:*}"; echo; } >> forge/secrets.env
+    printf 'CI_DISPATCH_AZURE_%s=' "${k##*:}" >> forge/secrets.env
+    ~/Repos/luma-homeops-ci2/azure/ci/tf.sh --append forge/secrets.env output -raw "${k%%:*}"
+    echo >> forge/secrets.env
   done
   { printf 'CI_DISPATCH_AZURE_SUBSCRIPTION_ID='; az account show --subscription Realliance --query id -o tsv; } >> forge/secrets.env
   ```
-  Signed commit and push. Ledger dates only, never ids: the secret's expiry (creation + 180 d) and its **rotation date** (creation + 150 d, F26), the day the rotation STOP falls due.
-- [ ] **Step 4: Smoke, as Chris's identity** (pre-approved in Step 1's STOP; cost under $0.02). Create a `small` group `ci-smoke-<hex>`:
-  - the class pin in its digest-only form, `ghcr.io/christopherjmiller/forgejo-runner-class@sha256:<64>` (T2-N1). Policy denies any other form, Chris's identity included;
+  `tf.sh` writes each raw value straight into the file, which it tightens to 0600, and refuses a raw form with no `--to`/`--append` (Task 2 review round 3, R2). Signed commit and push. Ledger dates only, never ids: the secret's expiry (creation + 180 d) and its **rotation date** (creation + 150 d, F26), the day the rotation STOP falls due.
+- [ ] **Step 4: Smoke, as Chris's identity** (pre-approved in Step 1's STOP; cost under $0.02). Start it at least 30 min after Step 1's apply, so the Policy assignment has propagated and a success shows the body passes an enforcing fence. Create a `small` group `ci-smoke-<hex>` with **the compliant body**, which Step 5 reuses:
+  - `az container create -g rg-realliance-ci -n ci-smoke-<hex> --location westus3 --image ghcr.io/christopherjmiller/forgejo-runner-class@sha256:<64> --cpu 2 --memory 8 --os-type Linux --restart-policy Never --tags forge-ci=1 expires-at=<launch + 40 min, RFC 3339 UTC>`;
+  - the image is the digest-only pin (T2-N1). Policy denies any other form, Chris's identity included;
+  - no `--ip-address`, no `--assign-identity`, no `--registry-*`, no volume (`--azure-file-volume-*`, `--secrets`, `--gitrepo-*`), and no `--sku` or `--priority` (Standard and Regular by default);
   - command `["/usr/local/bin/ci-class-entry","35m","small","smokehandle","https://git.realliance.net","00000000-0000-0000-0000-000000000000"]`;
   - `RUNNER_TOKEN` as a secure value holding a nonce, passed as `--secure-environment-variables @<umask-077 file holding RUNNER_TOKEN=<nonce>>`, never in argv.
 
   Then:
   - record the time from create to `Running` and to `Terminated` (`Monitor`). Expected: create → `Running` under `aci.PullAllowance` (5 min). If it isn't, raise `PullAllowance` in Task 13 to twice the measured time, so `small`'s timeout wrapper gets 40 min minus that (F32);
-  - a second group runs `["sh","-c","df -h / /run; nproc; free -g; curl -fsS -o /dev/null https://github.com"]`. Ledger its output (the free disk the fork build needs);
+  - a second group, the compliant body with only its name and command changed, runs `["sh","-c","df -h / /run; nproc; free -g; curl -fsS -o /dev/null https://github.com"]`. Ledger its output (the free disk the fork build needs);
   - **egress metric check** (E17). Run `az monitor metrics list-definitions --resource <group> -g rg-realliance-ci --resource-type Microsoft.ContainerInstance/containerGroups --query "[].name.value"`; it lists `NetworkBytesTransmittedPerSecond`. Then `az rest` GET that metric for the second group (`{subscriptionId}` form, `api-version=2023-10-01&metricnames=NetworkBytesTransmittedPerSecond&aggregation=Average&interval=FULL&timespan=<created>/<now>`) returns one data point above 0. Ledger the metric's latency (seconds from the transfer to a non-zero point). If `interval=FULL` is refused, STOP: the sweeper's two-reads design (Task 3) needs a rework before Task 5;
   - `az container show` and `az container logs` of the first group, searched locally with `grep -F -f <nonce file>`. Expected: no match;
   - save the raw ACI **list** (`az rest --url 'https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/rg-realliance-ci/providers/Microsoft.ContainerInstance/containerGroups?api-version=2023-05-01'`) to `$SCRATCH/aci-list.json`, mode 0600, and save a copy as the Task 7 fixture with every GUID replaced by zeros. Ledger whether the list carries `instanceView.state`, the container's `currentState`, its `exitCode` and its `finishTime`. The fallback is fixed now (F16):
     - no `instanceView` in the list → Task 7's `Groups()` GETs each `GroupName` group after the list (request #3, already allowed), under the budget, with the `Azure` interface unchanged;
     - the image is always `name@sha256:` (F16, T2-N1), so whether ACI accepts `tag@digest` no longer matters. Step 5 checks that Policy denies it;
   - delete both groups; `Monitor` until `az container list -g rg-realliance-ci --query "length(@)"` is `0`.
-- [ ] **Step 5: Policy negatives** (each refused at create, free). Expected `RequestDisallowedByPolicy` for each:
-  - 1 vCPU/2 GiB;
-  - image `busybox`;
-  - `--ip-address Public`;
-  - `--assign-identity`;
-  - location `westus2`;
-  - no `forge-ci` tag;
-  - the class image as `tag@digest`, `ghcr.io/christopherjmiller/forgejo-runner-class:sha-<7>@sha256:<64>` (T2-N1).
+- [ ] **Step 5: Policy negatives** (each refused at create, free). Run them only after Step 4's smoke succeeded, which proves the compliant body passes, and at least 30 min after Step 1's apply. Each negative is **Step 4's compliant body with exactly one change**, under a fresh name, so exactly one rule can deny it. Expected `RequestDisallowedByPolicy`, from the rule named:
 
-  Ledger each code. Any create that succeeds is a STOP: delete it, and fix the fence first.
+  | Negative (the one change) | Denying rule |
+  |---|---|
+  | `--cpu 1 --memory 2` | `aci-shape` |
+  | `--image busybox` | `aci-image` |
+  | the class image as `tag@digest`, `ghcr.io/christopherjmiller/forgejo-runner-class:sha-<7>@sha256:<64>` (T2-N1) | `aci-image` |
+  | `--ip-address Public` | `aci-isolation` |
+  | `--assign-identity` | `aci-isolation` |
+  | `--location westus2` | `location` |
+  | `--tags expires-at=<…>` (no `forge-ci`) | `tags` |
+
+  - Capture each error to a umask-077 file in `$SCRATCH` and ledger only its denying `policyDefinitionReferenceId`, taken with `grep -o '"policyDefinitionReferenceId": *"[^"]*"'`. If az's error message lacks it, take the definition name `realliance-ci-<rule>` the same way. The full error carries Azure ids, so it never reaches the transcript (F14).
+  - The reference id must be the rule in the table. A denial from another rule means the negative wasn't isolated: fix the body and rerun it.
+  - Any create that succeeds is a STOP: delete it, and fix the fence first.
+  - These denials meet Task 2's carry: a Policy deny confirmed before the dispatcher's secret ships.
 - [ ] **Step 6: Region check.** If Step 4 got a capacity refusal (`ServiceUnavailable`), STOP: moving to `westus2` is Chris's call (a terraform change and a re-apply).
 
 ### Task 5: The sweeper drill

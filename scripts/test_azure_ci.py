@@ -7,9 +7,10 @@ pins comes from azure/ci/fence.json, and test_fence_values pins fence.json itsel
 
 The plan-level tests run only when AZURE_CI_PLAN_JSON names the output of
 
-    umask 077; ./azure/ci/tf.sh show -json "$SCRATCH/ci.tfplan" > "$SCRATCH/plan.json"
+    ./azure/ci/tf.sh --to "$SCRATCH/plan.json" show -json "$SCRATCH/ci.tfplan"
 
-That file holds the subscription id and other Azure ids, so it stays in a mode-0700 scratch dir.
+That file holds the subscription id and other Azure ids. tf.sh writes it 0600, and it stays in a mode-0700
+scratch dir.
 Plan-level checks compare ids silently and fail through pytest.fail with an id-free message, so a
 failure never prints one. These tests never open a `*.secret.*` file.
 
@@ -170,10 +171,20 @@ def _body(text: str, start: int) -> str:
     raise AssertionError("unbalanced braces")
 
 
+def _unique(pat: re.Pattern, text: str, what: str) -> dict[str, str]:
+    found: dict[str, str] = {}
+    for m in pat.finditer(text):
+        # Terraform merges an override file's block into the original, so a second block with the
+        # same name changes the first unseen (round 3 m-b). Here it fails instead.
+        assert m.group(1) not in found, f'{what} "{m.group(1)}" is declared twice (an override file?)'
+        found[m.group(1)] = _body(text, m.end())
+    return found
+
+
 def blocks(text: str, kind: str, rtype: str) -> dict[str, str]:
-    """{name: body} for every `kind "rtype" "name" {` block in text."""
+    """{name: body} for every `kind "rtype" "name" {` block in text; a duplicate name fails."""
     pat = re.compile(rf'^{kind}\s+"{re.escape(rtype)}"\s+"([^"]+)"\s*\{{', re.M)
-    return {m.group(1): _body(text, m.end()) for m in pat.finditer(text)}
+    return _unique(pat, text, f"{kind} {rtype}")
 
 
 def block(text: str, kind: str, rtype: str, name: str) -> str:
@@ -185,7 +196,7 @@ def block(text: str, kind: str, rtype: str, name: str) -> str:
 def labelled(text: str, kind: str) -> dict[str, str]:
     """{label: body} for every one-label block (`output "x" {`, `provider "x" {`, `variable "x" {`)."""
     pat = re.compile(rf'^{kind}\s+"([^"]+)"\s*\{{', re.M)
-    return {m.group(1): _body(text, m.end()) for m in pat.finditer(text)}
+    return _unique(pat, text, kind)
 
 
 def outputs(text: str) -> dict[str, str]:
@@ -386,7 +397,48 @@ def test_role_assignments_allow_listed():
     The dispatcher's service principal holds roles only at DISPATCHER_SCOPES. An assignment
     declared in main.tf, or any new one, fails until it's added on purpose.
     """
+    check_role_assignments(re.sub(r"#.*", "", all_tf()))
+    # terraform also loads *.tf.json, which all_tf() doesn't read; there must be none.
+    assert not list(CI.glob("*.tf.json"))
+
+
+OVERRIDE = re.compile(r"(^|_)override\.tf(\.json)?$")
+
+
+def override_files(root: Path) -> list[str]:
+    """Terraform override files under root: override.tf, *_override.tf, and their .tf.json forms."""
+    return sorted(str(p.relative_to(root)) for p in root.rglob("*")
+                  if p.is_file() and ".terraform" not in p.relative_to(root).parts and OVERRIDE.search(p.name))
+
+
+def test_no_override_files():
+    """Round 3 m-b: an override file merges into a block the allow-list already passed, so none may exist."""
+    assert override_files(CI) == []
+
+
+def test_override_scan_catches(tmp_path):
+    names = ["override.tf", "a_override.tf", "dispatcher_override.tf", "x_override.tf.json", "override.tf.json",
+             "tests/deep_override.tf"]
+    for n in names + ["overrides.tf", "notoverride.tf", "override.tftpl"]:
+        (tmp_path / n).parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / n).write_text("")
+    assert override_files(tmp_path) == sorted(names)
+
+
+OVERRIDE_SNIPPET = 'resource "azurerm_role_assignment" "dispatcher" {\n  scope = "/subscriptions/${var.subscription_id}"\n}\n'
+
+
+@pytest.mark.parametrize("where", ["before", "after"])
+def test_override_block_fails_the_allow_list(where):
+    """The reviewer's case: a dispatcher_override.tf (sorting before or after fence.tf) holding only
+    a subscription scope for the dispatcher's assignment. The duplicate block fails the scan."""
     code = re.sub(r"#.*", "", all_tf())
+    code = OVERRIDE_SNIPPET + code if where == "before" else code + OVERRIDE_SNIPPET
+    with pytest.raises(AssertionError, match="declared twice"):
+        check_role_assignments(code)
+
+
+def check_role_assignments(code: str) -> None:
     found = blocks(code, "resource", "azurerm_role_assignment")
     assert set(found) == set(ROLE_ASSIGNMENTS)
     for name, body in found.items():
@@ -399,8 +451,6 @@ def test_role_assignments_allow_listed():
             assert scope in DISPATCHER_SCOPES, name
             assert has(body, "principal_type", '"ServicePrincipal"'), name
     assert grant_findings(code) == []
-    # terraform also loads *.tf.json, which all_tf() doesn't read; there must be none.
-    assert not list(CI.glob("*.tf.json"))
 
 
 # Resource types that grant rights or can create a role assignment that ROLE_ASSIGNMENTS never
@@ -595,7 +645,10 @@ def test_tf_sh():
     assert "exec terraform" not in sh  # every run goes through the redacting filter
     assert re.search(r"^  trap '' INT TERM$", sh, re.M)  # a Ctrl-C mustn't end the filter mid-apply
     assert sh.rstrip().endswith('exit "$status"')
-    assert "[ -f /dev/stdout ]" in sh  # raw output only to a regular file (round 2 n2)
+    # Round 3: raw output only to an explicit --to/--append file; TF_CLI_ARGS* and TF_LOG* refused.
+    assert "for v in ${!TF_CLI_ARGS*} ${!TF_LOG*}; do" in sh and "compgen" not in sh.replace("no compgen", "")
+    assert '3>"$dest"' in sh and '3>>"$dest"' in sh
+    assert "[ -f /dev/stdout ]" not in sh  # a transcript can be a regular file (round 3 R2)
 
 
 @pytest.fixture
@@ -633,19 +686,20 @@ def tf_rig(tmp_path):
         (bin_ / f).chmod(0o755)
     ident = str(uuid.uuid4())
     mark = tmp_path / "ran"
-    env = clean_env(PATH=f"{bin_}:{os.environ['PATH']}", STUB_ID=ident, STUB_UP=ident.upper(), STUB_MARK=str(mark))
+    env = {k: v for k, v in clean_env().items() if not k.startswith(("TF_CLI_ARGS", "TF_LOG"))}
+    env.update(PATH=f"{bin_}:{os.environ['PATH']}", STUB_ID=ident, STUB_UP=ident.upper(), STUB_MARK=str(mark))
 
-    def run(*args, to_file=False, **extra):
+    def run(*args, to_file=False, cwd=None, **extra):
         """Run tf.sh; stdout is a pipe, or with to_file a regular file whose text lands in .stdout."""
         mark.unlink(missing_ok=True)
         if not to_file:
             r = subprocess.run([str(root / "azure/ci/tf.sh"), *args], capture_output=True, text=True,
-                               env={**env, **extra})
+                               env={**env, **extra}, cwd=cwd or tmp_path)
         else:
             out = tmp_path / "stdout"
             with out.open("w") as fh:
                 r = subprocess.run([str(root / "azure/ci/tf.sh"), *args], stdout=fh, stderr=subprocess.PIPE,
-                                   text=True, env={**env, **extra})
+                                   text=True, env={**env, **extra}, cwd=cwd or tmp_path)
             r.stdout = out.read_text()
         r.ran = mark.exists()
         return r
@@ -672,25 +726,80 @@ RAW_FORMS = [("output", "-raw", "dispatcher_client_id"), ("output", "-json"), ("
              ("-no-color", "output", "-raw", "x")]
 
 
+def no_raw(r, ident: str) -> None:
+    """Nothing raw on tf.sh's own stdout or stderr: the stub's UUID never appears in either."""
+    for stream in (r.stdout, r.stderr):
+        if ident in stream or ident.upper() in stream:
+            pytest.fail("raw output reached tf.sh's stdout or stderr")
+
+
 @pytest.mark.parametrize("args", RAW_FORMS)
-def test_tf_sh_data_paths_stay_raw(tf_rig, args):
-    """Raw data paths to a regular file keep stdout exact. stderr is still redacted, and the exit
-    code survives."""
+def test_tf_sh_raw_to_file(tf_rig, tmp_path, args):
+    """Round 3 R2: `--to FILE` takes the raw output, exact, in a new 0600 file. tf.sh's own stdout
+    stays empty, stderr is redacted, and the exit code survives."""
     run, ident = tf_rig
-    r = run(*args, to_file=True, STUB_RC="5")
+    dest = tmp_path / "out.json"
+    r = run("--to", str(dest), *args, STUB_RC="5")
     assert r.returncode == 5 and r.ran
-    assert r.stdout.startswith(f"out {ident} {ident.upper()} ")
-    assert r.stderr.strip() == "err <id> <id>"
+    assert dest.read_text().startswith(f"out {ident} {ident.upper()} ")
+    assert (dest.stat().st_mode & 0o777) == 0o600
+    assert r.stdout == "" and r.stderr.strip() == "err <id> <id>"
+    no_raw(r, ident)
 
 
 @pytest.mark.parametrize("args", RAW_FORMS)
-def test_tf_sh_raw_refuses_non_file(tf_rig, args):
-    """Round 2 n2: raw output never reaches a pipe, a terminal, or a transcript. tf.sh refuses
-    before terraform runs."""
-    run, _ = tf_rig
-    r = run(*args)
+@pytest.mark.parametrize("to_file", [False, True])
+def test_tf_sh_raw_needs_a_destination(tf_rig, args, to_file):
+    """Round 3 R2: without --to or --append a raw form is refused, before terraform runs, whatever
+    stdout is. An agent's transcript can be a regular file."""
+    run, ident = tf_rig
+    r = run(*args, to_file=to_file)
     assert r.returncode == 2 and not r.ran and r.stdout == ""
-    assert "regular file" in r.stderr
+    assert "needs a destination" in r.stderr
+    no_raw(r, ident)
+
+
+def test_tf_sh_append(tf_rig, tmp_path):
+    """--append keeps what's there and adds the raw output, and it tightens an existing 0644 file to
+    0600. --to truncates."""
+    run, ident = tf_rig
+    dest = tmp_path / "secrets.env"
+    dest.write_text("KEEP=1\nCI_X=")
+    dest.chmod(0o644)
+    r = run("--append", str(dest), "output", "-raw", "x")
+    assert r.returncode == 0 and r.ran and r.stdout == ""
+    text = dest.read_text()
+    assert text.startswith(f"KEEP=1\nCI_X=out {ident} ")
+    assert (dest.stat().st_mode & 0o777) == 0o600
+    no_raw(r, ident)
+    r = run("--to", str(dest), "output", "-json")
+    assert r.returncode == 0 and dest.read_text().startswith(f"out {ident} ")
+    assert "KEEP=1" not in dest.read_text()
+
+
+def test_tf_sh_destination_is_relative_to_the_caller(tf_rig, tmp_path):
+    """tf.sh cds into azure/ci, but a relative destination means the caller's directory."""
+    run, ident = tf_rig
+    (tmp_path / "work").mkdir()
+    r = run("--append", "forge.env", "output", "-raw", "x", cwd=tmp_path / "work")
+    assert r.returncode == 0 and (tmp_path / "work/forge.env").read_text().startswith(f"out {ident} ")
+
+
+def test_tf_sh_refuses_bad_destinations(tf_rig, tmp_path):
+    """No link, directory, device, /proc path, or tf.sh's own stdout (a transcript, say)."""
+    run, ident = tf_rig
+    target = tmp_path / "target"
+    target.write_text("")
+    link = tmp_path / "link"
+    link.symlink_to(target)
+    for dest in (str(link), str(tmp_path), "/dev/stdout", "/dev/null", "/proc/self/fd/1", str(tmp_path / "no/dir/x")):
+        r = run("--to", dest, "output", "-raw", "x")
+        assert r.returncode == 2 and not r.ran, dest
+        no_raw(r, ident)
+    # The caller's stdout is a regular file, and naming it is refused.
+    r = run("--to", str(tmp_path / "stdout"), "output", "-raw", "x", to_file=True)
+    assert r.returncode == 2 and not r.ran and "own stdout" in r.stderr
+    assert target.read_text() == ""
 
 
 @pytest.mark.parametrize("args", [("output", "-json=false"), ("show", "-json=0", "p"), ("plan", "-json")])
@@ -703,14 +812,35 @@ def test_tf_sh_not_raw_forms_are_redacted(tf_rig, args):
 
 @pytest.mark.parametrize("args", [("state", "pull"), ("state", "push", "x.tfstate"), ("-no-color", "state", "pull"),
                                   ("-chdir=elsewhere", "plan"), ("-chdir", "elsewhere", "plan"),
-                                  ("--chdir=.", "output", "-raw", "x")])
+                                  ("--chdir=.", "output", "-raw", "x"), ("--to", "f", "plan"),
+                                  ("--append", "f", "output", "x"), ("output", "-raw", "x", "--to", "f"), ("plan", "--to", "f"),
+                                  ("--to",), ("--to", "", "output", "-raw", "x")])
 @pytest.mark.parametrize("to_file", [False, True])
 def test_tf_sh_refuses(tf_rig, args, to_file):
-    """Round 2 n2: tf.sh refuses `state pull|push` and `-chdir`, even into a file."""
-    run, _ = tf_rig
+    """Rounds 2 and 3: `state pull|push`, `-chdir`, a destination on a non-raw command, a misplaced
+    --to, and an empty one are refused, whatever stdout is."""
+    run, ident = tf_rig
     r = run(*args, to_file=to_file)
     assert r.returncode == 2 and not r.ran and r.stdout == ""
     assert r.stderr.startswith("tf.sh: ")
+    no_raw(r, ident)
+
+
+@pytest.mark.parametrize("var,value,args", [
+    ("TF_CLI_ARGS_output", "-raw", ("output", "dispatcher_client_secret")),  # the reviewer's case
+    ("TF_CLI_ARGS", "-no-color", ("plan",)),
+    ("TF_CLI_ARGS_show", "-json", ("show", "p")),
+    ("TF_LOG", "trace", ("apply", "x.tfplan")),
+    ("TF_LOG_PROVIDER", "debug", ("plan",)),
+])
+def test_tf_sh_refuses_tf_cli_args(tf_rig, var, value, args):
+    """Round 3 m-a: terraform splices TF_CLI_ARGS* into argv after tf.sh's checks, and TF_LOG*
+    traces print request bodies. Either one set means exit 2, with terraform never run."""
+    run, ident = tf_rig
+    r = run(*args, **{var: value})
+    assert r.returncode == 2 and not r.ran and r.stdout == ""
+    assert var in r.stderr and value not in r.stderr.replace(var, "")
+    no_raw(r, ident)
 
 
 def test_tf_sh_keeps_the_lock_id(tf_rig):
@@ -735,8 +865,9 @@ def test_tf_sh_refuses_without_az(tf_rig):
 def test_readme_names_the_tf_sh_rules():
     """The README tells Chris about the lock id, raw output to files, and the saved-plan rollback."""
     text = (CI / "README.md").read_text()
-    assert "force-unlock" in text and "ID:" in text
-    assert "regular file" in text
+    assert "force-unlock -force <ID>" in text and "ID:" in text  # round 3 m-c: no hidden prompt
+    assert "--to" in text and "--append" in text and "0600" in text
+    assert "TF_CLI_ARGS" in text
     assert "plan -destroy -out=" in text
 
 
