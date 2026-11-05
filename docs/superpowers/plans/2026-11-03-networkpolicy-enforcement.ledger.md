@@ -217,3 +217,134 @@ Forgejo transferred `realliance/ci-dispatch` (id 240) at 21:27:18Z and `reallian
 - The old API paths now answer 301, and `curl` without `-L` prints no count. The runner-idle check in B2 Step 1, Task 9 Step 1 and every later enforcer restart uses `/repos/realliance-ops/forge-bot/actions/tasks` and `/repos/realliance-ops/ci-dispatch/actions/tasks`. The general runner's check keeps `/repos/realliance/realliance.net/actions/tasks`.
 - Task 8 Step 5's job script runs `git ls-remote https://git.realliance.net/realliance-ops/forge-bot HEAD`. Git follows the old path's redirect, but the redirect lasts only until someone creates a repo of that name in `realliance`.
 - The CI hold in the same STOP covers branch pushes to both `realliance-ops` repos. Only `realliance-ops` Owners can push to them now.
+
+## B1a: the canary, no policy yet (Task 6, 2026-11-05)
+
+**B1a_at=2026-11-05T21:21:17Z.** That is when `scripts/netpol-verify.sh baseline` passed on all three nodes. Task 7 (B1b) follows within the hour. Until its policies are in, every probe dials the BMCs, the KVM, and router SSH every 300 s.
+
+### Answers
+
+- **Interval:** 300 s (Chris, 2026-11-03). That gives `PROBE_INTERVAL: "300"` and readiness `find /tmp/ready -mmin -11`. Task 7's alert uses `for: 15m`.
+- **The Step 6 STOP:** pre-approved (Chris, 2026-11-05), conditional on every check matching the plan.
+- **The own-BMC skip** (below): it changes the pre-approved checks, so the controller asked Chris. Chris approved pushing `3c1039ce` (2026-11-05, AskUserQuestion).
+
+### What deployed
+
+- Argo app `netpol-canary`, from commits `123e42bc` and `d29886dc` (the review fixes) plus `3c1039ce` (the own-BMC skip). It renders:
+  - Namespace `netpol-canary`, with PodSecurity `enforce: restricted`;
+  - DaemonSet `netpol-probe`, in `PROBE_MODE=baseline`;
+  - Deployment `netpol-echo`, agnhost porter on 9376 and 9377;
+  - Services `netpol-echo` (ClusterIP) and `netpol-echo-pod` (headless);
+  - no NetworkPolicy.
+- Deployed ConfigMap: **`netpol-probe-6247dhf725`**. The first push ran `netpol-probe-b29fh85tmd`.
+- **N: 26 rows in matrix.txt** (1 dns, 3 open, 22 dropped). Each probe skips its own node's BMC, so **every node runs 25 canary rows, 21 of them dropped**. In runner scope a node runs 22 rows, 19 dropped; a caller with no node name gets 23 rows, 20 dropped. Task 7 expects `rows 25/25 deny-logged 21/21` per node.
+- Image `registry.k8s.io/e2e-test-images/agnhost:2.66.1@sha256:6e2eef87…66a4`. `top pod`: 2m / 1Mi per probe, and 1m / 9Mi for echo.
+
+### Step 0 (20:48:40Z)
+
+- A3b_start + 24 h was at 18:41:00Z.
+- `idle`: `PASS … packet_id=0 packets=0 restarts=0 flags=ok` for top `9dcl7`, middle `9rdg7` and bottom `r5bd2`, then `idle: PASS (3 agents, 0 NetworkPolicies)`.
+- The three agents have 0 restarts and no lastState. They started at A3b: 18:40:54Z, 18:40:54Z and 18:41:00Z. All run digest `d9350ce2…300d`.
+- The kubelet restarts at 14:53–14:56Z (the PID cap) did not restart them.
+
+### Gate G before (20:49Z)
+
+- G1: 3 nodes Ready, none cordoned. 145/145 PGs active+clean.
+- G2: Ceph HEALTH_WARN: MDS_CLIENT_RECALL plus the muted AUTH_INSECURE_*. Argo: 61 apps, all Synced, only `rook` and `rook-cluster` Degraded.
+- G3: the edge snapshot was re-baselined (`edge-t6-before.txt` in scratch). It has 51 rows: 35 host rows and 16 probes, with no 000 or err row.
+  - Hosts: 16×200, 14×302, 1×303, 3×401, 1×404. Probes: 5×200, 3×302, 3×401, 2×403, 3×404.
+  - That is 16 probes, not the 11 of the Pages note: the Forgejo sign-in probes landed since.
+- G4: no non-Running pods, 0 NetworkPolicies. The only Warning event is the routine postgres-operator `ResourceLimits` one in `chrismillerxyz`.
+
+### Push 1: the canary (20:50:10Z)
+
+- `7b0949b0..d29886dc`, a fast-forward with no force; it carried exactly `123e42bc` and `d29886dc`.
+- Renovate then pushed `4ff430e4` (the `ha-reload` python digest) and `3bd5352c` (the immich `extensions-job` Postgres digest). Argo synced the cluster to `3bd5352c`.
+- **First-run race.** At 20:50:20Z the first runs on bottom and middle failed two rows:
+  - `open refused netpol-echo…:9376`;
+  - `dropped other netpol-echo-pod…:9378`.
+
+  The echo pod was not Ready yet, so the ClusterIP had no endpoints and the headless name had no record. top's first run passed. The second runs (20:55:19–23Z) passed these rows on every node. Expect the same one-run failure whenever the echo pod is new; it clears 300 s later.
+- The DaemonSet stayed at 2/3, with no restarts and no crash loop.
+
+### Baseline 1 (20:56:08Z): FAIL, middle's own BMC
+
+top 26/26 and bottom 26/26. middle 25/26, with one failure: `FAIL dropped timeout 192.168.0.117:443`.
+
+- `192.168.0.117` is **middle's own BMC**. The map in `tools/bmcctl/src/bmcctl/nodes.py` is top .119, middle .117, bottom .151.
+- Middle's host cannot reach its own BMC, because NC-SI on `enp35s0f0` drops unicast from the host (known since 2026-10-30, and the reason ipmi-exporter avoids middle). The row can never answer from middle, so after Task 7 it would always pass as "dropped" without proving anything.
+- Every other row answered on all three nodes. The echo pod refused the 9378 row, which counts as an answer; the rest were open.
+
+**Fix `3c1039ce`, `netpol-canary: each probe skips its own node's BMC`.**
+- `probe.sh`:
+  - `probe_own_bmc NODE_NAME` reads a `NODE_BMCS` default.
+  - `probe_rows` skips the row that dials the probe node's own BMC. With no known node it skips nothing, which fails closed.
+  - Every BMC is still dialled from the other two nodes.
+- A static test pins `NODE_BMCS`, and the `NODE_IPS` ring, to bmcctl's `NODES`, and the BMCs to the matrix's BMC rows. The `netpol-manifests` hook runs on that file too.
+- `baseline` checks each node against its own N: matrix.txt expanded with that pod's node name and host IP.
+
+### Push 2: the own-BMC skip (21:20:28Z)
+
+- `3bd5352c..3c1039ce`, a fast-forward with no force; it carried exactly `3c1039ce`.
+- At 21:20:50Z: the app was Synced/Healthy at `3c1039ce`, and the DaemonSet was 3/3/3 on `netpol-probe-6247dhf725` (generation 2, observed 2). Probe pods `lqnml` (middle), `r8h7n` (top) and `rkwn5` (bottom) started at 21:20:31–35Z and were Ready with 0 restarts. Echo was 1/1, the same pod as push 1.
+
+### Baseline 2 (21:21:15–17Z): PASS
+
+`SUMMARY 25/25 baseline` on middle, top and bottom, then `baseline: PASS (3 nodes × 25 rows answer)`. The exec timeout was 290 s per pod. The run had 75 PASS lines and 0 FAIL.
+
+| Expect | Row | Target | top | middle | bottom |
+|---|---|---|---|---|---|
+| dns | cluster DNS (CoreDNS) | `kubernetes.default.svc.cluster.local:53` | open | open | open |
+| open | echo server, same namespace | `netpol-echo.netpol-canary.svc.cluster.local:9376` | open | open | open |
+| dropped | echo server, port the policy does not allow | `netpol-echo.netpol-canary.svc.cluster.local:9377` | open | open | open |
+| dropped | echo pod IP direct, headless, unserved port | `netpol-echo-pod.netpol-canary.svc.cluster.local:9378` | refused | refused | refused |
+| open | forge via the WAN /25 and NAT reflection | `git.realliance.net:443` | open | open | open |
+| open | public internet | `1.1.1.1:443` | open | open | open |
+| dropped | BMC (top's own; top skips it) | per node | skipped (own BMC) | `192.168.0.119:443` open | `192.168.0.119:443` open |
+| dropped | BMC (bottom's own; bottom skips it) | per node | `192.168.0.151:443` open | `192.168.0.151:443` open | skipped (own BMC) |
+| dropped | KVM | `192.168.0.2:80` | open | open | open |
+| dropped | KVM | `192.168.0.2:443` | open | open | open |
+| dropped | router SSH | `192.168.0.1:22` | open | open | open |
+| dropped | router DNS over TCP (router input) | `192.168.0.1:53` | open | open | open |
+| dropped | API server ClusterIP | `10.96.0.1:443` | open | open | open |
+| dropped | API server on a node | `192.168.0.240:6443` | open | open | open |
+| dropped | API server on the control-plane VIP (Talos, held by one node) | `192.168.0.5:6443` | open | open | open |
+| dropped | Forgejo ClusterIP | `forgejo-http.forgejo.svc.cluster.local:3000` | open | open | open |
+| dropped | Traefik LB | `192.168.0.7:443` | open | open | open |
+| dropped | mosquitto LB | `192.168.0.8:1883` | open | open | open |
+| dropped | CephNFS LB | `192.168.0.230:2049` | open | open | open |
+| dropped | registry LB | `192.168.0.231:5000` | open | open | open |
+| dropped | Talos apid on a node | `192.168.0.240:50000` | open | open | open |
+| dropped | Talos apid on the probe's own node (nftables input chain, v1.1.3) | per node | `192.168.0.240:50000` open | `192.168.0.241:50000` open | `192.168.0.242:50000` open |
+| dropped | Talos apid on another node | per node | `192.168.0.241:50000` open | `192.168.0.242:50000` open | `192.168.0.240:50000` open |
+| dropped | kubelet on another node | per node | `192.168.0.241:10250` open | `192.168.0.242:10250` open | `192.168.0.240:10250` open |
+| dropped | zigbee2mqtt through the WAN address (router input) | `152.44.247.88:8585` | open | open | open |
+| dropped | BMC (middle's own; middle skips it) | per node | `192.168.0.117:443` open | skipped (own BMC) | `192.168.0.117:443` open |
+
+### Gate G after
+
+After push 1 (21:07Z):
+- G1: 3 nodes Ready; 145/145 PGs active+clean.
+- G2: the same Ceph warn codes. Argo had 62 apps. The 61 kept their sync and health status; their revision moved `7b0949b0` → `3bd5352c` (Renovate, expected). The new `netpol-canary` was Synced/Progressing, held there by middle's probe.
+- G3: the edge diff against before is empty after normalising `code_challenge|state|nonce`, and the cert CNs are identical.
+- G4: no non-Running pods, 0 NetworkPolicies.
+
+After push 2 (21:21–21:22Z):
+- G1: 3 nodes Ready; 145/145 PGs active+clean.
+- G2: the same Ceph warn codes. Argo: 62 apps, the 61 unchanged, 41 git-sourced apps at `3c1039ce`, and `netpol-canary` Synced/Healthy.
+- G3: the edge diff is empty again (51 rows).
+- G4: no non-Running pods, 0 NetworkPolicies. The agents still have 0 restarts, and `idle` at 21:21:57Z gave `PASS (3 agents, 0 NetworkPolicies)` with `packet_id=0`.
+- One Warning event lay outside netpol-canary: one failed readiness probe on `media/mm-plex` at 21:14:20Z (count 1). The pod has been Ready since 14:53Z with 0 restarts. With 0 NetworkPolicies no agent has queued a packet, so the canary did not cause it.
+
+No rollback trigger fired, and break-glass was not used.
+
+### Carries
+
+- **Task 7:**
+  - per node, `rows 25/25 deny-logged 21/21`;
+  - the first-run race described earlier;
+  - option (a): the echo ingress also allows TCP 9378 from the probe, so the pod-IP row isolates the probe's egress;
+  - the F5 JSON6902 patch for `kind: NetworkPolicy`, with `components:`/`patches:` after `resources:`.
+- **Task 8:**
+  - the runner's counts are 22/19 when it knows its node, or 23/20 without one;
+  - `test_runner_job_egress_confined` must skip the `$HOST_IP` and `$PEER_IP` rows, and the row for the runner node's own BMC.
