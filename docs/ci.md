@@ -650,6 +650,8 @@ The first apply of `azure/ci/` on or after **2027-04-05** (then every 150 days; 
 `azure/ci/fence.tf`) replaces the client secret and destroys the old one at once, so from that apply
 until the pod restarts on the new one, the paid classes wait `not-ready`. Run it as one STOP, back to
 back, inside the 30 min before `CIDispatchPaidNotReady` pages. Only the client secret changes.
+Without an apply, the secret still dies on **2027-05-05**, 180 days after its creation, and the paid
+classes stop with it (`CIDispatchAzureFailing`).
 
 1. STOP: ask Chris. He plans and applies, in a luma-homeops checkout. The plan must change only
    `time_rotating.dispatcher` and `azuread_application_password.dispatcher`:
@@ -884,10 +886,13 @@ v0.3.0 deploy on, `restic-ci-dispatch` copies that directory to restic host `ci-
 3. Choose the file and the restic snapshot that holds it, on the laptop (`docs/backups.md`,
    Inspect / restore a file): `restic snapshots --host ci-dispatch-ledger`, then
    `restic ls <id> /data/snapshots`.
-4. Run `scripts/ci-dispatch-ledger-restore.sh <file> <id>`. It refuses unless the StatefulSet is at 0
-   and its pod has terminated, then starts pod `ledger-restore`. The pod takes the file from the
-   volume when it's still there, else from that restic snapshot, and checks it for the SQLite header
-   before it moves `ledger.db` and its `-wal` and `-shm` files into `/data/before-restore-<time>/`.
+4. With the break-glass's `KUBECONFIG=/tmp/galaxy-kubeconfig` still exported, run
+   `scripts/ci-dispatch-ledger-restore.sh <file> <id>`. It prints the kubectl context it uses. It
+   refuses on any kubectl error, while either Argo app still syncs automatically, unless the
+   StatefulSet is at 0, and while its pod exists; then it starts pod `ledger-restore`. The pod takes
+   the file from the volume when it's still there, else from that restic snapshot, and checks the
+   copy against its source and for the SQLite header before it moves `ledger.db` and its `-wal` and
+   `-shm` files into `/data/before-restore-<time>/`.
    Watch `kubectl -n ci-dispatch get pod ledger-restore` until it reads `Completed`: the volume may
    take minutes to move between nodes, so wait (S3). Read its log, then delete the pod. `Error` means
    nothing moved: read the log, fix the file or the id, delete the pod, and run it again.
@@ -902,13 +907,14 @@ v0.3.0 deploy on, `restic-ci-dispatch` copies that directory to restic host `ci-
 
 F10: v0.1.0 and v0.2.0 refuse schema v2, so going back to v0.2.0, the pin before the v0.3.0 deploy,
 takes a **v1** copy of the ledger. Its source is restic host **`ci-dispatch-ledger-pre-v0.3.0`**: one
-snapshot of `/data/snapshots`, taken at the v0.3.0 deploy before the migration (phase 2 Task 19).
-`restic forget --group-by host` keeps a host's only snapshot under every keep rule, so it stays. The
-paid classes stay `off`, since v0.2.0 has none.
+snapshot of `/data/snapshots`, taken after the v0.3.0 deploy and before the next 03:00 UTC copy
+(phase 2 Task 19). The migration rewrites only `ledger.db`, so until then the directory holds only
+v0.2.0's v1 copies. `restic forget --group-by host` keeps a host's only snapshot under every keep
+rule, so it stays. The paid classes stay `off`, since v0.2.0 has none.
 
 1. On the laptop, with the restic environment of `docs/backups.md`: `restic snapshots --host
-   ci-dispatch-ledger-pre-v0.3.0` gives the id, and `restic ls <id> /data/snapshots` the newest file.
-   Its schema version must print 1:
+   ci-dispatch-ledger-pre-v0.3.0` gives the id, and `restic ls <id> /data/snapshots` the files. Take
+   the newest file whose schema version prints 1:
 
    ```bash
    nix develop --command restic restore <id> --include /data/snapshots/<the file> --target ./out

@@ -6,15 +6,18 @@ Runs as the `ci-dispatch-ledger-restore` pre-commit hook (docs/ci.md, Restoring 
 
 `ci-dispatch-ledger-restore-pod.sh` runs against a fake /data, with a stub `restic` first on PATH.
 It runs under every POSIX shell found here: `sh`, plus `dash` and `busybox sh` when present (the pod
-runs busybox). What it pins: the replacement is copied and checked for the SQLite header before
-anything moves, so a missing file, an `--include` that matched nothing (restic exits 0 then), a
-failed restore or a non-SQLite file all fail and leave ledger.db and its -wal and -shm files
-byte-for-byte as they were.
+runs busybox). What it pins: the replacement is copied, compared with its source and checked for
+the SQLite header before anything moves, and every step checks its own exit status. So a missing
+file, an `--include` that matched nothing (restic exits 0 then), a failed restore, a non-SQLite
+file, a short copy (stub `cp`), a colliding before-restore name (stub `date`) or a move that fails
+halfway (stub `mv`) all fail and leave ledger.db and its -wal and -shm files byte-for-byte as they
+were.
 
 `ci-dispatch-ledger-restore.sh` runs against a stub `kubectl`: it refuses bad names, any snapshot
-id that isn't hex (`latest` included), and a dispatcher that isn't stopped, before any apply. Its
-`--print` manifest is a Pod Security `restricted` pod with the restic jobs' label and image, the
-ledger PVC read-write, no affinity, and the pod script byte-for-byte.
+id that isn't hex (`latest` included), an Argo app that still syncs automatically, a dispatcher that
+isn't stopped, and any kubectl error, before any apply. Its `--print` manifest is a Pod Security
+`restricted` pod with the restic jobs' label and image, the ledger PVC read-write, no affinity, and
+the pod script byte-for-byte.
 """
 
 import os
@@ -62,7 +65,16 @@ esac
 
 STUB_KUBECTL = r"""#!/bin/sh
 printf '%s\n' "$*" >> "$KLOG"
+if [ -n "$STUB_FAIL" ]; then
+  case "$*" in *"$STUB_FAIL"*) echo "Unable to connect to the server: i/o timeout" >&2; exit 1 ;; esac
+fi
 case "$*" in
+  "config current-context") echo admin@galaxy ;;
+  *"-n argo-cd get application "*)
+    for a in $STUB_AUTOMATED; do
+      case "$*" in *"get application $a "*) printf '%s' '{"prune":true,"selfHeal":true}' ;; esac
+    done
+    ;;
   *"get statefulset ci-dispatch"*) printf '%s' "$STUB_REPLICAS" ;;
   *"get pod "*)
     for p in $STUB_PODS; do
@@ -108,11 +120,21 @@ def world(tmp_path):
     return {"tmp": tmp_path, "data": data, "bin": bin_, "log": tmp_path / "restic.log", "source": source}
 
 
+def real(busybox, tool):
+    """The argv that runs the real `tool`, for a stub to hand over to."""
+    return f'"{busybox}" {tool}' if busybox else f'"{shutil.which(tool)}"'
+
+
+def stub(world, busybox, tool, body):
+    """Puts a stub `tool` first on PATH; REAL in body is the real tool's argv."""
+    _write_exec(world["bin"] / tool, "#!/bin/sh\n" + body.replace("REAL", real(busybox, tool)))
+
+
 def run_pod(world, shell, busybox, mode="file", snap=SNAP, rid=RID):
     bin_ = world["bin"]
     if busybox:
-        # The pod's coreutils are busybox applets: put them ahead of the host's.
-        for applet in ("head", "od", "tr", "cp", "mv", "mkdir", "rm", "ls", "date", "dirname", "cat"):
+        # The pod's coreutils are busybox applets: put them ahead of the host's (a stub stays).
+        for applet in ("head", "od", "tr", "cp", "cmp", "mv", "mkdir", "rm", "ls", "date", "dirname", "cat"):
             link = bin_ / applet
             if not link.exists():
                 link.symlink_to(busybox)
@@ -199,9 +221,54 @@ class TestPodScript:
 
     def test_empty_file_on_the_volume_falls_back_to_restic(self, world, shell, busybox):
         (world["data"] / "snapshots" / SNAP).write_bytes(b"")
+        r = run_pod(world, shell, busybox)
+        assert r.returncode == 0, r.stderr
+        assert len(restic_calls(world)) == 1, "an empty file on the volume must send it to restic"
+        assert (world["data"] / "ledger.db").read_bytes() == SQLITE
+
+    def test_empty_file_on_the_volume_and_nothing_in_restic(self, world, shell, busybox):
+        (world["data"] / "snapshots" / SNAP).write_bytes(b"")
         r = run_pod(world, shell, busybox, mode="empty")
         assert r.returncode == 1
+        assert len(restic_calls(world)) == 1
         assert_untouched(world)
+
+    def test_before_restore_name_collides(self, world, shell, busybox):
+        # A file already holds the before-restore name: mkdir fails, so nothing may move.
+        clash = world["data"] / "before-restore-20990101T000000Z"
+        clash.write_bytes(b"in the way")
+        stub(world, busybox, "date", "echo 20990101T000000Z\n")
+        (world["data"] / "snapshots" / SNAP).write_bytes(SQLITE)
+        r = run_pod(world, shell, busybox)
+        assert r.returncode == 1, r.stderr
+        assert clash.read_bytes() == b"in the way"
+        for name, body in LIVE.items():
+            assert (world["data"] / name).read_bytes() == body, name
+        assert not (world["data"] / "ledger.db.part").exists()
+        assert [p.name for p in world["data"].glob("before-restore-*")] == [clash.name]
+
+    @pytest.mark.parametrize("exit_code", [1, 0])
+    def test_short_copy(self, world, shell, busybox, exit_code):
+        # cp writes 20 bytes (the header and then some) and exits 1, or claims success: either way
+        # the copy differs from its source, so nothing may move.
+        stub(world, busybox, "cp", f'head -c 20 "$1" > "$2"\nexit {exit_code}\n')
+        (world["data"] / "snapshots" / SNAP).write_bytes(SQLITE)
+        r = run_pod(world, shell, busybox)
+        assert r.returncode == 1, r.stderr
+        assert_untouched(world)
+
+    def test_move_aside_fails_halfway(self, world, shell, busybox):
+        # ledger.db moves aside, then the -wal won't: ledger.db must come back.
+        stub(world, busybox, "mv", 'case "$1" in ledger.db-wal) echo "mv: denied" >&2; exit 1 ;; esac\n'
+                                   'exec REAL "$@"\n')
+        (world["data"] / "snapshots" / SNAP).write_bytes(SQLITE)
+        r = run_pod(world, shell, busybox)
+        assert r.returncode == 1, r.stderr
+        for name, body in LIVE.items():
+            assert (world["data"] / name).read_bytes() == body, name
+        assert not (world["data"] / "ledger.db.part").exists()
+        (old,) = world["data"].glob("before-restore-*")
+        assert list(old.iterdir()) == []
 
     @pytest.mark.parametrize("snap", ["ledger.db", "../ledger-20261120T030012Z.db.x", "snap"])
     def test_bad_name(self, world, shell, busybox, snap):
@@ -233,13 +300,15 @@ def kube(tmp_path):
     return {"bin": bin_, "log": tmp_path / "kubectl.log", "apply": tmp_path / "applied.yaml"}
 
 
-def run_wrapper(kube, *args, replicas="0", pods=""):
+def run_wrapper(kube, *args, replicas="0", pods="", automated="", fail=""):
     env = {
         "PATH": f"{kube['bin']}:{os.environ['PATH']}",
         "KLOG": str(kube["log"]),
         "KAPPLY": str(kube["apply"]),
         "STUB_REPLICAS": replicas,
         "STUB_PODS": pods,
+        "STUB_AUTOMATED": automated,
+        "STUB_FAIL": fail,
         "KUBECONFIG": "/nonexistent",
     }
     return subprocess.run(["bash", str(WRAPPER), *args], env=env, capture_output=True, text=True, timeout=60)
@@ -274,11 +343,39 @@ def test_wrapper_refuses_a_running_dispatcher(kube, replicas, pods):
     assert not any("apply" in c for c in kubectl_calls(kube))
 
 
+@pytest.mark.parametrize("automated", ["applications", "ci-dispatch", "applications ci-dispatch"])
+def test_wrapper_refuses_while_argo_syncs(kube, automated):
+    r = run_wrapper(kube, SNAP, RID, automated=automated)
+    assert r.returncode == 1, r.stderr
+    assert "syncs automatically" in r.stderr
+    assert not any("apply" in c for c in kubectl_calls(kube))
+
+
+@pytest.mark.parametrize("fail", ["config current-context", "get application applications",
+                                  "get application ci-dispatch", "get statefulset", "get pod ci-dispatch-0",
+                                  "get pod ledger-restore"])
+def test_wrapper_refuses_on_any_kubectl_error(kube, fail):
+    # A lookup that errors must never read as "nothing there" (fail closed).
+    r = run_wrapper(kube, SNAP, RID, fail=fail)
+    assert r.returncode != 0, r.stdout
+    assert any(fail in c for c in kubectl_calls(kube)), "the failing lookup never ran"
+    assert not any("apply" in c for c in kubectl_calls(kube))
+    assert not kube["apply"].exists()
+
+
 def test_wrapper_applies_once_stopped(kube):
     r = run_wrapper(kube, SNAP, RID)
     assert r.returncode == 0, r.stderr
-    calls = kubectl_calls(kube)
-    assert calls[-1] == "-n ci-dispatch apply -f -"
+    assert "kubectl context: admin@galaxy" in r.stdout
+    assert kubectl_calls(kube) == [
+        "config current-context",
+        "-n argo-cd get application applications -o jsonpath={.spec.syncPolicy.automated}",
+        "-n argo-cd get application ci-dispatch -o jsonpath={.spec.syncPolicy.automated}",
+        "-n ci-dispatch get statefulset ci-dispatch -o jsonpath={.spec.replicas}",
+        "-n ci-dispatch get pod ci-dispatch-0 --ignore-not-found -o name",
+        "-n ci-dispatch get pod ledger-restore --ignore-not-found -o name",
+        "-n ci-dispatch apply -f -",
+    ]
     printed = run_wrapper(kube, "--print", SNAP, RID)
     assert kube["apply"].read_text() == printed.stdout
 

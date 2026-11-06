@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Put a nightly copy of ci-dispatch's ledger back as /data/ledger.db (docs/ci.md, Restoring the
-# ledger). Run it with the dispatcher stopped: it refuses unless statefulset/ci-dispatch is at 0
-# replicas and pod ci-dispatch-0 is gone, since the volume is RWO and the live process holds the
-# ledger.
+# ledger). Run it with the dispatcher stopped, as the break-glass leaves it: it refuses unless the
+# Argo apps `applications` and `ci-dispatch` have no automated sync (self-heal would bring the
+# dispatcher back mid-restore), statefulset/ci-dispatch is at 0 replicas, and neither pod
+# ci-dispatch-0 nor an old ledger-restore exists. Any kubectl error is a refusal. It prints the
+# kubectl context it uses (KUBECONFIG, as the break-glass exports it).
 #
 #   scripts/ci-dispatch-ledger-restore.sh <ledger-YYYYMMDDTHHMMSSZ.db> <restic snapshot id>
 #   scripts/ci-dispatch-ledger-restore.sh --print <file> <id>   (the pod manifest only; no cluster)
@@ -98,13 +100,25 @@ if [ "$print" = 1 ]; then
   exit 0
 fi
 
+# Each lookup is its own assignment, so a kubectl error stops the script (set -e) instead of reading
+# as "nothing there".
+context=$(kubectl config current-context)
+echo "kubectl context: $context"
+for app in applications ci-dispatch; do
+  automated=$(kubectl -n argo-cd get application "$app" -o jsonpath='{.spec.syncPolicy.automated}')
+  if [ -n "$automated" ]; then
+    echo "$0: Argo app $app still syncs automatically; pause it as the break-glass does (docs/ci.md)" >&2
+    exit 1
+  fi
+done
 replicas=$(kubectl -n "$ns" get statefulset ci-dispatch -o jsonpath='{.spec.replicas}')
 if [ "$replicas" != 0 ]; then
   echo "$0: statefulset/ci-dispatch has ${replicas:-no} replicas; stop it first (docs/ci.md)" >&2
   exit 1
 fi
 for p in ci-dispatch-0 ledger-restore; do
-  if [ -n "$(kubectl -n "$ns" get pod "$p" --ignore-not-found -o name)" ]; then
+  found=$(kubectl -n "$ns" get pod "$p" --ignore-not-found -o name)
+  if [ -n "$found" ]; then
     echo "$0: pod $p exists; wait for ci-dispatch-0 to go, or read and delete an old ledger-restore" >&2
     exit 1
   fi
