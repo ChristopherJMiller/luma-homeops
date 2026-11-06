@@ -21,6 +21,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 RELEASE = REPO / "cluster/applications/forgejo-release.yaml"
+DOCS = REPO / "docs/forgejo.md"
 KEEPWARM = "forgejo-keepwarm"
 # The plan's pattern. Use it with fullmatch: `$` alone lets a trailing newline through, and re.ASCII
 # keeps `\d` to 0-9.
@@ -218,3 +219,29 @@ def test_fork_pin(repo_values: dict) -> None:
     assert DIGEST_RE.match(image.get("digest", "")), image.get("digest")
     assert image.get("rootless") is True
     assert "tag" not in image and "repository" not in image and "registry" not in image
+
+
+def code_blocks(path: Path) -> list[str]:
+    return re.findall(r"^```[a-z]*\n(.*?)^```", path.read_text(), re.S | re.M)
+
+
+def test_runbook_selective_sync(docs: list[dict]) -> None:
+    """docs/forgejo.md, "When the sync waits at wave -1". The one selective sync names the Deployment and
+    every Secret the chart renders: the pod's checksum/config comes from those Secrets, so a
+    Deployment-only sync would start Forgejo on the old config. terminate-op only asks for the stop, so
+    an `app wait --operation` sits between it and anything after it."""
+    blocks = code_blocks(DOCS)
+    syncs = [b for b in blocks if "app sync forgejo-release" in b]
+    assert len(syncs) == 1, f"want one selective sync block, got {len(syncs)}"
+    lines = [ln for ln in syncs[0].splitlines() if "argocd" in ln]
+    needles = ("app terminate-op forgejo-release", "app wait forgejo-release --operation", "app sync forgejo-release")
+    order = [next((i for i, ln in enumerate(lines) if n in ln), -1) for n in needles]
+    assert -1 not in order and order == sorted(order), f"want {needles} in order, got {lines}"
+    sync = lines[order[2]]
+    want = {f":Secret:{d['metadata']['name']}" for d in docs if d["kind"] == "Secret"} | {"apps:Deployment:forgejo"}
+    assert set(re.findall(r"--resource (\S+)", sync)) == want, sync
+    for b in blocks:
+        bl = b.splitlines()
+        for i, ln in enumerate(bl):
+            if "app terminate-op forgejo-release" in ln:
+                assert any("app wait forgejo-release --operation" in later for later in bl[i + 1:]), b

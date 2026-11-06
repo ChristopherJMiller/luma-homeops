@@ -32,7 +32,7 @@
 ## Review Focus
 
 1. **A node is NotReady during a rollout.** The DaemonSet never turns healthy, so the sync stalls before Forgejo's Recreate, and the old forge keeps serving. The runbook gives the selective sync. Test: Task 4 `test_keepwarm_wave_before_forgejo`.
-2. **The fork binary doesn't start on Alpine.** The DaemonSet runs `/app/gitea/gitea --version` before `sleep`, so it crash-loops in wave −1 and the sync fails before the old pod stops. Test: Task 4 `test_keepwarm_runs_version_first`.
+2. **The fork binary doesn't start on Alpine.** The DaemonSet runs `/app/gitea/gitea --version` before `sleep`, so it crash-loops in wave −1. The sync **waits** there, and never fails: Argo here has no sync timeout, and it never reads a DaemonSet as Degraded. The old pod keeps serving, and nothing alerts, so the rollout's `Monitor` watches the keep-warm pods. The way out is a revert of the pin, never a sync of Forgejo (`docs/forgejo.md`, "When the sync waits at wave -1"). Test: Task 4 `test_keepwarm_runs_version_first`.
 3. **Someone re-pushes a tag or deletes a package version.** Publish refuses to move an existing tag, and the deploy pins a digest. Test: Task 2 `refuse-to-move` case.
 4. **A patch adds a migration.** The fallback stops being safe. The build fails before compiling. Test: Task 2 `no-migrations` case.
 5. **A build reuses a version string.** Browsers serve stale assets. The workflow derives the version from the tag or sha and fails when the tag's `X.Y.Z` ≠ `.gitmodules` `tag`. Test: Task 3 `version` cases.
@@ -142,6 +142,8 @@
   `test_fork_pin` passes.
 - [ ] **Step 3: STOP, then ask Chris** to approve the rollout. Downtime is 1–3 min. Rollback triggers: any Step 5 failure, or the pod not Ready within 10 min. Rollback is §4e.
 - [ ] **Step 4: Push** when no Actions job is running. `Monitor` the DaemonSet (wave −1) to 3/3 on the new digest, then Forgejo's Recreate to Ready.
+  - The `Monitor` watches each keep-warm pod's state, not only the counts. It stops on `CrashLoopBackOff`, `OOMKilled`, `Error`, `ErrImagePull` or `ImagePullBackOff`, and has a time bound. On a crash loop, read `kubectl -n forgejo logs <pod> --previous`, then follow the runbook's crash-loop case: revert the pin, never sync Forgejo.
+  - This is the DaemonSet's first update (Task 4 proved only its creation). Ledger the operation message `waiting for healthy state of apps/DaemonSet/forgejo-keepwarm` as the evidence that the wave ran before the Recreate.
 - [ ] **Step 5: Acceptance.**
   - `/api/v1/version` reads `15.0.11-realliance.1+gitea-1.22.0`.
   - `nix develop --command pytest tests/forge -v` in realliance-sso passes.
