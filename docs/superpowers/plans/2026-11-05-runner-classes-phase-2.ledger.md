@@ -190,6 +190,87 @@ Taken 2026-11-05.
   - M6: what a metric read returns for a group deleted a moment before. On a 404 the egress term fails open and the run is `Degraded`.
   - I2: the first runs confirm that `trigger().scheduledTime` is set on a Recurrence run; the tag `ci-sweeper-over-at` then reads a whole 10-min slot.
 
+- **Step 1:** Chris authorised the apply of the saved plan (2026-11-06). Apply complete: 28 added, 0 changed, 0 destroyed. `apply_done` 2026-11-06T03:17:23Z. The ABAC condition on the sweeper's assignment was accepted (nothing dropped).
+- **Step 2, re-plan (F33):** `No changes. Your infrastructure matches the configuration.` The server kept the workflow definition as sent, so the template needs no edit and there's no re-apply.
+- **Step 2, providers:** `Microsoft.ContainerInstance`, `Logic`, `Insights`, `CostManagement`, `Consumption`, `Authorization` and `Resources` all `Registered`.
+- **Step 2, API versions:** the pins all exist as GA. Newer GA versions exist for some types, and none were taken. The sweeper is applied with the pins and validated, so moving one is a template change and a re-apply, which is a controller call:
+  - `containerGroups`: 2026-07-01, 2025-09-01 (pin 2023-05-01);
+  - Insights `metrics`: 2024-02-01 (pin 2023-10-01);
+  - CostManagement `Query`: 2026-08-01, 2026-06-01, 2025-03-01 (pin 2023-11-01);
+  - Consumption `Budgets`: 2026-06-01 (pin 2023-05-01);
+  - Resources `resourceGroups`: 2026-06-01, and `tags`: 2023-07-01 (pin 2021-04-01);
+  - Logic `workflows` 2019-05-01 and `roleAssignments` 2022-04-01 are the newest GA.
+- **Step 2, role assignments** on `rg-realliance-ci` (`roleDefinitionName` only): `Cost Management Reader`, `Realliance CI dispatcher`, `Realliance CI sweeper`, and nothing else.
+- **Step 2, sweeper runs:** the first run (slot 03:14:58Z, during the apply) already ended `Succeeded`, code none, and every read action answered OK. The 403 window the carry expected never showed, and there was no `Degraded` run or email. Next run (slot 03:24:58Z): `Succeeded`. First `Succeeded`: 2026-11-06T03:15:02Z.
+- **Runtime facts (Task 3 carries):**
+  - (a) `trigger().scheduledTime` is set: **yes.** The run's trigger object has `code`, `correlation`, `endTime`, `name`, `originHistoryName`, `scheduledTime`, `startTime` and `status`. A Recurrence trigger has no outputs (no `outputsLink`). The `Slot` action's output equals `scheduledTime` truncated to seconds, and the slots fall exactly 10 min apart.
+  - (b) The dispatcher assignment GET (`2022-04-01`, by its fixed name) returns `properties.createdOn`: **yes**, also `updatedOn`, `createdBy` and `updatedBy`.
+  - (c) `RunsCancelled` is in the workflow's metric definitions: **yes,** with `RunsStarted`, `RunsCompleted`, `RunsSucceeded` and `RunsFailed`. A cancelled run counting there is Task 5's drill.
+  - (d) The Activity Log alert `ci-sweeper-locked` is enabled, `global`, scoped to the CI group (`/subscriptions/<id>/resourceGroups/rg-realliance-ci`). Its condition is `category = Administrative`, `operationName = Microsoft.Authorization/roleAssignments/delete`, `status = Succeeded`. An RG-scope assignment delete is an Administrative event in that group, so the scope fits; **the live delete is Task 5's drill.**
+  - `nextLink` spelling: the Logic Apps run-actions list pages at 30 actions and carries `nextLink`, lower camel case.
+- **Step 3, credentials:** the loop stopped on no error (each `tf.sh` exit was 0). Count-only checks before the commit: `grep -cE '^CI_DISPATCH_AZURE_[A-Z_]+=$'` printed `0`; each of the four keys counted once; the three ids are GUID-shaped (count 3) and the secret is longer than 30 characters with no space. The committed blob is git-crypt. Signed commit `0a9acda` in `realliance/sso-secrets` (`forge: ci-dispatch's Azure credentials (CI_DISPATCH_AZURE_*)`), pushed to `main`.
+  - Client secret created 2026-11-06 (03:09Z). **Expires 2027-05-05**, creation + 180 d. **Rotation STOP falls due 2027-04-05**, creation + 150 d, `time_rotating`'s `rotation_rfc3339`. The first apply on or after that date replaces it (F26).
+- **Step 4, the smoke** (2026-11-06, as Chris's identity, from 03:48Z, over 30 min after the apply). Five `small` groups, all with the compliant body, differing only in name and command:
+  - **Form (ruling, 2026-11-06):** `az container create` has no `--tags` in az 2.89.1, and the fence denies a group without both tags. So every create was `az rest --method put` at `2023-05-01`, `{subscriptionId}` URL form, with the dispatcher's wire body in a 0600 file. The token went as a `secureValue` only, and each command line through a file. The plan's Task 4 Step 4 and the Step 5 table now say so.
+  - **The fence passes the compliant body:** every PUT answered 201 `Pending`. No capacity refusal and no `ServiceUnavailable` anywhere.
+  - **Timings,** PUT → `Running` (container `startTime`) → `Terminated` (`finishTime`):
+
+    | Group | Command | → Running | → Terminated | Exit |
+    |---|---|---|---|---|
+    | 1 | `ci-class-entry 35m small smokehandle <forge> <zero uuid>` | 52 s (pull 32 s) | 58 s | 1, `unauthenticated: unregistered runner` |
+    | 2 | `df -h / /run; nproc; free -g; curl github.com; sleep 150` | 37 s (pull 20 s) | 190 s | 0 |
+    | 3 | `curl` 100 MB from speed.cloudflare.com | under 60 s | under 60 s | 22 (the endpoint answers 403, from here too) |
+    | 4 | `curl` both Go 1.26.9 tarballs, 101_097_347 bytes in 2.3 s | 64 s (pull 47 s) | 69 s | 0 |
+    | 5 | `sleep 120`, the same two tarballs, `sleep 60` | 42 s | deleted at 03:59:36Z during its `sleep 60` tail | n/a |
+
+    Create → `Running` stays at or under 64 s, under `aci.PullAllowance` (5 min), so Task 13 keeps 5 min (F32). The image is pulled cold each time, in 20 to 47 s. Group 1 shows the entry refuses a bad token at once: a bad registration costs about a minute, not the 35 min timeout.
+  - **Group 2's output:** `/` and `/run` are one `overlay`, 50G in size with **47G free**. `nproc` is 2. The image has no `free` (no procps), so `free -g` printed `not found`.
+  - **Nonce:** group 1's `az container show` and `az container logs` hold no match (`grep -F -f`), and nor does any PUT answer, list, GET or log. `RUNNER_TOKEN` comes back with neither `value` nor `secureValue`.
+  - **Image digests:** the pin `sha256:fa7be53e…` (`sha-4fb0c3b`) is an OCI image index. ACI pulls its linux/amd64 child `sha256:6bf028e1eb672e81b8c788f80a2e4a77e947ae0ee614f96e7bdaeb6c23071ff4`, and only the `Pulling`/`Pulled` events name it. The list and the GET both return `image` exactly as sent, the index digest. The index's other child is the attestation manifest.
+  - **The ACI list** (`2023-05-01`, saved 0600): **no `instanceView`**, neither the group's `state` nor the container's `currentState`, `exitCode` or `finishTime`. `2025-09-01` lacks it too. `provisioningState` reads `Succeeded` for exited groups, and there's no `nextLink` at 4 groups. So F16's fallback holds: `Groups()` GETs each own group. A group GET carries `instanceView.state` (`Failed` for exit 1, `Succeeded` for exit 0) and `currentState` with `state`, `exitCode`, `startTime` and `finishTime`. The Task 7 fixture `internal/azure/testdata/aci-list.json` (4 groups, every GUID zeroed, count-only check 0) is copied into `ci-dispatch-v2`, uncommitted. Zeroed raw GETs of a failed and a completed group stay in the controller's scratch.
+  - **Egress metric (E17):**
+    - `list-definitions` lists `NetworkBytesTransmittedPerSecond`, and `interval=FULL` is accepted. FULL returns one point whose grain is the span floored to whole minutes, aligned to the start minute: 2, 10, 11, 23, 37 and 95-minute spans each gave one point. A span that isn't whole minutes adds a second, partial bucket.
+    - Before a group has data, the answer is one timeseries whose points have no `average`.
+    - **The metric is blind for about the first 90 s of a container's life.** Group 2's `curl` at start-up never showed: its first points were 03:51 and 03:52, about 90 s after its 03:49:32 start. Groups 1, 3 and 4 (each alive under 70 s; group 4 received 101 MB) never reported a single point. Points that do arrive land within about 90 s of their minute.
+    - **Idle reads a number, not "no data":** once group 2's points began, its idle minutes read transmitted 2 and 1 B/s and received 0.
+    - **Deleted group:** a metric read straight after the delete answers **404 `ResourceNotFound`**. The sweeper's egress term fails open (`Degraded`), as the README says. Metrics are not queryable by id after a delete, which undercuts the Activity Log spike in "Open items" (item 2).
+    - **I3, egress bytes:**
+      - group 2 (`curl` github.com): **unmeasured**, inside the blind window; its measurable idle tail was about 1–2 B/s;
+      - group 4 (101 MB in 2.3 s, alive 5 s): **0**, never reported;
+      - group 5 (the same 101 MB at 03:57:49–52Z, 120 s after start): **0 visible.** Received reads 0 (average and maximum) in the 03:57 and 03:58 minutes, and transmitted reads 2 then 0 B/s.
+      - So **the metric misses a short burst even 2 minutes into a container's life.** It behaves like a sampled rate, not a byte counter. The ACK overhead of a 100 MB download can't be measured with it, and average × duration undercounts any bursty transfer. A sustained, rate-limited transfer may register; that's untested, because another group would have taken the smoke past its $0.02.
+  - **Cost:** about 10 group-minutes of `small`, from pull start to finish or delete, about $0.02.
+  - **State lag:** group 5's GET still read `Running` about 40 s after its last command should have ended (seen once).
+  - Every smoke group deleted by name; `az container list -g rg-realliance-ci --query "length(@)"` reached `0` at 03:59:38Z, and `az resource list -g rg-realliance-ci` counts 0 too.
+- **Step 5, Policy negatives** (each the compliant body with exactly one change, PUT the same way, fresh `ci-neg-<hex>` name). All answered `RequestDisallowedByPolicy` with exactly one `policyDefinitionReferenceId`, the expected one; none was created:
+
+  | Change | Denying `policyDefinitionReferenceId` |
+  |---|---|
+  | `requests` 1 vCPU / 2 GiB | `aci-shape` |
+  | `image: busybox` | `aci-image` |
+  | the class image as `tag@digest` (`:sha-4fb0c3b@sha256:…`) | `aci-image` |
+  | `ipAddress` Public, port 80 | `aci-isolation` |
+  | `identity` SystemAssigned | `aci-isolation` |
+  | `location: westus2` | `location` |
+  | tags without `forge-ci` | `tags` |
+  | `restartPolicy: Always` (n-b) | `aci-isolation` |
+  | a free NSG, `westus3`, both tags (n-b, `types`-only) | `types` |
+
+  This meets Task 2's carry, a Policy deny confirmed, though the dispatcher's secret reached sso-secrets earlier the same morning (Step 3, before the smoke window opened). It hasn't been resealed or deployed.
+- **Step 6, region:** no capacity refusal. `westus3` stays.
+- **Retail prices, for Task 6's M6** (public reads, 2026-11-06): the pinned filter answers 4 items on one page, with no `NextPageLink`. At `2023-01-01-preview` a page holds up to 1000 items; Container Instances across all regions is 871, still one page. A filter with more items (Virtual Machines in `westus3`) pages, and the live link reads `https://prices.azure.com:443/api/retail/prices?api-version=2023-01-01-preview&$filter=<%20- and %27-encoded filter>&$skip=1000`: host with `:443`, a literal `$`, and `$skip` in steps of 1000. Two live pages are saved in the controller's scratch, with ids zeroed (count-only check 0).
+- **Rulings (controller, 2026-11-06):**
+  - The smoke and the negatives use `az rest --method put` with the dispatcher's wire body, in a 0600 file, because `az container create` has no `--tags`. The plan's Task 4 Step 4 and the Step 5 table now say so, with the two n-b rows.
+  - **Carry → Tasks 13 and 14:** the pin is an OCI index. ACI pulls its linux/amd64 child, and only the pull events name the child digest; the list and the GET return the image exactly as sent. The guard and the sweeper compare the image as sent, so match on the sent string and never on an event's digest.
+  - **Carry → Task 3's README (Minor):** `interval=FULL` floors the grain to whole minutes from the start minute. A span that isn't whole minutes gets a second, partial bucket, and the sweeper reads `data[0]` only. For a group 1–2 min old, that first bucket is the empty pre-create minute, so it reads 0; past that, the newest partial minute is left out.
+- **Concerns for the controller:**
+  - **E17's egress term, as designed, doesn't measure egress.** `NetworkBytes*PerSecond` is blind for about the first 90 s of a container's life. It also missed a 101 MB, 2.3 s burst two minutes in, both received and transmitted.
+    - The sweeper's 10 GB cap and egress rate, and the dispatcher's planned egress pass, all read average × time, so they can undercount by any factor. Only the budget bounds egress today.
+    - That widens "Open items" item 1, and item 2's Activity Log spike can't help, because metrics 404 after a delete.
+    - Before Task 13 builds on E17, it needs a decision: test a sustained, rate-limited upload (cheap, in Task 5's drill), and if the metric still misses it, drop the egress term or replace it.
+  - **The secret reached sso-secrets before the first Policy deny** (Step 3 ran during the propagation wait, as the brief's order put it). It isn't resealed or deployed, and the denies are now confirmed.
+  - **Newer GA API versions exist** (Step 2 list); the pins stay unless the controller rules otherwise.
+
 ## Task 5
 
 ## Task 6

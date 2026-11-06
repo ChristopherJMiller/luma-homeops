@@ -508,11 +508,11 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   ```
   `tf.sh` writes each raw value straight into the file, which it tightens to 0600, and refuses a raw form with no `--to`/`--append` (Task 2 review round 3, R2). Signed commit and push. Ledger dates only, never ids: the secret's expiry (creation + 180 d) and its **rotation date** (creation + 150 d, F26), the day the rotation STOP falls due.
 - [ ] **Step 4: Smoke, as Chris's identity** (pre-approved in Step 1's STOP; cost under $0.02). Start it at least 30 min after Step 1's apply, so the Policy assignment has propagated and a success shows the body passes an enforcing fence. Create a `small` group `ci-smoke-<hex>` with **the compliant body**, which Step 5 reuses:
-  - `az container create -g rg-realliance-ci -n ci-smoke-<hex> --location westus3 --image ghcr.io/christopherjmiller/forgejo-runner-class@sha256:<64> --cpu 2 --memory 8 --os-type Linux --restart-policy Never --tags forge-ci=1 expires-at=<launch + 40 min, RFC 3339 UTC>`;
+  - `az rest --method put --url 'https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/rg-realliance-ci/providers/Microsoft.ContainerInstance/containerGroups/ci-smoke-<hex>?api-version=2023-05-01' --body @<0600 file>`, with the dispatcher's wire body: `location` `westus3`; `tags` `forge-ci: "1"` and `expires-at: <launch + 40 min, RFC 3339 UTC>`; `properties.osType` `Linux` and `restartPolicy` `Never`; one container with the image, `resources.requests` `cpu: 2` and `memoryInGB: 8`, the command and the token. `az container create` has no `--tags` (az 2.89.1), and the fence denies a group without both tags (ruling, 2026-11-06);
   - the image is the digest-only pin (T2-N1). Policy denies any other form, Chris's identity included;
-  - no `--ip-address`, no `--assign-identity`, no `--registry-*`, no volume (`--azure-file-volume-*`, `--secrets`, `--gitrepo-*`), and no `--sku` or `--priority` (Standard and Regular by default);
+  - no `ipAddress`, `identity`, `imageRegistryCredentials`, `volumes`, `initContainers`, `sku` or `priority` (Standard and Regular by default);
   - command `["/usr/local/bin/ci-class-entry","35m","small","smokehandle","https://git.realliance.net","00000000-0000-0000-0000-000000000000"]`;
-  - `RUNNER_TOKEN` as a secure value holding a nonce, passed as `--secure-environment-variables @<umask-077 file holding RUNNER_TOKEN=<nonce>>`, never in argv.
+  - `RUNNER_TOKEN` as an `environmentVariables` entry with only a `secureValue`, holding a nonce. The body lives in a umask-077 file, so the nonce never reaches argv. Pass any command line holding a UUID-shaped placeholder through a file too.
 
   Then:
   - record the time from create to `Running` and to `Terminated` (`Monitor`). Expected: create → `Running` under `aci.PullAllowance` (5 min). If it isn't, raise `PullAllowance` in Task 13 to twice the measured time, so `small`'s timeout wrapper gets 40 min minus that (F32);
@@ -528,13 +528,15 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
 
   | Negative (the one change) | Denying rule |
   |---|---|
-  | `--cpu 1 --memory 2` | `aci-shape` |
-  | `--image busybox` | `aci-image` |
+  | `requests` `cpu: 1`, `memoryInGB: 2` | `aci-shape` |
+  | `image: busybox` | `aci-image` |
   | the class image as `tag@digest`, `ghcr.io/christopherjmiller/forgejo-runner-class:sha-<7>@sha256:<64>` (T2-N1) | `aci-image` |
-  | `--ip-address Public` | `aci-isolation` |
-  | `--assign-identity` | `aci-isolation` |
-  | `--location westus2` | `location` |
-  | `--tags expires-at=<…>` (no `forge-ci`) | `tags` |
+  | `ipAddress` `{type: Public, ports: [80/TCP]}` | `aci-isolation` |
+  | `identity` `{type: SystemAssigned}` | `aci-isolation` |
+  | `location: westus2` | `location` |
+  | `tags` with `expires-at` only (no `forge-ci`) | `tags` |
+  | `restartPolicy: Always` (Task 2 review n-b) | `aci-isolation` |
+  | a free NSG in the CI group, `westus3`, both tags, PUT at `Microsoft.Network/networkSecurityGroups` `2023-09-01` (n-b) | `types` |
 
   - Capture each error to a umask-077 file in `$SCRATCH` and ledger only its denying `policyDefinitionReferenceId`, taken with `grep -o '"policyDefinitionReferenceId": *"[^"]*"'`. If az's error message lacks it, take the definition name `realliance-ci-<rule>` the same way. The full error carries Azure ids, so it never reaches the transcript (F14).
   - The reference id must be the rule in the table. A denial from another rule means the negative wasn't isolated: fix the body and rerun it.
