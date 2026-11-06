@@ -273,6 +273,52 @@ Taken 2026-11-05.
 
 ## Task 5
 
+- **Step 1:** Chris pre-approved Step 1's whole list (2026-11-06): groups as his identity in the CI group (about 2.5 h, about $0.65), the sweeper removing the dispatcher's assignment, `TestLiveLocked` while locked, and his restore apply. The controller added one measurement, a sustained upload for E17 (Task 4 concern 1).
+- **Form:** every group was `az rest --method put` at `2023-05-01` with the compliant body (Task 4's ruling), a fresh nonce as the only `secureValue`. No PUT answer held the nonce.
+- **Step 2, age kill:** `ci-drill-age-2713b1`, `small`, `["sleep","7200"]`, `expires-at` 3 h out. ARM `createdTime` 04:29:27Z. The 06:05:05Z sweep's `Delete_old` ran 06:05:09.8–06:05:11.4Z, and the group read gone at 06:05:32Z: **95.7 min** after creation (expected 90–102). Every sweep from 04:35Z to 05:55Z ended `Succeeded`, and none set `ci-sweeper-over-at`.
+- **Egress upload (E17, Task 4 concern 1):** `ci-egress-0808fb`, `small`, alongside Step 2. The container started 04:30:07Z, slept 120 s, then sent `/dev/zero` to `https://speed.cloudflare.com/__up`: 30 POSTs of 10_000_000 bytes, `curl --limit-rate 1M`, every answer 200. **300_000_000 bytes, 04:32:07–04:36:53Z.** It exited 0 at 04:41:54Z; the drill deleted it at 04:43:06Z.
+  - `NetworkBytesTransmittedPerSecond` **counts a sustained upload.** At PT1M the five full minutes read 1_053_6xx–1_054_6xx B/s, the curl rate (1 MiB/s) plus 0.5 %.
+  - Ratios against the bytes sent:
+
+    | Reading | Bytes | Ratio |
+    |---|---|---|
+    | Σ(PT1M `average` × 60) | 318_583_140 | 1.06 |
+    | Σ(every sample) × 30 s | 294_504_660 | 0.98 |
+    | FULL over 04:28–04:43Z, `average` × 900 s | 384_136_513 | 1.28 |
+    | the sweeper's form: FULL from `createdTime` − 1 min, `data[0].average` × (now − `createdTime`) | 397_684_626 | 1.33 |
+
+  - **The metric is a sampled rate, about 2 samples a minute** (PT1M `count` 1–3). FULL's `average` is the mean of the samples, not time-weighted, and the blind start (about 90 s, no samples) isn't in it. The sweeper's average × age thus reads high for a young group, the safe direction. A sample is a short-window rate, which also explains Task 4's missed 2.3 s burst: unbiased over many samples, noisy for one burst.
+  - **Latency:** minute stamps run about 60–65 s behind the wall clock (the 04:32 minute, with 53 s of upload, read 1 B/s; the last bytes landed in the 04:38 point), and a point publishes within about a minute after that. The first non-zero point was readable at most 120 s after the upload began. A sweep's 10-min rate window misses roughly the newest 2 min.
+  - **Verdict:** far over 1 %, so the metric supports the 10 GB cap and the egress rate for sustained traffic.
+  - Received over the same 15 min averaged 1_758 B/s (ACKs).
+- **Step 3, rate trip:**
+  - five `medium` groups `ci-drill-rate-b7d818-{1..5}` (20 cores, $1.165 an hour) PUT 06:05:59–06:06:11Z, each 201 `Pending`. `StandardCores` in `westus3` read 0 of a limit of **20** before.
+  - **Azure refused the sixth, `small`: HTTP 400 Bad Request, code `ContainerGroupQuotaReached`**, the only code in the body; the message names `StandardCores`. Not created.
+  - The 06:15:05Z sweep, the first over the ceiling, ran `Mark_over` (`OK`) and set `ci-sweeper-over-at`; the run ended `Succeeded`.
+  - **The 06:25:06Z sweep locked**, 19.1 min after the last create (expected within 22). F7's order held: `Delete_dispatcher_assignment` 06:25:14.88–06:25:17.12Z (`OK`); then `Delete_all_groups` from 06:25:17.21Z, its five `Delete_group` repetitions starting 06:25:17.35Z or later, all `OK`; `Write_lock_tag` `OK`. The run ended 06:25:19Z.
+  - **The run reads `status` `Failed`, `code` `Terminated`, `error.code` `Locked`.** The README's "code `Locked`" is the run's `error.code`.
+  - The 06:35:06Z sweep ended the same way, as designed while locked.
+  - The failed-run email is Chris's to confirm.
+- **Step 4, the lock:**
+  - Role names on `rg-realliance-ci`: `Cost Management Reader` and `Realliance CI sweeper`, no `Realliance CI dispatcher`.
+  - Tag names on the CI group: `ci-sweeper-lock` present (name only), and `ci-sweeper-over-at` still set.
+  - The newest succeeded run (06:15:05Z) has `Read_budget` `Succeeded` (`OK`), as has the locking run.
+  - **Alerts,** by state through an id-free Alerts Management query: `ci-sweeper-failed` (RunsFailed) **Fired** 06:29:00Z; `ci-sweeper-locked` (Activity Log, Administrative) **Fired** 06:31:25Z, about 6 min after the delete, which is runtime fact (d) live; `ci-sweeper-lock-failed` (RunsCancelled) did not fire. The `Lock_result` action reads `Cancelled` because `Terminate` ends it, but the run doesn't count as cancelled. The emails are Chris's to confirm.
+  - **`TestLiveLocked` failed:** `Groups = nil (code "") after 30m0s: not locked` (started 06:35:45Z). A fresh process at 07:11:48Z, with a new token, read the same after 5 min.
+  - Diagnosis, read-only: the service principal's only assignments left are `Cost Management Reader` on the CI group and `Realliance CI sweeper history reader` on the workflow. It's in no group, and neither role holds `containerGroups/read`.
+  - A temporary probe test (untracked, deleted after) as the service principal at 07:17Z: `Groups` nil with 0 groups; `Group("ci-small-0-0-2")` **`ErrLocked`, code `AuthorizationFailed`**; `SweeperRuns` nil. At 07:18Z, the same GET first and then `CreateGroup("ci-small-0-0-2", …)`: **`ErrLocked`, code `AuthorizationFailed`**, stopped at its GET-first, so no PUT went out. A list as Chris afterwards: 0 groups.
+  - **The lock locks**: single-resource reads and creates answer 403 `AuthorizationFailed`, which confirms `TestErrorClasses`'s 403 row. But **a locked collection list answers 200 with an empty `value`**: ARM filters the list to what the caller may read. `Groups()` can't see a lock, and `TestLiveLocked`'s gate never opens.
+  - A `python -I` script wrote the credential files from sso-secrets, printing byte counts only; `rm -r` removed them straight after each run.
+- **Step 5:** the restore plan, grep form: `# azurerm_role_assignment.dispatcher will be created`, `Plan: 1 to add, 0 to change, 0 to destroy.` The workflow shows no change (F6). Saved 0600 in the controller's scratch; Chris applies.
+- **Cost, estimated** from group-minutes at list price: age 95.7 min `small`, $0.19; egress 12.4 min `small`, $0.02, plus 0.3 GB, about $0.03; rate trip 5 × 19.2 min `medium`, $0.37. **About $0.61.** Cost Management's figure for 2026-11-06 comes the next day (F25, for Task 22).
+- **Rulings (controller, 2026-11-06):**
+  - The quota refusal is **HTTP 400 `ContainerGroupQuotaReached` (`StandardCores`), not 409**. Treat it as definitely not created, and as a quota class distinct from capacity. **Carry → Task 7 Step 6 and Task 13** (`TestErrorClasses`, E11). Today the table has the code at 409 only, and a bare 400 is `ErrRejected`.
+  - FULL's `average` is per sample, and the sweeper's average × age reads high for a young group. **Carry → Task 20's README.** Task 3's files stay as they are.
+- **Carries:**
+  - **Task 7:** `TestLiveLocked` must gate on a single-group GET of a fixed absent name (404 open, 403 locked), not on `Groups`.
+  - **Task 14 and Task 18:** a locked dispatcher's `Groups()` returns an empty list, not `ErrLocked`. Lock detection (`CIDispatchLocked`, `TestACILockedWaitsNotReady`) needs a GET probe or the 403 from a create. Settle-on-absence must not read a locked empty list as "all groups gone": after a manual assignment delete, groups run until the next sweep, up to 10 min.
+  - **Task 20's README:** a locked run's code is `error.code` `Locked` under `code` `Terminated`.
+
 ## Task 6
 
 ## Task 7
