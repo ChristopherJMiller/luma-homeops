@@ -169,8 +169,10 @@ RESTIC_HOST = "ci-dispatch-ledger"
 BACKUPS_RULE = REPO / "cluster/backups/prometheusrule.yaml"
 CANARY = REPO / "cluster/backups/restic-canary-cronjob.yaml"
 GUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
-# internal/metrics FindingKinds of v0.1.0, less stored-config-rejected (its own counter alerts).
-FINDING_KINDS = {"owner-name-stale", "owner-name-missing", "owner-names-unchecked"}
+# internal/metrics FindingKinds of v0.2.0, less stored-config-rejected (its own counter alerts).
+# paid-class-unlaunchable (v0.2.0, Task 13 review M2): a paid class is on in ci.yaml, but no hourly
+# cap or no paid concurrency admits a job, so its jobs would wait forever with no hold.
+FINDING_KINDS = {"owner-name-stale", "owner-name-missing", "owner-names-unchecked", "paid-class-unlaunchable"}
 # One Forgejo-held key's whole back-off schedule (3 min pickup, then 1/2/5/10/10 min) fits six
 # undos in its first hour, then one an hour (the 60 min wait after the sixth). increase() reads
 # six as about 6.05 at the window's edges, so the threshold is 7, with room to spare.
