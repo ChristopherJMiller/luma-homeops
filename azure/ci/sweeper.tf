@@ -2,23 +2,34 @@
 # App in the guard group runs every 10 min under its own managed identity, and reads nothing the
 # dispatcher writes, so it holds even against a compromised dispatcher.
 #
-# One run, in the order of sweeper/workflow.json.tftpl (scripts/test_azure_ci.py runs it in a
-# simulator against a fake ARM):
+# One run, in the order of sweeper/workflow.json.tftpl (scripts/test_azure_ci.py runs it, sweep
+# after sweep, in a simulator against a fake ARM):
 # 1. Read the CI group's container groups, its resources with createdTime, the CI budget, the
 #    group's tags, and the dispatcher's role assignment.
-# 2. For every container group, whatever its name or tags: read its egress over its life and over
-#    the last 10 min, delete it at or over the per-job cap, and add its shape price and its egress
-#    rate to the burn (E17). Bytes over the life are the metric's average times the seconds since
-#    creation; the query starts a minute early so a brand-new group never asks for an empty span.
-# 3. Delete compute older than max_age_minutes.
-# 4. Trip on any of: the burn over the ceiling with the tag ci-sweeper-over-at under
-#    repeat_window_minutes old (two sweeps in a row); the budget's currentSpend at budget_ci_usd;
-#    the dispatcher's assignment already gone. The trip deletes that assignment FIRST, then every
-#    container group whatever the first DELETE did, and ends the run Failed, code Locked, or
-#    LockFailed when the assignment DELETE got anything but a 2xx or a 404 (F6, F7).
-# 5. Otherwise over the ceiling, write the tag; under it, remove the tag.
-# 6. Any read, delete, or tag write that failed, or a list with a next page, ends the run Failed,
-#    code Degraded. Every failed run emails (azurerm_monitor_metric_alert.sweeper_failed).
+# 2. The lock state. The tag ci-sweeper-lock holds the createdOn of the assignment instance a lock
+#    aims at. The lock is PENDING while that instance or an older one exists, or none does. It ends
+#    only when a NEWER instance exists (RESTORED), and only Chris's apply can make one: the
+#    dispatcher holds no Authorization or tag right, and the sweeper can only delete. An unreadable
+#    assignment is neither, so a transient read error never locks.
+# 3. Lock first (M1) when the budget's currentSpend is at budget_ci_usd, the assignment is gone, or
+#    a lock is pending: straight to step 6, with no egress or age work before it.
+# 4. Otherwise, for every container group, whatever its name or tags: read its egress over its life
+#    and over the last 10 min, delete it at or over the per-job cap, and add its shape price and
+#    its egress rate to the burn (E17). Bytes over the life are the metric's average times the
+#    seconds since creation; the query starts a minute early so a brand-new group never asks for
+#    an empty span. Then delete compute older than max_age_minutes.
+# 5. The rate trip: the burn over the ceiling with ci-sweeper-over-at holding the previous slot.
+#    The tag stores the recurrence slot, trigger().scheduledTime, never the clock, so a slow or
+#    queued run still sees the previous slot (I2).
+# 6. The trip deletes the assignment FIRST, unless it's already gone (M2). Then, in parallel, it
+#    deletes every container group, from the ACI list or else the RG's list (M3), and marks
+#    ci-sweeper-lock when no lock is pending. It ends Failed, code Locked, when the assignment is
+#    gone or its DELETE got a 2xx or a 404; else Cancelled (LockFailed), and every later sweep
+#    retries (F6, F7, I1).
+# 7. With no trip: over the ceiling, write the slot into ci-sweeper-over-at, else remove it; on
+#    RESTORED, remove ci-sweeper-lock.
+# 8. Any read, delete, or tag write that failed, or a list with a next page, ends the run Failed,
+#    code Degraded. Each outcome has its own alert, below.
 #
 # Every HTTP action has a 1-min timeout and one retry, the trigger runs one run at a time, and the
 # loops run over finite lists, so a hung request holds the queue for minutes, never for good. The
@@ -142,7 +153,12 @@ resource "azurerm_role_assignment" "history_reader" {
   description        = "ci-dispatch: read the sweeper's run history for CISweeperStale."
 }
 
-# A failed run emails: a lock, a failed lock, or a degraded sweep.
+# The alerts, one per outcome, so none masks another (Task 3 review M5). Logic Apps Consumption
+# exposes two failing run statuses as metrics, so:
+# - Degraded ends a run Failed: RunsFailed (a Locked run also counts there);
+# - LockFailed ends a run Cancelled, the one code that does: RunsCancelled;
+# - Locked is the assignment's own delete, from the CI group's Activity Log, once per lock.
+# All three email alert_emails through one action group.
 resource "azurerm_monitor_action_group" "sweeper_failed" {
   name                = "ci-sweeper-failed"
   resource_group_name = azurerm_resource_group.guard.name
@@ -163,7 +179,7 @@ resource "azurerm_monitor_metric_alert" "sweeper_failed" {
   name                = "ci-sweeper-failed"
   resource_group_name = azurerm_resource_group.guard.name
   scopes              = [azapi_resource.sweeper.id]
-  description         = "The CI sweeper ended a run Failed: Locked, LockFailed, or Degraded. Read the run's error in the portal."
+  description         = "The CI sweeper ended a run Failed: Degraded (a read, delete or tag write failed) or Locked. Read the run's error in the portal."
   severity            = 1
   enabled             = true
   frequency           = "PT5M"
@@ -175,6 +191,48 @@ resource "azurerm_monitor_metric_alert" "sweeper_failed" {
     aggregation      = "Total"
     operator         = "GreaterThan"
     threshold        = 0
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.sweeper_failed.id
+  }
+}
+
+resource "azurerm_monitor_metric_alert" "sweeper_lock_failed" {
+  name                = "ci-sweeper-lock-failed"
+  resource_group_name = azurerm_resource_group.guard.name
+  scopes              = [azapi_resource.sweeper.id]
+  description         = "The CI sweeper decided to lock the dispatcher, and the assignment delete failed (the run ends Cancelled). Every sweep retries; read the run's Lock_failed step."
+  severity            = 0
+  enabled             = true
+  frequency           = "PT5M"
+  window_size         = "PT15M"
+
+  criteria {
+    metric_namespace = "Microsoft.Logic/workflows"
+    metric_name      = "RunsCancelled"
+    aggregation      = "Total"
+    operator         = "GreaterThan"
+    threshold        = 0
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.sweeper_failed.id
+  }
+}
+
+resource "azurerm_monitor_activity_log_alert" "sweeper_locked" {
+  name                = "ci-sweeper-locked"
+  resource_group_name = azurerm_resource_group.guard.name
+  location            = "global"
+  scopes              = [azurerm_resource_group.ci.id]
+  description         = "A role assignment in the CI group was deleted: the sweeper's lock, or anyone else. Paid CI is down until a terraform apply of azure/ci restores it."
+  enabled             = true
+
+  criteria {
+    category       = "Administrative"
+    operation_name = "Microsoft.Authorization/roleAssignments/delete"
+    statuses       = ["Succeeded"]
   }
 
   action {

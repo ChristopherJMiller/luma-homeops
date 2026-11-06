@@ -83,7 +83,7 @@ From `.superpowers/sdd/2026-11-05-runner-classes-phase-2/preflight.md` § 6. F1 
   - `Proxy: nil` on the Forgejo transport, which the Azure and price clients copy (F20).
 - Step budget 20 s, wedge limit `max(3 × step_budget, 2 min)`; every Azure call runs under the step's budget.
 - Paid-gate stub (`gate.go`, "No paid backend in v1"): replace it, never delete the gate (Task 11 M5 carry).
-- **Settle on observed absence** (phase 1 Task 14 review, M6). A paid launch never settles because a DELETE was accepted. ACI bills until the group is gone, so a row leaves its active state only once a list read after the delete lacks the group. The global $0.60-an-hour bound counts compute that still exists, not just ledger rows. (E10, Task 14)
+- **Settle on observed absence** (phase 1 Task 14 review, M6). A paid launch never settles because a DELETE was accepted. ACI bills until the group is gone, so a row leaves its active state only once a list read after the delete lacks the group. The global hourly gate ($0.48 since 2026-11-06, I3) counts compute that still exists, not just ledger rows. (E10, Task 14)
 - **Schema v1 is frozen** (Task 14 review, I1). Phase 1 deploys v1 with `CREATE INDEX launches_key ON launches(job_id, attempt)` before phase 2 exists, so every phase 2 ledger change is a v2 migration and `schema_v1.sql` is never edited. (Task 10)
 - **The job listing doesn't page** (Task 14 review, M3). Forgejo 15's `GET /admin/actions/runners/jobs` has no paging, and the client caps the body at 16 MiB. Past the cap (about 80k listed jobs) `readForge` fails every tick, and nothing launches for anyone, paid classes included. Running paid jobs still stop at their hard stops, and the reaper and the sweeper still delete compute, since neither needs Forgejo. The accepted risk goes in `docs/ci.md` (Task 20); the fix is a paged listing on the fork's `WISHLIST.md`.
 - **Spec amendments approved by Chris (2026-11-05)** are listed under Decided. Task 20 writes them into the spec in one commit.
@@ -106,6 +106,7 @@ From `.superpowers/sdd/2026-11-05-runner-classes-phase-2/preflight.md` § 6. F1 
 
 - **Shapes.** `small`, ACI: 2 vCPU, 8 GiB, runner timeout 30 min, hard stop 40 min after launch, $0.117 an hour. `medium`, ACI: 4 vCPU, 16 GiB, 45 min, 55 min, $0.233 an hour. Pickup timeout on ACI: 6 min.
 - **Limits.** Per owner: $10 a period and 2 paid jobs at once by default, with signed overrides. Global: **$80** a period and at most $0.60 an hour of running compute. Both are ceilings in code, and config may only lower them. The spec said $100; Chris lowered it on 2026-11-05 (cache design, Decided).
+  - **I3 (Chris, 2026-11-06):** the dispatcher's hourly ceiling in code is **$0.48** (480_000 µ$), 4 `small` or 2 `medium` jobs at once. The sweeper's line stays $0.60 and counts compute plus egress, so legitimate traffic gets about $0.12 an hour (about 380 KB/s across all groups) before two sweeps lock. The worst-case arithmetic below is the sweeper's and doesn't change (Task 3 review I3).
 - **Backstops.**
   - The sweeper is a Logic App in the guard group, every 10 min. It deletes anything older than 90 min. Over $0.60 an hour for two sweeps in a row, it deletes all compute and **locks**.
   - The CI group's budget is **$85** over the calendar month (the spec's $105, lowered with the cap by Chris on 2026-11-05); it also deletes all compute and locks.
@@ -127,7 +128,7 @@ From `.superpowers/sdd/2026-11-05-runner-classes-phase-2/preflight.md` § 6. F1 
     - The reservation releases only on absence (M6).
     - `CostOf` rounds the duration up to whole seconds, then computes `ceil(secs × hourly / 3600)` in int64.
   - Burn = the sum of `HourlyMicro` over the loop's `Active()` paid rows (`reserved`, `registered`, `created`, `running`), plus `Compute.Hourly` (= `prices.ShapePrice`) of every listed group that no active row claims (F2, F13). That covers orphans, groups still deleting after an undo, and anything else in the CI group, and it is the sweeper's own pricing. The dispatcher's burn is therefore never below the sweeper's. (M6)
-  - The gate allows `burn ≤ 600_000`; the sweeper trips on `> 600_000`. (E3, E4)
+  - The gate allows `burn ≤ 480_000` (I3, Chris, 2026-11-06); the sweeper trips on `> 600_000`, compute plus egress. The 120_000 between them is the egress headroom that keeps a correct dispatcher from tripping the sweeper. (E3, E4)
 - **Price floor** = the spec's 2026-11-04 list prices, 117_000 (`small`) and 233_000 (`medium`), served by the func `prices.Floor(c)` (F19). The dispatcher uses `max(feed, floor)`, re-applied to stored prices when it reads them (F23), and rejects a feed above 3 × floor. `model.Shape(c)` (2/8, 4/16) is the one shape table that prices, `aci` and the Azure guard share. The sweeper prices groups by shape: 2/8 → 117_000, 4/16 → 233_000, any other shape → 1_000_000. (E4)
 - **Timeout wrapper** = hard stop − 5 min (`aci.PullAllowance`): `small` 35m, `medium` 50m. `expires-at` = launch + hard stop.
 - **Names.** RGs `rg-realliance-ci` and `rg-realliance-ci-guard`. App registration `realliance-ci-dispatch`. Roles `Realliance CI dispatcher`, `Realliance CI sweeper`, `Realliance CI sweeper history reader`. Logic App `ci-sweeper`. Budgets `realliance-ci` ($85) and `realliance-ci-guard` ($5). Policy initiative `realliance-ci-fence`. Action group `ci-sweeper-failed`.
@@ -183,15 +184,16 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   Leaf packages add files only, so merging `origin/main` into `v2` at gate (b) is clean (F5). If Chris reads "dispatcher code" strictly, Tasks 6 and 7 move to (b) with no other change.
 - **E2. A backend seam before ACI.** Task 11 moves `tiny` behind a `Backend` interface with no behavior change: the whole phase 1 loop suite, the crash matrix included, passes unedited (one allowed exception, Task 11). The seam has two settle models, chosen by `SettleOnAbsence()`: tiny settles on a successful delete, as today, and ACI only on observed absence (F2). ACI then plugs in (Task 14). It's one shared reconcile with one branch, so one crash-safety proof.
 - **E3. The reservation is the exact worst case** *(Chris, 2026-11-05: spec amendment a)*. The spec rounds `medium` to "$0.21", below its own worst case of $0.2136, against its rule "refuses any launch it can't pay for at worst case". The ledger reserves 213_584 µ$, and the spec's $0.08 and $0.21 are display values.
-- **E4. A price floor in code.** The gate never prices a class below its 2026-11-04 list price, so a feed answering $0 can't lift the $0.60-an-hour ceiling. A higher feed price is used as is, and a feed above 3 × floor is rejected as suspect. The sweeper prices by shape with the same numbers, and prices an unknown shape at $1 an hour.
+- **E4. A price floor in code.** The gate never prices a class below its 2026-11-04 list price, so a feed answering $0 can't lift the $0.48-an-hour gate (I3). A higher feed price is used as is, and a feed above 3 × floor is rejected as suspect. The sweeper prices by shape with the same numbers, and prices an unknown shape at $1 an hour.
 - **E5. The sweeper** *(Chris, 2026-11-05: spec amendment b)*:
   - **Definition:** one `azapi_resource` Logic App whose definition is one reviewed JSON template. It runs one at a time (trigger concurrency 1) with a 1-minute timeout on every HTTP action, so a hung run can't block the queue unseen.
-  - **State:** "two sweeps in a row" lives in the CI group's tag `ci-sweeper-over-at`, which the sweeper alone can write.
+  - **State:** "two sweeps in a row" lives in the CI group's tag `ci-sweeper-over-at`, which the sweeper alone can write. It holds the recurrence slot (`trigger().scheduledTime`), so a slow or queued run still sees the previous sweep (Task 3 review I2).
+  - **The sweeper remembers a decided lock** (Task 3 review I1, design A): the tag `ci-sweeper-lock` holds the `createdOn` of the assignment instance the lock aims at. While that instance or an older one exists, or none does, the lock is pending: every sweep locks first and retries the DELETE. Only a newer instance, which only Chris's apply can create, ends it, and the sweeper then removes the tag. An unreadable assignment counts as neither.
   - **Budget:** the $85 budget emails at 80 % and 100 %. The lock itself comes from the sweeper reading the budget's `currentSpend` every run, so no action-group webhook URL exists, and the alert-evaluation lag goes away (the cost-data lag stays).
   - **Delete set:** it deletes only `Microsoft.ContainerInstance/containerGroups`; phase 3 extends that list with the role.
   - **Lock scope:** the lock deletes only the dispatcher's custom-role assignment. It has a fixed name, `uuidv5("url", "realliance-ci/dispatcher-assignment")`, so a restore re-creates the same id the sweeper's definition names (F6). Cost Management Reader and the history reader stay, so the dispatcher can still report that it's locked.
-  - **Trip order:** the role assignment DELETE goes **first**, then the groups (F7). A failed or timed-out group DELETE can then never skip the lock.
-  - **Failure email:** after a lock the run ends `Failed`, so the failed-run email fires.
+  - **Trip order:** the role assignment DELETE goes **first**, then the groups (F7). A failed or timed-out group DELETE can then never skip the lock. The budget, already-locked and pending trips come before any egress or age work (review M1); an assignment already gone gets no DELETE (M2).
+  - **Failure email:** after a lock the run ends `Failed` (code `Locked`); a lock whose DELETE failed ends `Cancelled` (`LockFailed`). Each outcome has its own alert: `Degraded` and `Locked` runs raise `RunsFailed`, `LockFailed` raises `RunsCancelled`, and the assignment's delete raises an Activity Log alert (review M5).
 - **E6. "Both budgets"** *(Chris, 2026-11-05: spec amendment c)* = `realliance-ci` ($85 since Chris's 2026-11-05 cap change, CI group, locks through the sweeper) and `realliance-ci-guard` ($5, guard group, email only, which catches a runaway sweeper). The $120 subscription budget is the existing one.
 - **E7. The Policy fence** (deny, CI group, initiative `realliance-ci-fence`). It denies:
   - any type but `containerGroups` (mode `Indexed`), and any location but `westus3`;
@@ -242,7 +244,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
 
 ## Review Focus
 
-1. **Money runaway through the dispatcher's own arithmetic.** Four causes: a launch in `reserved` or `registered` left out of the burn, a group that still runs with no active row (an orphan, or one still deleting), a configured ceiling above the code's, or a price feed answering $0. Expected: the burn counts every active row and every listed group no row claims, the code ceilings ($80 a period, $0.60 an hour) bind whatever config says, and an hourly price never drops below the floor. Tests: Task 14 `TestBurnCountsEveryActiveState` and `TestBurnCountsUnclaimedGroups`; Task 12 `TestPaidCeilingClampsConfig` and `TestPaidPlanCountsOwnLaunches`; Task 6 `TestHourlyFloor`.
+1. **Money runaway through the dispatcher's own arithmetic.** Four causes: a launch in `reserved` or `registered` left out of the burn, a group that still runs with no active row (an orphan, or one still deleting), a configured ceiling above the code's, or a price feed answering $0. Expected: the burn counts every active row and every listed group no row claims, the code ceilings ($80 a period, $0.48 an hour since 2026-11-06, I3) bind whatever config says, and an hourly price never drops below the floor. Tests: Task 14 `TestBurnCountsEveryActiveState` and `TestBurnCountsUnclaimedGroups`; Task 12 `TestPaidCeilingClampsConfig` and `TestPaidPlanCountsOwnLaunches`; Task 6 `TestHourlyFloor`.
 2. **The lock doesn't lock.** The sweeper deletes the wrong assignment, the dispatcher reads 403 as an outage and keeps creating, or a group created during RBAC propagation survives. Expected: within two sweeps plus propagation (30 min at most), all compute is gone and the dispatcher's creates fail, until Chris applies. Tests: Task 3 `test_lock_deletes_only_the_dispatcher_assignment` and `test_trip_rule` (the assignment goes first); Task 2 `test_dispatcher_assignment_named`; Task 7 `TestErrorClasses`; Task 14 `TestACILockedWaitsNotReady`; Task 5 drill with `TestLiveLocked`, the service principal's own 403.
 3. **A reservation that never frees, or frees early.** Something deletes the group, Azure is unreadable, a DELETE is accepted but the group is still `Deleting`, or the cached list predates the launch. Expected: the reservation frees on the first fresh list that lacks the group. It never frees on an accepted DELETE, or on a list read before the PUT returned, even within the same step. It stays held while Azure is unreadable. Tests: Task 14 `TestReservationFreedWhenGroupVanishes`, `TestPaidNeverSettlesOnAcceptedDelete`, `TestStaleListNeverSettlesAFreshLaunch`, `TestReservationKeptWhileAzureUnreadable` and `TestNoActivePaidRowOutlivesExpiry`.
 4. **The runner credential leaks.** Paths: the group definition, an ARM error, a log line, the Activity Log, or the job's environment. Expected: it travels only as `secureValue`, no GET or error returns it, and it leaves the environment before the runner starts. Tests: Task 7 `TestGuardRefusesTokenInValue` and `TestErrorsNeverContainSecrets`; Task 13 `TestBodyTokenOnlySecure` and `TestBodyRedacts`; Task 1 smoke (`/proc/1/environ`); Task 8 `test_runner_credential_not_in_group_definition`.
@@ -452,11 +454,12 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   3. Sum the burn sequentially: shape price, plus each group's egress rate as `rate_bytes_per_s × 3600 × egress.micro_per_gb / 1e9` µ$ an hour.
   4. Delete each listed `delete_types` resource older than `max_age_minutes`.
   5. Trip when either holds:
-     - burn > `ceiling_micro_per_hour` and the tag `ci-sweeper-over-at` ≥ now − `repeat_window_minutes`;
+     - burn > `ceiling_micro_per_hour` and the tag `ci-sweeper-over-at` ≥ the slot − `repeat_window_minutes` (the slot is `trigger().scheduledTime`, review I2);
      - the budget's `currentSpend.amount` ≥ `budget_ci_usd`.
 
      The trip **first** DELETEs `${dispatcher_assignment_id}`. That id is stable across restores (F6), and 204 or 404 counts as done. **Then** it deletes every container group, running after the assignment action whether it `Succeeded`, `Failed` or `TimedOut` (F7). Last it ends `Terminate` `Failed`, code `Locked`.
-  6. Without a trip: over the ceiling, merge the tag with the current time; otherwise delete the tag if present.
+  6. Without a trip: over the ceiling, merge the tag with the slot; otherwise delete the tag if present.
+  7. **Fix round 1 (review I1, M1–M5):** a third and fourth trip, the assignment already gone and a lock pending in `ci-sweeper-lock`, join the budget trip ahead of the egress work. The trip skips the DELETE when the assignment is gone, marks `ci-sweeper-lock` in parallel with the group deletes, deletes from the ACI list or else the RG's list, and ends `Locked` (Failed) or `LockFailed` (Cancelled). See E5 and `azure/ci/README.md`.
 - The ABAC condition: the sweeper's assignment carries `condition_version = "2.0"` with a condition limiting `roleAssignments/delete` to `@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {dispatcher role id}`. If the plan refuses it, drop it and ledger that *(plan's call)*. The CI group holds no other assignment worth guarding at its scope.
 
 - [ ] **Step 1: Write the failing tests** (they render the template with fixed placeholder values):
@@ -516,6 +519,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   - record the time from create to `Running` and to `Terminated` (`Monitor`). Expected: create → `Running` under `aci.PullAllowance` (5 min). If it isn't, raise `PullAllowance` in Task 13 to twice the measured time, so `small`'s timeout wrapper gets 40 min minus that (F32);
   - a second group, the compliant body with only its name and command changed, runs `["sh","-c","df -h / /run; nproc; free -g; curl -fsS -o /dev/null https://github.com"]`. Ledger its output (the free disk the fork build needs);
   - **egress metric check** (E17). Run `az monitor metrics list-definitions --resource <group> -g rg-realliance-ci --resource-type Microsoft.ContainerInstance/containerGroups --query "[].name.value"`; it lists `NetworkBytesTransmittedPerSecond`. Then `az rest` GET that metric for the second group (`{subscriptionId}` form, `api-version=2023-10-01&metricnames=NetworkBytesTransmittedPerSecond&aggregation=Average&interval=FULL&timespan=<created>/<now>`) returns one data point above 0. Ledger the metric's latency (seconds from the transfer to a non-zero point). If `interval=FULL` is refused, STOP: the sweeper's two-reads design (Task 3) needs a rework before Task 5;
+  - **egress budget (I3, Chris, 2026-11-06):** in a third group, run a real `small` job's download-heavy steps (a fork checkout, `npm ci`, the Go module download) and ledger its transmitted bytes: the total, and the highest 10-min average. Under the $0.48 gate, all groups together may send about 380 KB/s before two sweeps lock. Also ledger what a metric read returns for a group deleted a moment before (the sweeper's egress term fails open on a 404; review M6);
   - `az container show` and `az container logs` of the first group, searched locally with `grep -F -f <nonce file>`. Expected: no match;
   - save the raw ACI **list** (`az rest --url 'https://management.azure.com/subscriptions/{subscriptionId}/resourceGroups/rg-realliance-ci/providers/Microsoft.ContainerInstance/containerGroups?api-version=2023-05-01'`) to `$SCRATCH/aci-list.json`, mode 0600, and save a copy as the Task 7 fixture with every GUID replaced by zeros. Ledger whether the list carries `instanceView.state`, the container's `currentState`, its `exitCode` and its `finishTime`. The fallback is fixed now (F16):
     - no `instanceView` in the list → Task 7's `Groups()` GETs each `GroupName` group after the list (request #3, already allowed), under the budget, with the `Azure` interface unchanged;
@@ -559,7 +563,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   - Names only: `az role assignment list -g rg-realliance-ci --query "[].roleDefinitionName" -o tsv` lists `Cost Management Reader` and `Realliance CI sweeper`, not `Realliance CI dispatcher`.
   - The budget action of the newest succeeded run shows `Succeeded`, which proves the identity reads `currentSpend`.
   - **From the dispatcher's side** (F17): run `CI_AZURE_LIVE=1 CI_AZURE_CREDS=$SCRATCH/azure-creds $GO test -tags live -run TestLiveLocked ./internal/azure/`, with Task 7 Step 6's credential files. `Monitor` it for up to 30 min of RBAC propagation. Expected: `Groups` and `CreateGroup("ci-small-0-0-2", …)` both return `ErrLocked`, and `aci_group_names()` stays empty. Ledger the real error code (it confirms or corrects `TestErrorClasses`'s 403 row), then `rm -r $SCRATCH/azure-creds`.
-- [ ] **Step 5: STOP—Chris restores.** The plan in the grep form reports exactly `Plan: 1 to add, 0 to change, 0 to destroy.`. That's the assignment, under its fixed name. The workflow's parameter takes its id from the deterministic local `local.dispatcher_assignment_id`, which a plan knows while the CI group exists, so it's unchanged (F6, Task 2 review I1). Chris applies. The next sweep below the ceiling clears the tag. Ledger the drill: timings, the quota code, and its cost from the next day's Cost Management, which Task 22 needs (F25). This meets the done-when "a drill with an over-ceiling resource trips the sweeper and locks".
+- [ ] **Step 5: STOP—Chris restores.** The plan in the grep form reports exactly `Plan: 1 to add, 0 to change, 0 to destroy.`. That's the assignment, under its fixed name. The workflow's parameter takes its id from the deterministic local `local.dispatcher_assignment_id`, which a plan knows while the CI group exists, so it's unchanged (F6, Task 2 review I1). Chris applies. The next sweep sees the newer assignment, removes `ci-sweeper-lock` and `ci-sweeper-over-at`, and ends `Succeeded` (review I1); if it ends `Locked` with no cause, apply again (M4). Ledger the drill: timings, the quota code, and its cost from the next day's Cost Management, which Task 22 needs (F25). This meets the done-when "a drill with an over-ceiling resource trips the sweeper and locks".
 
 ### Task 6: `internal/prices`
 
@@ -771,7 +775,8 @@ Every task: `$GO vet ./... && $GO test -race -p=4 ./...` green, then a signed co
 // limits: the money formulas (F12, E17)
 func CostOf(hourly Micro, d time.Duration) Micro // d rounded UP to whole seconds; ceil(secs × hourly / 3600) in int64; d ≤ 0 → 0
 func EgressCost(bytes int64) Micro               // ceil(bytes × 87_000 / 1e9); bytes ≤ 0 → 0
-const CeilingPeriod Micro = 80_000_000           // was 100_000_000 (Chris, 2026-11-05: the cache host); CeilingHour stays 600_000
+const CeilingPeriod Micro = 80_000_000           // was 100_000_000 (Chris, 2026-11-05: the cache host)
+const CeilingHour Micro = 480_000                // was 600_000 (Chris, 2026-11-06, I3): 4 small or 2 medium; the sweeper keeps $0.60 for compute plus egress
 const EgressMicroPerGB Micro = 87_000            // plan's call (E17)
 const EgressCapBytes int64 = 10_000_000_000      // plan's call (E17)
 // ledger: Launch gains HourlyMicro int64 and StoppedAt time.Time.
@@ -825,7 +830,8 @@ Schema v2 (I1: v1 with `launches_key` is what phase 1 deployed, so `schema_v1.sq
     - a charge above the reservation is capped, and a negative one is refused;
     - `UndoHeld(…, 0)` behaves as phase 1's did.
   - `TestReserveRefusesNegativeMoney`.
-  - `TestCeilingPeriodIs80` (Chris's cap change): `limits.Parse` takes `global.paid_usd_per_period: 80` and refuses `80.01` and `100` with `ErrAboveCeiling`. Phase 1's `TestCeilings` rows that used 100 and 101 move to 80 and 80.01. That's the one phase 1 test this task edits, and it says so.
+  - `TestCeilingPeriodIs80` (Chris's cap change): `limits.Parse` takes `global.paid_usd_per_period: 80` and refuses `80.01` and `100` with `ErrAboveCeiling`. Phase 1's `TestCeilings` rows that used 100 and 101 move to 80 and 80.01.
+  - `TestCeilingHourIs048` (I3): `limits.Parse` takes `global.paid_usd_per_hour: 0.48` and refuses `0.49` and `0.60` with `ErrAboveCeiling`; `TestCeilings`' hourly rows move the same way. With the row above, that's the one phase 1 test this task edits, and it says so.
   - `TestEgressCharge` (Review Focus 6, E17):
     - `EgressCost(10_000_000_000)` = 870_000 and `EgressCost(1)` = 1;
     - a `small` row with `SetEgress` 2_000_000_000, 1_000_000_000 (ignored, lower) and an `End` at 10 min charges 19_500 + 174_000 = 193_500. The egress part isn't capped by the 78_000 reservation;
@@ -945,13 +951,13 @@ The paid path replaces the stub. Its order follows the spec's gate table:
 - [ ] **Step 1: Write the failing tests.**
   - `TestPaidGateOrder` (table, each gate failing alone). Values:
     - two running gives `owner-busy`;
-    - a burn of 483_001 plus 117_000 gives `class-full`;
+    - a burn of 363_001 plus 117_000 gives `class-full` (the $0.48 gate, I3);
     - committed 9_922_001 plus 78_000 against $10 gives `owner-limit`;
     - global 79_922_001 plus 78_000 gives `global-cap` (the $80 ceiling);
     - a stale price, a missing price, `PaidReady` false and `docker` each give their reason.
-  - `TestBurnAtCeilingExactly`: a burn of 483_000 plus 117_000 equals 600_000 and launches.
-  - `TestPaidCeilingClampsConfig` (Review Focus 1): `Global.PaidPerHour` 900_000 and `PaidPerPeriod` 150_000_000, set directly to bypass `Parse`, still bind at 600_000 and 80_000_000.
-  - `TestPaidPlanCountsOwnLaunches` (Review Focus 1): six owners each with a waiting `small` and a burn of 0 give exactly five launches (585_000); the sixth waits `class-full`.
+  - `TestBurnAtCeilingExactly`: a burn of 363_000 plus 117_000 equals 480_000 and launches.
+  - `TestPaidCeilingClampsConfig` (Review Focus 1): `Global.PaidPerHour` 900_000 and `PaidPerPeriod` 150_000_000, set directly to bypass `Parse`, still bind at 480_000 and 80_000_000.
+  - `TestPaidPlanCountsOwnLaunches` (Review Focus 1): six owners each with a waiting `small` and a burn of 0 give exactly four launches (468_000); the fifth and sixth wait `class-full`.
   - `TestOwnerLimitAboveGlobalStillBound` (carry M3).
   - `TestFairOrderPaid` (F22): owner A (tiny 0, held 30 min) sorts after owner B (tiny 20). Two owners tied on the key sort by `Committed`. A paid held undo moves `Committed`, never `HeldMinutes`.
   - `TestTinyUnaffected`: every phase 1 gate test passes unedited.
@@ -995,6 +1001,7 @@ func Body(s Spec) (secret.Value, error)   // the PUT body; shape from model.Shap
   - It accepts `small` and `medium` in `dry-run` or `on` only with `azure` set. Defaults fill missing `paid.classes.<c>` fields, so the block is optional. `large` other than `off` gets "no backend in phase 2".
   - It refuses `hard_stop > 1h`, `hard_stop − PullAllowance ≤ runner_timeout`, `pickup ≥ hard_stop`, an image that isn't exactly `ghcr.io/christopherjmiller/forgejo-runner-class@sha256:<64 hex>` (it refuses a tag, `tag@digest` included; T2-N1), and `poll` outside 10 s–5 min.
   - Defaults: `small` {30m, 40m, 6m} and `medium` {45m, 55m, 6m}.
+  - **No money in `config`** (I3): the hourly gate is `limits.CeilingHour` (480_000, Task 10), applied with `min(Global.PaidPerHour, CeilingHour)` in the gate. `config.Load` refuses any money key (`paid_usd_per_hour`, `ceiling`) in the site config, so nothing there can lift it.
 - **Metrics:**
   - backends `{small, aci}` and `{medium, aci}`; reap reasons `orphan-group` and `egress-cap` (E17); orphan kind `group`; APIs `azure`, `prices`;
   - gauges `ci_dispatch_burn_usd_per_hour`, `ci_dispatch_period_usd{kind="used|reserved|cap"}`, `ci_dispatch_azure_locked` and `ci_dispatch_paid_ready{class}`, present from the start. Task 14 sets them every tick (F8);
@@ -1010,6 +1017,7 @@ func Body(s Spec) (secret.Value, error)   // the PUT body; shape from model.Shap
   - `TestBodyCommand`: exactly `[EntryPoint, "35m", "small", h, "https://git.realliance.net", uuid]`, and `"50m"` for `medium`.
   - `TestBodyTokenOnlySecure` (Review Focus 4): `environmentVariables == [{name: RUNNER_TOKEN, secureValue: token}]`; no `value` key; the token occurs once in the body.
   - `TestBodyTags`: the seven tags, `expires-at` = `ExpiresAt` in RFC 3339 UTC.
+  - `TestLoadRefusesMoney` (I3): a site config with `paid.paid_usd_per_hour: 0.60` or `paid.ceiling: 600000` fails to load; the gate's ceiling stays `limits.CeilingHour`.
   - `TestBodyRedacts` (Review Focus 4): `%v`, `%+v`, `%#v`, `%x` and `slog` of the returned value print no token.
   - `TestBuiltBodiesPassTheGuard`, in `internal/azure` (F38, like `kube/tiny_test.go`): `aci.Body` → `azure`'s guard, for both classes and boundary hard stops.
   - `TestNoNetworkImports`: `internal/aci`'s full dependency set (`go list -deps`) holds no `net`, `net/http`, `os/exec` or `internal/prices`.
@@ -1077,7 +1085,7 @@ func (lp *Loop) SetEgress(e map[string]Egress, at time.Time)            // the w
   - `TestACINoCapacityBacksOff`: `ErrNoCapacity` gives `UndoHeld(…, 0)` with no try, then `Wait backoff` for 1 min, on the same schedule.
   - `TestPaidNeverSettlesOnAcceptedDelete` (Review Focus 3, M6): a `Stopped` group's `DeleteGroup` answers 202. The next fresh list shows it with `provisioningState` `Deleting`: no `End`, burn still counts 117_000, and the gate sees the reservation. The list after that lacks it, giving `End`, with the charge stopped at the `Stopped` sighting (F11).
   - `TestBurnCountsEveryActiveState` (Review Focus 1, moved from Task 10 by F13): `Active()` rows in `reserved`, `registered`, `created` and `running` (117_000 each) give a burn of 468_000. Ended, undone and reaped rows add nothing.
-  - `TestBurnCountsUnclaimedGroups` (Review Focus 1, M6): one active `small` row plus listed groups no row claims, namely a `ci-small-…` orphan, a `Deleting` 2/8 group whose row was undone, and a `ci-drill-…` 4/16 group. The burn is 117_000 + 117_000 + 117_000 + 233_000 = 584_000. A sixth `small` job then waits `class-full`, since 584_000 + 117_000 > 600_000. A listed 2/16 group counts 1_000_000.
+  - `TestBurnCountsUnclaimedGroups` (Review Focus 1, M6): one active `small` row plus listed groups no row claims, namely a `ci-small-…` orphan, a `Deleting` 2/8 group whose row was undone, and a `ci-drill-…` 4/16 group. The burn is 117_000 + 117_000 + 117_000 + 233_000 = 584_000. The next `small` job then waits `class-full`, since 584_000 + 117_000 > 480_000. A listed 2/16 group counts 1_000_000.
   - `TestMoneyGauges` (F8): after a launch, burn is 0.117 and `period_usd{reserved}` 0.078. After its settle at 10 min, `period_usd{used}` is 0.0195 and `{reserved}` 0. `paid_ready` and `azure_locked` follow the fake. `price_age` stays absent until `SetPrices`.
   - `TestACILockedWaitsNotReady` (Review Focus 2): `List` returns `ErrLocked`. Paid jobs then wait `not-ready`, `CreateGroup` is never called, `ci_dispatch_azure_locked` is 1, `PaidState()` is `closed`, `ReadOK` stays true (F39), and tiny still launches. The next good list clears it.
   - `TestStaleListNeverSettlesAFreshLaunch` (Review Focus 3, F4):
@@ -1092,7 +1100,7 @@ func (lp *Loop) SetEgress(e map[string]Egress, at time.Time)            // the w
     - `SetEgress` with an own group at 10_000_000_000 bytes gives `DeleteGroup` and `reaped_total{reason="egress-cap"}` +1. The row settles on absence with `EgressCost` included;
     - at 9_999_999_999 nothing is deleted;
     - a foreign `ci-drill-…` group over the cap is never deleted by the loop.
-  - `TestBurnCountsEgress` (Review Focus 6): one `small` row (117_000) plus a group sending 1_000_000 bytes/s gives a burn of 117_000 + 313_200 = 430_200. One more such group (743_400 > 600_000) makes the next `small` wait `class-full`.
+  - `TestBurnCountsEgress` (Review Focus 6): one `small` row (117_000) plus a group sending 500_000 bytes/s gives a burn of 117_000 + 156_600 = 273_600, and a second `small` launches (390_600 ≤ 480_000). At 1_000_000 bytes/s the burn is 430_200, and the next `small` waits `class-full` (547_200 > 480_000).
   - `TestPaidNotReadyWithoutEgressPass` (E17): with no `SetEgress` for 5 min, paid jobs wait `not-ready` and `paid_ready` is 0; tiny is unaffected.
   - `TestPaidStateSnapshotRace` (F23): `SetPrices`, `PaidState` and a tick run concurrently under `-race`, and every `PaidState` answer matches one whole snapshot.
   - `TestACIStoppedTornDownThenSettled`, `TestACIPickupTimeoutSixMinutes`, `TestACIExpiredDeletedWhileForgejoDown`.
@@ -1173,8 +1181,8 @@ func (w *Watcher) Run(ctx context.Context)                             // Egress
   - `forgejo-admin` gains `paid_usd_per_period: 0.15`.
   - `realliance` (id 52) gains `paid_usd_per_period: 30` *(Chris, 2026-11-05)*.
   - Every other owner, `realliance-ops` included, stays on the defaults: $10 and 2.
-  - `global.paid_usd_per_period` drops from 100 to **80** (Chris, 2026-11-05); `paid_usd_per_hour` stays 0.60.
-  - **Order matters:** v0.2.0's code ceiling is $80, so a head saying 100 fails its `Parse` with `ErrAboveCeiling`. This commit must therefore merge before Task 19 deploys v0.2.0. v0.1.0 accepts 80, since lowering a value is always allowed.
+  - `global.paid_usd_per_period` drops from 100 to **80** (Chris, 2026-11-05), and `paid_usd_per_hour` from 0.60 to **0.48** (Chris, 2026-11-06, I3).
+  - **Order matters:** v0.2.0's code ceilings are $80 and $0.48 an hour, so a head saying 100 or 0.60 fails its `Parse` with `ErrAboveCeiling`. This commit must therefore merge before Task 19 deploys v0.2.0. v0.1.0 accepts 80, since lowering a value is always allowed.
 - [ ] **Step 2: Check locally** with phase 1 Task 15 Step 2's scratch test (`limits.Parse`, then a read-only `Resolve`). Expected: PASS, no findings. **Step 3: Commit signed, PR. Chris** merges fast-forward.
 
 ### Task 18: The luma-homeops manifests (not deployed)
@@ -1300,6 +1308,7 @@ func (w *Watcher) Run(ctx context.Context)                             // Egress
   - (g) **the paid cap drops to $80 a period and the CI budget to $85** (Chris, 2026-11-05, for the cache host). The text changes in the summary, "Limits", the backstop table, the scenario table (row 2 becomes $85 + $28.80, about $138 with logging, state, the sweeper and the cache host), and the `ci.yaml` example;
   - two corrections the pre-flight found (F35): the dispatcher's `runs/read` sits in the **guard** group (the spec's "Azure identity" says the CI group only), and paid launches settle on observed absence ("Settle", M6);
   - (h) the per-job egress cap (E17), written only if Chris keeps the plan's call; otherwise its final values.
+  - (i) **the dispatcher's hourly ceiling drops to $0.48** (Chris, 2026-11-06, Task 3 review I3), while the sweeper's $0.60 line, compute plus egress, stays. The text changes in "Limits" and the gate table; the worst-case rows don't.
 
   Commit: `spec: runner classes amendments (Chris, 2026-11-05)`.
 - [ ] **Step 3: Verify:** vale on each new or changed file, no output; `grep -nE 'secret|token' docs/ci.md` shows names only; no GUID. **Step 4: Commit and push** (docs-only; members' guide through a ci-dispatch PR).
@@ -1351,7 +1360,8 @@ func (w *Watcher) Run(ctx context.Context)                             // Egress
   Task 20 Step 2b writes them into the spec in one commit.
 - **The fork's image build** uses `medium` (Task 21 Step 5).
 - **F1, paid held undos:** a paid held undo after compute existed charges `CostOf(compute_at → stop)`, settled on absence, no try. `ErrNoCapacity` stays at 0. The held back-off is 1, 2, 5, 10, 10, then 60 min (Tasks 10, 14).
-- **The paid cap is $80 a period and the CI budget $85** (cache design, `docs/superpowers/specs/2026-11-05-ci-cache-design.md`). It pays for an always-on Azure cache host ($12.41 a month, in its own group outside the CI group) under the $150 cap. The $0.60-an-hour ceiling holds against $85 and stays (Values fixed by the spec). It's the seventh spec amendment, (g) in Task 20. It changes `limits.CeilingPeriod` (Task 10), `fence.json` and the budget (Task 2), the sweeper's trip (Task 3), the gate tests (Task 12) and `ci.yaml` (Task 17).
+- **The paid cap is $80 a period and the CI budget $85** (cache design, `docs/superpowers/specs/2026-11-05-ci-cache-design.md`). It pays for an always-on Azure cache host ($12.41 a month, in its own group outside the CI group) under the $150 cap. The sweeper's $0.60-an-hour line holds against $85 and stays; the dispatcher's own gate is $0.48 since 2026-11-06 (Values fixed by the spec). It's the seventh spec amendment, (g) in Task 20. It changes `limits.CeilingPeriod` (Task 10), `fence.json` and the budget (Task 2), the sweeper's trip (Task 3), the gate tests (Task 12) and `ci.yaml` (Task 17).
+- **The dispatcher's hourly gate is $0.48** (Chris, 2026-11-06, Task 3 review I3): 4 `small` or 2 `medium` at once. The sweeper's $0.60 counts compute plus egress and stays, so the worst-case arithmetic is unchanged, and legitimate egress gets about $0.12 an hour before two sweeps lock. It's spec amendment (i) in Task 20, and Tasks 10, 12, 13, 14 and 17 carry it. Task 4 measures a real `small` job's transmitted bytes.
 - **A per-job egress cap before paid goes on** (E17). The design is in Tasks 3, 4, 7, 10, 14, 15 and 18 and Review Focus 6. The values (10 GB, 87_000 µ$ a GB, charged to the owner) are the plan's call.
 
 ### Open for Chris

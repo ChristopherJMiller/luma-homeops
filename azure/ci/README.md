@@ -46,21 +46,34 @@ What `tf.sh` does to output:
 
 `ci-sweeper` is a Logic App in the guard group (`sweeper.tf`, `sweeper/workflow.json.tftpl`). Every 10 minutes it:
 
-- deletes any container group older than 90 minutes, and any at or over the 10 GB egress cap;
-- adds up the burn: each group's shape price plus its egress rate;
-- **locks** when the burn is over $0.60 an hour for a second sweep in a row, when the CI budget's spend reaches $85, or when the lock is already in place. Locking deletes the dispatcher's role assignment first, then every container group.
+- **locks first** when the CI budget's spend reaches $85, or a lock is already in place or pending;
+- otherwise deletes any container group older than 90 minutes, and any at or over the 10 GB egress cap, and adds up the burn: each group's shape price plus its egress rate;
+- **locks** when that burn is over $0.60 an hour for a second sweep in a row. The tag `ci-sweeper-over-at` holds the previous sweep's scheduled slot, so a slow or queued run still counts.
 
-Every failed run emails `alert_emails`. The run's error code says why:
+Locking deletes the dispatcher's role assignment first, then every container group. The tag `ci-sweeper-lock` remembers the lock by the deleted assignment's `createdOn`. Every sweep retries the delete until the assignment is gone, and keeps compute at zero after that. Only a newer assignment ends the lock, and only an apply can create one. The sweeper then removes the tag itself.
 
-| Code | Meaning |
-|---|---|
-| `Locked` | The sweeper deleted the dispatcher's assignment, or found it missing. Every sweep repeats this until an apply restores it. |
-| `LockFailed` | The assignment delete failed. The groups went anyway; the next sweep tries again only if a trip still holds. |
-| `Degraded` | A read, delete, or tag write failed, or a list had a second page. The other rules still ran. |
+Each outcome has its own email to `alert_emails`, so one can't mask another:
 
-To unlock, find the cause first (the run's error, the dispatcher's log). Then plan: it reads `1 to add, 0 to change`, the assignment under its fixed name. Chris applies.
+| Outcome | Run ends | Alert |
+|---|---|---|
+| `Locked`: the assignment is gone. Every sweep repeats this until an apply restores it. | `Failed`, code `Locked` | `ci-sweeper-locked`, from the CI group's Activity Log when anyone deletes the assignment |
+| `LockFailed`: the assignment delete failed. The groups went anyway, and every sweep retries. | `Cancelled`; the `Lock_failed` step says why | `ci-sweeper-lock-failed` (runs cancelled) |
+| `Degraded`: a read, delete, or tag write failed, or a list had a second page. The other rules still ran. | `Failed`, code `Degraded` | `ci-sweeper-failed` (runs failed, which `Locked` runs also raise) |
 
-The first sweeps after the first apply can fail with 403 until the sweeper's role assignment propagates. Expect one `Degraded` email then.
+To unlock:
+
+1. Find the cause first: the run's error, and the dispatcher's log.
+2. Plan: it reads `1 to add, 0 to change`, the assignment under its fixed name. Chris applies.
+3. Then check that the next sweep ends `Succeeded`. If it ends `Locked` with no cause, a sweep that read the old state raced the apply: apply again.
+
+A budget lock holds until the month rolls over or Chris raises the budget: while `currentSpend` stays at $85 or more, the next sweep locks the restored assignment too.
+
+Notes:
+
+- **The dispatcher's own gate is $0.48 an hour of compute** (4 `small` or 2 `medium` jobs; Chris, 2026-11-06). The sweeper's $0.60 counts compute plus egress, which leaves about $0.12 an hour, about 380 KB/s across all groups, for traffic before two sweeps lock.
+- The egress term fails open. An unread metric (a 404 for a group deleted mid-sweep, say) adds nothing to the burn and skips the cap, and the run ends `Degraded`. Task 4 checks what a metric read returns for a deleted group.
+- The shape price reads only CPU and memory, and ignores `gpu`, `sku` and `limits`. The `aci-shape` Policy denies all three today; widen the price if that rule ever changes.
+- The first sweeps after the first apply can fail with 403 until the sweeper's role assignment propagates. Expect one `Degraded` email then.
 
 ## The budgets end on 2030-12-31
 

@@ -77,8 +77,10 @@ resource "azurerm_resource_group" "ci" {
   }
 
   lifecycle {
-    # The sweeper (Task 3) keeps its "two sweeps in a row" state in this tag, and only it writes it.
-    ignore_changes = [tags["ci-sweeper-over-at"]]
+    # The sweeper (Task 3) keeps its state in two tags, and only it writes them: "two sweeps in a
+    # row" (ci-sweeper-over-at) and a pending lock (ci-sweeper-lock). Terraform must leave both, so a
+    # restore plan stays 1 to add, 0 to change.
+    ignore_changes = [tags["ci-sweeper-over-at"], tags["ci-sweeper-lock"]]
   }
 }
 

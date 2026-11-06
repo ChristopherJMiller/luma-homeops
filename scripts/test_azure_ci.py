@@ -86,7 +86,7 @@ ISOLATION = {
 
 TYPE_GATE = {"field": "type", "equals": CG}
 
-# Every resource instance the plan creates (F30: for_each and count expand). The last seven are
+# Every resource instance the plan creates (F30: for_each and count expand). The last nine are
 # Task 3's sweeper.
 EXPECTED_ADDRESSES = {
     "azurerm_resource_group.ci",
@@ -110,6 +110,8 @@ EXPECTED_ADDRESSES = {
     "azurerm_role_assignment.history_reader",
     "azurerm_monitor_action_group.sweeper_failed",
     "azurerm_monitor_metric_alert.sweeper_failed",
+    "azurerm_monitor_metric_alert.sweeper_lock_failed",
+    "azurerm_monitor_activity_log_alert.sweeper_locked",
 }
 
 SP = "azuread_service_principal.dispatcher.object_id"
@@ -321,8 +323,9 @@ def test_resource_groups():
     guard = block(main, "resource", "azurerm_resource_group", "guard")
     assert has(ci, "name", "local.fence.ci_group") and has(guard, "name", "local.fence.guard_group")
     assert has(ci, "location", "local.fence.region") and has(guard, "location", "local.fence.region")
-    # The sweeper alone writes its two-sweeps state into this tag; terraform must not fight it.
-    assert has(ci, "ignore_changes", '[tags["ci-sweeper-over-at"]]')
+    # The sweeper alone writes its state into these tags (two sweeps in a row, a pending lock), and
+    # terraform must not fight it: a restore plan stays 1 to add, 0 to change.
+    assert has(ci, "ignore_changes", '[tags["ci-sweeper-over-at"], tags["ci-sweeper-lock"]]')
 
 
 def test_budgets():
@@ -423,6 +426,19 @@ def test_dispatcher_role_exact():
         assert not re.search(r"/(exec|logs|start|stop)\b", a, re.I), a
 
 
+def test_dispatcher_role_cannot_write_ci_tags():
+    """Task 3 review I1: the sweeper's state (ci-sweeper-over-at, ci-sweeper-lock) lives in the CI
+    group's tags, and the lock ends only on an assignment the dispatcher can't create. So its role
+    holds no tag, resource-group, Authorization or wildcard right, now or after phase 3 widens it."""
+    for a in fence()["dispatcher_actions"]:
+        low = a.lower()
+        assert "*" not in a, a
+        assert not low.startswith(("microsoft.resources/", "microsoft.authorization/")), a
+        assert "/tags/" not in low and not low.endswith("/tags"), a
+    # Its one write is containerGroups/write, which can't reach the group's own tags.
+    assert [a for a in fence()["dispatcher_actions"] if a.endswith("/write")] == [f"{CG}/write"]
+
+
 def test_password_lifetime():
     """F26: 150-day rotation inside a 180-day credential (the spec's 6 months at most)."""
     text = tf("fence.tf")
@@ -515,8 +531,9 @@ GRANTING_TYPES = re.compile(
     r"|azurerm_(resource_group|subscription|management_group|tenant)_template_deployment|azurerm_template_deployment"
 )
 
-# The lines of code that may name Microsoft.Authorization: the lock target's id (fence.tf), and the
-# ABAC condition that limits the sweeper's delete right to the dispatcher's role (sweeper.tf).
+# The lines of code that may name Microsoft.Authorization: the lock target's id (fence.tf), the ABAC
+# condition that limits the sweeper's delete right to the dispatcher's role, and the Activity Log
+# alert that reports the lock (sweeper.tf). None grants anything.
 SWEEPER_LOCK_CONDITION = (
     "((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR "
     "(@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals "
@@ -525,6 +542,7 @@ AUTHORIZATION_OK = {
     'dispatcher_assignment_id = "${azurerm_resource_group.ci.id}/providers/'
     'Microsoft.Authorization/roleAssignments/${local.dispatcher_assignment_name}"',
     f'sweeper_lock_condition = "{SWEEPER_LOCK_CONDITION}"',
+    'operation_name = "Microsoft.Authorization/roleAssignments/delete"',
 }
 
 # azapi can PUT, PATCH or POST anything ARM takes, so its only use is the one workflow (Task 3).
@@ -991,7 +1009,27 @@ WDL = {
     "ticks": ticks,
     "addMinutes": lambda s, n: iso(ticks(s) + _num(n) * MINUTE),
     "formatDateTime": _format,
+    "union": lambda *xs: _union(*xs),
+    "empty": lambda x: _empty(x),
 }
+
+
+def _union(*xs):
+    out = []
+    for x in xs:
+        if not isinstance(x, list):
+            raise WdlError("union() of a non-array")
+        out += [v for v in x if v not in out]
+    return out
+
+
+def _empty(x):
+    if x is None:
+        return True
+    if isinstance(x, (str, list, dict)):
+        return len(x) == 0
+    raise WdlError(f"empty() of {type(x).__name__}")
+
 
 def interpolations(v: str) -> list[tuple[int, int]]:
     """(start, end) of each '@{...}' in a workflow string; braces inside '...' literals don't count."""
@@ -1026,11 +1064,16 @@ class Run:
 
     runAfter, If, Foreach, variables and Terminate as the runtime documents them. A scope (the run,
     a branch, one loop iteration) fails when an action in it failed or timed out and no later action
-    in the same scope runs after that status: an unhandled failure, as in a try/catch.
+    in the same scope runs after that status: an unhandled failure, as in a try/catch. Actions in a
+    branch an If didn't take, or under an action that was skipped, read as Skipped.
+
+    `now` is utcNow() and `scheduled` the recurrence slot, trigger().scheduledTime: a run that waited
+    in the queue, or ran long, has a `now` well after its slot.
     """
 
-    def __init__(self, d: dict, respond, now: str = NOW):
+    def __init__(self, d: dict, respond, now: str = NOW, scheduled: str | None = None):
         self.d, self.respond, self.now = d, respond, now
+        self.scheduled = scheduled or now
         self.vars: dict = {}
         self.results = ChainMap()
         self.loops: dict = {}
@@ -1076,6 +1119,8 @@ class Run:
     def ref(self, name, args):
         if name == "utcNow":
             return self.now
+        if name == "trigger":
+            return {"name": "Recurrence", "scheduledTime": self.scheduled, "startTime": self.scheduled}
         if name == "variables":
             return self.vars[args[0]]
         if name == "items":
@@ -1137,11 +1182,17 @@ class Run:
                 ok = all(status[p] in want for p, want in a.get("runAfter", {}).items())
                 status[n] = self.action(n, a) if ok else "Skipped"
                 if not ok:
-                    self.results[n] = {"status": "Skipped"}
+                    self.skip(n, a)
         for n, st in status.items():
             if st in ("Failed", "TimedOut") and not any(st in b.get("runAfter", {}).get(n, []) for b in actions.values()):
                 return "Failed"
         return "Succeeded"
+
+    def skip(self, name: str, a: dict) -> None:
+        """An action that didn't run, and every action under it, reads as Skipped."""
+        self.results[name] = {"status": "Skipped"}
+        for path, _ in walk({name: a}):
+            self.results[path[-1]] = {"status": "Skipped"}
 
     def action(self, name: str, a: dict) -> str:
         kind = a["type"]
@@ -1169,6 +1220,15 @@ class Run:
                         kept.append(self.item)
                 self.item = None
                 rec.update(outputs={"body": kept}, body=kept)
+            elif kind == "Select":
+                src = self.value(a["inputs"]["from"])
+                if not isinstance(src, list):
+                    raise WdlError("Select from a non-array")
+                mapped = []
+                for self.item in src:
+                    mapped.append(self.value(a["inputs"]["select"]))
+                self.item = None
+                rec.update(outputs={"body": mapped}, body=mapped)
             elif kind == "InitializeVariable":
                 (var,) = a["inputs"]["variables"]
                 want = {"float": (int, float), "integer": int, "array": list, "string": str}[var["type"]]
@@ -1182,6 +1242,8 @@ class Run:
                 inp = self.value(a["inputs"])
                 raise Terminated(inp["runStatus"], inp.get("runError", {}).get("code"))
             elif kind == "If":
+                for inner, sub_a in [*a.get("actions", {}).items(), *a.get("else", {}).get("actions", {}).items()]:
+                    self.skip(inner, sub_a)  # until the taken branch runs
                 branch = a.get("actions", {}) if self.condition(a["expression"]) else a.get("else", {}).get("actions", {})
                 rec["status"] = self.scope(branch)
             elif kind == "Foreach":
@@ -1209,15 +1271,20 @@ class Run:
 
 # --- a fake ARM for the sweeper's requests ---
 
-def ago(minutes: float) -> str:
-    return iso(ticks(NOW) - int(minutes * MINUTE))
+def ago(minutes: float, now: str = NOW) -> str:
+    return iso(ticks(now) - int(minutes * MINUTE))
+
+
+def secs(t: str) -> str:
+    """A time in the sweeper's tag format, yyyy-MM-ddTHH:mm:ssZ."""
+    return iso(ticks(t))[:19] + "Z"
 
 
 @dataclass
 class Group:
-    """One container group as ACI lists it: no tags, any name. total and rate are the egress metric's
-    Average in bytes per second over the group's life and over the last 10 min; None means a point
-    with no average, "empty" a metric with no timeseries."""
+    """One container group as ACI lists it: no tags, any name, created `age` minutes before NOW.
+    total and rate are the egress metric's Average in bytes per second over the group's life and
+    over the last 10 min; None means a point with no average, "empty" a metric with no timeseries."""
     name: str
     cpu: float = 2.0
     mem: float = 8.0
@@ -1229,6 +1296,10 @@ class Group:
     @property
     def id(self) -> str:
         return f"{ACI_LIST}/{self.name}"
+
+    @property
+    def born(self) -> str:
+        return ago(self.age)
 
     def aci(self) -> dict:
         req = {"cpu": self.cpu, "memoryInGB": self.mem}
@@ -1255,19 +1326,40 @@ def metric(avg) -> dict:
                        "timeseries": [{"metadatavalues": [], "data": [point]}]}]}
 
 
+ASSIGNED = "2026-10-06T09:30:15.1234567Z"  # when the dispatcher's assignment was created, a month before NOW
+
+
 class FakeArm:
-    """Answers one scenario's ARM requests and records them. A request it doesn't expect, with its
-    exact query, gets a 400 and lands in .unexpected, so a wrong URI or query fails loudly.
+    """The CI group as ARM shows it to the sweeper, across sweeps: a clock, the container groups, the
+    group's tags, and the dispatcher's assignment with its createdOn. Requests change that state the
+    way ARM would: a 2xx DELETE removes the group or the assignment, and a PATCH merges or deletes
+    tags. A request it doesn't expect, with its exact query, gets a 400 and lands in .unexpected, so a
+    wrong URI or query fails loudly.
 
     `codes` overrides an answer: keys "groups", "resources", "budget", "tags", "tag-write",
     "lock-read", "lock-delete", ("metrics", name) and ("delete", name); values a status or TIMEOUT.
+    A refused request changes nothing.
     """
 
-    def __init__(self, groups=(), others=(), spend=0.0, tag=None, locked=False, codes=None, next_link=None):
-        self.groups, self.others, self.spend, self.tag = list(groups), list(others), spend, tag
-        self.locked, self.codes, self.next_link = locked, codes or {}, next_link
+    def __init__(self, groups=(), others=(), spend=0.0, tag=None, locked=False, codes=None, next_link=None,
+                 lock_tag=None, now=NOW, assigned=ASSIGNED):
+        self.now, self.groups, self.others, self.spend = now, list(groups), list(others), spend
+        self.tags = {"ManagedBy": "terraform"}
+        if tag is not None:
+            self.tags["ci-sweeper-over-at"] = tag
+        if lock_tag is not None:
+            self.tags["ci-sweeper-lock"] = lock_tag
+        self.assignment = None if locked else {"createdOn": assigned}
+        self.codes, self.next_link = codes or {}, next_link
         self.calls: list = []
         self.unexpected: list = []
+
+    def advance(self, minutes: float = 10) -> None:
+        self.now = ago(-minutes, self.now)
+
+    def restore(self) -> None:
+        """Chris's apply: a new assignment instance under the same fixed name, created now."""
+        self.assignment = {"createdOn": self.now}
 
     def answer(self, key, code, body):
         got = self.codes.get(key, code)
@@ -1279,14 +1371,14 @@ class FakeArm:
         self.calls.append((method, uri, queries, body))
         path = uri[len(ARM):] if uri.startswith(ARM + "/") else None
         q = dict(queries)
-        by_id = {g.id: g for g in self.groups}
+        by_id = {g.id.lower(): g for g in self.groups}
         if (method, path, q) == ("GET", ACI_LIST, {"api-version": "2023-05-01"}):
             listing = {"value": [g.aci() for g in self.groups]}
             if self.next_link:
                 listing["nextLink"] = self.next_link
             return self.answer("groups", 200, listing)
         if (method, path, q) == ("GET", f"{CI_ID}/resources", {"$expand": "createdTime", "api-version": "2021-04-01"}):
-            rows = [{"id": g.id, "name": g.name, "type": CG, "createdTime": ago(g.age)} for g in self.groups]
+            rows = [{"id": g.id, "name": g.name, "type": CG, "createdTime": g.born} for g in self.groups]
             rows += [{"id": f"{CI_ID}/providers/{t}/{n}", "name": n, "type": t, "createdTime": ago(age)}
                      for n, t, age in self.others]
             return self.answer("resources", 200, {"value": rows})
@@ -1295,30 +1387,45 @@ class FakeArm:
                                                               "currentSpend": {"amount": self.spend, "unit": "USD"}}})
         if path == TAGS and q == {"api-version": "2021-04-01"}:
             if method == "GET":
-                tags = {"ManagedBy": "terraform", **({"ci-sweeper-over-at": self.tag} if self.tag is not None else {})}
-                return self.answer("tags", 200, {"properties": {"tags": tags}})
+                return self.answer("tags", 200, {"properties": {"tags": dict(self.tags)}})
             if method == "PATCH":
-                return self.answer("tag-write", 200, body)
+                r = self.answer("tag-write", 200, body)
+                if r is not TIMEOUT and 200 <= r[0] < 300:
+                    given = body["properties"]["tags"]
+                    if body["operation"] == "Merge":
+                        self.tags.update(given)
+                    elif body["operation"] == "Delete":  # by name and value, as the Tags API does
+                        self.tags = {k: v for k, v in self.tags.items() if given.get(k) != v}
+                return r
         if path == LOCK_ID and q == {"api-version": "2022-04-01"}:
             if method == "GET":
-                return self.answer("lock-read", 404 if self.locked else 200, {"name": "dispatcher-test"})
+                if self.assignment is None:
+                    return self.answer("lock-read", 404, {})
+                return self.answer("lock-read", 200, {"name": "dispatcher-test", "properties": {
+                    "createdOn": self.assignment["createdOn"], "principalType": "ServicePrincipal"}})
             if method == "DELETE":
-                return self.answer("lock-delete", 204 if self.locked else 200, {})
-        if method == "DELETE" and path in by_id and q == {"api-version": "2023-05-01"}:
-            return self.answer(("delete", by_id[path].name), 200, {})
-        g = by_id.get((path or "").removesuffix("/providers/Microsoft.Insights/metrics"))
+                r = self.answer("lock-delete", 204 if self.assignment is None else 200, {})
+                if r is not TIMEOUT and 200 <= r[0] < 300:
+                    self.assignment = None
+                return r
+        if method == "DELETE" and path and path.lower() in by_id and q == {"api-version": "2023-05-01"}:
+            g = by_id[path.lower()]
+            r = self.answer(("delete", g.name), 200, {})
+            if r is not TIMEOUT and 200 <= r[0] < 300:
+                self.groups.remove(g)
+            return r
+        g = by_id.get((path or "").removesuffix("/providers/Microsoft.Insights/metrics").lower())
         if method == "GET" and g and path.endswith("/metrics") and set(q) == {
                 "api-version", "metricnames", "aggregation", "interval", "timespan"} and (
                 q["api-version"], q["metricnames"], q["aggregation"], q["interval"]) == (
                 "2023-10-01", "NetworkBytesTransmittedPerSecond", "Average", "FULL"):
             start, _, end = q["timespan"].partition("/")
-            fmt = lambda t: t[:19] + "Z"  # noqa: E731
-            if end == fmt(NOW) and start == fmt(ago(10)):
+            if end == secs(self.now) and start == secs(ago(10, self.now)):
                 return self.answer(("metrics", g.name), 200, metric(g.rate))
-            if end == fmt(NOW) and start == fmt(ago(g.age + 1)):
+            if end == secs(self.now) and start == secs(ago(1, g.born)):
                 return self.answer(("metrics", g.name), 200, metric(g.total))
             # With no createdTime the template falls back to the rate window, a minute early.
-            if end == fmt(NOW) and start == fmt(ago(11)) and self.codes.get("resources", 200) != 200:
+            if end == secs(self.now) and start == secs(ago(11, self.now)) and self.codes.get("resources", 200) != 200:
                 return self.answer(("metrics", g.name), 200, metric(g.total))
         self.unexpected.append((method, uri, q))
         return 400, {"error": {"code": "FakeUnexpected"}}
@@ -1329,19 +1436,31 @@ class FakeArm:
     def tag_writes(self) -> list[dict]:
         return [b for m, u, _, b in self.calls if m == "PATCH"]
 
+    def writes(self) -> list[tuple[str, str]]:
+        """Every DELETE and PATCH this sweep, in order: (method, the path or the tag body's keys)."""
+        return [(m, u[len(ARM):] if m == "DELETE" else ",".join(b["properties"]["tags"]))
+                for m, u, _, b in self.calls if m != "GET"]
 
-def sweep(*groups, **kw) -> tuple[dict, FakeArm]:
-    arm = FakeArm(groups, **kw)
-    result = Run(definition(), arm).go()
+
+def again(arm: FakeArm, scheduled: str | None = None) -> dict:
+    """One sweep on `arm`'s current state; its calls replace the last sweep's."""
+    arm.calls, arm.unexpected = [], []
+    result = Run(definition(), arm, now=arm.now, scheduled=scheduled).go()
     assert not arm.unexpected, f"requests the fake didn't expect: {arm.unexpected}"
-    return result, arm
+    return result
+
+
+def sweep(*groups, scheduled: str | None = None, **kw) -> tuple[dict, FakeArm]:
+    arm = FakeArm(groups, **kw)
+    return again(arm, scheduled), arm
 
 
 OK = {"status": "Succeeded", "code": None}
 LOCKED = {"status": "Failed", "code": "Locked"}
-LOCK_FAILED = {"status": "Failed", "code": "LockFailed"}
+LOCK_FAILED = {"status": "Cancelled", "code": None}  # Terminate carries no code when Cancelled
 DEGRADED = {"status": "Failed", "code": "Degraded"}
 MARK = {"operation": "Merge", "properties": {"tags": {"ci-sweeper-over-at": "2026-11-05T12:00:00Z"}}}
+LOCK_MARK = {"operation": "Merge", "properties": {"tags": {"ci-sweeper-lock": secs(ASSIGNED)}}}
 
 
 # --- values and grants ---
@@ -1432,7 +1551,16 @@ def test_history_reader_exact():
     assert has(a, "role_definition_id", "azurerm_role_definition.history_reader.role_definition_resource_id")
 
 
-def test_failed_run_alert():
+def metric_alert(text: str, name: str) -> dict[str, str]:
+    alert = block(text, "resource", "azurerm_monitor_metric_alert", name)
+    crit = _body(alert, re.search(r"^\s*criteria\s*\{", alert, re.M).end())
+    return {"alert": alert, "crit": crit}
+
+
+def test_alerts_one_per_code():
+    """Review M5: each outcome has a signal no other outcome raises, so none masks another.
+    Degraded: RunsFailed. LockFailed: RunsCancelled, since only it ends a run Cancelled. Locked: the
+    assignment's delete in the CI group's Activity Log. Each emails alert_emails."""
     text = tf("sweeper.tf")
     group = block(text, "resource", "azurerm_monitor_action_group", "sweeper_failed")
     assert has(group, "name", '"ci-sweeper-failed"')
@@ -1440,15 +1568,29 @@ def test_failed_run_alert():
     assert re.search(r'dynamic\s+"email_receiver"\s*\{', group)
     assert has(group, "for_each", "range(nonsensitive(length(var.alert_emails)))")
     assert has(group, "email_address", "var.alert_emails[email_receiver.value]")
-    alert = block(text, "resource", "azurerm_monitor_metric_alert", "sweeper_failed")
-    assert has(alert, "scopes", f"[{WORKFLOW}]")
-    assert has(alert, "frequency", '"PT5M"') and has(alert, "window_size", '"PT15M"')
-    assert has(alert, "enabled", "true")
-    crit = _body(alert, re.search(r"^\s*criteria\s*\{", alert, re.M).end())
-    for key, value in (("metric_namespace", '"Microsoft.Logic/workflows"'), ("metric_name", '"RunsFailed"'),
-                       ("aggregation", '"Total"'), ("operator", '"GreaterThan"'), ("threshold", "0")):
-        assert has(crit, key, value), key
-    assert has(alert, "action_group_id", "azurerm_monitor_action_group.sweeper_failed.id")
+    assert set(blocks(text, "resource", "azurerm_monitor_metric_alert")) == {"sweeper_failed", "sweeper_lock_failed"}
+    for name, alert_name, metric in (("sweeper_failed", "ci-sweeper-failed", "RunsFailed"),
+                                     ("sweeper_lock_failed", "ci-sweeper-lock-failed", "RunsCancelled")):
+        a = metric_alert(text, name)
+        assert has(a["alert"], "name", f'"{alert_name}"'), name
+        assert has(a["alert"], "scopes", f"[{WORKFLOW}]"), name
+        assert has(a["alert"], "frequency", '"PT5M"') and has(a["alert"], "window_size", '"PT15M"'), name
+        assert has(a["alert"], "enabled", "true"), name
+        for key, value in (("metric_namespace", '"Microsoft.Logic/workflows"'), ("metric_name", f'"{metric}"'),
+                           ("aggregation", '"Total"'), ("operator", '"GreaterThan"'), ("threshold", "0")):
+            assert has(a["crit"], key, value), (name, key)
+        assert has(a["alert"], "action_group_id", "azurerm_monitor_action_group.sweeper_failed.id"), name
+    locked = block(text, "resource", "azurerm_monitor_activity_log_alert", "sweeper_locked")
+    assert has(locked, "scopes", f"[{CI_GROUP}]") and has(locked, "location", '"global"')
+    assert has(locked, "enabled", "true")
+    crit = _body(locked, re.search(r"^\s*criteria\s*\{", locked, re.M).end())
+    assert has(crit, "category", '"Administrative"')
+    assert has(crit, "operation_name", '"Microsoft.Authorization/roleAssignments/delete"')
+    assert has(crit, "statuses", '["Succeeded"]')
+    assert has(locked, "action_group_id", "azurerm_monitor_action_group.sweeper_failed.id")
+    # The run statuses behind the two metric alerts: only LockFailed cancels, and Locked and Degraded fail.
+    ends = {p[-1]: a["inputs"]["runStatus"] for p, a in walk(definition()["actions"]) if a["type"] == "Terminate"}
+    assert ends == {"Terminate_locked": "Failed", "Terminate_lock_failed": "Cancelled", "Terminate_degraded": "Failed"}
 
 
 def test_workflow_resource():
@@ -1496,7 +1638,7 @@ def test_every_http_action_has_a_timeout():
     a run ends; with concurrency 1, a hung request can hold the queue for minutes, not forever."""
     d = definition()
     https = http_actions(d)
-    assert len(https) == 13
+    assert len(https) == 15
     for path, a in https:
         name = "/".join(path)
         assert a.get("limit") == {"timeout": "PT1M"}, name
@@ -1511,7 +1653,7 @@ def test_every_http_action_has_a_timeout():
     assert fence()["sweeper"]["action_timeout"] == "PT1M"
     types = {a["type"] for _, a in walk(d["actions"])}
     assert types <= {"Http", "InitializeVariable", "IncrementVariable", "AppendToArrayVariable", "Compose", "Query",
-                     "Foreach", "If", "Terminate"}, types
+                     "Select", "Foreach", "If", "Terminate"}, types
 
 
 def test_action_names_unique_and_runafter_local():
@@ -1525,10 +1667,21 @@ def test_action_names_unique_and_runafter_local():
 def test_references_are_upstream():
     """The runtime refuses a reference to an action that isn't upstream of the one reading it.
     Every actions(), body() and outputs() names an ancestor: a runAfter predecessor, transitively,
-    in the same scope or an enclosing one. items() names an enclosing loop, and variables() an
-    initialized variable."""
+    in the same scope or an enclosing one, or an action in such a predecessor's If branches. items()
+    names an enclosing loop, and variables() an initialized variable."""
     d = definition()
     variables = {a["inputs"]["variables"][0]["name"] for a in d["actions"].values() if a["type"] == "InitializeVariable"}
+    every = {p[-1]: a for p, a in walk(d["actions"])}
+
+    def inside(a: dict) -> set:
+        """Actions in a's If branches, at any depth, but never inside a loop."""
+        if a["type"] == "Foreach":
+            return set()
+        found = set()
+        for branch in (a.get("actions", {}), a.get("else", {}).get("actions", {})):
+            for n, x in branch.items():
+                found |= {n} | inside(x)
+        return found
 
     def check(actions: dict, outer: set, loops: tuple):
         for name, a in actions.items():
@@ -1538,7 +1691,7 @@ def test_references_are_upstream():
                 if p not in up:
                     up.add(p)
                     todo += list(actions[p].get("runAfter", {}))
-            visible = outer | up
+            visible = outer | up | {x for u in up for x in inside(every[u])}
             own = {k: v for k, v in a.items() if k not in ("actions", "else")}
             for s in strings(own):
                 for fn, ref in re.findall(r"\b(actions|outputs|body)\('([^']+)'\)", s):
@@ -1644,93 +1797,194 @@ def test_shape_price_without_containers():
     assert run.results["Shape_price"]["outputs"] == 1000000
 
 
+EARLY = "@or(outputs('Lock_view')?['spent'], outputs('Lock_state')?['gone'], outputs('Lock_view')?['pending'])"
+LOCK_STATE = {
+    "tag": "@{coalesce(body('Read_tags')?['properties']?['tags']?['ci-sweeper-lock'], '')}",
+    "created": ("@{if(empty(coalesce(body('Read_dispatcher_assignment')?['properties']?['createdOn'], '')), '', "
+                "formatDateTime(coalesce(body('Read_dispatcher_assignment')?['properties']?['createdOn'], "
+                "'0001-01-01T00:00:00Z'), 'yyyy-MM-ddTHH:mm:ssZ'))}"),
+    "gone": "@equals(outputs('Read_dispatcher_assignment')?['statusCode'], 404)",
+}
+TAG, CREATED, GONE = (f"outputs('Lock_state')?['{k}']" for k in ("tag", "created", "gone"))
+LOCK_VIEW = {
+    "pending": (f"@and(not(equals({TAG}, '')), or({GONE}, and(not(equals({CREATED}, '')), "
+                f"lessOrEquals({CREATED}, {TAG}))))"),
+    "restored": f"@and(not(equals({TAG}, '')), not(equals({CREATED}, '')), greater({CREATED}, {TAG}))",
+    "spent": ("@greaterOrEquals(float(string(coalesce(body('Read_budget')?['properties']?['currentSpend']?['amount'], "
+              "0))), 85)"),
+}
 TRIP = {"or": [
+    {"equals": ["@actions('Early')?['outputs']", True]},
     {"and": [
         {"greater": ["@variables('burn')", 600000]},
         {"greaterOrEquals": ["@{coalesce(body('Read_tags')?['properties']?['tags']?['ci-sweeper-over-at'], '')}",
-                             "@{formatDateTime(addMinutes(outputs('Now'), -12), 'yyyy-MM-ddTHH:mm:ssZ')}"]},
+                             "@{formatDateTime(addMinutes(outputs('Slot'), -12), 'yyyy-MM-ddTHH:mm:ssZ')}"]},
     ]},
-    {"greaterOrEquals": ["@float(string(coalesce(body('Read_budget')?['properties']?['currentSpend']?['amount'], 0)))",
-                         85]},
-    {"equals": ["@outputs('Read_dispatcher_assignment')?['statusCode']", 404]},
 ]}
 LOCK_DONE = {"or": [
+    {"equals": ["@actions('Lock_state')?['outputs']?['gone']", True]},
     {"equals": ["@actions('Delete_dispatcher_assignment')?['status']", "Succeeded"]},
-    {"equals": ["@outputs('Delete_dispatcher_assignment')?['statusCode']", 404]},
+    {"equals": ["@actions('Delete_dispatcher_assignment')?['outputs']?['statusCode']", 404]},
 ]}
 EVERY_END = ["Succeeded", "Failed", "TimedOut"]
+EVERY = EVERY_END + ["Skipped"]
+
+
+def test_lock_state_rules():
+    """Review I1, design A: ci-sweeper-lock holds the createdOn of the assignment instance a lock aims
+    at. Pending while that instance or an older one exists, or none does; restored only by a newer
+    one. An unreadable assignment (created '') is neither."""
+    d = definition()
+    assert find(d, "Slot")["inputs"] == (
+        "@formatDateTime(coalesce(trigger()?['scheduledTime'], trigger()?['startTime'], outputs('Now')), "
+        "'yyyy-MM-ddTHH:mm:ssZ')")
+    assert find(d, "Lock_state")["inputs"] == LOCK_STATE
+    assert find(d, "Lock_view")["inputs"] == LOCK_VIEW
+    assert find(d, "Early")["inputs"] == EARLY
+    chain = [(n, find(d, n).get("runAfter")) for n in ("Slot", "Lock_state", "Lock_view", "Early")]
+    assert chain == [("Slot", {"Now": ["Succeeded"]}), ("Lock_state", {"Slot": ["Succeeded"]}),
+                     ("Lock_view", {"Lock_state": ["Succeeded"]}), ("Early", {"Lock_view": ["Succeeded"]})]
+    # Lock first (M1): an early trip skips the egress and age work, and an unknown Early runs it.
+    survey = find(d, "Survey")
+    assert survey["expression"] == {"not": {"equals": ["@actions('Early')?['outputs']", True]}}
+    assert set(survey["actions"]) == {"Each_group", "Old_compute", "Delete_old"} and "else" not in survey
+    assert survey["runAfter"] == {"Early": EVERY}
 
 
 def test_trip_rule():
-    """Two sweeps over $0.60 an hour, or the $85 budget spent, or the lock already in place. The trip
-    deletes the dispatcher's assignment first, then every group whatever that DELETE did, and ends
-    Failed (F7)."""
+    """The early trips (budget spent, assignment gone, lock pending), or two sweeps over $0.60 an
+    hour. The trip deletes the dispatcher's assignment first, unless it's already gone; then the
+    groups and the lock tag, whatever that DELETE did. It ends Failed (Locked) or Cancelled
+    (LockFailed) (F7, I1, M2)."""
     f = fence()
     assert (f["sweeper"]["ceiling_micro_per_hour"], f["sweeper"]["repeat_window_minutes"], f["budget_ci_usd"]) == (
         600000, 12, 85)
     trip = find(definition(), "Trip")
     assert trip["type"] == "If" and trip["expression"] == TRIP
+    assert trip["runAfter"] == {"Live_groups": EVERY}
     acts = trip["actions"]
-    assert set(acts) == {"Delete_dispatcher_assignment", "Delete_all_groups", "Lock_result"}
-    assert [n for n, a in acts.items() if a.get("runAfter", {}) == {}] == ["Delete_dispatcher_assignment"]
-    lock = acts["Delete_dispatcher_assignment"]
+    assert set(acts) == {"Lock_assignment", "Delete_all_groups", "Mark_lock", "Lock_result"}
+    assert [n for n, a in acts.items() if a.get("runAfter", {}) == {}] == ["Lock_assignment"]
+    gate = acts["Lock_assignment"]
+    assert gate["expression"] == {"not": {"equals": ["@actions('Lock_state')?['outputs']?['gone']", True]}}
+    assert set(gate["actions"]) == {"Delete_dispatcher_assignment"} and "else" not in gate
+    lock = gate["actions"]["Delete_dispatcher_assignment"]
     assert (lock["type"], lock["inputs"]["method"], lock["inputs"]["uri"], lock["inputs"]["queries"]) == (
         "Http", "DELETE", ARM + LOCK_ID, {"api-version": "2022-04-01"})
     loop = acts["Delete_all_groups"]
     assert loop["type"] == "Foreach" and loop["foreach"] == "@body('Live_groups')"
-    assert loop["runAfter"] == {"Delete_dispatcher_assignment": EVERY_END}
+    assert loop["runAfter"] == {"Lock_assignment": EVERY_END}
     inner = loop["actions"]["Delete_group"]["inputs"]
     assert (inner["method"], inner["uri"]) == ("DELETE", ARM + "@{items('Delete_all_groups')?['id']}")
+    mark = acts["Mark_lock"]
+    assert mark["runAfter"] == {"Lock_assignment": EVERY_END}
+    assert mark["expression"] == {"or": [
+        {"equals": ["@{coalesce(actions('Lock_state')?['outputs']?['tag'], '')}", ""]},
+        {"equals": ["@actions('Lock_view')?['outputs']?['restored']", True]}]}
+    write = mark["actions"]["Write_lock_tag"]["inputs"]
+    assert (write["method"], write["uri"]) == ("PATCH", ARM + TAGS)
+    assert write["body"] == {"operation": "Merge", "properties": {"tags": {"ci-sweeper-lock": (
+        "@{if(empty(coalesce(actions('Lock_state')?['outputs']?['created'], '')), "
+        "formatDateTime(outputs('Now'), 'yyyy-MM-ddTHH:mm:ssZ'), actions('Lock_state')?['outputs']?['created'])}")}}}
     result = acts["Lock_result"]
-    assert result["runAfter"] == {"Delete_all_groups": EVERY_END}
+    assert result["runAfter"] == {"Delete_all_groups": EVERY_END, "Mark_lock": EVERY_END}
     assert result["expression"] == LOCK_DONE
-    ends = {n: a["inputs"] for n, a in [*result["actions"].items(), *result["else"]["actions"].items()]}
-    assert {n: (i["runStatus"], i["runError"]["code"]) for n, i in ends.items()} == {
-        "Terminate_locked": ("Failed", "Locked"), "Terminate_lock_failed": ("Failed", "LockFailed")}
     assert set(result["actions"]) == {"Terminate_locked"}
-    # The groups the trip deletes: every listed group not already deleted in this run.
-    live = find(definition(), "Live_groups")["inputs"]
-    assert live == {"from": "@body('Read_groups')?['value']",
-                    "where": "@not(contains(variables('deleted'), toLower(item()?['id'])))"}
+    assert result["actions"]["Terminate_locked"]["inputs"]["runStatus"] == "Failed"
+    assert result["actions"]["Terminate_locked"]["inputs"]["runError"]["code"] == "Locked"
+    assert set(result["else"]["actions"]) == {"Lock_failed", "Terminate_lock_failed"}
+    assert result["else"]["actions"]["Terminate_lock_failed"]["inputs"] == {"runStatus": "Cancelled"}
+    # The groups the trip deletes: every group in the ACI list, plus RG compute it doesn't list (M3),
+    # minus those already deleted this run.
+    d = definition()
+    assert find(d, "Aci_ids")["inputs"] == {"from": "@coalesce(body('Read_groups')?['value'], json('[]'))",
+                                             "select": "@toLower(item()?['id'])"}
+    assert find(d, "Rg_only")["inputs"] == {
+        "from": "@coalesce(body('Read_resources')?['value'], json('[]'))",
+        "where": ("@and(equals(toLower(item()?['type']), toLower('Microsoft.ContainerInstance/containerGroups')), "
+                  "not(contains(body('Aci_ids'), toLower(item()?['id']))))")}
+    assert find(d, "Live_groups")["inputs"] == {
+        "from": "@union(coalesce(body('Read_groups')?['value'], json('[]')), body('Rg_only'))",
+        "where": "@not(contains(variables('deleted'), toLower(item()?['id'])))"}
+    # With no trip: the rate tag holds the slot, never the clock (I2); a restore clears the lock tag.
+    over = trip["else"]["actions"]["Over_ceiling"]
+    assert over["actions"]["Mark_over"]["inputs"]["body"] == {
+        "operation": "Merge", "properties": {"tags": {"ci-sweeper-over-at": "@{outputs('Slot')}"}}}
+    clear = trip["else"]["actions"]["Clear_lock"]
+    assert clear["expression"] == {"equals": ["@actions('Lock_view')?['outputs']?['restored']", True]}
+    assert clear["actions"]["Delete_lock_tag"]["inputs"]["body"] == {
+        "operation": "Delete", "properties": {"tags": {"ci-sweeper-lock": "@{actions('Lock_state')?['outputs']?['tag']}"}}}
 
 
-def trip_ctx(burn=0.0, tag=None, spend=0.0, lock_code=200) -> Run:
-    run = Run(definition(), FakeArm())
+def decide(burn=0.0, over=None, spend=0.0, lock_code=200, created=ASSIGNED, lock_tag=None, now=NOW,
+           scheduled=None) -> Run:
+    """A run poised at the Trip: the reads answered, the lock state computed, the burn summed."""
+    run = Run(definition(), FakeArm(), now=now, scheduled=scheduled)
     run.vars.update(burn=burn, deleted=[], problems=[])
-    tags = {"properties": {"tags": {} if tag is None else {"ci-sweeper-over-at": tag}}}
+    tags = {k: v for k, v in (("ci-sweeper-over-at", over), ("ci-sweeper-lock", lock_tag)) if v is not None}
+
+    def http(code, body):
+        return {"status": "Succeeded" if 200 <= code < 300 else "Failed", "outputs": {"statusCode": code, "body": body},
+                "body": body}
+
     run.results.update(
-        Now={"status": "Succeeded", "outputs": NOW, "body": NOW},
-        Read_tags={"status": "Succeeded", "outputs": {"statusCode": 200, "body": tags}, "body": tags},
-        Read_budget={"status": "Succeeded", "body": {"properties": {"currentSpend": {"amount": spend}}}},
-        Read_dispatcher_assignment={"status": "Succeeded" if lock_code == 200 else "Failed",
-                                    "outputs": {"statusCode": lock_code}, "body": {}})
+        Now={"status": "Succeeded", "outputs": now, "body": now},
+        Read_tags=http(200, {"properties": {"tags": tags}}),
+        Read_budget=http(200, {"properties": {"currentSpend": {"amount": spend}}}),
+        Read_dispatcher_assignment=http(lock_code, {"properties": {"createdOn": created}} if lock_code == 200
+                                        else {"error": {"code": f"Fake{lock_code}"}}))
+    for name in ("Slot", "Lock_state", "Lock_view", "Early"):
+        assert run.action(name, find(definition(), name)) == "Succeeded", name
     return run
 
 
-@pytest.mark.parametrize("burn,tag,spend,lock,trips", [
-    (600001.0, ago(10)[:19] + "Z", 0, 200, True),    # second over-ceiling sweep in a row
-    (600001.0, ago(12)[:19] + "Z", 0, 200, True),    # the window's edge
-    (600001.0, ago(13)[:19] + "Z", 0, 200, False),   # too old: this sweep is a first one
-    (600000.0, ago(10)[:19] + "Z", 0, 200, False),   # at the ceiling is allowed (the gate allows <=)
-    (600001.0, None, 0, 200, False),                 # first over-ceiling sweep
-    (5e7, "garbage", 0, 200, True),                  # a tag only Chris could write: compares, never throws
-    (0.0, None, 85, 200, True),                      # the budget spent
-    (0.0, None, 84.99, 200, False),
-    (0.0, None, "85.00", 200, True),                 # a decimal ARM sends as a string still compares
-    (0.0, None, 0, 404, True),                       # already locked: the dispatcher can't delete its groups
-    (0.0, None, 0, 403, False),                      # can't read the assignment: not proof of a lock
+LATER = ago(-5)  # an assignment Chris's apply made after the lock (5 min after NOW)
+
+
+@pytest.mark.parametrize("kw,trips", [
+    ({"burn": 600001.0, "over": secs(ago(10))}, True),    # second over-ceiling sweep in a row
+    ({"burn": 600001.0, "over": secs(ago(12))}, True),    # the window's edge
+    ({"burn": 600001.0, "over": secs(ago(13))}, False),   # too old: this sweep is a first one
+    ({"burn": 600000.0, "over": secs(ago(10))}, False),   # at the ceiling is allowed
+    ({"burn": 600001.0}, False),                          # first over-ceiling sweep
+    ({"burn": 5e7, "over": "garbage"}, True),             # a tag only Chris could write: compares, never throws
+    # I2: a run that started 13 min after its slot still sees the previous slot's tag.
+    ({"burn": 600001.0, "over": secs(ago(10)), "now": ago(-13), "scheduled": NOW}, True),
+    ({"burn": 600001.0, "over": secs(ago(20)), "now": ago(-1), "scheduled": NOW}, False),
+    ({"spend": 85}, True), ({"spend": 84.99}, False), ({"spend": "85.00"}, True),
+    ({"lock_code": 404}, True),                           # already locked
+    ({"lock_code": 403}, False),                          # can't read the assignment: not proof of a lock
+    # A pending lock (I1): the aimed-at instance, or an older one, still exists, or none does.
+    ({"lock_tag": secs(ASSIGNED)}, True),
+    ({"lock_tag": secs(ago(-1))}, True),                  # aimed at a later instance than this one
+    ({"lock_tag": secs(ASSIGNED), "lock_code": 404}, True),
+    ({"lock_tag": secs(ASSIGNED), "created": LATER}, False),  # restored
+    ({"lock_tag": secs(ASSIGNED), "lock_code": 500}, False),  # unreadable: neither (the run is Degraded)
 ])
-def test_trip_truth_table(burn, tag, spend, lock, trips):
-    assert trip_ctx(burn, tag, spend, lock).condition(find(definition(), "Trip")["expression"]) is trips
+def test_trip_truth_table(kw, trips):
+    assert decide(**kw).condition(find(definition(), "Trip")["expression"]) is trips
 
 
-@pytest.mark.parametrize("status,code,locked", [
-    ("Succeeded", 200, True), ("Succeeded", 204, True), ("Failed", 404, True),
-    ("Failed", 400, False), ("Failed", 403, False), ("Failed", 409, False), ("Failed", 429, False),
-    ("Failed", 500, False), ("TimedOut", None, False)])
-def test_lock_counts_only_2xx_and_404(status, code, locked):
+@pytest.mark.parametrize("kw,restored", [
+    ({"lock_tag": secs(ASSIGNED), "created": LATER}, True),
+    ({"lock_tag": secs(ASSIGNED)}, False),                    # the same instance
+    ({"lock_tag": secs(ASSIGNED), "lock_code": 404}, False),
+    ({"lock_tag": secs(ASSIGNED), "lock_code": 500}, False),  # never cleared on a failed read
+    ({"created": LATER}, False),                              # no lock to clear
+])
+def test_restored_only_by_a_newer_instance(kw, restored):
+    assert decide(**kw).results["Lock_view"]["outputs"]["restored"] is restored
+
+
+@pytest.mark.parametrize("status,code,gone,locked", [
+    ("Succeeded", 200, False, True), ("Succeeded", 204, False, True), ("Failed", 404, False, True),
+    ("Skipped", None, True, True),  # already gone: no DELETE, still locked (M2)
+    ("Failed", 400, False, False), ("Failed", 403, False, False), ("Failed", 409, False, False),
+    ("Failed", 429, False, False), ("Failed", 500, False, False), ("TimedOut", None, False, False)])
+def test_lock_counts_only_2xx_and_404(status, code, gone, locked):
     """F6/F7: a 404 means the assignment is already gone. Any other failure isn't a lock."""
     run = Run(definition(), FakeArm())
+    run.results["Lock_state"] = {"status": "Succeeded", "outputs": {"tag": "", "created": "", "gone": gone}}
     run.results["Delete_dispatcher_assignment"] = {
         "status": status, "outputs": None if code is None else {"statusCode": code}}
     assert run.condition(find(definition(), "Lock_result")["expression"]) is locked
@@ -1814,7 +2068,8 @@ def test_run_second_over_ceiling_sweep_locks_first():
     result, arm = sweep(*groups, tag=ago(10)[:19] + "Z")
     assert result == LOCKED
     assert arm.deletes() == [LOCK_ID] + [g.id for g in groups]
-    assert arm.tag_writes() == []
+    # The lock tag aims at the instance just deleted, by its own createdOn (no clock in it).
+    assert arm.tag_writes() == [LOCK_MARK] and arm.writes()[0] == ("DELETE", LOCK_ID)
 
 
 @pytest.mark.parametrize("answer", [403, 409, 500, TIMEOUT])
@@ -1829,6 +2084,7 @@ def test_run_failed_lock_still_deletes_every_group(answer):
 def test_run_lock_answered_404_is_locked():
     result, arm = sweep(medium("a"), spend=90.0, codes={"lock-delete": 404})
     assert result == LOCKED and arm.deletes() == [LOCK_ID, medium("a").id]
+    assert arm.tag_writes() == [LOCK_MARK]
 
 
 def test_run_failed_group_delete_after_the_lock_still_ends_locked():
@@ -1843,10 +2099,13 @@ def test_run_budget_spent_locks_with_no_compute():
 
 
 def test_run_already_locked_keeps_compute_at_zero():
-    """While locked, the dispatcher can't delete its own groups, so every sweep deletes them all."""
+    """While locked, the dispatcher can't delete its own groups, so every sweep deletes them all. The
+    assignment is already gone, so there's no DELETE to send (M2). With no lock tag yet, the sweep
+    aims one at the next instance: anything created after now."""
     g = small("made-during-propagation", age=3)
     result, arm = sweep(g, locked=True)
-    assert result == LOCKED and arm.deletes() == [LOCK_ID, g.id]
+    assert result == LOCKED and arm.deletes() == [g.id]
+    assert arm.tag_writes() == [{"operation": "Merge", "properties": {"tags": {"ci-sweeper-lock": secs(NOW)}}}]
 
 
 def test_run_stale_tag_is_rewritten():
@@ -1922,10 +2181,28 @@ def test_run_budget_unread_keeps_the_age_kill():
     assert result == DEGRADED and arm.deletes() == [old.id]
 
 
-def test_run_groups_unread_still_locks_on_the_budget():
-    """With no group list the trip can't delete groups, but the lock still goes."""
-    result, arm = sweep(small("a"), spend=90.0, codes={"groups": 500})
-    assert result == LOCKED and arm.deletes() == [LOCK_ID]
+def test_run_groups_unread_still_deletes_from_the_rg_list():
+    """M3: with no ACI list, the trip deletes the RG's container groups instead."""
+    a = small("a")
+    result, arm = sweep(a, spend=90.0, codes={"groups": 500})
+    assert result == LOCKED and arm.deletes() == [LOCK_ID, a.id]
+
+
+def test_run_lists_union_without_doubles():
+    """A group only the RG list shows (the ACI list lagging, say) goes too, and no group goes twice."""
+    a, b = small("a"), small("b")
+    arm = FakeArm([a, b], spend=90.0)
+    real = arm.__call__
+
+    def lagging(method, uri, queries, body):  # the ACI list misses b
+        r = real(method, uri, queries, body)
+        if method == "GET" and uri == ARM + ACI_LIST and r is not TIMEOUT:
+            return r[0], {"value": [x for x in r[1]["value"] if x["name"] != "b"]}
+        return r
+
+    result = Run(definition(), lagging, now=arm.now).go()
+    assert not arm.unexpected
+    assert result == LOCKED and arm.deletes() == [LOCK_ID, a.id, b.id]
 
 
 def test_run_failed_delete_is_degraded():
@@ -1948,6 +2225,102 @@ def test_run_paged_list_is_degraded():
     """The sweeper reads one page; a list that pages fails the run loudly instead of hiding groups."""
     result, _ = sweep(small("a"), next_link=ARM + ACI_LIST + "?$skipToken=x")
     assert result == DEGRADED
+
+
+# --- the template, sweep after sweep (review I1, I2, M1-M3) ---
+
+def lock_tag(arm: FakeArm):
+    return arm.tags.get("ci-sweeper-lock")
+
+
+def test_sweeps_failed_lock_retries_until_restored():
+    """I1: the sweeper remembers a decided lock. The rate trip's DELETE fails, so the run ends LockFailed and the
+    tag aims at that instance. Every later sweep retries first; once gone, every sweep keeps compute at
+    zero without a DELETE; a newer instance (Chris's apply) clears it, and nothing else does."""
+    groups = [medium(n) for n in ("a", "b", "c")]
+    arm = FakeArm(groups, tag=secs(ago(10)), codes={"lock-delete": 500})
+    assert again(arm) == LOCK_FAILED
+    assert arm.writes()[0] == ("DELETE", LOCK_ID) and arm.groups == [] and arm.assignment
+    assert lock_tag(arm) == secs(ASSIGNED)
+    # Under the ceiling now, and the delete still fails: still pending, still retried, still remembered.
+    arm.advance()
+    assert again(arm) == LOCK_FAILED and arm.writes() == [("DELETE", LOCK_ID)] and lock_tag(arm) == secs(ASSIGNED)
+    # The retry takes: Locked, and the lock comes first, with no egress or age work in that sweep (M1).
+    arm.advance()
+    arm.codes = {}
+    arm.groups.append(small("made-during-propagation", age=-18))
+    assert again(arm) == LOCKED and arm.assignment is None
+    assert arm.writes() == [("DELETE", LOCK_ID), ("DELETE", f"{ACI_LIST}/made-during-propagation")]
+    assert not [u for m, u, *_ in arm.calls if u.endswith("/metrics")]
+    # Locked: no DELETE to send (M2), and the tag stays.
+    arm.advance()
+    assert again(arm) == LOCKED and arm.writes() == [] and lock_tag(arm) == secs(ASSIGNED)
+    # Chris restores: the next sweep sees a newer instance, clears both tags, and ends Succeeded.
+    arm.advance()
+    arm.restore()
+    assert again(arm) == OK and "ci-sweeper-lock" not in arm.tags and "ci-sweeper-over-at" not in arm.tags
+    arm.advance()
+    assert again(arm) == OK and arm.writes() == []
+
+
+def test_sweeps_budget_lock_survives_the_month_rollover():
+    """I1: a budget lock whose DELETE failed is still pending after currentSpend resets."""
+    arm = FakeArm(spend=86.0, codes={"lock-delete": 500})
+    assert again(arm) == LOCK_FAILED and lock_tag(arm) == secs(ASSIGNED)
+    arm.advance()
+    arm.spend = 0.0
+    assert again(arm) == LOCK_FAILED and arm.writes() == [("DELETE", LOCK_ID)]
+    arm.advance()
+    arm.codes = {}
+    assert again(arm) == LOCKED and arm.assignment is None
+
+
+def test_sweeps_unreadable_assignment_is_degraded_not_locked():
+    """I1: a pending lock with an unreadable assignment neither trips nor clears this sweep."""
+    arm = FakeArm(lock_tag=secs(ASSIGNED), codes={"lock-read": 500})
+    assert again(arm) == DEGRADED and arm.writes() == [] and lock_tag(arm) == secs(ASSIGNED)
+    arm.advance()
+    arm.codes = {}
+    assert again(arm) == LOCKED and arm.writes()[0] == ("DELETE", LOCK_ID)
+
+
+def test_sweeps_stale_404_after_a_restore():
+    """M2, M4: a 404 that predates the restore (RBAC replication) trips, but sends no DELETE and keeps
+    the tag, so the next sweep, reading the restored instance, clears the lock."""
+    arm = FakeArm(lock_tag=secs(ASSIGNED), codes={"lock-read": 404})
+    arm.restore()
+    assert again(arm) == LOCKED and arm.writes() == [] and arm.assignment
+    arm.advance()
+    arm.codes = {}
+    assert again(arm) == OK and lock_tag(arm) is None and arm.assignment
+
+
+def test_sweeps_restore_while_the_budget_is_spent_relocks_the_new_instance():
+    """M7: within the month a budget lock comes straight back, aimed at the restored instance."""
+    arm = FakeArm(lock_tag=secs(ASSIGNED), spend=90.0)
+    arm.restore()
+    assert again(arm) == LOCKED and arm.writes()[0] == ("DELETE", LOCK_ID)
+    assert lock_tag(arm) == secs(NOW) and arm.assignment is None
+
+
+def test_sweeps_slow_runs_keep_the_rate_trip():
+    """I2: the rate tag holds the slot. A first sweep that ran 13 min late writes its slot, and the
+    next slot's sweep, also late, still trips."""
+    groups = [medium(n) for n in ("a", "b", "c")]
+    arm = FakeArm(groups, now=ago(-13))
+    assert again(arm, scheduled=NOW) == OK and arm.tag_writes() == [MARK]
+    arm.advance()
+    assert again(arm, scheduled=ago(-10)) == LOCKED and arm.writes()[0] == ("DELETE", LOCK_ID)
+
+
+def test_sweeps_lock_first_before_egress_and_age():
+    """M1: on a budget trip the assignment DELETE is the sweep's first write; no metric is read and no
+    egress or age delete comes before it."""
+    groups = [small("old", age=95, total=9e6), small("hot", total=9e6, rate=5e6)]
+    result, arm = sweep(*groups, spend=85.0)
+    assert result == LOCKED
+    assert arm.writes()[:3] == [("DELETE", LOCK_ID), ("DELETE", groups[0].id), ("DELETE", groups[1].id)]
+    assert not [u for m, u, *_ in arm.calls if u.endswith("/metrics")]
 
 
 # --- files and hooks -------------------------------------------------------------------------------
@@ -2214,8 +2587,13 @@ def test_readme_names_the_tf_sh_rules():
     assert "plan -destroy -out=" in text
     # Task 2 review n-a: the destination check compares only tf.sh's own stdout and stderr.
     assert "never name a transcript or a capture file" in text
-    # Task 3: the sweeper, its lock, and how the lock is undone.
-    assert "## The sweeper" in text and "Locked" in text and "Degraded" in text
+    # Task 3: the sweeper, its lock, and how the lock is undone, with the review's notes (M4, M6-M8,
+    # I3): check the next sweep after unlocking, the egress term fails open, a budget lock holds for
+    # the month, the shape price ignores gpu/sku/limits, and the dispatcher's lower hourly gate.
+    assert "## The sweeper" in text and "Locked" in text and "Degraded" in text and "LockFailed" in text
+    for note in ("check that the next sweep ends `Succeeded`", "fails open", "until the month rolls over",
+                 "`gpu`", "$0.48 an hour", "ci-sweeper-lock"):
+        assert note in text, note
 
 
 def test_variables():
@@ -2383,6 +2761,12 @@ def test_plan_matches_files(plan):
     assert (alert["frequency"], alert["window_size"], alert["enabled"]) == ("PT5M", "PT15M", True)
     assert [(c["metric_name"], c["aggregation"], c["operator"], c["threshold"]) for c in alert["criteria"]] == [
         ("RunsFailed", "Total", "GreaterThan", 0)]
+    lock_failed = after["azurerm_monitor_metric_alert.sweeper_lock_failed"]
+    assert [(c["metric_name"], c["aggregation"], c["operator"], c["threshold"]) for c in lock_failed["criteria"]] == [
+        ("RunsCancelled", "Total", "GreaterThan", 0)]
+    locked = after["azurerm_monitor_activity_log_alert.sweeper_locked"]
+    assert [(c["category"], c["operation_name"], c["statuses"]) for c in locked["criteria"]] == [
+        ("Administrative", "Microsoft.Authorization/roleAssignments/delete", ["Succeeded"])]
     assert after["azurerm_monitor_action_group.sweeper_failed"]["name"] == "ci-sweeper-failed"
     wf = after["azapi_resource.sweeper"]
     assert (wf["type"], wf["name"], wf["location"]) == ("Microsoft.Logic/workflows@2019-05-01", "ci-sweeper",

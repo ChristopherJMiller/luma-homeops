@@ -77,7 +77,7 @@ run "restore_plan_knows_the_lock_target" {
   }
 
   assert {
-    condition     = azapi_resource.sweeper.body.properties.definition.actions.Trip.actions.Delete_dispatcher_assignment.inputs.uri == "https://management.azure.com${var.want_id}"
+    condition     = azapi_resource.sweeper.body.properties.definition.actions.Trip.actions.Lock_assignment.actions.Delete_dispatcher_assignment.inputs.uri == "https://management.azure.com${var.want_id}"
     error_message = "The sweeper's lock doesn't delete the dispatcher's assignment in the restore plan."
   }
 

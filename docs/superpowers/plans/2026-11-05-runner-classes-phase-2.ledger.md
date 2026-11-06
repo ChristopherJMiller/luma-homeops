@@ -17,6 +17,10 @@ Phase 1 ledger cited below: `.superpowers/sdd/2026-11-04-runner-classes-phase-0-
 - Cache design: paid CI cap $80 per period (CI-group budget $85); release repo `realliance/forgejo` first; per-job egress cap in phase 2.
 - Accepted risk: a compromised dispatcher churning groups shorter than one sweep evades the egress rule; only the budget bounds it. Task 20 records it as spec amendment (h).
 
+### Chris (2026-11-06)
+
+- I3 (Task 3 review): the dispatcher's hourly gate drops to $0.48 (480_000 µ$), 4 `small` or 2 `medium` at once. The sweeper's $0.60 line, compute plus egress, stays, so the worst-case arithmetic is unchanged and legitimate egress gets about $0.12 an hour of headroom. The plan carries it in E4, Values, Review Focus 1, Decided, and Tasks 4, 10, 12, 13, 14, 17 and 20 (amendment (i)).
+
 ### Carried phase 1 rulings (phase 1 `progress.md` line)
 
 - 4: credit period is the UTC calendar month; ledger is `modernc.org/sqlite`.
@@ -46,6 +50,11 @@ Two phase 1 carries address phase 2 and this plan does not claim them:
 
 1. Phase 1 Task 12 fix round: "M8 -> Chris at Task 19/phase 2" (phase 1 ledger line 147).
 2. The hold table's growth: soft-cleared rows are never pruned, "revisit in phase 2" (phase 1 ledger line 82).
+
+### Open items for Chris, raised at Task 3's review (2026-11-06)
+
+1. **Alternating sweeps evade the rate trip,** not only groups shorter than one sweep. A batch created just after sweep k−1 and deleted just before k+1 lives about 20 min and only sweep k sees it, so sweep k+1 clears the tag. The next batch repeats that, close to 100 % of the time, with no trip and no age delete. The fixed recurrence and the history reader make sweep times predictable to the second. Only the budget bounds it (8–48 h late).
+2. **A possible partial fix, to spike:** the sweeper reads the CI group's Activity Log for container-group writes and deletes since the last slot, and counts compute and egress for groups that churned between sweeps. That needs metrics to stay queryable by id after a delete (unverified). A churned group would then count one sweep late, instead of never. No code yet.
 
 ## Baseline
 
@@ -142,6 +151,25 @@ Taken 2026-11-05.
   - `azurerm_monitor_action_group.sweeper_failed`, `azurerm_monitor_metric_alert.sweeper_failed`
 - **Tests:** static `196 passed, 4 skipped`; with `AZURE_CI_PLAN_JSON`, `200 passed`. The suite runs the template in a small Logic Apps simulator against a fake ARM. 20 of 20 mutations fail it, among them the assignment DELETE after the groups, any 4xx counted as locked, and the dropped timeout.
 
+### Task 3 fix round 1 (review 0/3/8, 2026-11-06)
+
+- **I1, design A (controller's ruling):** the tag `ci-sweeper-lock` holds the `createdOn` (seconds) of the assignment instance a lock aims at.
+  - Pending while that instance or an older one exists, or none does: every sweep trips first and retries the DELETE, F7 order.
+  - Restored only by a newer instance, which only Chris's apply can create; the sweeper then removes the tag.
+  - An unreadable assignment is neither, and the run is `Degraded`.
+  - The tag write runs after the DELETE, in parallel with the group deletes, and only when no lock tag exists or after a restore. No new grant; the tag joins `ignore_changes`, so the restore plan stays 1 to add, 0 to change.
+- **I2:** the rate tag stores and compares the recurrence slot (`trigger().scheduledTime`, falling back to the trigger's start, then the clock). The metric windows and the age kill keep `utcNow()`.
+- **I3 (Chris):** the plan amendments listed under "Chris (2026-11-06)".
+- **M1:** the budget, already-locked and pending trips decide right after the reads and skip the egress and age work.
+- **M2:** an assignment that reads 404 counts as `Locked`, and no DELETE goes.
+- **M3:** the trip deletes the union of the ACI list and the RG list's container groups, minus those deleted this run.
+- **M5:** `LockFailed` ends the run `Cancelled` (Azure refuses `runError` on Cancelled, so a `Lock_failed` step holds the detail). Three alerts: `ci-sweeper-failed` (RunsFailed: Degraded, and Locked runs), `ci-sweeper-lock-failed` (RunsCancelled), `ci-sweeper-locked` (Activity Log, the assignment's delete). Logic Apps exposes only two failing run statuses as metrics, hence the third channel.
+- **M4, M6, M7, M8:** README notes (check the next sweep after unlocking; the egress term fails open; a budget lock holds for the month; the shape price ignores `gpu`, `sku` and `limits`).
+- **Found while testing:** `Clear_lock` running after a failed rate-tag write masked that failure; `If_degraded` now checks `Over_ceiling` itself.
+- **Azure check:** `validate` accepts the 60-action definition (placeholder ids). It refused `runError` on a Cancelled terminate, and accepted `trigger()?['scheduledTime']`, `Select` and `union`.
+- **Plan:** `Plan: 28 to add, 0 to change, 0 to destroy.` The 26 before, plus `azurerm_monitor_metric_alert.sweeper_lock_failed` and `azurerm_monitor_activity_log_alert.sweeper_locked`.
+- **Tests:** static `219 passed, 4 skipped`; with `AZURE_CI_PLAN_JSON`, `223 passed`. Against the pre-fix code the new suite fails 46 cases (22 tests). 34 of 34 mutations fail it, the review's five lock mutations among them.
+
 ## Task 4
 
 - **Carry from Task 2 (review m3):** confirm a Policy deny before the dispatcher secret ships.
@@ -150,6 +178,10 @@ Taken 2026-11-05.
   - F33: if the plan shows the workflow `1 to change`, match the template to the server's normalised form.
   - Step 4's egress check also confirms two runtime assumptions: an idle running group reports average 0, not "no data", and a group with no data yet answers with an empty `timeseries` or a point without `average`. Both feed average × seconds.
   - The apply may refuse the ABAC condition on the sweeper's assignment: drop it and ledger it.
+- **Carries from Task 3's review (2026-11-06):**
+  - I3: measure a real `small` job's transmitted bytes in the smoke (the total and the highest 10-min average). All groups together may send about 380 KB/s under the $0.48 gate before two sweeps lock.
+  - M6: what a metric read returns for a group deleted a moment before. On a 404 the egress term fails open and the run is `Degraded`.
+  - I2: the first runs confirm that `trigger().scheduledTime` is set on a Recurrence run; the tag `ci-sweeper-over-at` then reads a whole 10-min slot.
 
 ## Task 5
 
