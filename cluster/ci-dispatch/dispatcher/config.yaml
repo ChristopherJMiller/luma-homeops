@@ -6,7 +6,8 @@
 #
 # Move a class from dry-run to on only by editing `classes` here and watching the decision log
 # for a day (docs/ci.md). Only `tiny` can be anything but off in phase 1: config.Load refuses a
-# paid class in another mode.
+# paid class in another mode. dry-run decides, logs and counts, and launches nothing; the reaper
+# still runs, on the dispatcher's own ci-tiny-<job>-<attempt>-<try> Jobs and runners only.
 forgejo:
   # The in-cluster Service (Forgejo pods, TCP 3000), never the public name through the router.
   url: http://forgejo-http.forgejo.svc.cluster.local:3000

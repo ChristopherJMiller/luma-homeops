@@ -24,6 +24,7 @@ resources:
   - forgejo-release.yaml
   - forgejo-runner.yaml
   - forgejo-runner-general.yaml
+  - ci-dispatch.yaml
   - home-assistant.yaml
   - home-assistant-release.yaml
   - home-assistant-mosquitto.yaml
