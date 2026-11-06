@@ -8,6 +8,7 @@
 #   scripts/netpol-verify.sh canary [--node NAME]
 #   scripts/netpol-verify.sh stray [--since DUR]      DUR like 15m (the default), 2h
 #   scripts/netpol-verify.sh alert
+#   scripts/netpol-verify.sh runner
 #
 # Exit 0 = pass, 1 = at least one FAIL (an answer that does not parse is a FAIL
 # too, never a vacuous pass), 2 = the check could not run or is meaningless (no
@@ -73,6 +74,9 @@
 #
 # alert -- Prometheus has loaded the NetpolCanaryFailing rule as the object writes it, checked
 # by name (alert()).
+#
+# runner -- B2 (§9.3): the forgejo-runner pod dials the runner rows and every dropped row needs a
+# deny of its own, judged as canary judges (runner()).
 set -uo pipefail
 
 : "${KUBECONFIG:=/tmp/galaxy-kubeconfig}"; export KUBECONFIG
@@ -88,11 +92,14 @@ PROBE_SELECTOR=app.kubernetes.io/name=netpol-probe
 CANARY_NODES=3
 # How many more runs an AMBIGUOUS pod gets (review round 3, R3-1).
 CANARY_RERUNS=3
+
+RUNNER_NS=forgejo-runner
+RUNNER_SELECTOR=app.kubernetes.io/name=forgejo-runner
 # exec_timeout ROWS -> seconds to allow one `probe.sh once` in a pod: every row and the WAN lookup
 # at probe.sh's deadline, plus 30 s. A healthy run takes seconds. Needs probe.sh sourced.
 exec_timeout() { echo $((($1 + 1) * PROBE_DEADLINE_DEFAULT + 30)); }
 
-usage() { echo "usage: $0 idle | selftest | baseline | canary [--node NAME] | stray [--since DUR] | alert" >&2; exit 2; }
+usage() { echo "usage: $0 idle | selftest | baseline | canary [--node NAME] | stray [--since DUR] | alert | runner" >&2; exit 2; }
 die() { echo "ERROR: $*" >&2; exit 2; }
 # The cluster answered, but not with what we can judge: a FAIL, not "could not run".
 parse_fail() { echo "FAIL parse: $*"; echo "${CHECK:-idle}: FAIL (unparseable answer)"; exit 1; }
@@ -351,6 +358,9 @@ deny_attempts() {
 # literal .240:6443 row, 3.022 to 3.024 s). claim_rows pairs attempts with this.
 ROW_GAP_MIN=2.9
 ROW_GAP_MAX=3.5
+# A row's slot, around its start on the pod's clock (runner): the first SYN follows node's start-up.
+SLOT_BEFORE=0.25
+SLOT_AFTER=1.5
 
 # claim_rows REQS ATTEMPTS -> "row<TAB>status<TAB>why" per row of REQS ("row<TAB>direction<TAB>
 # dst,dst,..."), the must-drop rows in the order the probe runs them; status 1 (logged), 0 (not
@@ -373,9 +383,17 @@ ROW_GAP_MAX=3.5
 # k-th attempt in time is the k-th row's, if it fits that row. In the 1-in-27 case where all three
 # ClusterIP SYNs land on .240, that names the earlier attempt the ClusterIP row's. A ClusterIP path
 # that never logs leaves one attempt for two rows, so it still reads NOT-LOGGED. Another run in
-# the window leaves the group A, and canary runs the pod again.
+# the window leaves the group A, and canary runs the pod again. Pairing rests on that other run's
+# neighbouring rows being logged: if the agent logged its literal attempt and lost the rest, the two
+# literal attempts would pass as a pair (review of the pre-work, probe a).
+#
+# STARTS (optional, "row<TAB>seconds"; runner) gives each row's start on the pod's clock, counted as
+# deny_attempts counts. A row of an overlapping group then takes the one attempt whose first SYN
+# falls in its slot, SLOT_BEFORE before to SLOT_AFTER after its start: none reads 0; two or more read A.
+# That holds with another run in the window too, unless its attempt lands in the same slot.
 claim_rows() {
-  awk -F'\t' -v gapmin="$ROW_GAP_MIN" -v gapmax="$ROW_GAP_MAX" '
+  awk -F'\t' -v gapmin="$ROW_GAP_MIN" -v gapmax="$ROW_GAP_MAX" -v reqsf="$1" -v startsf="${3:-}" \
+    -v before="$SLOT_BEFORE" -v after="$SLOT_AFTER" '
     function overlaps(a, b,   n, arr, i) {
       n = split(cands[a], arr, ",")
       for (i = 1; i <= n; i++) if ((b, arr[i]) in incand) return 1
@@ -393,7 +411,8 @@ claim_rows() {
       }
       return hit
     }
-    FNR == NR {
+    FILENAME == startsf { rstart[$1] = $2 + 0; next }
+    FILENAME == reqsf {
       key = $2 "|" $3
       if (!(key in rid)) {
         nreq++; rid[key] = nreq; rdir[nreq] = $2; cands[nreq] = $3; comp[nreq] = nreq
@@ -475,8 +494,31 @@ claim_rows() {
         }
         if (ok) for (r = 1; r <= nreq; r++) if (find(r) == g) { st[r] = 1; why[r] = ""; kind[r] = "paired" }
       }
+      # Timed slots, when the start of each row is known: they decide the overlapping groups.
+      if (startsf != "")
+        for (g = 1; g <= nreq; g++) {
+          if (find(g) != g || greqs[g] < 2) continue
+          n = 0; known = 1
+          for (k = 1; k <= nrows; k++) if (find(rowreq[k]) == g) { n++; prow[n] = rowreq[k]; pid[n] = rowid[k]; if (!(rowid[k] in rstart)) known = 0 }
+          if (!known) continue
+          for (i = 1; i <= n; i++) {
+            cnt = 0; tsp[i] = ""
+            for (j = 1; j <= gatt[g]; j++) {
+              sp = gsp[g, j]
+              if (first[g, sp] < rstart[pid[i]] - before || first[g, sp] > rstart[pid[i]] + after) continue
+              if (!fitsrow(sp, prow[i], g)) continue
+              cnt++; tsp[i] = sp
+            }
+            tst[i] = (cnt == 1) ? 1 : ((cnt == 0) ? 0 : "A")
+            twhy[i] = (cnt == 0) ? "no attempt in its slot on the pod clock" : ((cnt > 1) ? cnt " attempts in its slot on the pod clock" : "")
+          }
+          for (i = 1; i <= n; i++)
+            for (j = i + 1; j <= n; j++)
+              if (tst[i] == 1 && tst[j] == 1 && tsp[i] == tsp[j]) { tst[i] = tst[j] = "A"; twhy[i] = twhy[j] = "one attempt in two slots" }
+          for (i = 1; i <= n; i++) { st[prow[i]] = tst[i]; why[prow[i]] = twhy[i]; kind[prow[i]] = "timed" }
+        }
       for (k = 1; k <= nrows; k++) print rowid[k] "\t" st[rowreq[k]] "\t" why[rowreq[k]]
-    }' "$1" "$2"
+    }' "$1" "${3:-/dev/null}" "$2"
 }
 
 # backend_dsts NS SVC PORT -> one IP:PORT per endpoint address: where a dial to the Service on PORT
@@ -579,15 +621,15 @@ policed_namespaces() {
 
 # cluster_pods -> $tmp/pods-now.tsv: "ns/name<TAB>podIP<TAB>since<TAB>holds" for every pod now,
 # since as YYYYMMDDHHMMSS (UTC): when the pod got its current IP. That is the last transition of
-# its PodReadyToStartContainers condition, which the kubelet sets once the sandbox and its network
-# are up; a sandbox recreated after a node reboot gets a new IP while startTime stays put
+# its PodReadyToStartContainers condition to True, which the kubelet sets once the sandbox and its
+# network are up (a False condition means no sandbox now, so it falls back too); a sandbox recreated after a node reboot gets a new IP while startTime stays put
 # (review round 3, R3-2). startTime when the condition is absent (Kubernetes before 1.29). holds is 1 when
 # the pod holds its IP: Running or Pending and not hostNetwork. A finished pod keeps its podIP in
 # status after the IP is free again.
 cluster_pods() {
   kc get pods -A -o json > "$tmp/allpods.json" 2> /dev/null < /dev/null || die "cannot list pods; is KUBECONFIG right?"
   jq -r '.items[] | [(.metadata.namespace + "/" + .metadata.name), (.status.podIP // "-"),
-      (([.status.conditions[]? | select(.type == "PodReadyToStartContainers") | .lastTransitionTime][0] // .status.startTime // "")
+      (([.status.conditions[]? | select(.type == "PodReadyToStartContainers" and .status == "True") | .lastTransitionTime][0] // .status.startTime // "")
         | gsub("[-:TZ]"; "") | if . == "" then "-" else . end),
       (if ((.status.phase == "Running" or .status.phase == "Pending") and (.spec.hostNetwork != true) and (.status.podIP // "") != "") then 1 else 0 end)]
       | @tsv' "$tmp/allpods.json" > "$tmp/pods-now.tsv" 2> /dev/null || parse_fail "the pod list"
@@ -707,10 +749,11 @@ canary_exec() {
   echo $? > "$tmp/$pod.rc"
 }
 
-# canary_judge POD NODE -> $tmp/POD.report (what to print) and $tmp/POD.verdict (PASS, FAIL or
-# AMBIGUOUS), from $tmp/attempts.tsv and the backends' destinations ($tmp/dst).
+# canary_judge POD NODE [NS] -> $tmp/POD.report (what to print), $tmp/POD.verdict (PASS, FAIL or
+# AMBIGUOUS) and $tmp/POD.counts ("rows logged dropped"), from $tmp/attempts.tsv and the backends'
+# destinations ($tmp/dst). NS is the pod's namespace (default netpol-canary).
 canary_judge() {
-  local pod=$1 node=$2 rows rc summary npass nfail d=0 dn=0 amb=0 order=ok i=0 row line expect host port backend
+  local pod=$1 node=$2 ns=${3:-$CANARY_NS} rows rc summary npass nfail d=0 dn=0 amb=0 order=ok i=0 row line expect host port backend
   local lexpect lhp w t0 t1 e0 e1 k0="" k1="" st why dir b verdict
   rows=$(wc -l < "$tmp/$pod.rows")
   rc=$(cat "$tmp/$pod.rc" 2> /dev/null)
@@ -734,7 +777,7 @@ canary_judge() {
     order="the pod printed no T0/T1 clock reading"
   fi
   printf '%s\t%s\n' "$k0" "$k1" > "$tmp/$pod.window"
-  awk -F'\t' -v p="$CANARY_NS/$pod" -v a="$k0" -v b="$k1" 'a != "" && $2 == p && $1 >= a && $1 <= b' "$tmp/attempts.tsv" > "$tmp/$pod.attempts"
+  awk -F'\t' -v p="$ns/$pod" -v a="$k0" -v b="$k1" 'a != "" && $2 == p && $1 >= a && $1 <= b' "$tmp/attempts.tsv" > "$tmp/$pod.attempts"
   # Row i of the repo's expansion against line i of the pod's table: a stale ConfigMap shows here.
   [ "$(wc -l < "$tmp/$pod.lines")" -eq "$rows" ] || order="the pod ran $(wc -l < "$tmp/$pod.lines") rows, the repo has $rows"
   : > "$tmp/$pod.reqs"
@@ -762,7 +805,11 @@ canary_judge() {
     printf '%s\t%s\t%s\n' "$i" "$(row_direction "$host:$port")" "$w" >> "$tmp/$pod.reqs"
     printf '%s\t%s\t%s\n' "$i" "${lhp:-$host:$port}" "${backend/#-/the literal}" >> "$tmp/$pod.labels"
   done < <(paste -d$'\t' "$tmp/$pod.rows" "$tmp/$pod.lines")
-  claim_rows "$tmp/$pod.reqs" "$tmp/$pod.attempts" > "$tmp/$pod.claims"
+  if [ -s "$tmp/$pod.starts" ]; then
+    claim_rows "$tmp/$pod.reqs" "$tmp/$pod.attempts" "$tmp/$pod.starts" > "$tmp/$pod.claims"
+  else
+    claim_rows "$tmp/$pod.reqs" "$tmp/$pod.attempts" > "$tmp/$pod.claims"
+  fi
   while IFS=$'\t' read -r i st why; do
     [ "$st" != 1 ] || { d=$((d + 1)); continue; }
     IFS=$'\t' read -r _ dir w < <(awk -F'\t' -v i="$i" '$1 == i' "$tmp/$pod.reqs")
@@ -771,7 +818,7 @@ canary_judge() {
       amb=$((amb + 1))
       echo "AMBIGUOUS $lhp ($dir to $b: ${w:-none}; $why)" >> "$tmp/$pod.report"
     else
-      echo "NOT-LOGGED $lhp (no $dir deny of its own from $CANARY_NS/$pod to $b: ${w:-none})" >> "$tmp/$pod.report"
+      echo "NOT-LOGGED $lhp (no $dir deny of its own from $ns/$pod to $b: ${w:-none})" >> "$tmp/$pod.report"
     fi
   done < "$tmp/$pod.claims"
   if [ "$amb" -eq 0 ]; then
@@ -786,6 +833,152 @@ canary_judge() {
   fi
   [ "$verdict" != FAIL ] || echo "FAIL $node exit=${rc:-?} summary='${summary:-none}' order=$order" >> "$tmp/$pod.report"
   echo "$verdict" > "$tmp/$pod.verdict"
+  echo "$rows $d $dn" > "$tmp/$pod.counts"
+}
+
+# resolve_backends -> $tmp/dst/<ns>_<svc>_<port>: the post-DNAT IP:PORTs of every backend row in
+# $tmp/*.rows (backend_dsts), port anchored.
+resolve_backends() {
+  local b p
+  mkdir -p "$tmp/dst"
+  cat "$tmp"/*.rows | awk '$1 == "dropped" && $5 != "-" { print $5, $4 }' | sort -u > "$tmp/backends.txt"
+  while read -r b p; do
+    backend_dsts "${b%%/*}" "${b#*/}" "$p" > "$tmp/dst/${b%%/*}_${b#*/}_$p"
+  done < "$tmp/backends.txt"
+}
+
+# year_secs MS -> seconds since 1 January (UTC) of MS, epoch milliseconds, counted as deny_attempts
+# counts them (the same month table, so the two always agree).
+year_secs() {
+  local mo d hh mi ss
+  read -r mo d hh mi ss < <(date -u -d "@$(($1 / 1000))" '+%m %d %H %M %S')
+  awk -v mo="$mo" -v d="$d" -v hh="$hh" -v mi="$mi" -v ss="$ss" -v ms="$(($1 % 1000))" 'BEGIN {
+    split("0 31 59 90 120 151 181 212 243 273 304 334", cum, " ")
+    printf "%.3f\n", (cum[mo + 0] + d - 1) * 86400 + hh * 3600 + mi * 60 + ss + ms / 1000 }'
+}
+
+# runner_exec POD NODE -> $tmp/POD.{out,err,rc,starts}: every row of $tmp/POD.dial dialled in ONE
+# exec in the runner pod, in order, with scripts/netpol-connect.js (design §9.3). node reads the pod's
+# clock before the run (T0), before each row, and after (T1), in epoch milliseconds. .out is the
+# probe's table (T0, PASS|FAIL expect got host:port note, SUMMARY, T1), so canary_judge reads it
+# unchanged; .starts holds each row's start, so claim_rows pairs the overlapping rows on the pod's
+# own clock (review of the pre-work, T8-2, T8-3).
+runner_exec() {
+  local pod=$1 node=$2 js limit args=() expect host port got verdict npass=0 total=0 erc i=0 t0 t1 ms row note
+  js=$(cat "$ROOT/scripts/netpol-connect.js") || die "missing scripts/netpol-connect.js"
+  while read -r expect _ host port _ _; do
+    if [ "$expect" = dns ]; then args+=(dns "$host" -); else args+=(tcp "$host" "$port"); fi
+  done < "$tmp/$pod.dial"
+  limit=$(exec_timeout "$(wc -l < "$tmp/$pod.dial")")
+  # shellcheck disable=SC2016
+  timeout "$limit" kubectl -n "$RUNNER_NS" exec "$pod" -c runner -- sh -c '
+    js=$1; shift
+    now() { node -e "process.stdout.write(String(Date.now()))"; }
+    echo "T0 $(now)"
+    while [ "$#" -ge 3 ]; do
+      t=$(now)
+      if [ "$1" = dns ]; then r=$(node -e "$js" dns "$2" 2> /dev/null); else r=$(node -e "$js" tcp "$2" "$3" 2> /dev/null); fi
+      echo "R $1 $2 $3 ${r:-other:empty} $t"
+      shift 3
+    done
+    echo "T1 $(now)"' sh "$js" "${args[@]}" > "$tmp/$pod.raw" 2> "$tmp/$pod.err" < /dev/null
+  erc=$?
+  t0=$(awk '$1 == "T0" && $2 ~ /^[0-9]+$/ { print $2; exit }' "$tmp/$pod.raw")
+  t1=$(awk '$1 == "T1" && $2 ~ /^[0-9]+$/ { print $2; exit }' "$tmp/$pod.raw")
+  : > "$tmp/$pod.starts"
+  {
+    [ -z "$t0" ] || echo "T0 $(date -u -d "@$((t0 / 1000))" '+%m%d %H:%M:%S')"
+    while IFS=$'\t' read -r row got ms; do
+      i=$((i + 1))
+      read -r expect _ host port _ note <<< "$row"
+      total=$((total + 1))
+      if [ -n "$got" ] && probe_judge "$expect" "$got" enforced; then verdict=PASS; npass=$((npass + 1)); else verdict=FAIL; fi
+      echo "$verdict $expect ${got:-missing} $host:$port${note:+ $note}"
+      [[ ! "$ms" =~ ^[0-9]+$ ]] || printf '%s\t%s\n' "$i" "$(year_secs "$ms")" >> "$tmp/$pod.starts"
+    done < <(paste -d$'\t' "$tmp/$pod.dial" <(awk '$1 == "R" { print $5 "\t" $6 }' "$tmp/$pod.raw"))
+    echo "SUMMARY $npass/$total enforced node=$node"
+    [ -z "$t1" ] || echo "T1 $(date -u -d "@$(((t1 + 999) / 1000))" '+%m%d %H:%M:%S')"
+  } > "$tmp/$pod.out"
+  if [ "$erc" -ne 0 ]; then echo "$erc" > "$tmp/$pod.rc"
+  elif [ "$npass" -eq "$total" ] && [ "$total" -gt 0 ]; then echo 0 > "$tmp/$pod.rc"
+  else echo 1 > "$tmp/$pod.rc"; fi
+}
+
+# runner -- B2 and after (§9.3): the forgejo-runner pod dials every runner row of matrix.txt (scope
+# all, expanded with its node's name and host IP, so its own BMC is skipped; counts come from the
+# matrix) and must pass each; every dropped row needs a deny of its own from forgejo-runner/<pod>
+# inside the run's window, judged as canary judges (backend_dsts, deny_attempts, claim_rows,
+# row_direction), then `stray` over that window. Exit 2 unless exactly one runner pod is Running and
+# Ready. It assumes an idle runner: in host mode a job shares the pod's network namespace, so a
+# job's denies carry the same srcPod and land in the window (they can only make it AMBIGUOUS).
+runner() {
+  local pod node phase hostip ready wan round k0 k1 counts
+  ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+  local probe=$ROOT/cluster/netpol-canary/probe.sh matrix=$ROOT/cluster/netpol-canary/matrix.txt
+  [ -f "$probe" ] && [ -f "$matrix" ] || die "missing $probe or $matrix"
+  # shellcheck source=/dev/null
+  . "$probe"
+
+  kc -n "$RUNNER_NS" get pods -l "$RUNNER_SELECTOR" -o json > "$tmp/runner-pods.json" 2> /dev/null \
+    || die "cannot list pods in $RUNNER_NS; is KUBECONFIG right?"
+  jq -r '.items[] | select(.metadata.deletionTimestamp == null)
+      | [.metadata.name, (.spec.nodeName // "-"), (.status.phase // "-"), (.status.hostIP // "-"),
+         ([.status.conditions[]? | select(.type == "Ready") | .status][0] // "False")] | @tsv' \
+    "$tmp/runner-pods.json" > "$tmp/runner-pods.tsv" 2> /dev/null || parse_fail "the runner pod list"
+  if [ "$(wc -l < "$tmp/runner-pods.tsv")" -ne 1 ]; then
+    sed 's/^/  /' "$tmp/runner-pods.tsv" >&2
+    die "need exactly 1 forgejo-runner pod (found $(wc -l < "$tmp/runner-pods.tsv"))"
+  fi
+  IFS=$'\t' read -r pod node phase hostip ready < "$tmp/runner-pods.tsv"
+  [ "$phase" = Running ] && [ "$ready" = True ] || die "forgejo-runner pod $pod is $phase, Ready=$ready"
+  wan=${NETPOL_WAN_IP:-$(dig +short git.realliance.net 2> /dev/null | grep -E '^[0-9.]+$' | tail -n 1)}
+  [ -n "$wan" ] || die "cannot resolve git.realliance.net"
+
+  # Rows with $WAN_IP left as a placeholder for the judge; the same rows with it filled in to dial.
+  NODE_NAME=$node HOST_IP=$hostip WAN_IP='$WAN_IP' probe_rows "$matrix" runner > "$tmp/$pod.rows" 2> /dev/null \
+    || die "matrix.txt does not expand for $node"
+  NODE_NAME=$node HOST_IP=$hostip WAN_IP=$wan probe_rows "$matrix" runner > "$tmp/$pod.dial" 2> /dev/null \
+    || die "matrix.txt does not expand for $node"
+  resolve_backends
+  echo "runner: $node $(wc -l < "$tmp/$pod.rows") rows, exec timeout $(exec_timeout "$(wc -l < "$tmp/$pod.rows")") s"
+  runner_exec "$pod" "$node"
+  canary_logs
+  policed_namespaces
+  cluster_pods
+  canary_judge "$pod" "$node" "$RUNNER_NS"
+  IFS=$'\t' read -r k0 k1 < "$tmp/$pod.window"
+  for round in $(seq "$CANARY_RERUNS"); do
+    [ "$(cat "$tmp/$pod.verdict")" = AMBIGUOUS ] || break
+    echo "RERUN $node $pod ($round of $CANARY_RERUNS): overlapping rows ambiguous, one more run"
+    grep '^AMBIGUOUS ' "$tmp/$pod.report" | sed 's/^/  last run: /'
+    runner_exec "$pod" "$node"
+    canary_logs
+    canary_judge "$pod" "$node" "$RUNNER_NS"
+    IFS=$'\t' read -r _ k1 < "$tmp/$pod.window"
+  done
+  cat "$tmp/$pod.report"
+
+  if [ -n "$k0" ] && [ -n "$k1" ]; then klog_window "$k0" "$k1" < "$tmp/agents.log" > "$tmp/agents.run"; else : > "$tmp/agents.run"; fi
+  local fail=0
+  if stray_check "$tmp/agents.run"; then
+    echo "stray: PASS ($(stray_counts), policed: ${POLICED:-none})"
+  else
+    echo "stray: FAIL ($STRAY_N of $DENY_N deny lines stray, policed: ${POLICED:-none})"
+    fail=1
+  fi
+  read -r counts < "$tmp/$pod.counts"
+  set -- $counts
+  case $(cat "$tmp/$pod.verdict") in
+    PASS) ;;
+    AMBIGUOUS) [ "$fail" -eq 1 ] || { echo "runner: AMBIGUOUS ($1 rows, $2/$3 deny-logged, still ambiguous after $((CANARY_RERUNS + 1)) runs; run it again)"; return 2; } ;;
+    *) fail=1 ;;
+  esac
+  if [ "$fail" -eq 0 ]; then
+    echo "runner: PASS ($1 rows, $2/$3 deny-logged)"
+    return 0
+  fi
+  echo "runner: FAIL ($1 rows, $2/$3 deny-logged)"
+  return 1
 }
 
 # canary_logs -> $tmp/attempts.tsv from every agent's last 10 minutes, read after the runs so their
@@ -834,11 +1027,7 @@ canary() {
       || die "matrix.txt does not expand for $node"
   done < "$tmp/probes.tsv"
   # Post-DNAT destinations for each backend row: IP:PORT, port anchored.
-  mkdir -p "$tmp/dst"
-  cat "$tmp"/*.rows | awk '$1 == "dropped" && $5 != "-" { print $5, $4 }' | sort -u > "$tmp/backends.txt"
-  while read -r b p; do
-    backend_dsts "${b%%/*}" "${b#*/}" "$p" > "$tmp/dst/${b%%/*}_${b#*/}_$p"
-  done < "$tmp/backends.txt"
+  resolve_backends
 
   while IFS=$'\t' read -r pod node _ _; do
     echo "canary: $node $(wc -l < "$tmp/$pod.rows") rows, exec timeout $(exec_timeout "$(wc -l < "$tmp/$pod.rows")") s"
@@ -1230,7 +1419,7 @@ selftest() {
 CHECK=$1
 shift
 case "$CHECK" in
-  idle | selftest | baseline | alert) [ "$#" -eq 0 ] || usage; "$CHECK" ;;
+  idle | selftest | baseline | alert | runner) [ "$#" -eq 0 ] || usage; "$CHECK" ;;
   canary)
     if [ "$#" -eq 0 ]; then canary ""
     elif [ "$#" -eq 2 ] && [ "$1" = --node ] && [ -n "$2" ]; then canary "$2"

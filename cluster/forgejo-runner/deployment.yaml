@@ -59,6 +59,37 @@ spec:
                   - key: kubernetes.io/hostname
                     operator: In
                     values: [middle]
+      # netpol-gate (netpol plan Task 8, B2; design §6.3): the runner must not register or take a job
+      # until this pod's egress is enforced. Without NRI the enforcer enrols a new pod's IP a moment
+      # after the pod starts, and a job before that would run unconfined. A timeout to the API
+      # ClusterIP means the packet was dropped, so the policy is live and the gate passes; a connect,
+      # or any error such as a refusal, means not yet, so it waits.
+      # Never allow the API server in this namespace's egress, or this gate waits forever.
+      initContainers:
+        - name: netpol-gate
+          # Keep this image equal to the runner's; netpol-manifests (pre-commit) fails otherwise, and
+          # Renovate bumps both lines together.
+          image: ghcr.io/christopherjmiller/forgejo-runner:sha-6b269ab@sha256:3bb2fca689b0c986039be061a4201580488c30bcdcb476815f80d737f97b76e9
+          command:
+            - sh
+            - -c
+            - |
+              until node -e 'const s=require("net").connect({host:"10.96.0.1",port:443,timeout:3000});
+                s.on("connect",()=>process.exit(1));s.on("timeout",()=>process.exit(0));
+                s.on("error",()=>process.exit(1))'; do
+                echo "egress not enforced yet; waiting"; sleep 3
+              done
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
       containers:
         - name: runner
           # images/forgejo-runner (forgejo-runner v13.2.1, Go, ko, Node, git, gcc), built by GitHub

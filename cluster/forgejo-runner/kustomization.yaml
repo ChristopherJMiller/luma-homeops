@@ -14,3 +14,11 @@ resources:
   - pvc.yaml
   - runner-config.yaml
   - deployment.yaml
+# NetworkPolicy (netpol plan Task 8, B2; design §6.3): default-deny, DNS, and egress to the forge
+# through the WAN /25 on 443 plus the public internet; never the cluster, the LAN, the tailnet or the
+# router's own services. This kustomization's namespace puts the components' policies in forgejo-runner.
+# deployment.yaml's netpol-gate holds the runner back until they are enforced for its pod.
+components:
+  - ../components/netpol/default-deny
+  - ../components/netpol/allow-dns
+  - ../components/netpol/egress-internet-only

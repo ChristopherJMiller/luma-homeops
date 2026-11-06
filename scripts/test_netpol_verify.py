@@ -79,6 +79,7 @@ case "$args" in
   *" endpointslices "*) svc=${args#*kubernetes.io/service-name=}; answer "$F/eps/${ns}_${svc%% *}" ;;
   *" get pods -A "*) answer "$F/allpods.json" ;;
   *" netpol-canary get pods "*) answer "$F/probe-pods.json" ;;
+  *" forgejo-runner get pods "*) answer "$F/runner-pods.json" ;;
   *" exec "*) p=${args#* exec }; p=${p%% *}
     [ -f "$F/exec/$p.rc" ] || { echo "Error from server (NotFound): pods \"$p\" not found" >&2; exit 1; }
     cat "$F/exec/$p"; exit "$(cat "$F/exec/$p.rc")" ;;
@@ -530,12 +531,13 @@ ROW_GAP = 3.022
 
 
 def deny_lines(pod_name: str, rows: list[list[str]], objs: dict, skip: str | None = None, ago_s: float = 0,
-               shift: dict[str, float] | None = None, port_base: int = 41000) -> list[str]:
+               shift: dict[str, float] | None = None, port_base: int = 41000, src_pod: str | None = None,
+               src_ip: str | None = None) -> list[str]:
     """Each dropped row's attempt as the enforcer logs it: one source port per row, three SYNs (at +0,
     +1 and +3 s) to the literal destination or to the backend's post-DNAT IP:PORTs in turn
     (kube-proxy picks a backend per SYN); ingress at the echo for the 9377 row, egress otherwise.
     The rows run in order, ROW_GAP apart, the first one 1 s ago (plus AGO_S). shift: host:port ->
-    seconds later for that row's attempt."""
+    seconds later for that row's attempt. src_pod/src_ip: the source (default the canary probe)."""
     out, j = [], 0
     for i, (expect, _scope, host, port, backend, *_) in enumerate(rows):
         if expect != "dropped":
@@ -545,14 +547,15 @@ def deny_lines(pod_name: str, rows: list[list[str]], objs: dict, skip: str | Non
         if f"{host}:{port}" == skip:
             continue
         dsts = [f"{host}:{port}"] if backend == "-" else resolve(objs, backend, int(port))
-        src = f"{PROBE_IP.get(pod_name.removeprefix('netpol-probe-'), '10.244.3.9')}:{port_base + i}"
+        src = f"{src_ip or PROBE_IP.get(pod_name.removeprefix('netpol-probe-'), '10.244.3.9')}:{port_base + i}"
+        who = src_pod or f"netpol-canary/{pod_name}"
         for syn, off in enumerate((0, 1, 3)):
             dst = dsts[syn % len(dsts)]
             if f"{host}:{port}" == ECHO_9377:
-                out.append(deny_line(f"netpol-canary/{pod_name}", dst, dst_pod=f"netpol-canary/{ECHO_POD}",
+                out.append(deny_line(who, dst, dst_pod=f"netpol-canary/{ECHO_POD}",
                                      direction="ingress", src=src, ago_s=start - off))
             else:
-                out.append(deny_line(f"netpol-canary/{pod_name}", dst, src=src, ago_s=start - off))
+                out.append(deny_line(who, dst, src=src, ago_s=start - off))
     return out
 
 
@@ -566,13 +569,14 @@ def write_backends(f: Path, objs: dict) -> None:
 
 
 def k8s_pod(ref: str, ip: str, start: str = OLD, phase: str = "Running", host_network: bool = False,
-            ready_to_start: str | None = None) -> dict:
+            ready_to_start: str | None = None, ready_to_start_status: str = "True") -> dict:
     """A pod as `kubectl get pods -A` lists it. ready_to_start: its PodReadyToStartContainers
-    condition last turned True then (the sandbox, and so the IP, came up)."""
+    condition last changed then, to ready_to_start_status (True: the sandbox, and so the IP, came up)."""
     ns, name = ref.split("/")
     status = {"podIP": ip, "startTime": start, "phase": phase}
     if ready_to_start is not None:
-        status["conditions"] = [{"type": "PodReadyToStartContainers", "status": "True", "lastTransitionTime": ready_to_start}]
+        status["conditions"] = [{"type": "PodReadyToStartContainers", "status": ready_to_start_status,
+                                 "lastTransitionTime": ready_to_start}]
     return {"metadata": {"namespace": ns, "name": name}, "spec": {"hostNetwork": host_network}, "status": status}
 
 
@@ -942,6 +946,17 @@ def test_stray_holder_since_falls_back_or_holds(tmp_path, ready_to_start):
     assert "which media/mm-plex-0 has held since" in r.stdout
 
 
+def test_stray_holder_since_ignores_a_false_condition(tmp_path):
+    """Review of the pre-work, M1: a PodReadyToStartContainers condition that is False (no sandbox now)
+    says nothing of when the IP came; startTime stands in. Here that is before the line: STRAY."""
+    lines = [deny_line("netpol-canary/ci-job-abc", "192.168.0.2:80", src="10.244.4.77:40000", ago_s=600)]
+    holder = k8s_pod("media/mm-plex-0", "10.244.4.77", start=iso_ago(86400), ready_to_start=iso_ago(300),
+                     ready_to_start_status="False")
+    r = run(stray_fixtures(tmp_path, lines, pods_now=STRAY_PODS + [holder]), "stray")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "which media/mm-plex-0 has held since" in r.stdout
+
+
 def test_stray_finished_pod_does_not_hold_its_ip(tmp_path):
     """A Succeeded pod keeps podIP in its status after the IP is free: it is not the IP's holder."""
     lines = [deny_line("netpol-canary/ci-job-abc", "192.168.0.2:80", src="10.244.4.77:40000", ago_s=600)]
@@ -1264,3 +1279,171 @@ def test_alert_without_the_object_is_exit_2(tmp_path):
     r = run(alert_fixtures(tmp_path, pr=False), "alert")
     assert r.returncode == 2, r.stdout + r.stderr
     assert "cannot read PrometheusRule prometheus/netpol-canary" in r.stderr
+
+
+# --- runner (B2) ------------------------------------------------------------------
+
+RUNNER_POD = "forgejo-runner-5f48b6bcd7-f56hv"
+RUNNER_IP = "10.244.4.169"
+RUNNER_NODE = "middle"
+RUNNER_POLICED = POLICED + [{"metadata": {"name": "default-deny", "namespace": "forgejo-runner"}}]
+
+
+def expand_runner(node: str = RUNNER_NODE) -> list[list[str]]:
+    """The rows the runner dials on NODE: probe_rows over matrix.txt, scope runner (the all rows),
+    with the node's host IP, less its own BMC."""
+    env = dict(os.environ, NODE_NAME=node, HOST_IP=NODE_IP[node], WAN_IP=WAN_IP)
+    r = subprocess.run(["bash", "-c", '. "$1"; probe_rows "$2" runner', "_", str(PROBE), str(MATRIX)],
+                       env=env, capture_output=True, text=True, check=True)
+    return [line.split() for line in r.stdout.splitlines()]
+
+
+def epoch_ms(offset_s: float = 0) -> int:
+    return int((datetime.now(timezone.utc) + timedelta(seconds=offset_s)).timestamp() * 1000)
+
+
+def runner_raw(rows: list[list[str]], got: dict[str, str] | None = None) -> str:
+    """What runner_exec reads back from the pod: node's clock before the run (T0), one R line per row
+    with the row's start (epoch ms), node's clock after (T1). Dropped row j starts ROW_GAP after the
+    one before, 50 ms before its first SYN in deny_lines."""
+    out, j = [f"T0 {epoch_ms(-2)}"], 0
+    for expect, _scope, host, port, *_ in rows:
+        mode = "dns" if expect == "dns" else "tcp"
+        g = (got or {}).get(f"{host}:{port}", "timeout" if expect == "dropped" else "open")
+        start = epoch_ms(-1 + j * ROW_GAP - 0.05) if expect == "dropped" else epoch_ms(-1.5)
+        j += expect == "dropped"
+        out.append(f"R {mode} {host} {port if mode == 'tcp' else '-'} {g} {start}")
+    out.append(f"T1 {epoch_ms(90)}")
+    return "\n".join(out) + "\n"
+
+
+def runner_fixtures(tmp: Path, *, ready: bool = True, raw: str | None = None, lines=None, skip=None,
+                    live_like: bool = True, extra_log=()) -> Path:
+    fixtures(tmp, ds_doc=ds(3, 3), pods=agents(3), np_items=RUNNER_POLICED)
+    f = tmp / "fx"
+    objs = backends(live_like)
+    write_backends(f, objs)
+    write_pods(f, [k8s_pod(f"forgejo-runner/{RUNNER_POD}", RUNNER_IP)])
+    pod = {"metadata": {"name": RUNNER_POD}, "spec": {"nodeName": RUNNER_NODE},
+           "status": {"phase": "Running", "hostIP": NODE_IP[RUNNER_NODE],
+                      "conditions": [{"type": "Ready", "status": "True" if ready else "False"}]}}
+    (f / "runner-pods.json").write_text(json.dumps({"items": [pod]}))
+    (f / "exec").mkdir()
+    rows = expand_runner()
+    (f / "exec" / RUNNER_POD).write_text(raw if raw is not None else runner_raw(rows))
+    (f / "exec" / f"{RUNNER_POD}.rc").write_text("0")
+    if lines is None:
+        lines = deny_lines(RUNNER_POD, rows, objs, skip=skip, src_pod=f"forgejo-runner/{RUNNER_POD}", src_ip=RUNNER_IP)
+    lines = list(lines) + list(extra_log)
+    for i, a in enumerate(agents(3)):
+        (f / "logs" / a["metadata"]["name"]).write_text(LOG_START + "".join(x + "\n" for x in lines[i::3]))
+    return tmp
+
+
+def run_runner(tmp: Path) -> subprocess.CompletedProcess:
+    env = dict(os.environ, PATH=f"{tmp / 'bin'}:{os.environ['PATH']}", NETPOL_FIXTURES=str(tmp / "fx"),
+               KUBECONFIG=str(tmp / "no-such-kubeconfig"), NETPOL_WAN_IP=WAN_IP)
+    return subprocess.run([str(SCRIPT), "runner"], env=env, capture_output=True, text=True, timeout=120)
+
+
+def test_runner_passes(tmp_path):
+    r = run_runner(runner_fixtures(tmp_path))
+    assert r.returncode == 0, r.stdout + r.stderr
+    rows = expand_runner()
+    n, d = len(rows), sum(x[0] == "dropped" for x in rows)
+    assert f"{RUNNER_NODE} rows {n}/{n} deny-logged {d}/{d}" in r.stdout
+    assert re.search(r"^stray: PASS \(\d+ deny lines, policed: forgejo-runner,netpol-canary\)$", r.stdout, re.M), r.stdout
+    assert r.stdout.rstrip().splitlines()[-1] == f"runner: PASS ({n} rows, {d}/{d} deny-logged)"
+
+
+def test_runner_row_counts_come_from_the_matrix():
+    """On middle the runner dials the all rows less middle's own BMC; $HOST_IP and $PEER_IP stay in
+    (Review Focus 1: a pod dialling its own node). The plan's literal "19 rows, 16/16" predates the
+    matrix's growth in Task 6."""
+    rows = expand_runner()
+    all_rows = [r for r in (x.split() for x in MATRIX.read_text().splitlines()) if r and not r[0].startswith("#") and r[1] == "all"]
+    assert len(rows) == len(all_rows) - 1
+    hosts = {f"{r[2]}:{r[3]}" for r in rows}
+    assert "192.168.0.117:443" not in hosts, "middle skips its own BMC"
+    assert "192.168.0.241:50000" in hosts and "192.168.0.242:50000" in hosts and "192.168.0.242:10250" in hosts
+
+
+def test_runner_dials_every_row_in_one_exec(tmp_path):
+    """One exec runs every row back to back (review of the pre-work, T8-2); its arguments carry the
+    script and the JS, so the call spans several lines of the stub's log."""
+    r = run_runner(runner_fixtures(tmp_path))
+    assert r.returncode == 0, r.stdout + r.stderr
+    calls = (tmp_path / "fx" / "calls.log").read_text()
+    assert calls.count(f"-n forgejo-runner exec {RUNNER_POD} -c runner -- sh -c") == 1
+    assert "dns kubernetes.default.svc.cluster.local -" in calls and "tcp 192.168.0.241 50000" in calls
+    assert "192.168.0.117" not in calls and f"tcp {WAN_IP} 8585" in calls
+    assert 'node -e "process.stdout.write(String(Date.now()))"' in calls, "the pod clock times each row"
+
+
+def test_runner_before_enforcement_fails(tmp_path):
+    """Before the policies (Step 4): the dropped rows connect or are refused, and nothing is logged."""
+    rows = expand_runner()
+    got = {f"{x[2]}:{x[3]}": "open" for x in rows if x[0] == "dropped"}
+    r = run_runner(runner_fixtures(tmp_path, raw=runner_raw(rows, got), lines=[]))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "FAIL dropped open 192.168.0.1:22" in r.stdout
+    assert "runner: FAIL" in r.stdout
+
+
+def test_runner_unlogged_row_fails(tmp_path):
+    r = run_runner(runner_fixtures(tmp_path, skip="192.168.0.2:80"))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert f"NOT-LOGGED 192.168.0.2:80 (no egress deny of its own from forgejo-runner/{RUNNER_POD}" in r.stdout
+
+
+def test_runner_clusterip_all_to_240_is_paired(tmp_path):
+    """The runner has no loop of its own, so its one run is alone in the window: pairing settles the
+    1-in-27 case."""
+    objs = backends(True)
+    lines = [x.replace("192.168.0.241:6443", "192.168.0.240:6443").replace("192.168.0.242:6443", "192.168.0.240:6443")
+             for x in deny_lines(RUNNER_POD, expand_runner(), objs, src_pod=f"forgejo-runner/{RUNNER_POD}", src_ip=RUNNER_IP)]
+    r = run_runner(runner_fixtures(tmp_path, lines=lines))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "RERUN" not in r.stdout
+
+
+def test_runner_not_ready_is_exit_2(tmp_path):
+    r = run_runner(runner_fixtures(tmp_path, ready=False))
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert f"forgejo-runner pod {RUNNER_POD} is Running, Ready=False" in r.stderr
+
+
+def runner_lines(skip: str | None = None) -> list[str]:
+    return deny_lines(RUNNER_POD, expand_runner(), backends(True), skip=skip, src_pod=f"forgejo-runner/{RUNNER_POD}",
+                      src_ip=RUNNER_IP)
+
+
+def runner_other_run(ago_s: float) -> list[str]:
+    """Another run of the same rows from the runner pod (a CI job, say), AGO_S earlier."""
+    return deny_lines(RUNNER_POD, expand_runner(), backends(True), ago_s=ago_s, port_base=51000,
+                      src_pod=f"forgejo-runner/{RUNNER_POD}", src_ip=RUNNER_IP)
+
+
+def test_runner_other_run_in_the_window_is_timed_out_of_it(tmp_path):
+    """Another run's attempts in the window would turn rhythm pairing off. The runner knows each row's
+    start on the pod's clock, so the overlapping rows take the attempt in their own slot: PASS."""
+    r = run_runner(runner_fixtures(tmp_path, lines=runner_lines() + runner_other_run(-10.5)))
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "RERUN" not in r.stdout and "AMBIGUOUS" not in r.stdout
+
+
+def test_runner_two_attempts_in_one_slot_is_ambiguous(tmp_path):
+    """Another run 0.3 s off: both attempts fall in the overlapping rows' slots. AMBIGUOUS, and with
+    nothing changing between runs, exit 2. Never PASS."""
+    r = run_runner(runner_fixtures(tmp_path, lines=runner_lines() + runner_other_run(-0.3)))
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "attempts in its slot on the pod clock" in r.stdout
+    assert r.stdout.rstrip().splitlines()[-1].startswith("runner: AMBIGUOUS (")
+
+
+def test_runner_clusterip_defect_fails_even_beside_another_run(tmp_path):
+    """The ClusterIP path never logs. Another run's literal attempt is in the window, but not in the
+    ClusterIP row's slot: NOT-LOGGED."""
+    r = run_runner(runner_fixtures(tmp_path, lines=runner_lines(skip="10.96.0.1:443") + runner_other_run(-10.5)))
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "NOT-LOGGED 10.96.0.1:443" in r.stdout

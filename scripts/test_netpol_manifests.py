@@ -929,3 +929,52 @@ def test_argo_cd_chart_policies_stay_off():
     app = yaml.safe_load((REPO / "cluster/applications/argo-cd.yaml").read_text())
     assert app["spec"]["source"]["path"] == "cluster/argo-cd"
     assert "networkPolicy" not in json.dumps(app["spec"]["source"].get("helm", {})), "the Application must not override it"
+
+
+# --- forgejo-runner (plan Task 8, B2) -------------------------------------------
+
+RUNNER_DIR = "cluster/forgejo-runner"
+RUNNER_NS = "forgejo-runner"
+# The §6.3 gate body: a timeout to the API ClusterIP means the packet was dropped, so egress is
+# enforced and the runner may start; a connect or any error means not yet.
+RUNNER_GATE_MUST_HAVE = [
+    'host:"10.96.0.1",port:443,timeout:3000',
+    's.on("timeout",()=>process.exit(0))',
+    's.on("connect",()=>process.exit(1))',
+    's.on("error",()=>process.exit(1))',
+    "sleep 3",
+]
+
+
+def runner_pod_spec(docs: list[dict]) -> dict:
+    return named(docs, "Deployment", "forgejo-runner")["spec"]["template"]["spec"]
+
+
+def test_runner_policies_equal_spec_6_3():
+    """forgejo-runner takes exactly the three components (design §6.3): default-deny, DNS, and the
+    forge plus the public internet. Nothing allows ingress."""
+    k = yaml.safe_load((REPO / RUNNER_DIR / "kustomization.yaml").read_text())
+    assert k["components"] == [f"../components/netpol/{c}" for c in COMPONENTS]
+    assert "§6.3" in (REPO / RUNNER_DIR / "kustomization.yaml").read_text(), "point the components at design §6.3"
+    nps = policies(render(RUNNER_DIR))
+    assert set(nps) == set(COMPONENTS)
+    for name, np in nps.items():
+        assert np["metadata"]["namespace"] == RUNNER_NS, name
+        assert "ingress" not in np["spec"], f"{name}: nothing may allow ingress to the runner"
+    assert policies_egress(list(nps.values())) == SPEC_6_3_RULES
+
+
+def test_runner_gate():
+    """netpol-gate holds the runner back until this pod's egress is enforced (design §6.3): same image
+    and securityContext as the runner, the §6.3 body, small requests."""
+    pod = runner_pod_spec(render(RUNNER_DIR))
+    inits = pod.get("initContainers", [])
+    assert [c["name"] for c in inits] == ["netpol-gate"]
+    (gate,) = inits
+    (runner,) = [c for c in pod["containers"] if c["name"] == "runner"]
+    assert gate["image"] == runner["image"], "keep the gate image equal to the runner's"
+    assert gate["securityContext"] == runner["securityContext"]
+    assert gate["command"][:2] == ["sh", "-c"] and len(gate["command"]) == 3
+    for must in RUNNER_GATE_MUST_HAVE:
+        assert must in gate["command"][2], must
+    assert gate["resources"] == {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}
