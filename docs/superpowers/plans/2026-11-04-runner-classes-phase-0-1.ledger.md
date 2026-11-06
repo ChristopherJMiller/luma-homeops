@@ -93,3 +93,39 @@ It matches the 01:24Z before, apart from the two namespaces.
   - NetworkPolicies went from 5 to 11, the 6 new ones in `ci-dispatch` (`allow-dns`, `ci-dispatch`, `default-deny`) and `ci-tiny` (`allow-dns`, `default-deny`, `egress-internet-web`).
   - Memory requests: top 86 % (26604Mi, the dispatcher's 48Mi on top of 26556Mi), middle 85 %, bottom 88 %. At 01:34Z top briefly read 87 %, from a trivy-operator scan Job pod (256Mi) that finished.
 - No rollback trigger fired: no crash loop, no denied API, Forgejo or DNS traffic, the config verified, and nothing else in Gate G changed.
+
+## Task 19: `tiny` on (2026-11-06)
+
+### Step 1: preconditions
+
+- **Waived by Chris** (2026-11-06): Task 18 Step 5's 48 h dry-run compare, NetworkPolicy Task 7 Step 11's 24 h gate, and the ≤ 86 % memory gate. The 48 h compare and Step 11 still run later as post-checks.
+- **Met:**
+  - NetworkPolicy B2: `B2_done=2026-11-06T17:13:28Z`; `runner` PASS (22 rows, 19/19 deny-logged).
+  - NetworkPolicy Task 9's restart gap: the agent was Ready at t0 + 7.1 s, and its rules were back at t0 + 6.3 s, the fail-open time. Both are in the NetworkPolicy ledger (8dd46cfd).
+  - `docs/ci.md` is on `main` (2f920cf3 to cdd66dbe): the pause, the break-glass and the weekly check.
+- **Memory requested** (17:21Z, after the general runner, pages and B2 deploys; forge-bot is not deployed): top **86 %** (26604Mi), middle **85 %** (26430Mi), bottom **88 %** (27135Mi). `NodeMemoryRequestsHigh` fires over 90 %. A `tiny` pod adds 512Mi, about 1.7 points, and its placement prefers nodes other than `top`.
+- `ci.yaml` keeps `global.tiny_concurrent: 1`.
+
+### Step 2: the change
+
+- `cluster/ci-dispatch/dispatcher/config.yaml`: `classes.tiny` goes from `dry-run` to `"on"`, quoted, because YAML 1.1 reads a bare `on` as true. `test_config_values` expects `"on"`.
+- Fail-first: with the expectation changed and the config not, `test_config_values` failed (`{'tiny': 'dry-run'} != {'tiny': 'on'}`). After the config change: `test_ci_dispatch_manifests.py` + `test_netpol_manifests.py` gave 52 passed, 1 skipped (the forge-bot keyring test). Every pre-commit hook passed.
+- The render differs from `main` in the ConfigMap only: its data, and its name `ci-dispatch-config-mh8k58t484` → `ci-dispatch-config-4cfh56gm69`, which the StatefulSet references, and the pod restarts on it.
+- The StatefulSet and Application header comments no longer say `tiny` is in dry-run.
+- Commit: `ci-dispatch: tiny on (runner classes Task 19)`, signed, rebased (`-S`) onto 8dd46cfd.
+
+### Step 3: Gate G before (17:21–17:23Z)
+
+- **The STOP is pre-approved** (Chris, 2026-11-06): push once B2 and the restart gap pass and Gate G matches.
+- G1: 3 nodes `Ready`, none cordoned. 145/145 PGs `active+clean`; 9/9 OSDs up and in. No hop, drain or recovery.
+- G2: Ceph `HEALTH_WARN`, `MDS_CLIENT_RECALL` plus the three `AUTH_INSECURE_*` checks (the known noise). Argo: 63 apps, all `Synced`; only `rook` and `rook-cluster` Degraded.
+- G3: 51 edge rows; the normalised diff against Task 18's after-snapshot is empty.
+- G4:
+  - No pod outside `Running`/`Succeeded`, and none over 100 restarts.
+  - NetworkPolicies: `ci-dispatch` 3, `ci-tiny` 3, `forgejo-runner` 3, `netpol-canary` 5.
+  - Memory requests as in Step 1.
+- `ci-tiny` is empty. `ci-dispatch-0` is on `top`, 0 restarts, 15 h old. Metrics: `class_mode{class="tiny"}` 1 (dry-run), `config_verified` 1, `store_rejected_total` 0, every `errors_total` and `orphans` series 0, `launches_total{outcome="dry-run"}` 1 (Task 18's probe).
+- Firing alerts: `Watchdog` only.
+- `check-prometheus-rules.sh`: exit 0, `selected=42 groups=45 alerting=188 recording=82`, the one gonic WARN.
+- `stray --since 15m` (17:22Z): `FAIL (0 of 752 deny lines stray, 1 agent logs short of 15m)`. The only cause is middle's agent `k456z`, 343 s old after Task 9's restart. `stray --since 5m`: PASS (275 deny lines, policed `ci-dispatch,ci-tiny,forgejo-runner,netpol-canary`). Deny lines naming `ci-dispatch/` or `ci-tiny/` over 15 min: 0 on each agent.
+- The runners are idle: the galaxy runner's last tasks (realliance-ops/ci-dispatch 180 and 181) ended at 17:19:46Z, and the general runner's last (realliance.net 143) on 2026-11-05.
