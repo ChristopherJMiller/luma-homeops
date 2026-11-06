@@ -97,7 +97,7 @@ spec:
                           cpu: 1m
                           memory: 8Mi
                         limits:
-                          memory: 64Mi # `--version` peaks near 40Mi of its own
+                          memory: 128Mi # `--version` needs ~40Mi of its own, plus page cache; 64Mi hit its limit
                       securityContext:
                         allowPrivilegeEscalation: false
                         readOnlyRootFilesystem: true

@@ -22,10 +22,14 @@ import yaml
 REPO = Path(__file__).resolve().parent.parent
 RELEASE = REPO / "cluster/applications/forgejo-release.yaml"
 KEEPWARM = "forgejo-keepwarm"
-FORK_PIN_RE = re.compile(r"^git\.realliance\.net/realliance/forgejo:v15\.0\.11-realliance\.\d+@sha256:[0-9a-f]{64}$")
+# The plan's pattern. Use it with fullmatch: `$` alone lets a trailing newline through, and re.ASCII
+# keeps `\d` to 0-9.
+FORK_PIN_RE = re.compile(r"^git\.realliance\.net/realliance/forgejo:v15\.0\.11-realliance\.\d+@sha256:[0-9a-f]{64}$", re.ASCII)
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
-# A well-formed pin that exists nowhere: renders the fullOverride path without touching the repo.
+# Well-formed pins that exist nowhere. SAMPLE_PIN renders the fullOverride path; PINNED stands in
+# for the pin Task 5 commits, so every render test also runs against the file as it reads then.
 SAMPLE_PIN = "git.realliance.net/realliance/forgejo:v15.0.11-realliance.1@sha256:" + "0" * 64
+PINNED = "git.realliance.net/realliance/forgejo:v15.0.11-realliance.7@sha256:" + "a" * 64
 WAVE = "argocd.argoproj.io/sync-wave"
 
 
@@ -35,8 +39,16 @@ def app() -> dict:
 
 
 @pytest.fixture(scope="module")
-def values(app: dict) -> dict:
+def repo_values(app: dict) -> dict:
     return app["spec"]["source"]["helm"]["valuesObject"]
+
+
+@pytest.fixture(scope="module", params=["today", "pinned"])
+def values(request: pytest.FixtureRequest, repo_values: dict) -> dict:
+    """The values as committed, and as they read once a fork pin is in (simulated)."""
+    if request.param == "today":
+        return repo_values
+    return {**repo_values, "image": {**repo_values["image"], "fullOverride": PINNED}}
 
 
 @pytest.fixture(scope="module")
@@ -71,9 +83,20 @@ def docs(app: dict, chart: Path, values: dict, tmp_path_factory: pytest.TempPath
     return render(app, chart, values, tmp_path_factory.mktemp("as-is"))
 
 
+def without_override(values: dict) -> dict:
+    """The fallback: the same values with the fullOverride line deleted (docs/forgejo.md, "Fork image")."""
+    return {**values, "image": {k: v for k, v in values["image"].items() if k != "fullOverride"}}
+
+
+@pytest.fixture(scope="module")
+def docs_upstream(app: dict, chart: Path, values: dict, tmp_path_factory: pytest.TempPathFactory) -> list[dict]:
+    return render(app, chart, without_override(values), tmp_path_factory.mktemp("upstream"))
+
+
 @pytest.fixture(scope="module")
 def docs_fork(app: dict, chart: Path, values: dict, tmp_path_factory: pytest.TempPathFactory) -> list[dict]:
-    forked = {**values, "image": {**values["image"], "fullOverride": SAMPLE_PIN}}
+    base = without_override(values)
+    forked = {**base, "image": {**base["image"], "fullOverride": SAMPLE_PIN}}
     return render(app, chart, forked, tmp_path_factory.mktemp("fork"))
 
 
@@ -106,9 +129,11 @@ def test_keepwarm_wave_before_forgejo(docs: list[dict]) -> None:
     assert early == [f"DaemonSet/{KEEPWARM}"], early
 
 
-@pytest.mark.parametrize("variant", ["upstream", "fork"])
-def test_keepwarm_same_image(variant: str, docs: list[dict], docs_fork: list[dict], values: dict) -> None:
-    rendered = docs if variant == "upstream" else docs_fork
+@pytest.mark.parametrize("variant", ["as-is", "upstream", "fork"])
+def test_keepwarm_same_image(
+    variant: str, docs: list[dict], docs_upstream: list[dict], docs_fork: list[dict], values: dict
+) -> None:
+    rendered = {"as-is": docs, "upstream": docs_upstream, "fork": docs_fork}[variant]
     dep = one(rendered, "Deployment", "forgejo")
     ds = one(rendered, "DaemonSet", KEEPWARM)
     (main,) = [c for c in dep["spec"]["template"]["spec"]["containers"] if c["name"] == "forgejo"]
@@ -116,9 +141,12 @@ def test_keepwarm_same_image(variant: str, docs: list[dict], docs_fork: list[dic
     assert warm["image"] == main["image"]
     assert set(pod_images(dep)) == {main["image"]}, "every Forgejo container runs the one image"
     assert warm.get("imagePullPolicy") == main.get("imagePullPolicy")
+    # The chart sets the Deployment's from gitea.images.pullSecrets; the keep-warm pod has to pull alike.
+    ds_pod, dep_pod = ds["spec"]["template"]["spec"], dep["spec"]["template"]["spec"]
+    assert ds_pod.get("imagePullSecrets") == dep_pod.get("imagePullSecrets")
     if variant == "fork":
         assert main["image"] == SAMPLE_PIN
-    else:
+    elif variant == "upstream":
         assert main["image"].endswith("@" + values["image"]["digest"]), main["image"]
         assert main["image"].startswith("code.forgejo.org/forgejo/forgejo:"), main["image"]
 
@@ -135,7 +163,7 @@ def test_keepwarm_minimal(docs: list[dict]) -> None:
     ds = one(docs, "DaemonSet", KEEPWARM)
     pod = ds["spec"]["template"]["spec"]
     (warm,) = pod["containers"]
-    assert warm["resources"] == {"requests": {"cpu": "1m", "memory": "8Mi"}, "limits": {"memory": "64Mi"}}
+    assert warm["resources"] == {"requests": {"cpu": "1m", "memory": "8Mi"}, "limits": {"memory": "128Mi"}}
     psc, csc = pod.get("securityContext") or {}, warm.get("securityContext") or {}
     merged = {**psc, **csc}
     assert merged.get("runAsNonRoot") is True
@@ -171,17 +199,20 @@ def test_keepwarm_outside_forgejo_selectors(docs: list[dict]) -> None:
         ("git.realliance.net/realliance/forgejo@sha256:" + "0" * 64, False),
         ("git.realliance.net/realliance/forgejo:sha-abcdef1@sha256:" + "0" * 64, False),
         ("ghcr.io/realliance/forgejo:v15.0.11-realliance.1@sha256:" + "0" * 64, False),
+        (SAMPLE_PIN + "\n", False),
+        (SAMPLE_PIN.replace("realliance.1@", "realliance.\u0661@"), False),
     ],
 )
 def test_fork_pin_pattern(pin: str, ok: bool) -> None:
-    """The pin guard rejects a tag without a digest, a sha- tag and any other registry."""
-    assert bool(FORK_PIN_RE.match(pin)) is ok
+    """The pin guard rejects a tag without a digest, a sha- tag, any other registry, a trailing newline
+    and a non-ASCII digit."""
+    assert bool(FORK_PIN_RE.fullmatch(pin)) is ok
 
 
-def test_fork_pin(values: dict) -> None:
-    image = values["image"]
+def test_fork_pin(repo_values: dict) -> None:
+    image = repo_values["image"]
     if image.get("fullOverride"):
-        assert FORK_PIN_RE.match(image["fullOverride"]), image["fullOverride"]
+        assert FORK_PIN_RE.fullmatch(image["fullOverride"]), image["fullOverride"]
     # The upstream line stays: the chart ignores it under fullOverride, and deleting fullOverride
     # alone falls back to it (docs/forgejo.md, "Fork image").
     assert DIGEST_RE.match(image.get("digest", "")), image.get("digest")
