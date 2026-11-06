@@ -52,7 +52,7 @@ What `tf.sh` does to output:
 
 Locking deletes the dispatcher's role assignment first, then every container group. The tag `ci-sweeper-lock` remembers the lock by the deleted assignment's `createdOn`. Every sweep retries the delete until the assignment is gone, and keeps compute at zero after that. Only a newer assignment ends the lock, and only an apply can create one. The sweeper then removes the tag itself.
 
-Each outcome has its own email to `alert_emails`, so one can't mask another:
+Each outcome has its own email to `alert_emails`. `Locked` and `LockFailed` are never masked; `Degraded` can hide under a lock (check the next sweep after a restore):
 
 | Outcome | Run ends | Alert |
 |---|---|---|
@@ -70,7 +70,7 @@ A budget lock holds until the month rolls over or Chris raises the budget: while
 
 Notes:
 
-- **The dispatcher's own gate is $0.48 an hour of compute** (4 `small` or 2 `medium` jobs; Chris, 2026-11-06). The sweeper's $0.60 counts compute plus egress, which leaves about $0.12 an hour, about 380 KB/s across all groups, for traffic before two sweeps lock.
+- **The dispatcher's own gate is $0.48 an hour** (4 `small` or 2 `medium` jobs; Chris, 2026-11-06). The sweeper's $0.60 counts compute plus egress, which leaves about $0.12 an hour, about 380 KB/s across all groups, for traffic before two sweeps lock.
 - The egress term fails open. An unread metric (a 404 for a group deleted mid-sweep, say) adds nothing to the burn and skips the cap, and the run ends `Degraded`. Task 4 checks what a metric read returns for a deleted group.
 - The shape price reads only CPU and memory, and ignores `gpu`, `sku` and `limits`. The `aci-shape` Policy denies all three today; widen the price if that rule ever changes.
 - The first sweeps after the first apply can fail with 403 until the sweeper's role assignment propagates. Expect one `Degraded` email then.

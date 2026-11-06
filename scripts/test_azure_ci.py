@@ -1401,8 +1401,10 @@ class FakeArm:
             if method == "GET":
                 if self.assignment is None:
                     return self.answer("lock-read", 404, {})
-                return self.answer("lock-read", 200, {"name": "dispatcher-test", "properties": {
-                    "createdOn": self.assignment["createdOn"], "principalType": "ServicePrincipal"}})
+                props = {"principalType": "ServicePrincipal"}
+                if self.assignment["createdOn"] is not None:  # None: an answer without createdOn
+                    props["createdOn"] = self.assignment["createdOn"]
+                return self.answer("lock-read", 200, {"name": "dispatcher-test", "properties": props})
             if method == "DELETE":
                 r = self.answer("lock-delete", 204 if self.assignment is None else 200, {})
                 if r is not TIMEOUT and 200 <= r[0] < 300:
@@ -2281,6 +2283,18 @@ def test_sweeps_unreadable_assignment_is_degraded_not_locked():
     assert again(arm) == DEGRADED and arm.writes() == [] and lock_tag(arm) == secs(ASSIGNED)
     arm.advance()
     arm.codes = {}
+    assert again(arm) == LOCKED and arm.writes()[0] == ("DELETE", LOCK_ID)
+
+
+def test_sweeps_assignment_without_created_on_is_degraded_not_locked():
+    """Round 2 N1: a 200 for the assignment that lacks createdOn can't say which instance it is. With a
+    lock pending it neither trips nor clears: Degraded, no DELETE, the tag kept."""
+    arm = FakeArm(lock_tag=secs(ASSIGNED))
+    arm.assignment = {"createdOn": None}
+    assert again(arm) == DEGRADED and arm.writes() == [] and lock_tag(arm) == secs(ASSIGNED)
+    # With createdOn back, the pending lock goes ahead.
+    arm.advance()
+    arm.assignment = {"createdOn": ASSIGNED}
     assert again(arm) == LOCKED and arm.writes()[0] == ("DELETE", LOCK_ID)
 
 

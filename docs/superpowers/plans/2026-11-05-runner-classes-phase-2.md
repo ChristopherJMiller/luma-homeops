@@ -105,8 +105,7 @@ From `.superpowers/sdd/2026-11-05-runner-classes-phase-2/preflight.md` § 6. F1 
 ### Values fixed by the spec (verbatim)
 
 - **Shapes.** `small`, ACI: 2 vCPU, 8 GiB, runner timeout 30 min, hard stop 40 min after launch, $0.117 an hour. `medium`, ACI: 4 vCPU, 16 GiB, 45 min, 55 min, $0.233 an hour. Pickup timeout on ACI: 6 min.
-- **Limits.** Per owner: $10 a period and 2 paid jobs at once by default, with signed overrides. Global: **$80** a period and at most $0.60 an hour of running compute. Both are ceilings in code, and config may only lower them. The spec said $100; Chris lowered it on 2026-11-05 (cache design, Decided).
-  - **I3 (Chris, 2026-11-06):** the dispatcher's hourly ceiling in code is **$0.48** (480_000 µ$), 4 `small` or 2 `medium` jobs at once. The sweeper's line stays $0.60 and counts compute plus egress, so legitimate traffic gets about $0.12 an hour (about 380 KB/s across all groups) before two sweeps lock. The worst-case arithmetic below is the sweeper's and doesn't change (Task 3 review I3).
+- **Limits.** Per owner: $10 a period and 2 paid jobs at once by default, with signed overrides. Global: **$80** a period, and the dispatcher's burn (compute plus egress) at most **$0.48** an hour, 4 `small` or 2 `medium` jobs at once. Both are ceilings in code, and config may only lower them. The spec said $100 and $0.60; Chris lowered the period cap on 2026-11-05 (cache design, Decided) and the hourly one on 2026-11-06 (Task 3 review I3). The sweeper's $0.60-an-hour line, compute plus egress, stays, so legitimate traffic gets about $0.12 an hour (about 380 KB/s across all groups) before two sweeps lock, and the worst-case arithmetic below, which is the sweeper's, doesn't change.
 - **Backstops.**
   - The sweeper is a Logic App in the guard group, every 10 min. It deletes anything older than 90 min. Over $0.60 an hour for two sweeps in a row, it deletes all compute and **locks**.
   - The CI group's budget is **$85** over the calendar month (the spec's $105, lowered with the cap by Chris on 2026-11-05); it also deletes all compute and locks.
@@ -1318,7 +1317,7 @@ func (w *Watcher) Run(ctx context.Context)                             // Egress
 **Gate:** (c), and Task 19 Step 5 green, Task 20 Step 1 on `main`, the Task 9 route live, and a restic snapshot present.
 
 - [ ] **Step 1: Change the expected modes**, watch `test_config_values` fail, set `small: on` and `medium: on`, and watch it pass. Commit: `ci-dispatch: small and medium on (runner classes phase 2)`.
-- [ ] **Step 2: Gate G, then STOP—ask Chris.** Every member can now spend up to their limit. Rollback triggers: any acceptance failure, a 24/7 alert, or burn over $0.60 an hour. Rollback: classes `off` and a revert; fast stop: the break-glass.
+- [ ] **Step 2: Gate G, then STOP—ask Chris.** Every member can now spend up to their limit. Rollback triggers: any acceptance failure, a 24/7 alert, or burn over the sweeper's $0.60/h line, measured on `ci_dispatch_burn_usd_per_hour` (compute plus egress). Rollback: classes `off` and a revert; fast stop: the break-glass.
 - [ ] **Step 3: Push and `Monitor`** the rollout, then Gate G after (F28).
 - [ ] **Step 4: Acceptance.** `CI_PAID_ACCEPTANCE=1 nix develop --command pytest tests/forge/test_forge_ci_paid.py -v`. Expected: all PASS. Ledger:
   - start times from `ci_dispatch_start_seconds{backend="aci"}`;

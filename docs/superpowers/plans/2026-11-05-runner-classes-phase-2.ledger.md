@@ -170,6 +170,13 @@ Taken 2026-11-05.
 - **Plan:** `Plan: 28 to add, 0 to change, 0 to destroy.` The 26 before, plus `azurerm_monitor_metric_alert.sweeper_lock_failed` and `azurerm_monitor_activity_log_alert.sweeper_locked`.
 - **Tests:** static `219 passed, 4 skipped`; with `AZURE_CI_PLAN_JSON`, `223 passed`. Against the pre-fix code the new suite fails 46 cases (22 tests). 34 of 34 mutations fail it, the review's five lock mutations among them.
 
+### Task 3 review round 2 (0/0/3, 2026-11-06)
+
+- **N1:** a simulator case for an assignment answering 200 without `createdOn` while a lock is pending: `Degraded`, no DELETE, the tag kept. It fails with `If_degraded`'s `created == ''` check removed.
+- **N2:** the plan's "Limits" line now reads as the dispatcher's $0.48 ceiling (compute plus egress) beside the sweeper's $0.60 line, with no separate sub-bullet. Task 21's rollback trigger is the sweeper's $0.60/h line, measured on `ci_dispatch_burn_usd_per_hour`.
+- **N3:** the README says `Locked` and `LockFailed` are never masked and `Degraded` can hide under a lock; the gate note drops "of compute".
+- **Plan:** still `Plan: 28 to add, 0 to change, 0 to destroy.` Tests: static `220 passed, 4 skipped`; with `AZURE_CI_PLAN_JSON`, `224 passed`.
+
 ## Task 4
 
 - **Carry from Task 2 (review m3):** confirm a Policy deny before the dispatcher secret ships.
