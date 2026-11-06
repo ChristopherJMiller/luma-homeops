@@ -115,8 +115,10 @@ spec:
       rules:
         # Two rules, one name; `level` tells them apart. The global cap is $80 a period, so these fire
         # at $64 and $76 of used plus reserved money. The gate refuses any launch past the cap itself.
+        # `> 0` drops a zero cap: the built-in limits (no verified ci.yaml) carry 0, and money over 0
+        # would read +Inf and page both levels (review M1).
         - alert: CIDispatchSpendHigh
-          expr: sum(ci_dispatch_period_usd{kind=~"used|reserved"}) / max(ci_dispatch_period_usd{kind="cap"}) >= 0.80
+          expr: sum(ci_dispatch_period_usd{kind=~"used|reserved"}) / max(ci_dispatch_period_usd{kind="cap"} > 0) >= 0.80
           for: 5m
           labels:
             severity: critical
@@ -124,7 +126,7 @@ spec:
           annotations:
             summary: "ci-dispatch's paid spend this period, used plus reserved, is at 80 % of the $80 global cap ($64) (docs/ci.md)"
         - alert: CIDispatchSpendHigh
-          expr: sum(ci_dispatch_period_usd{kind=~"used|reserved"}) / max(ci_dispatch_period_usd{kind="cap"}) >= 0.95
+          expr: sum(ci_dispatch_period_usd{kind=~"used|reserved"}) / max(ci_dispatch_period_usd{kind="cap"} > 0) >= 0.95
           for: 5m
           labels:
             severity: critical
