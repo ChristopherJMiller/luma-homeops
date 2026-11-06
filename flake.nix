@@ -89,6 +89,7 @@
             pre-commit
             kubeseal
             prometheus-alertmanager # amtool, for scripts/test-alertmanager-routes.sh
+            dash # the runner class image's /bin/sh, for scripts/test_runner_class_image.py's behavioural tests
             nodejs_22
             kustomize
             talosctl
