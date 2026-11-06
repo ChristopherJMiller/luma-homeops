@@ -46,7 +46,7 @@ IMAGE_RE = r"^git\.realliance\.net/realliance-ops/ci-dispatch:sha-[0-9a-f]{7}@sh
 # deploy (2026-11-06; v0.1.0 was Task 14 Step 4). A new pin is a reviewed commit that changes this line too.
 RELEASE_IMAGE = (
     "git.realliance.net/realliance-ops/ci-dispatch:sha-19b416f"
-    "@sha256:cbd4c59a5150ba18a7a5ac56cfc798957976fd735682ee7c25ef8aeda2eb2d3b"
+    "@sha256:b50069b0a8a976e15d0ea0fc75d408f7f19d20f347da995376165f9320affd57"
 )
 # ci-dispatch v0.1.0's shutdown (internal/loop, cmd/ci-dispatch): the step in flight, then the servers.
 SHUTDOWN_GRACE_SECONDS = 20

@@ -62,7 +62,7 @@ spec:
           # v0.2.0: tag v0.2.0 (signed) = main 19b416f, built by ci-dispatch's CI as an OCI manifest,
           # amd64 (v0.1.0: Task 14). A new image never deploys itself: .renovaterc.json never automerges this
           # image, so its PR is the alarm. Re-pin by hand after review, with the test's RELEASE_IMAGE.
-          image: git.realliance.net/realliance-ops/ci-dispatch:sha-19b416f@sha256:cbd4c59a5150ba18a7a5ac56cfc798957976fd735682ee7c25ef8aeda2eb2d3b
+          image: git.realliance.net/realliance-ops/ci-dispatch:sha-19b416f@sha256:b50069b0a8a976e15d0ea0fc75d408f7f19d20f347da995376165f9320affd57
           args:
             - --config=/etc/ci-dispatch/config/config.yaml
           env:
