@@ -95,7 +95,8 @@
   - **Triggers:** `push: tags: ['v15.0.11-realliance.*']` and `workflow_dispatch`. No PR builds. `concurrency: {group: image, cancel-in-progress: false}`.
   - **Every step** (Task 3 review I1, I1-R):
     - No `actions/checkout`. Each job checks out with an anonymous `git fetch` of the public repo at `$GITHUB_SHA`.
-    - Every step blanks `GITHUB_TOKEN` and `FORGEJO_TOKEN` in its own `env:`, because the runner puts the task token there. Every `run:` step also blanks `ACTIONS_RUNTIME_TOKEN`, so only the two artifact steps keep that JWT.
+    - Every `run:` step blanks `GITHUB_TOKEN`, `FORGEJO_TOKEN` and `ACTIONS_RUNTIME_TOKEN` in its own `env:`, where the runner puts the task token and the JWT.
+    - The two artifact (`uses:`) steps can't be blanked. Runner v13.2.1 applies `GITHUB_TOKEN` and `FORGEJO_TOKEN` again to action steps (act `action.go:251-262`), so those steps hold the task token and the JWT. Their `GITHUB_TOKEN` and `FORGEJO_TOKEN` blanks stay, harmless there (re-review R2-M1).
     - Every `uses:` names its action by a 40-hex sha.
   - **`build`** (`runs-on: medium`, `timeout-minutes: 40`) never sees `REGISTRY_TOKEN`:
     1. The anonymous fetch.

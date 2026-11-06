@@ -573,3 +573,16 @@ Chris pre-approved the Step 2 STOP. The runner was idle (three `idle` lines at 1
 - **The pipeline UI re-run** (forge-bot run #48, or the next push to `main`): Chris.
 - **realliance-sso PR #62:** Chris merges.
 - **Task 12 (B4)** no earlier than B2_done + 7 days.
+
+## B1 24 h gate, run as a post-check (Task 7 Step 11, 2026-11-06)
+
+**B1_green_at=2026-11-06T22:22:10Z**. Chris waived the gate for the `tiny` CI class (live 2026-11-06T17:24:54Z), so this is a post-check, not a gate. Read-only.
+
+- **`canary`** (22:10Z): PASS on 3 nodes, 25/25 rows each, stray PASS (361 deny lines, policed: ci-dispatch, ci-tiny, forgejo-runner, netpol-canary). No AMBIGUOUS exit.
+- **Alert:** `max_over_time(ALERTS{alertname="NetpolCanaryFailing"}[24h])` returned an empty result (22:10Z). `netpol-verify.sh alert`: PASS (group loaded, `for=900s`).
+- **Deny volume**, quiet window 22:11:42–22:21:41Z, no manual canary run inside it: **379 lines per 10 min, all `netpol-canary`**. `ci-tiny` 0, `ci-dispatch` 0, `forgejo-runner` 0. That is below the 465 STOP (378 at Step 10). The earlier ~546 was inflated by manual runs.
+- **Gate G**, excluding ci-dispatch, ci-tiny, forgejo-runner (B2) and the forgejo keep-warm DaemonSet:
+  - G1: 3 Ready nodes; 145/145 PGs active+clean; the enforcers are 3/3 Running (`k456z` restarted by the Task 9 test, the other two 0 restarts).
+  - G2: 63 Argo apps, only `rook` and `rook-cluster` Degraded, as in the baseline. Ceph is HEALTH_WARN with MDS_CLIENT_RECALL (the allowlisted code, back since it cleared at Task 7) **plus three AUTH_INSECURE_* codes** (AUTH_INSECURE_CLIENT_KEY_TYPE on 6 entities, AUTH_INSECURE_KEYS_ALLOWED, AUTH_INSECURE_KEYS_CREATABLE). Those are not in the baseline. They are about Ceph auth key types, with no policy in `rook`; flagged, not investigated.
+  - G3: edge snapshot 51 rows, the same count as the B2 baseline. Against the older Task 4 file it differs only by the 5 Forgejo sign-in/API probes added since.
+  - G4: no non-Running pods. NetworkPolicies: ci-dispatch 3, ci-tiny 3, forgejo-runner 3, netpol-canary 5, nothing else.
