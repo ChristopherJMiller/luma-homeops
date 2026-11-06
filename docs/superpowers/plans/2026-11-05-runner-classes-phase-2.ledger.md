@@ -306,3 +306,12 @@ Taken 2026-11-05.
 ## Task 21
 
 ## Task 22
+
+## Task 9: money-alert route (2026-11-06)
+
+- Ruling (Chris): no new receiver; no email receiver exists. Money alerts route by name, any severity, to the existing `critical-alerts` (Discord, 24/7, repeat 30m): `CIDispatch(SpendHigh|Locked|OrphanCompute|Drift|PaidNotReady)|CISweeperStale`, placed before the weekday-only `homelab-default` route.
+- Gate G-lite before: `prometheus-stack-config` Synced/Healthy, Alertmanager pod 2/2, 0 restarts.
+- Pushed 2026-11-06T04:29Z as `0db39a77`. Argo Synced/Healthy at that commit; pod 2/2 Running, 0 restarts; live `/api/v2/status` routing tree shows the new route to `critical-alerts`.
+- Tests: `scripts/test-alertmanager-routes.sh` (14 rows, all ok); `amtool` added to the dev shell (flake.nix).
+- Still open: Step 5 drill (Chris, outside weekday hours): `amtool alert add alertname=CIDispatchLocked severity=critical drill=true --end=+10m`.
+- Note: the python rewrite of the secret dropped its YAML comments.
