@@ -1,0 +1,38 @@
+---
+# Sign-in goes straight to the Realliance SSO. Forgejo 15 has no setting for it (upstream #3342).
+# IngressRoute, not Ingress: the rule must read the `flash` cookie, which an Ingress cannot
+# (the same exception as cluster/pages/edge.yaml). The chart's Ingress serves everything else.
+# Runbook: docs/forgejo.md ("Sign-in redirect"). Static tests: scripts/test_forgejo_signin_redirect.py.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: signin-to-sso
+spec:
+  redirectRegex:
+    # The query rides along, so ?redirect_to= still reaches /user/oauth2/realliance.
+    regex: ^https://git\.realliance\.net/user/login(\?.*)?$
+    replacement: https://git.realliance.net/user/oauth2/realliance${1}
+    permanent: false # never cache this: it is the way back to the login page
+---
+# Redirect only a GET to /user/login with no `flash` cookie and no ?local query:
+#  * `flash` is set by a failed SSO callback; skipping then shows Forgejo's error instead of
+#    bouncing back to Keycloak in a loop.
+#  * ?local=1 (any ?local key; QueryRegexp, because v3 Query(`local`) misses `local=1`) keeps the stock login page reachable.
+# POST /user/login is untouched (Forgejo answers 403, the internal form is off).
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: forgejo-signin
+spec:
+  entryPoints: [websecure]
+  routes:
+    - kind: Rule
+      priority: 1000
+      match: >-
+        Host(`git.realliance.net`) && Path(`/user/login`) && Method(`GET`)
+        && !QueryRegexp(`local`, `.*`) && !HeaderRegexp(`Cookie`, `(^|;\s*)flash=`)
+      middlewares:
+        - name: signin-to-sso
+      services:
+        - name: forgejo-http
+          port: 3000

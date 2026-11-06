@@ -33,8 +33,18 @@ Application is unchanged, keep checking the vendored sha256, and skip the
 deployed-state invariants. `resources: []` WITHOUT the marker fails: an
 accidental empty render must never pass. To redeploy, `git revert` the
 rollback commit.
+
+Rolling back the canary
+-----------------------
+Same rule and marker for cluster/netpol-canary/kustomization.yaml. Below its
+header comment it becomes exactly the marker line, `apiVersion:`, `kind:` and
+`resources: []`: delete everything after the `resources:` list (the ConfigMap
+generator, and from Task 7 on its components and patches). Leave
+cluster/applications/netpol-canary.yaml as it is. The canary tests then skip
+the deployed-state checks.
 """
 
+import ast
 import hashlib
 import json
 import re
@@ -112,6 +122,78 @@ ENFORCER_METRICS = {
     "kube_network_policies_unresolved_ip_count",
 }
 
+CANARY_DIR = "cluster/netpol-canary"
+CANARY_APP = "cluster/applications/netpol-canary.yaml"
+CANARY_NS = "netpol-canary"
+CANARY_KINDS = sorted(
+    ["ConfigMap", "DaemonSet", "Deployment", "Namespace", "PrometheusRule", "Service", "Service"] + ["NetworkPolicy"] * 5
+)
+CANARY_POLICIES = {"default-deny", "allow-dns", "egress-internet-only", "probe-egress-to-echo", "echo-ingress-from-probe"}
+PROBE_LABELS = {"app.kubernetes.io/name": "netpol-probe"}
+ECHO_LABELS = {"app.kubernetes.io/name": "netpol-echo"}
+# Chris (2026-11-05): three missed 300 s intervals before it fires.
+CANARY_ALERT_FOR = "15m"
+CANARY_ALERT_EXPR = (
+    'kube_daemonset_status_number_ready{namespace="netpol-canary",daemonset="netpol-probe"}'
+    ' < kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"}'
+    ' or absent(kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"})'
+)
+
+# The reusable policy components (design §6.2). Each renders one NetworkPolicy named after its
+# directory, with no namespace: the consumer sets it.
+COMPONENTS_DIR = "cluster/components/netpol"
+COMPONENTS = ["default-deny", "allow-dns", "egress-internet-only"]
+
+# §6.3's three egress rules, copied literally: DNS, the WAN /25 on TCP 443, and the internet less
+# ten CIDRs. allow-dns and egress-internet-only together must hold exactly these.
+SPEC_6_3_RULES = [
+    {
+        "to": [
+            {
+                "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "kube-system"}},
+                "podSelector": {"matchLabels": {"k8s-app": "kube-dns"}},
+            }
+        ],
+        "ports": [{"protocol": "UDP", "port": 53}, {"protocol": "TCP", "port": 53}],
+    },
+    {
+        "to": [{"ipBlock": {"cidr": "152.44.247.0/25"}}],
+        "ports": [{"protocol": "TCP", "port": 443}],
+    },
+    {
+        "to": [
+            {
+                "ipBlock": {
+                    "cidr": "0.0.0.0/0",
+                    "except": [
+                        "0.0.0.0/8",
+                        "10.0.0.0/8",
+                        "100.64.0.0/10",
+                        "127.0.0.0/8",
+                        "169.254.0.0/16",
+                        "172.16.0.0/12",
+                        "192.168.0.0/16",
+                        "224.0.0.0/4",
+                        "240.0.0.0/4",
+                        "152.44.247.0/25",
+                    ],
+                }
+            }
+        ],
+    },
+]
+# The form, not the value: Renovate automerges agnhost digests (:automergeDigest).
+AGNHOST_RE = r"registry\.k8s\.io/e2e-test-images/agnhost:[0-9][0-9.]*@sha256:[0-9a-f]{64}"
+PROBE_ENV = ["PROBE_MODE", "PROBE_INTERVAL", "HOST_IP", "NODE_NAME", "MATRIX"]
+# Chris's pick (2026-11-03): one run every 300 s, Ready while /tmp/ready is under 11 minutes old.
+PROBE_INTERVAL = "300"
+READY_RE = r'test -n "\$\(find /tmp/ready -mmin -(\d+) 2>/dev/null\)"'
+# agnhost connect --timeout=3s and dig +time=3: a run takes at most 3 s per row, plus the WAN lookup.
+ROW_TIMEOUT_S = 3
+DHCP_VARS = "router/ansible/group_vars/vyos_routers.yml"
+# bmcctl's node -> BMC map, the record of which BMC belongs to which node.
+BMCCTL_NODES = "tools/bmcctl/src/bmcctl/nodes.py"
+
 # pre-commit hooks that rewrite files; none may touch the vendored manifest.
 REWRITING_HOOKS = {"yamlfmt", "end-of-file-fixer", "trailing-whitespace", "mixed-line-ending", "fix-byte-order-marker"}
 
@@ -142,7 +224,7 @@ def has_marker(text: str) -> bool:
     return any(line.strip() == ROLLBACK_MARKER for line in text.splitlines())
 
 
-def enforcer_state(app_dir=ENFORCER_DIR) -> str:
+def app_state(app_dir) -> str:
     """'deployed' or 'rolled-back' (the marked rollback in the module docstring).
 
     Fails on anything else: an empty render without the marker, the marker on a
@@ -164,7 +246,7 @@ def enforcer_state(app_dir=ENFORCER_DIR) -> str:
 
 
 def require_deployed():
-    if enforcer_state() == "rolled-back":
+    if app_state(ENFORCER_DIR) == "rolled-back":
         pytest.skip(f"rolled back: {ENFORCER_DIR} renders nothing ({ROLLBACK_MARKER})")
 
 
@@ -182,11 +264,15 @@ def deployed_kustomization() -> str:
     return DEPLOYED_KUSTOMIZATION if has_marker(text) else text
 
 
-def enforcer_copy(tmp_path: Path, kustomization: str) -> Path:
-    d = tmp_path / "kube-network-policies"
-    shutil.copytree(REPO / ENFORCER_DIR, d)
+def app_copy(tmp_path: Path, app_dir: str, kustomization: str) -> Path:
+    d = tmp_path / Path(app_dir).name
+    shutil.copytree(REPO / app_dir, d)
     (d / "kustomization.yaml").write_text(kustomization)
     return d
+
+
+def enforcer_copy(tmp_path: Path, kustomization: str) -> Path:
+    return app_copy(tmp_path, ENFORCER_DIR, kustomization)
 
 
 # --- always, deployed or rolled back -------------------------------------------
@@ -198,12 +284,12 @@ def test_upstream_vendored_byte_identical():
 
 def test_enforcer_state():
     """The tree is either deployed or in the marked rollback, never an unmarked empty render."""
-    assert enforcer_state() in {"deployed", "rolled-back"}
+    assert app_state(ENFORCER_DIR) in {"deployed", "rolled-back"}
 
 
 def test_rollback_edit_is_recognised(tmp_path):
     d = enforcer_copy(tmp_path, rolled_back_text(deployed_kustomization()))
-    assert enforcer_state(d) == "rolled-back"
+    assert app_state(d) == "rolled-back"
     assert render(d) == []
 
 
@@ -211,21 +297,21 @@ def test_unmarked_empty_render_fails(tmp_path):
     k = deployed_kustomization()
     d = enforcer_copy(tmp_path, rolled_back_text(k).replace(ROLLBACK_MARKER + "\n", ""))
     with pytest.raises(AssertionError, match="no rollback marker"):
-        enforcer_state(d)
+        app_state(d)
 
 
 def test_marker_on_a_rendering_kustomization_fails(tmp_path):
     k = deployed_kustomization()
     d = enforcer_copy(tmp_path, k.replace("\napiVersion:", f"\n{ROLLBACK_MARKER}\napiVersion:", 1))
     with pytest.raises(AssertionError, match="resources must be"):
-        enforcer_state(d)
+        app_state(d)
 
 
 def test_rollback_that_keeps_patches_fails(tmp_path):
     k = rolled_back_text(deployed_kustomization())
     d = enforcer_copy(tmp_path, k + "patches:\n  - path: daemonset-patch.yaml\n")
     with pytest.raises(AssertionError, match="keeps only"):
-        enforcer_state(d)
+        app_state(d)
 
 
 def test_enforcer_app():
@@ -408,3 +494,436 @@ def test_canary_matrix_bmcs_match_ipmi_scrapeconfig():
             bmcs.add(row[2])
     assert bmcs, "matrix has no BMC rows"
     assert bmcs == scraped, f"matrix BMCs {sorted(bmcs)} != scraped {sorted(scraped)}"
+
+
+# --- the canary (cluster/netpol-canary, plan Tasks 6 and 7) ---------------------
+
+
+def named(docs: list[dict], kind: str, name: str) -> dict:
+    found = [d for d in docs if d.get("kind") == kind and d["metadata"]["name"] == name]
+    assert len(found) == 1, f"expected exactly one {kind}/{name}, got {len(found)}"
+    return found[0]
+
+
+def require_canary_deployed():
+    if app_state(CANARY_DIR) == "rolled-back":
+        pytest.skip(f"rolled back: {CANARY_DIR} renders nothing ({ROLLBACK_MARKER})")
+
+
+def canary_rows() -> list[list[str]]:
+    """The matrix.txt rows the canary runs (scope all or canary), split into columns."""
+    rows = []
+    for raw in (REPO / CANARY_DIR / "matrix.txt").read_text().splitlines():
+        row = raw.split()
+        if row and not row[0].startswith("#") and row[1] in ("all", "canary"):
+            rows.append(row)
+    return rows
+
+
+def hardened_container(pod: dict, what: str) -> dict:
+    """PodSecurity restricted, plus no token, no service links and no host namespaces.
+    Returns the pod's one container."""
+    sc = pod["securityContext"]
+    assert sc["runAsNonRoot"] is True and sc["runAsUser"] == 1000, what
+    assert sc["seccompProfile"] == {"type": "RuntimeDefault"}, what
+    assert pod["automountServiceAccountToken"] is False, what
+    assert pod["enableServiceLinks"] is False, what
+    for key in ("hostNetwork", "hostPID", "hostIPC", "initContainers", "ephemeralContainers"):
+        assert not pod.get(key), f"{what}: {key} must not be set"
+    assert not [v for v in pod.get("volumes", []) if "hostPath" in v], f"{what}: no hostPath"
+    (c,) = pod["containers"]
+    assert re.fullmatch(AGNHOST_RE, c["image"]), f"{what}: {c['image']!r} is not a digest-pinned agnhost"
+    csc = c["securityContext"]
+    assert csc["allowPrivilegeEscalation"] is False, what
+    assert csc["readOnlyRootFilesystem"] is True, what
+    assert csc["capabilities"] == {"drop": ["ALL"]}, what
+    assert "privileged" not in csc, what
+    return c
+
+
+def probe_container(docs: list[dict]) -> dict:
+    return named(docs, "DaemonSet", "netpol-probe")["spec"]["template"]["spec"]["containers"][0]
+
+
+def test_canary_state():
+    """Deployed or in the marked rollback, never an unmarked empty render."""
+    assert app_state(CANARY_DIR) in {"deployed", "rolled-back"}
+
+
+def test_canary_rollback_edit_is_recognised(tmp_path):
+    text = (REPO / CANARY_DIR / "kustomization.yaml").read_text()
+    if has_marker(text):
+        pytest.skip("the canary is rolled back already")
+    d = app_copy(tmp_path, CANARY_DIR, rolled_back_text(text))
+    assert app_state(d) == "rolled-back"
+    assert render(d) == []
+
+
+def test_canary_app():
+    """Same in both states: a rollback never edits or deletes the Application."""
+    app = yaml.safe_load((REPO / CANARY_APP).read_text())
+    assert app["kind"] == "Application"
+    assert app["metadata"] == {"name": "netpol-canary", "namespace": "argo-cd"}, "no finalizers"
+    assert app["spec"]["source"]["path"] == CANARY_DIR
+    assert app["spec"]["destination"] == {"server": "https://kubernetes.default.svc", "namespace": CANARY_NS}
+    sync = app["spec"]["syncPolicy"]
+    assert sync["automated"] == {"prune": True, "selfHeal": True, "allowEmpty": True}
+    assert sync["syncOptions"] == ["CreateNamespace=true", "PrunePropagationPolicy=foreground", "PruneLast=true"]
+
+    root = yaml.safe_load((REPO / "cluster/applications/kustomization.yaml").read_text())
+    assert Path(CANARY_APP).name in root["resources"]
+
+
+def test_canary_kustomization_sets_no_namespace():
+    """F5: a kustomization-level namespace would move Task 7's PrometheusRule out of `prometheus`.
+    Every object names netpol-canary itself (test_canary_workloads checks the render)."""
+    require_canary_deployed()
+    k = yaml.safe_load((REPO / CANARY_DIR / "kustomization.yaml").read_text())
+    assert "namespace" not in k
+
+
+def test_canary_workloads():
+    require_canary_deployed()
+    docs = render(CANARY_DIR)
+    assert sorted(d["kind"] for d in docs) == CANARY_KINDS
+
+    ns = one(docs, "Namespace")
+    assert ns["metadata"]["name"] == CANARY_NS
+    assert ns["metadata"]["labels"]["pod-security.kubernetes.io/enforce"] == "restricted"
+    for d in docs:
+        # The PrometheusRule lives in `prometheus` (test_canary_alert).
+        if d["kind"] not in ("Namespace", "PrometheusRule"):
+            assert d["metadata"].get("namespace") == CANARY_NS, f"{d['kind']}/{d['metadata']['name']}"
+
+    workloads = {"netpol-probe": named(docs, "DaemonSet", "netpol-probe"), "netpol-echo": named(docs, "Deployment", "netpol-echo")}
+    for name, w in workloads.items():
+        labels = {"app.kubernetes.io/name": name}
+        assert labels.items() <= w["metadata"]["labels"].items(), name
+        assert w["spec"]["selector"] == {"matchLabels": labels}, name
+        assert labels.items() <= w["spec"]["template"]["metadata"]["labels"].items(), name
+
+    # The probe.
+    pod = workloads["netpol-probe"]["spec"]["template"]["spec"]
+    c = hardened_container(pod, "netpol-probe")
+    assert c["command"] == ["bash", "/etc/netpol-probe/probe.sh", "loop"]
+    assert "args" not in c
+    assert sorted(e["name"] for e in c["env"]) == sorted(PROBE_ENV)
+    env = {e["name"]: e for e in c["env"]}
+    # B1b (Task 7): the policies are in, so must-drop rows must time out.
+    assert env["PROBE_MODE"]["value"] == "enforced"
+    assert env["PROBE_INTERVAL"]["value"] == PROBE_INTERVAL
+    assert env["HOST_IP"]["valueFrom"] == {"fieldRef": {"fieldPath": "status.hostIP"}}
+    assert env["NODE_NAME"]["valueFrom"] == {"fieldRef": {"fieldPath": "spec.nodeName"}}
+    assert env["MATRIX"]["value"] == "/etc/netpol-probe/matrix.txt"
+    assert c["resources"] == {"requests": {"cpu": "10m", "memory": "32Mi"}, "limits": {"memory": "128Mi"}}
+    rp = c["readinessProbe"]
+    cmd = rp["exec"]["command"]
+    assert len(cmd) == 3 and cmd[:2] == ["sh", "-c"] and re.fullmatch(READY_RE, cmd[2]), cmd
+    assert rp["periodSeconds"] == 15
+    # A failing canary is the signal, not something to restart.
+    assert "livenessProbe" not in c and "startupProbe" not in c
+
+    mounts = {m["mountPath"]: m for m in c["volumeMounts"]}
+    vols = {v["name"]: v for v in pod["volumes"]}
+    assert set(mounts) == {"/etc/netpol-probe", "/tmp"}
+    assert "emptyDir" in vols[mounts["/tmp"]["name"]]
+    assert mounts["/etc/netpol-probe"]["readOnly"] is True
+    cm_name = vols[mounts["/etc/netpol-probe"]["name"]]["configMap"]["name"]
+    assert re.fullmatch(r"netpol-probe-[a-z0-9]+", cm_name), "the generator's hashed name: a matrix change rolls the pods"
+    cm = named(docs, "ConfigMap", cm_name)
+    assert cm["data"] == {f: (REPO / CANARY_DIR / f).read_text() for f in ("probe.sh", "matrix.txt")}
+
+    # The echo server.
+    echo = workloads["netpol-echo"]
+    assert echo["spec"]["replicas"] == 1
+    e = hardened_container(echo["spec"]["template"]["spec"], "netpol-echo")
+    assert e["args"] == ["porter"] and "command" not in e
+    assert e["env"] == [{"name": "SERVE_PORT_9376", "value": "open"}, {"name": "SERVE_PORT_9377", "value": "closed"}]
+    assert e["readinessProbe"]["tcpSocket"] == {"port": 9376}
+    assert "livenessProbe" not in e and "startupProbe" not in e
+    assert e["resources"] == {"requests": {"cpu": "5m", "memory": "16Mi"}, "limits": {"memory": "64Mi"}}
+    assert sorted(p["containerPort"] for p in e["ports"]) == [9376, 9377]
+
+    sel = {"app.kubernetes.io/name": "netpol-echo"}
+    svc = named(docs, "Service", "netpol-echo")
+    assert svc["spec"].get("type", "ClusterIP") == "ClusterIP" and svc["spec"].get("clusterIP") != "None"
+    assert svc["spec"]["selector"] == sel
+    assert sorted((p["port"], p.get("protocol", "TCP")) for p in svc["spec"]["ports"]) == [(9376, "TCP"), (9377, "TCP")]
+    # Headless: its name resolves to the echo pod's own IP, for the matrix row that dials the pod directly.
+    pod_svc = named(docs, "Service", "netpol-echo-pod")
+    assert pod_svc["spec"]["clusterIP"] == "None"
+    assert pod_svc["spec"]["selector"] == sel
+
+
+def test_canary_matrix_targets_exist():
+    """Rows naming a netpol-canary Service name one this kustomization renders. The row through
+    the headless Service dials the echo pod's IP directly (no DNAT) on a port the echo neither
+    serves nor names, so the pod refuses it at baseline. echo-ingress-from-probe accepts TCP 9378
+    from the probe (test_canary_policies), so the row isolates the probe's egress."""
+    require_canary_deployed()
+    docs = render(CANARY_DIR)
+    services = {d["metadata"]["name"]: d for d in docs if d["kind"] == "Service"}
+    echo = named(docs, "Deployment", "netpol-echo")["spec"]["template"]["spec"]["containers"][0]
+    served = {p["containerPort"] for p in echo["ports"]}
+    rows = [r for r in canary_rows() if r[2].endswith(f".{CANARY_NS}.svc.cluster.local")]
+    assert rows, "the matrix has no echo rows"
+    headless = 0
+    for expect, scope, host, port, backend, *_ in rows:
+        svc = host.split(".")[0]
+        assert svc in services, f"{host} is not a Service in {CANARY_DIR}"
+        assert scope == "canary", f"{host}: only the canary can reach the echo server"
+        if services[svc]["spec"].get("clusterIP") == "None":
+            headless += 1
+            assert expect == "dropped" and int(port) not in served, f"{host}:{port}"
+            assert backend == f"{CANARY_NS}/{svc}"
+    assert headless == 1, "exactly one row dials the echo pod's IP"
+
+
+def test_probe_readiness_window_covers_interval():
+    """F9: Ready must outlast one interval plus one full run, and at least two intervals.
+
+    The probe touches /tmp/ready after each passing run and starts runs max(5, interval - run)
+    apart, so two healthy touches are at most interval + run apart. A run is bounded by every row
+    and the WAN lookup at their 3 s timeouts. Preflight F9 proposed 3 intervals, calibrated on the
+    60 s option; Chris's 300 s pick came with an 11-minute window (2.2 intervals), so 2 is the floor.
+    """
+    require_canary_deployed()
+    c = probe_container(render(CANARY_DIR))
+    interval = int({e["name"]: e for e in c["env"]}["PROBE_INTERVAL"]["value"])
+    window = int(re.fullmatch(READY_RE, c["readinessProbe"]["exec"]["command"][2]).group(1)) * 60
+    run = ROW_TIMEOUT_S * (len(canary_rows()) + 1)
+    assert window >= 2 * interval, f"readiness window {window}s < 2 x {interval}s"
+    assert window > interval + run, f"readiness window {window}s <= interval {interval}s + run {run}s"
+
+
+def test_probe_node_ips_match_dhcp_reservations():
+    """probe.sh's default NODE_IPS ($PEER_IP rows) is top, middle, bottom, as the router reserves them."""
+    defaults = re.findall(r"NODE_IPS:-([0-9. ]+)\}", (REPO / CANARY_DIR / "probe.sh").read_text())
+    assert len(defaults) == 1, "probe.sh must default NODE_IPS in exactly one place"
+    dhcp = yaml.safe_load((REPO / DHCP_VARS).read_text())["dhcp"]["static_mappings"]
+    ips = {m["name"]: m["ip"] for m in dhcp}
+    assert defaults[0].split() == [ips["top"], ips["middle"], ips["bottom"]]
+
+
+def bmcctl_nodes() -> dict[str, tuple[str, str]]:
+    """name -> (node IP, BMC IP) from bmcctl's NODES, read with ast (this imports and runs nothing)."""
+    tree = ast.parse((REPO / BMCCTL_NODES).read_text())
+    nodes = {}
+    for call in ast.walk(tree):
+        if isinstance(call, ast.Call) and getattr(call.func, "id", None) == "Node":
+            name, ip, bmc = (ast.literal_eval(a) for a in call.args)
+            nodes[name] = (ip, bmc)
+    assert nodes, f"no Node(...) entries in {BMCCTL_NODES}"
+    return nodes
+
+
+def test_probe_own_bmcs_match_bmcctl():
+    """probe.sh skips the probe node's own BMC: middle cannot reach its own (its NC-SI port drops
+    unicast from the host, 2026-10-30), so that row would time out at baseline and then pass as
+    "dropped" without proving anything. The NODE_BMCS default must be bmcctl's map, and its BMCs the matrix's BMC
+    rows, so each BMC is still dialled from the other two nodes."""
+    defaults = re.findall(r"NODE_BMCS:-([a-z0-9.= ]+)\}", (REPO / CANARY_DIR / "probe.sh").read_text())
+    assert len(defaults) == 1, "probe.sh must default NODE_BMCS in exactly one place"
+    own = dict(pair.split("=", 1) for pair in defaults[0].split())
+    nodes = bmcctl_nodes()
+    assert own == {name: bmc for name, (_, bmc) in nodes.items()}
+
+    bmc_rows = {r[2] for r in canary_rows() if "BMC" in r[5:]}
+    assert bmc_rows == set(own.values()), f"matrix BMC rows {sorted(bmc_rows)} != bmcctl BMCs {sorted(own.values())}"
+    # The NODE_IPS default (the $PEER_IP ring) is bmcctl's node IPs in the same order.
+    ring = re.findall(r"NODE_IPS:-([0-9. ]+)\}", (REPO / CANARY_DIR / "probe.sh").read_text())[0].split()
+    assert ring == [nodes[n][0] for n in ("top", "middle", "bottom")]
+
+
+# --- policy components and the canary's policies (plan Task 7) ------------------
+
+
+def policies(docs: list[dict]) -> dict[str, dict]:
+    nps = [d for d in docs if d.get("kind") == "NetworkPolicy"]
+    by_name = {d["metadata"]["name"]: d for d in nps}
+    assert len(by_name) == len(nps), "two NetworkPolicies share a name"
+    return by_name
+
+
+def test_components_match_spec():
+    """Each component renders one NetworkPolicy named after its directory, selecting every pod,
+    with no namespace (the consumer sets it). Together they hold exactly §6.3's egress rules."""
+    rules = []
+    for name in COMPONENTS:
+        d = f"{COMPONENTS_DIR}/{name}"
+        k = yaml.safe_load((REPO / d / "kustomization.yaml").read_text())
+        assert k == {
+            "apiVersion": "kustomize.config.k8s.io/v1alpha1",
+            "kind": "Component",
+            "resources": ["networkpolicy.yaml"],
+        }, d
+        text = (REPO / d / "networkpolicy.yaml").read_text()
+        head = text.split("\napiVersion:", 1)[0]
+        assert re.search(r"^# \S", head, re.M), f"{d}: say what the pod needs in a comment above the policy (§6.2)"
+
+        (np,) = [x for x in render(d) if x["kind"] == "NetworkPolicy"]
+        assert len(render(d)) == 1, f"{d} renders only its NetworkPolicy"
+        assert np["metadata"] == {"name": name}, f"{d}: no namespace, labels or annotations"
+        spec = np["spec"]
+        assert spec["podSelector"] == {}, d
+        assert "ingress" not in spec, f"{d}: these components only restrict or allow egress"
+        if name == "default-deny":
+            assert spec == {"podSelector": {}, "policyTypes": ["Ingress", "Egress"]}
+        else:
+            assert spec["policyTypes"] == ["Egress"], d
+            rules += spec["egress"]
+    assert policies_egress(render(f"{COMPONENTS_DIR}/allow-dns")) == SPEC_6_3_RULES[:1]
+    assert policies_egress(render(f"{COMPONENTS_DIR}/egress-internet-only")) == SPEC_6_3_RULES[1:]
+    assert rules == SPEC_6_3_RULES
+
+
+def policies_egress(docs: list[dict]) -> list[dict]:
+    return [r for d in docs if d["kind"] == "NetworkPolicy" for r in d["spec"].get("egress", [])]
+
+
+def test_canary_policies():
+    """The canary consumes the three components, plus its own two policies. probe-egress-to-echo
+    allows 9376 and 9377, so the 9377 drop can only be the echo's ingress default-deny (§9.2).
+    echo-ingress-from-probe allows 9376 and the unserved 9378 (option a, Task 6 review), so only
+    the probe's egress can drop the direct pod-IP row."""
+    require_canary_deployed()
+    k = yaml.safe_load((REPO / CANARY_DIR / "kustomization.yaml").read_text())
+    assert k["components"] == [f"../components/netpol/{c}" for c in COMPONENTS]
+    keys = list(k)
+    # F5 and the rollback edit: rolled_back_text drops everything after the resources list.
+    assert keys.index("resources") < keys.index("components") and keys.index("resources") < keys.index("patches")
+
+    docs = render(CANARY_DIR)
+    nps = policies(docs)
+    assert set(nps) == CANARY_POLICIES
+    for name, np in nps.items():
+        assert np["metadata"]["namespace"] == CANARY_NS, name
+    for c in COMPONENTS:
+        (want,) = render(f"{COMPONENTS_DIR}/{c}")
+        assert nps[c]["spec"] == want["spec"], f"{c}: the canary must use the component unchanged"
+
+    probe_tpl = named(docs, "DaemonSet", "netpol-probe")["spec"]["template"]["metadata"]["labels"]
+    echo_tpl = named(docs, "Deployment", "netpol-echo")["spec"]["template"]["metadata"]["labels"]
+    assert PROBE_LABELS.items() <= probe_tpl.items() and ECHO_LABELS.items() <= echo_tpl.items()
+
+    out = nps["probe-egress-to-echo"]["spec"]
+    assert out["podSelector"] == {"matchLabels": PROBE_LABELS}
+    assert out["policyTypes"] == ["Egress"]
+    (rule,) = out["egress"]
+    assert rule["to"] == [{"podSelector": {"matchLabels": ECHO_LABELS}}]
+    assert [(p["protocol"], p["port"]) for p in rule["ports"]] == [("TCP", 9376), ("TCP", 9377)]
+
+    inn = nps["echo-ingress-from-probe"]["spec"]
+    assert inn["podSelector"] == {"matchLabels": ECHO_LABELS}
+    assert inn["policyTypes"] == ["Ingress"]
+    (rule,) = inn["ingress"]
+    assert rule["from"] == [{"podSelector": {"matchLabels": PROBE_LABELS}}]
+    assert [(p["protocol"], p["port"]) for p in rule["ports"]] == [("TCP", 9376), ("TCP", 9378)]
+
+    # The echo serves 9377, which the policy keeps out; the policy lets 9378 in, which nothing serves.
+    echo = named(docs, "Deployment", "netpol-echo")["spec"]["template"]["spec"]["containers"][0]
+    served = {p["containerPort"] for p in echo["ports"]}
+    assert 9377 in served and 9378 not in served
+
+
+def test_canary_alert():
+    """NetpolCanaryFailing: a PrometheusRule (ConfigMap rules never load) in `prometheus`, labelled
+    `release: prometheus` or the ruleSelector never picks it up."""
+    require_canary_deployed()
+    pr = named(render(CANARY_DIR), "PrometheusRule", "netpol-canary")
+    assert pr["metadata"]["namespace"] == "prometheus"
+    assert pr["metadata"]["labels"]["release"] == "prometheus"
+    (group,) = pr["spec"]["groups"]
+    assert group["name"] == "netpol-canary"
+    (rule,) = group["rules"]
+    assert rule["alert"] == "NetpolCanaryFailing"
+    assert rule["expr"] == CANARY_ALERT_EXPR
+    assert rule["for"] == CANARY_ALERT_FOR
+    assert rule["labels"] == {"severity": "warning"}
+    assert rule["annotations"]["summary"] and rule["annotations"]["description"]
+
+
+# Namespaces where no NetworkPolicy may select pods (Global Constraints; design §6.2).
+# dns and rabbitmq-system leave this set only through plan Task 14.
+FORBIDDEN = {
+    "kube-system",
+    "rook",
+    "metallb-system",
+    "prometheus",
+    "argo-cd",
+    "telephony",
+    "home-assistant",
+    "dns",
+    "rabbitmq-system",
+}
+
+
+def policy_violations(docs: list[dict]) -> list[str]:
+    """One message per NetworkPolicy with no namespace (it would land wherever Argo's destination
+    points) or in a FORBIDDEN namespace."""
+    out = []
+    for d in docs:
+        if d.get("kind") != "NetworkPolicy":
+            continue
+        meta = d.get("metadata") or {}
+        name, ns = meta.get("name", "?"), meta.get("namespace")
+        if not ns:
+            out.append(f"NetworkPolicy {name} has no namespace; set it in the consumer (F5)")
+        elif ns in FORBIDDEN:
+            out.append(f"NetworkPolicy {ns}/{name}: no policy may select pods in {ns}")
+    return out
+
+
+def test_forbidden_guard_detects():
+    docs = [
+        {"kind": "NetworkPolicy", "metadata": {"name": "bad", "namespace": "rook"}},
+        {"kind": "NetworkPolicy", "metadata": {"name": "nowhere"}},
+        {"kind": "NetworkPolicy", "metadata": {"name": "fine", "namespace": CANARY_NS}},
+        {"kind": "ConfigMap", "metadata": {"name": "not-a-policy", "namespace": "rook"}},
+    ]
+    found = policy_violations(docs)
+    assert len(found) == 2, found
+    assert any("rook/bad" in v for v in found) and any("nowhere" in v for v in found)
+
+
+def policy_dirs() -> list[str]:
+    """Every kustomization directory under cluster/, except the components themselves, holding a
+    non-secret YAML file that mentions a NetworkPolicy or a netpol component."""
+    dirs = []
+    for k in sorted((REPO / "cluster").rglob("kustomization.yaml")):
+        d = k.parent
+        rel = d.relative_to(REPO).as_posix()
+        if rel == COMPONENTS_DIR.rsplit("/", 1)[0] or rel.startswith(COMPONENTS_DIR.rsplit("/", 1)[0] + "/"):
+            continue
+        for f in sorted(d.rglob("*")):
+            if not f.is_file() or f.suffix not in (".yaml", ".yml") or ".secret." in f.name:
+                continue
+            text = f.read_text(errors="replace")
+            if "kind: NetworkPolicy" in text or "components/netpol" in text:
+                dirs.append(rel)
+                break
+    return dirs
+
+
+def test_no_policy_in_forbidden_namespaces():
+    dirs = policy_dirs()
+    assert CANARY_DIR in dirs, "the canary renders policies, so the scan must find it"
+    found = [v for d in dirs for v in policy_violations(render(d))]
+    assert found == []
+
+
+def test_argo_cd_chart_policies_stay_off():
+    """Argo is the rollback path while enforcement rolls out, so its chart's NetworkPolicies stay off
+    until plan Task 12 (B4); A2 turned them off (ledger). policy_dirs renders kustomizations only and
+    cannot see a Helm-sourced policy, so this pins the value (review M4). The umbrella chart's values
+    reach the dependency under its name, so the dependency must stay `argo-cd` with no alias, and the
+    Application must not override the value. A chart bump that renames the key needs A2's render
+    check again: `helm template` before and after, counting NetworkPolicies."""
+    chart = yaml.safe_load((REPO / "cluster/argo-cd/Chart.yaml").read_text())
+    (dep,) = [d for d in chart["dependencies"] if d["name"] == "argo-cd"]
+    assert "alias" not in dep, "an alias moves the values key; update this test and values.yaml together"
+    values = yaml.safe_load((REPO / "cluster/argo-cd/values.yaml").read_text())
+    assert values["argo-cd"]["global"]["networkPolicy"]["create"] is False
+    app = yaml.safe_load((REPO / "cluster/applications/argo-cd.yaml").read_text())
+    assert app["spec"]["source"]["path"] == "cluster/argo-cd"
+    assert "networkPolicy" not in json.dumps(app["spec"]["source"].get("helm", {})), "the Application must not override it"

@@ -1,0 +1,14 @@
+{
+  "displayName": "Realliance CI: container groups only",
+  "description": "Runner classes spec, layer 5. The CI group holds job compute and nothing else, so Policy denies any resource type but an ACI container group.",
+  "mode": "Indexed",
+  "policyRule": {
+    "if": {
+      "field": "type",
+      "notIn": ["Microsoft.ContainerInstance/containerGroups"]
+    },
+    "then": {
+      "effect": "deny"
+    }
+  }
+}

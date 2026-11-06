@@ -1,8 +1,7 @@
 ---
-# The forge through the router's NAT reflection, and the public internet. Never the cluster
-# (pods, Services, LB IPs, nodes), the LAN (BMCs, KVM, router, switch), the tailnet, or the
-# router's own services on the WAN address. NetworkPolicy spec section 6.3. The consumer sets
-# the namespace.
+# Egress to the forge and the public internet for every pod in the consumer's namespace (design
+# §6.3). Never the cluster (pods, Services, LB IPs, nodes), the LAN (BMCs, KVM, router, switch),
+# the tailnet, or the router's own services on the WAN address. Pair it with allow-dns.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -11,15 +10,16 @@ spec:
   podSelector: {}
   policyTypes: [Egress]
   egress:
-    # git.realliance.net resolves to the WAN address; the router reflects :443 to Traefik .7. The
-    # whole DHCP /25 is listed, so a lease change inside it doesn't break CI; only 443, because
-    # other ports on it are router input (zigbee2mqtt :8585, DNS :53).
+    # git.realliance.net (registration --instance, checkout, package pushes) resolves to the WAN
+    # address; the router reflects :443 to Traefik .7. The whole DHCP /25 is listed, so a lease
+    # change inside it doesn't break CI; only 443, because other ports on it are router input
+    # (zigbee2mqtt :8585, DNS :53).
     - to:
         - ipBlock:
             cidr: 152.44.247.0/25
       ports:
         - {protocol: TCP, port: 443}
-    # The public internet: GitHub actions, Go proxy, npm, B2.
+    # The public internet: GitHub actions (DEFAULT_ACTIONS_URL), Go proxy, npm, B2.
     - to:
         - ipBlock:
             cidr: 0.0.0.0/0
@@ -30,7 +30,7 @@ spec:
               - 127.0.0.0/8
               - 169.254.0.0/16 # link-local, metadata-style addresses
               - 172.16.0.0/12
-              - 192.168.0.0/16 # LAN, nodes, BMCs, KVM, voice VLAN, switch OOB, LB IPs
+              - 192.168.0.0/16 # LAN, nodes, BMCs .117/.119/.151, KVM .2, voice VLAN, switch OOB, LB IPs
               - 224.0.0.0/4 # multicast
               - 240.0.0.0/4
               - 152.44.247.0/25 # our WAN /25: 443 only, above

@@ -1,0 +1,17 @@
+---
+# Runner config for the small class: one job, then exit (forgejo-runner one-job).
+log:
+  level: info
+
+runner:
+  capacity: 1
+  timeout: 30m
+  fetch_timeout: 5s
+  fetch_interval: 2s
+
+cache:
+  # Off until the CI cache lands (docs/superpowers/specs/2026-11-05-ci-cache-design.md).
+  enabled: false
+
+host:
+  workdir_parent: /work/act

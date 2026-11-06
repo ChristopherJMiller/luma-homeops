@@ -40,12 +40,15 @@ repos:
       # Any cluster/ change runs it: a component or a namespace can change what
       # a policy selects without touching the policy's own file. It accepts the
       # marked rollback (render nothing); the test file's docstring has the edit.
+      # It also runs on a change to the router's DHCP reservations or to
+      # bmcctl's node map, which the canary's node IPs and BMCs (probe.sh
+      # NODE_IPS, NODE_BMCS) must match.
       - id: netpol-manifests
         name: NetworkPolicy enforcer and policy static tests
         language: system
         entry: python -m pytest -q -p no:cacheprovider scripts/test_netpol_manifests.py
         pass_filenames: false
-        files: ^(cluster/.*|scripts/test_netpol_manifests\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
+        files: ^(cluster/.*|router/ansible/group_vars/vyos_routers\.yml|tools/bmcctl/src/bmcctl/nodes\.py|scripts/test_netpol_manifests\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
       # Realliance Pages' fixed values: the git-pages 0.10.1 pin and config (128 MB
       # cap, proxy not caddy, header allowlist), pod hardening for PodSecurity
       # restricted, the relay's env, monitors and alerts, Renovate rules, and the
@@ -89,6 +92,14 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_forge_fonts.py
         pass_filenames: false
         files: ^(cluster/forgejo/.*|cluster/applications/forgejo-release\.yaml|scripts/(test_forge_fonts\.py|sync-brand\.sh)|\.pre-commit-config\.yaml)$
+      # Forgejo sign-in goes straight to the SSO via a Traefik IngressRoute: GET only, flash-cookie and
+      # ?local guards, never a permanent redirect.
+      - id: forgejo-signin-redirect
+        name: Forgejo sign-in redirect static tests
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_forgejo_signin_redirect.py
+        pass_filenames: false
+        files: ^(cluster/forgejo/(signin-redirect|kustomization)\.yaml|scripts/test_forgejo_signin_redirect\.py|\.pre-commit-config\.yaml)$
       # Renovate must never automerge the forgejo-helm chart (a bump restarts Forgejo).
       - id: forgejo-renovate
         name: Forgejo chart Renovate guard
@@ -96,6 +107,25 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_forgejo_renovate.py
         pass_filenames: false
         files: ^(scripts/test_forgejo_renovate\.py|\.renovaterc\.json|cluster/applications/forgejo-release\.yaml)$
+      # Paid CI on ACI (azure/ci/): fence.json's values, every Policy rule, the dispatcher's exact
+      # role, the credential's lifetime, and no Azure id in a public file (runner classes phase 2,
+      # Tasks 2 and 3). Also tf.sh's redaction, the mocked `terraform test` restore scenario, and the
+      # Renovate rule that keeps provider bumps from automerging. The plan-level tests run only with
+      # AZURE_CI_PLAN_JSON set (the test file's docstring). It never opens ci.secret.auto.tfvars.
+      - id: azure-ci
+        name: azure/ci fence static tests
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_azure_ci.py
+        pass_filenames: false
+        files: ^(azure/ci/.*|scripts/test_azure_ci\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
+      # The small/medium CI runner class image (images/forgejo-runner-class): FROM lines equal to
+      # the galaxy runner's, root, toolchain, runner configs, entry-script contract, Renovate rule.
+      - id: runner-class
+        name: runner class image static tests
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_runner_class_image.py
+        pass_filenames: false
+        files: ^(images/forgejo-runner-class/.*|images/forgejo-runner/Dockerfile|scripts/test_runner_class_image\.py|\.github/workflows/forgejo-runner-class-image\.yml)$
       # scripts/netpol-verify.sh against a stub kubectl: a partial pod list or an
       # unparseable answer must FAIL, never pass vacuously.
       - id: netpol-verify-selftest

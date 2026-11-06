@@ -1,0 +1,28 @@
+---
+# NetpolCanaryFailing (design §6.4). A probe pod is Ready only while its last run matched the
+# matrix, so fewer Ready than scheduled means a node enforces wrongly, or not at all. A
+# PrometheusRule with `release: prometheus`, not a ConfigMap: ConfigMap rules never load here
+# (scripts/check-prometheus-rules.sh). `for: 15m` is three missed 300 s runs (Chris, 2026-11-05).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: netpol-canary
+  namespace: prometheus
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: netpol-canary
+      rules:
+        - alert: NetpolCanaryFailing
+          # absent(): the DaemonSet is gone, so nothing checks enforcement.
+          expr: kube_daemonset_status_number_ready{namespace="netpol-canary",daemonset="netpol-probe"} < kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"} or absent(kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"})
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: NetworkPolicy canary failing on a node
+            description: >-
+              A netpol-probe pod is not Ready: its last run did not match the matrix, so
+              that node's kube-network-policies agent enforces wrongly or not at all. Run
+              scripts/netpol-verify.sh canary. See docs/networkpolicy.md.

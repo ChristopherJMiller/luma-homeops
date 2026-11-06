@@ -1,0 +1,16 @@
+{
+  "displayName": "Realliance CI: forge-ci and expires-at tags",
+  "description": "Runner classes spec, layer 5. Every resource carries the forge-ci and expires-at tags the dispatcher writes, so a resource without them did not come from the dispatcher's launch path.",
+  "mode": "Indexed",
+  "policyRule": {
+    "if": {
+      "anyOf": [
+        {"field": "tags['forge-ci']", "exists": "false"},
+        {"field": "tags['expires-at']", "exists": "false"}
+      ]
+    },
+    "then": {
+      "effect": "deny"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+---
+# netpol-canary: the permanent NetworkPolicy canary (a probe DaemonSet plus an echo server).
+# Manifests in cluster/netpol-canary. Design: docs/superpowers/specs/2026-11-03-networkpolicy-enforcement-design.md §6.4.
+#
+# Roll back by rendering nothing, never by deleting this file: there is no resources-finalizer, so
+# the root app would orphan the DaemonSet and leave it running. The rollback edits
+# cluster/netpol-canary/kustomization.yaml only: the marker `# netpol: rolled back (Global
+# Constraints)` on its own line before `apiVersion:`, then `resources: []` and nothing after it.
+# allowEmpty lets Argo prune it all; the netpol-manifests hook rejects an empty render without
+# the marker.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: netpol-canary
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/netpol-canary
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: netpol-canary
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

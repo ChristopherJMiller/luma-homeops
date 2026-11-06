@@ -1,0 +1,9 @@
+---
+# Both canary workloads run as uid 1000 with no capabilities, no token and a read-only root, so
+# the namespace enforces PodSecurity `restricted`.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netpol-canary
+  labels:
+    pod-security.kubernetes.io/enforce: restricted

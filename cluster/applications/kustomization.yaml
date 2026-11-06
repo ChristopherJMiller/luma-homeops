@@ -20,6 +20,7 @@ resources:
   - immich.yaml
   - immich-release.yaml
   - kube-network-policies.yaml
+  - netpol-canary.yaml
   - forgejo-release.yaml
   - forgejo-runner.yaml
   - forgejo-runner-general.yaml

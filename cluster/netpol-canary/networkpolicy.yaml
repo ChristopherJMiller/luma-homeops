@@ -1,0 +1,44 @@
+---
+# netpol-probe needs the echo server on 9376 (its matrix row must connect) and 9377 (its row must
+# time out). This policy allows both, so the 9377 drop can only come from the echo's ingress
+# default-deny (design §9.2). DNS and the internet rows come from the components.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: probe-egress-to-echo
+  namespace: netpol-canary
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: netpol-probe
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: netpol-echo
+      ports:
+        - {protocol: TCP, port: 9376}
+        - {protocol: TCP, port: 9377}
+---
+# netpol-echo needs to accept the probe on 9376, the row that must connect. 9378 is unserved;
+# allowing it lets only the probe's egress drop the direct pod-IP row (option a, Task 6 review).
+# Everything else, 9377 from the probe included, meets default-deny.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: echo-ingress-from-probe
+  namespace: netpol-canary
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: netpol-echo
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: netpol-probe
+      ports:
+        - {protocol: TCP, port: 9376}
+        - {protocol: TCP, port: 9378}

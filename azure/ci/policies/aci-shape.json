@@ -1,0 +1,80 @@
+{
+  "displayName": "Realliance CI: one container, 2/8 or 4/16, Standard SKU",
+  "description": "Runner classes spec, layer 5. A job's container group has exactly one container, which requests exactly 2 vCPU and 8 GiB (small) or 4 vCPU and 16 GiB (medium), sets no limit beyond that, and requests no GPU. The SKU, when set, is Standard. Policy checks each number from both sides, so 2 and 2.0 compare the same.",
+  "mode": "Indexed",
+  "policyRule": {
+    "if": {
+      "allOf": [
+        {"field": "type", "equals": "Microsoft.ContainerInstance/containerGroups"},
+        {
+          "anyOf": [
+            {"count": {"field": "Microsoft.ContainerInstance/containerGroups/containers[*]"}, "notEquals": 1},
+            {
+              "count": {
+                "field": "Microsoft.ContainerInstance/containerGroups/containers[*]",
+                "where": {
+                  "anyOf": [
+                    {
+                      "allOf": [
+                        {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.requests.cpu", "greaterOrEquals": 2},
+                        {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.requests.cpu", "lessOrEquals": 2},
+                        {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.requests.memoryInGB", "greaterOrEquals": 8},
+                        {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.requests.memoryInGB", "lessOrEquals": 8},
+                        {
+                          "anyOf": [
+                            {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.limits.cpu", "exists": "false"},
+                            {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.limits.cpu", "lessOrEquals": 2}
+                          ]
+                        },
+                        {
+                          "anyOf": [
+                            {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.limits.memoryInGB", "exists": "false"},
+                            {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.limits.memoryInGB", "lessOrEquals": 8}
+                          ]
+                        },
+                        {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.requests.gpu", "exists": "false"},
+                        {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.limits.gpu", "exists": "false"}
+                      ]
+                    },
+                    {
+                      "allOf": [
+                        {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.requests.cpu", "greaterOrEquals": 4},
+                        {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.requests.cpu", "lessOrEquals": 4},
+                        {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.requests.memoryInGB", "greaterOrEquals": 16},
+                        {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.requests.memoryInGB", "lessOrEquals": 16},
+                        {
+                          "anyOf": [
+                            {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.limits.cpu", "exists": "false"},
+                            {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.limits.cpu", "lessOrEquals": 4}
+                          ]
+                        },
+                        {
+                          "anyOf": [
+                            {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.limits.memoryInGB", "exists": "false"},
+                            {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.limits.memoryInGB", "lessOrEquals": 16}
+                          ]
+                        },
+                        {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.requests.gpu", "exists": "false"},
+                        {"field": "Microsoft.ContainerInstance/containerGroups/containers[*].resources.limits.gpu", "exists": "false"}
+                      ]
+                    }
+                  ]
+                }
+              },
+              "notEquals": 1
+            },
+            {
+              "allOf": [
+                {"field": "Microsoft.ContainerInstance/containerGroups/sku", "exists": "true"},
+                {"field": "Microsoft.ContainerInstance/containerGroups/sku", "notEquals": "Standard"}
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "then": {
+      "effect": "deny"
+    }
+  }
+}

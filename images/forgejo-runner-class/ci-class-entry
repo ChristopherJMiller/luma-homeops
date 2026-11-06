@@ -1,0 +1,51 @@
+#!/bin/sh
+# ci-class-entry <timeout> <class> <handle> <url> <uuid>
+# RUNNER_TOKEN (environment) is the runner's registration secret. It goes to a 0600 file and
+# leaves the environment before exec, so /proc/1/environ and every job step never see it.
+# Every value is one quoted argv element; nothing is interpolated into a command string.
+set -eu
+
+if [ "$#" -ne 5 ]; then
+  echo "ci-class-entry: want 5 arguments: <timeout> <class> <handle> <url> <uuid>" >&2
+  exit 2
+fi
+
+case "$2" in
+  small | medium) ;;
+  *) echo "ci-class-entry: class must be small or medium" >&2; exit 2 ;;
+esac
+
+# case globs, not grep: grep matches line by line and would pass "ok<newline>anything".
+case "$3" in
+  "" | *[!A-Za-z0-9_-]*) echo "ci-class-entry: bad handle" >&2; exit 2 ;;
+esac
+if [ "${#3}" -gt 128 ]; then
+  echo "ci-class-entry: bad handle" >&2
+  exit 2
+fi
+
+case "$1" in
+  # 0m and 00m would make timeout(1) wait forever: the hard stop is binding.
+  0m | 00m) echo "ci-class-entry: timeout must not be zero" >&2; exit 2 ;;
+  [0-9]m | [0-9][0-9]m) ;;
+  *) echo "ci-class-entry: bad timeout" >&2; exit 2 ;;
+esac
+
+# url and uuid: non-empty, no control characters (newline included).
+for v in "$4" "$5"; do
+  case "$v" in
+    "" | *[[:cntrl:]]*) echo "ci-class-entry: bad url or uuid" >&2; exit 2 ;;
+  esac
+done
+
+if [ -z "${RUNNER_TOKEN:-}" ]; then
+  echo "ci-class-entry: RUNNER_TOKEN is empty" >&2
+  exit 2
+fi
+
+umask 077
+mkdir -p /run/ci /work/act
+printf '%s' "$RUNNER_TOKEN" > /run/ci/token
+unset RUNNER_TOKEN
+
+exec timeout --kill-after=30s "$1" forgejo-runner one-job --config "/etc/ci-class/runner-$2.yml" --wait --handle "$3" --url "$4" --uuid "$5" --token-url file:///run/ci/token --label "$2:host"

@@ -21,6 +21,8 @@ Facts this relies on, checked 2026-10-27:
   the live config on all three, apart from YAML quoting. Hostnames come from the
   router's DHCP reservations by MAC, so they survive a disk swap.
   `install.disk: /dev/nvme0n1` is the only M.2 slot and cannot match a Ceph disk.
+- **The kubelet caps every pod at 4096 tasks** (2026-11-05, `machine.kubelet.extraConfig.podPidsLimit`),
+  so one runaway pod cannot fork-bomb a node and starve etcd. The peak seen was 210 (Plex).
 - **A cold cache strands nothing.** All 110 running images still resolved upstream.
   A rebuilt node pulls everything again; docker.io pulls go through the in-cluster
   mirror at .231.

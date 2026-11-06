@@ -1,0 +1,26 @@
+{
+  "region": "westus3",
+  "ci_group": "rg-realliance-ci",
+  "guard_group": "rg-realliance-ci-guard",
+  "budget_ci_usd": 85,
+  "budget_guard_usd": 5,
+  "paid_cap_usd": 80,
+  "shapes": [
+    {"cpu": 2, "memory_gb": 8},
+    {"cpu": 4, "memory_gb": 16}
+  ],
+  "image_like": "ghcr.io/christopherjmiller/forgejo-runner-class@sha256:*",
+  "image_contains": "@sha256:",
+  "dropped_rules": [],
+  "dispatcher_actions": [
+    "Microsoft.ContainerInstance/containerGroups/read",
+    "Microsoft.ContainerInstance/containerGroups/write",
+    "Microsoft.ContainerInstance/containerGroups/delete",
+    "Microsoft.Insights/metrics/read"
+  ],
+  "egress": {
+    "cap_bytes": 10000000000,
+    "micro_per_gb": 87000,
+    "metric": "NetworkBytesTransmittedPerSecond"
+  }
+}
