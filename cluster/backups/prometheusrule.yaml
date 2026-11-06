@@ -4,7 +4,7 @@
 # selected by `release: prometheus` (any namespace since 0b Task 5; it lives in prometheus).
 # Names deliberately avoid Volume/Storage/Ceph so they route to
 # homelab-default (Discord, weekday hours) rather than the storage route.
-# Covers: restic-* (config tier + maintenance + canary), family-backup,
+# Covers: restic-* (config tier, ci-dispatch's ledger included, + maintenance + canary), family-backup,
 # family-canary, immich-backup, forgejo-dump (Realliance forge repos), and the
 # operator-generated logical-backup-* CronJobs.
 apiVersion: monitoring.coreos.com/v1
@@ -24,7 +24,7 @@ spec:
         - alert: BackupCronJobStale
           # No successful run in 36h for a nightly job.
           expr: |
-            (time() - kube_cronjob_status_last_successful_time{cronjob=~"restic-(home-assistant|plex|gonic|satellites)|family-backup|archive-backup|immich-backup|forgejo-dump|logical-backup-.*"}) > 36 * 3600
+            (time() - kube_cronjob_status_last_successful_time{cronjob=~"restic-(home-assistant|plex|gonic|satellites|ci-dispatch)|family-backup|archive-backup|immich-backup|forgejo-dump|logical-backup-.*"}) > 36 * 3600
           for: 1h
           labels:
             severity: warning
@@ -35,7 +35,7 @@ spec:
           # Exists but has never completed — a freshly broken deploy, or a
           # job that can never schedule (e.g. RWO affinity with the app at 0).
           expr: |
-            kube_cronjob_info{cronjob=~"restic-(home-assistant|plex|gonic|satellites)|family-backup|archive-backup|immich-backup|forgejo-dump|logical-backup-.*"}
+            kube_cronjob_info{cronjob=~"restic-(home-assistant|plex|gonic|satellites|ci-dispatch)|family-backup|archive-backup|immich-backup|forgejo-dump|logical-backup-.*"}
               unless on (namespace, cronjob) kube_cronjob_status_last_successful_time
           for: 48h
           labels:
