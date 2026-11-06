@@ -7,6 +7,7 @@
 #
 # Listed in cluster/applications/kustomization.yaml since Task 18 (dry-run: tiny decides and logs,
 # launches nothing, and reaps only the dispatcher's own ci-tiny-<job>-<attempt>-<try> names).
+# tiny is on since Task 19: members' jobs run as Jobs in ci-tiny. Pause it: docs/ci.md.
 #
 # To undo a deploy, roll back by rendering nothing, never by deleting this file:
 # cluster/ci-dispatch/kustomization.yaml -> `resources: []`. allowEmpty lets Argo prune everything,

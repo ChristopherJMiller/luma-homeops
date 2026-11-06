@@ -22,7 +22,8 @@ inventory:
   keyring: /etc/ci-dispatch/keyring/owners.asc
   fingerprints: /etc/ci-dispatch/keyring/fingerprints.txt
 classes:
-  tiny: dry-run
+  # tiny: dry-run from Task 18, on since Task 19. Quote every mode: YAML 1.1 reads a bare on or off as a bool.
+  tiny: "on"
   small: "off"
   medium: "off"
   large: "off"

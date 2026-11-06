@@ -1,8 +1,8 @@
 ---
 # ci-dispatch: launches one `tiny` runner Job per waiting Forgejo Actions job, within each owner's
 # limits (plan: docs/superpowers/plans/2026-11-04-runner-classes-phase-0-1.md). Code and README:
-# git.realliance.net/realliance-ops/ci-dispatch. Tiny starts in dry-run (config.yaml `classes`):
-# it reads the queue, decides, logs and counts, and launches nothing.
+# git.realliance.net/realliance-ops/ci-dispatch. Tiny ran in dry-run from Task 18 (it read the queue,
+# decided, logged and counted, and launched nothing) and is on since Task 19 (config.yaml `classes`).
 #
 # Dry-run still reaps, but only what carries the dispatcher's own name: a ci-tiny Job, or an
 # ephemeral instance-scope Forgejo runner, named ci-tiny-<job>-<attempt>-<try> with no active

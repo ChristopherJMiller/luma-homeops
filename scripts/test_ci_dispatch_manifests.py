@@ -343,7 +343,7 @@ def _seconds(s: str) -> int:
 
 def test_config_values(dispatcher):
     cfg = dispatcher_config(dispatcher)
-    assert cfg["classes"] == {"tiny": "dry-run", "small": "off", "medium": "off", "large": "off"}
+    assert cfg["classes"] == {"tiny": "on", "small": "off", "medium": "off", "large": "off"}
     assert cfg["forgejo"]["url"] == "http://forgejo-http.forgejo.svc.cluster.local:3000"
     assert cfg["forgejo"]["public_url"] == "https://git.realliance.net"
     assert cfg["inventory"]["repo"] == "realliance-ops/forge"
