@@ -55,6 +55,16 @@ If anything above is not green, **stop**. Surface to user.
 
 For each node in order (`top` → `middle` → `bottom`):
 
+**Before the drain of the node that runs Forgejo** (`kubectl -n forgejo get pods -l app.kubernetes.io/name=forgejo -o wide`), the forge's image must already sit on the other nodes. Forgejo uses `Recreate`, and the fork image comes from Forgejo's own registry, so a node without it leaves the forge down in `ImagePullBackOff` (`docs/forgejo.md`, "Fork image"). The DaemonSet `forgejo-keepwarm` keeps the image on every node. Confirm it:
+
+```bash
+kubectl -n forgejo get ds forgejo-keepwarm
+FORGE_IMG=$(kubectl -n forgejo get deploy forgejo -o jsonpath='{.spec.template.spec.containers[0].image}')
+TALOSCONFIG=nodes/talosconfig talosctl -n 192.168.0.240,192.168.0.241,192.168.0.242 image list | grep -F "${FORGE_IMG##*@}" | awk '{print $1}' | sort -u
+```
+
+Expect the DaemonSet at 3/3 and all three node IPs. A missing node is a stop: find out why its keep-warm pod isn't Running first. While a node is down, every `forgejo-release` sync waits at wave -1; hard rule 4 already holds merges.
+
 ```bash
 NODE_IP=192.168.0.240   # top
 

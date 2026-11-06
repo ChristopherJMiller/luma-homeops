@@ -374,6 +374,55 @@ The registry copy of `2.3` has the same digest as Quay's. Quay no longer serves 
 
 **Dependencies.** New pods cannot pull while Forgejo is down. A WAN-IP change breaks node pulls until the router's reflection rules follow (the inherited hairpin limit).
 
+## Fork image
+
+The forge's own image is `realliance/forgejo`'s patch queue on top of upstream 15.0.11: `git.realliance.net/realliance/forgejo`. Plan: `docs/superpowers/plans/2026-11-06-forgejo-fork-image.md`. Research and evidence: `docs/superpowers/specs/2026-11-06-forgejo-fork-image-research.md`.
+
+**The pin.** `cluster/applications/forgejo-release.yaml` sets `image.fullOverride` to `git.realliance.net/realliance/forgejo:v15.0.11-realliance.N@sha256:<amd64 digest>`. The upstream `digest:` line stays below it as the fallback; the chart ignores that line while `fullOverride` has a value. Until the first release, `fullOverride` is absent and the forge runs upstream `15.0.11-rootless`. No Renovate manager sees the pin, so Chris reviews each one. `scripts/test_forgejo_image.py` (pre-commit hook `forgejo-image`) checks the pin's form, the fallback line and the keep-warm DaemonSet.
+
+**Build and release.**
+
+1. Changes reach the fork's `main` as patches through a PR. CI refuses a patch that adds a database migration, so the same-version upstream image always boots on the same database.
+2. An Owner pushes a signed tag `v15.0.11-realliance.N` on `main`. The `image` workflow builds on the paid `medium` class and pushes the tags `v15.0.11-realliance.N` and `sha-<7>` as `realliance-ci`. It never moves a tag.
+3. The job prints the pin line. Chris reviews the digest, then the pin goes in as one signed commit. A `workflow_dispatch` build gets only `sha-<7>` and a `dev` version: a pipeline test, never a pin.
+
+**Deploy order.**
+
+1. `ci-dispatch` first: the live dispatcher must carry #3 (blocked jobs) before the forge runs an image with the `blocked` patch.
+2. No Actions job may run: every runner reads Idle or Offline under Site administration, Actions, Runners. A runner mid-job loses the forge, and a paid one keeps billing.
+3. Push the pin. Argo syncs wave -1 first, the keep-warm DaemonSet, on all three nodes. Only once it reads 3/3 Ready does Forgejo's Recreate start: 1 to 3 minutes of downtime. Watch with `Monitor` (the safe-rollout skill).
+
+**The keep-warm DaemonSet.** `forgejo-keepwarm` (namespace `forgejo`, Argo sync wave -1, from the chart's `extraDeploy`) runs `{{ include "gitea.image" . }}`, the Deployment's own image with the fallback included, as `/app/gitea/gitea --version && exec sleep 2147483647` on every node.
+
+- Why: with `Recreate` the old pod stops before the node pulls the new image, and the manifest and its token come from Forgejo. A node without the image cached sits in `ImagePullBackOff` with the forge down, and nothing recovers by itself.
+- The DaemonSet pulls the image while the old forge still serves it, and it keeps the image in use, so image garbage collection leaves it alone. The cached copies outlive a drain and a deleted package version. A rebuilt node starts empty and pulls again from the running forge.
+- It doubles as a start check: a binary that fails `--version` crash-loops in wave -1, the sync waits, and the old forge stays up. `kubectl -n forgejo logs ds/forgejo-keepwarm` shows the error.
+- Each pod requests 1m CPU and 8Mi, with a 64Mi limit. `--version` peaks near 40Mi of its own.
+
+**When the sync waits at wave -1.** Argo touches Forgejo only after the DaemonSet turns healthy, and this Argo has no sync timeout.
+
+- A node `NotReady` (a reboot, a Talos hop, a dead node) holds every sync of `forgejo-release` at wave -1, a config change too. It carries on once the node returns.
+- A running operation blocks the next: Argo skips auto-sync while one runs, so Argo applies a revert only after you end the waiting sync.
+
+To end the wait, or to roll Forgejo while a node is down, end the operation (`terminate-op`) and sync the Deployment alone, which skips the wave. First check that the keep-warm pods on the `Ready` nodes run the Deployment's new image (`kubectl -n forgejo get pods -l app.kubernetes.io/name=forgejo-keepwarm -o wide`); without it, the new Forgejo pod can land on a node that can't pull. Then, from this repo:
+
+```bash
+export KUBECONFIG=/tmp/galaxy-kubeconfig
+kubectl config set-context --current --namespace argo-cd
+nix develop --command argocd --core app terminate-op forgejo-release
+nix develop --command argocd --core app sync forgejo-release --resource apps:Deployment:forgejo
+kubectl config set-context --current --namespace default
+```
+
+**Fallback to upstream.** Trigger: Forgejo's pod is in `ErrImagePull`, `ImagePullBackOff` or `CrashLoopBackOff` on the fork image.
+
+1. Delete the `fullOverride:` line in `cluster/applications/forgejo-release.yaml`, commit, and push to GitHub `main`. The chart then renders `code.forgejo.org/forgejo/forgejo:15.0.11-rootless@sha256:3cd6bc2b…`. Argo reads GitHub, and both the chart and that image come from code.forgejo.org, so this works with the forge down. `kubectl set image` doesn't: self-heal reverts it.
+2. Argo rolls the DaemonSet to upstream first, then Forgejo. If the sync waits at wave -1, end it as in When the sync waits at wave -1. Watch with `Monitor`.
+3. `gitea migrate` is a no-op, and the data stays intact. Lost while on upstream: the jj UI and the PR-round views, the `blocked` status (ci-dispatch falls back to guessing), the Usage tab and the account link (restore the old navbar override from git history for the link). Round refs stay hidden from fetches, because `transfer.hideRefs` persists in Forgejo's git config file on `/data`. They still count in commit counts and graphs, and a mirror-mode push mirror could push `refs/realliance/*`.
+4. Roll forward only with the keep-warm DaemonSet in place, or while Forgejo is up with the image cached on every node.
+
+**Before a drain of Forgejo's node** (a Talos hop, a rebuild): check that the other nodes hold the image. The `talos-upgrade` skill carries the check.
+
 ## Template overrides (custom/)
 
 Forgejo has no plugin API; small UI changes are copies of upstream templates under
