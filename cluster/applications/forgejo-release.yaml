@@ -45,6 +45,64 @@ spec:
             memory: 512Mi
           limits:
             memory: 1Gi
+        # Keep-warm (docs/forgejo.md, "Fork image"): the Deployment's own image, run as `sleep` on
+        # every node one Argo wave before Forgejo. Recreate stops the old pod before the new one
+        # pulls, and the fork image comes from the forge's own registry, so each node must hold it
+        # while the old forge still serves it. `--version` runs first: a binary that won't start
+        # crash-loops here, and the sync waits at wave -1 with the old forge still up. With a node
+        # NotReady every sync of this app waits here too; the runbook has the selective sync.
+        extraDeploy:
+          - apiVersion: apps/v1
+            kind: DaemonSet
+            metadata:
+              name: forgejo-keepwarm
+              namespace: '{{ .Release.Namespace }}'
+              labels:
+                app.kubernetes.io/name: forgejo-keepwarm
+                app.kubernetes.io/instance: '{{ .Release.Name }}'
+              annotations:
+                argocd.argoproj.io/sync-wave: "-1"
+            spec:
+              selector:
+                matchLabels:
+                  app.kubernetes.io/name: forgejo-keepwarm
+                  app.kubernetes.io/instance: '{{ .Release.Name }}'
+              updateStrategy:
+                type: RollingUpdate
+                rollingUpdate:
+                  maxUnavailable: 100% # the pods serve nothing; pull on all nodes at once
+              template:
+                metadata:
+                  labels:
+                    app.kubernetes.io/name: forgejo-keepwarm
+                    app.kubernetes.io/instance: '{{ .Release.Name }}'
+                spec:
+                  automountServiceAccountToken: false
+                  terminationGracePeriodSeconds: 1 # `sleep` as PID 1 ignores SIGTERM
+                  tolerations:
+                    - operator: Exists # every node, whatever taint it gains
+                  securityContext:
+                    runAsNonRoot: true
+                    runAsUser: 1000
+                    runAsGroup: 1000
+                    seccompProfile:
+                      type: RuntimeDefault
+                  containers:
+                    - name: keepwarm
+                      image: '{{ include "gitea.image" . }}' # always the Deployment's image, fallback included
+                      imagePullPolicy: '{{ .Values.image.pullPolicy }}'
+                      command: ["sh", "-c", "/app/gitea/gitea --version && exec sleep 2147483647"]
+                      resources:
+                        requests:
+                          cpu: 1m
+                          memory: 8Mi
+                        limits:
+                          memory: 64Mi # `--version` peaks near 40Mi of its own
+                      securityContext:
+                        allowPrivilegeEscalation: false
+                        readOnlyRootFilesystem: true
+                        capabilities:
+                          drop: [ALL]
 
         persistence:
           enabled: true

@@ -107,6 +107,15 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_forgejo_renovate.py
         pass_filenames: false
         files: ^(scripts/test_forgejo_renovate\.py|\.renovaterc\.json|cluster/applications/forgejo-release\.yaml)$
+      # The forge image: the keep-warm DaemonSet runs the Deployment's exact image one Argo wave
+      # earlier, and a fork pin is a forge-registry tag plus digest with the upstream digest kept as
+      # the fallback (docs/forgejo.md, "Fork image"). Renders the chart, so it needs helm and network.
+      - id: forgejo-image
+        name: Forgejo image and keep-warm static tests
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_forgejo_image.py
+        pass_filenames: false
+        files: ^(scripts/test_forgejo_image\.py|cluster/applications/forgejo-release\.yaml|\.pre-commit-config\.yaml)$
       # Paid CI on ACI (azure/ci/): fence.json's values, every Policy rule, the dispatcher's exact
       # role, the credential's lifetime, and no Azure id in a public file (runner classes phase 2,
       # Tasks 2 and 3). Also tf.sh's redaction, the mocked `terraform test` restore scenario, and the

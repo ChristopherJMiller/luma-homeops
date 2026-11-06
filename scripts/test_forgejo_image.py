@@ -1,0 +1,189 @@
+"""Static tests for the forge's image and its keep-warm DaemonSet (cluster/applications/forgejo-release.yaml).
+
+    python -m pytest -q -p no:cacheprovider scripts/test_forgejo_image.py
+
+Runs in the `forgejo-image` pre-commit hook. It renders the Application's chart with `helm template`,
+so it needs `helm` and network: it pulls the chart version the Application names from its OCI
+registry, once per run.
+
+Forgejo runs with `strategy: Recreate`, and the fork image lives in the forge's own registry, so the
+old pod is gone before the new one pulls. `forgejo-keepwarm` runs the same image on every node, one
+Argo sync wave earlier: each node holds the image before Forgejo stops, and a binary that won't start
+stops the sync first (docs/forgejo.md, "Fork image").
+"""
+
+import re
+import subprocess
+from pathlib import Path
+
+import pytest
+import yaml
+
+REPO = Path(__file__).resolve().parent.parent
+RELEASE = REPO / "cluster/applications/forgejo-release.yaml"
+KEEPWARM = "forgejo-keepwarm"
+FORK_PIN_RE = re.compile(r"^git\.realliance\.net/realliance/forgejo:v15\.0\.11-realliance\.\d+@sha256:[0-9a-f]{64}$")
+DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+# A well-formed pin that exists nowhere: renders the fullOverride path without touching the repo.
+SAMPLE_PIN = "git.realliance.net/realliance/forgejo:v15.0.11-realliance.1@sha256:" + "0" * 64
+WAVE = "argocd.argoproj.io/sync-wave"
+
+
+@pytest.fixture(scope="module")
+def app() -> dict:
+    return yaml.safe_load(RELEASE.read_text())
+
+
+@pytest.fixture(scope="module")
+def values(app: dict) -> dict:
+    return app["spec"]["source"]["helm"]["valuesObject"]
+
+
+@pytest.fixture(scope="module")
+def chart(app: dict, tmp_path_factory: pytest.TempPathFactory) -> Path:
+    src = app["spec"]["source"]
+    out = tmp_path_factory.mktemp("chart")
+    ref = f"oci://{src['repoURL']}/{src['chart']}"
+    r = subprocess.run(
+        ["helm", "pull", ref, "--version", src["targetRevision"], "-d", str(out)],
+        capture_output=True, text=True, check=False,
+    )
+    assert r.returncode == 0, f"helm pull {ref} {src['targetRevision']} failed:\n{r.stderr}"
+    (tgz,) = out.glob("*.tgz")
+    return tgz
+
+
+def render(app: dict, chart: Path, values: dict, tmp: Path) -> list[dict]:
+    vals = tmp / "values.yaml"
+    vals.write_text(yaml.safe_dump(values))
+    release = app["spec"]["source"]["helm"]["releaseName"]
+    ns = app["spec"]["destination"]["namespace"]
+    r = subprocess.run(
+        ["helm", "template", release, str(chart), "-n", ns, "-f", str(vals)],
+        capture_output=True, text=True, check=False,
+    )
+    assert r.returncode == 0, f"helm template failed:\n{r.stderr}"
+    return [d for d in yaml.safe_load_all(r.stdout) if d]
+
+
+@pytest.fixture(scope="module")
+def docs(app: dict, chart: Path, values: dict, tmp_path_factory: pytest.TempPathFactory) -> list[dict]:
+    return render(app, chart, values, tmp_path_factory.mktemp("as-is"))
+
+
+@pytest.fixture(scope="module")
+def docs_fork(app: dict, chart: Path, values: dict, tmp_path_factory: pytest.TempPathFactory) -> list[dict]:
+    forked = {**values, "image": {**values["image"], "fullOverride": SAMPLE_PIN}}
+    return render(app, chart, forked, tmp_path_factory.mktemp("fork"))
+
+
+def one(docs: list[dict], kind: str, name: str) -> dict:
+    found = [d for d in docs if d["kind"] == kind and d["metadata"]["name"] == name]
+    assert len(found) == 1, f"want exactly one {kind}/{name}, got {len(found)}"
+    return found[0]
+
+
+def pod_images(obj: dict) -> list[str]:
+    pod = obj["spec"]["template"]["spec"]
+    return [c["image"] for c in pod.get("initContainers", []) + pod["containers"]]
+
+
+def test_keepwarm_wave_before_forgejo(docs: list[dict]) -> None:
+    ds = one(docs, "DaemonSet", KEEPWARM)
+    assert ds["metadata"]["namespace"] == "forgejo"
+    ann = ds["metadata"].get("annotations") or {}
+    assert ann.get(WAVE) == "-1"
+    # A sync hook is deleted and re-created around each sync; the image must stay in use between them.
+    assert not [k for k in ann if k in ("argocd.argoproj.io/hook", "helm.sh/hook")], ann
+    dep = one(docs, "Deployment", "forgejo")
+    wave = (dep["metadata"].get("annotations") or {}).get(WAVE)
+    assert wave is None or int(wave) >= 0, wave
+    # Nothing else may join wave -1 or earlier: the wave is the keep-warm gate and nothing more.
+    early = [
+        f"{d['kind']}/{d['metadata']['name']}" for d in docs
+        if int((d["metadata"].get("annotations") or {}).get(WAVE, "0")) < 0
+    ]
+    assert early == [f"DaemonSet/{KEEPWARM}"], early
+
+
+@pytest.mark.parametrize("variant", ["upstream", "fork"])
+def test_keepwarm_same_image(variant: str, docs: list[dict], docs_fork: list[dict], values: dict) -> None:
+    rendered = docs if variant == "upstream" else docs_fork
+    dep = one(rendered, "Deployment", "forgejo")
+    ds = one(rendered, "DaemonSet", KEEPWARM)
+    (main,) = [c for c in dep["spec"]["template"]["spec"]["containers"] if c["name"] == "forgejo"]
+    (warm,) = ds["spec"]["template"]["spec"]["containers"]
+    assert warm["image"] == main["image"]
+    assert set(pod_images(dep)) == {main["image"]}, "every Forgejo container runs the one image"
+    assert warm.get("imagePullPolicy") == main.get("imagePullPolicy")
+    if variant == "fork":
+        assert main["image"] == SAMPLE_PIN
+    else:
+        assert main["image"].endswith("@" + values["image"]["digest"]), main["image"]
+        assert main["image"].startswith("code.forgejo.org/forgejo/forgejo:"), main["image"]
+
+
+def test_keepwarm_runs_version_first(docs: list[dict]) -> None:
+    pod = one(docs, "DaemonSet", KEEPWARM)["spec"]["template"]["spec"]
+    assert "initContainers" not in pod
+    (warm,) = pod["containers"]
+    assert warm["command"] == ["sh", "-c", "/app/gitea/gitea --version && exec sleep 2147483647"]
+    assert "args" not in warm
+
+
+def test_keepwarm_minimal(docs: list[dict]) -> None:
+    ds = one(docs, "DaemonSet", KEEPWARM)
+    pod = ds["spec"]["template"]["spec"]
+    (warm,) = pod["containers"]
+    assert warm["resources"] == {"requests": {"cpu": "1m", "memory": "8Mi"}, "limits": {"memory": "64Mi"}}
+    psc, csc = pod.get("securityContext") or {}, warm.get("securityContext") or {}
+    merged = {**psc, **csc}
+    assert merged.get("runAsNonRoot") is True
+    assert merged.get("runAsUser") == 1000
+    assert csc.get("readOnlyRootFilesystem") is True
+    assert csc.get("allowPrivilegeEscalation") is False
+    assert csc.get("capabilities") == {"drop": ["ALL"]}
+    assert pod.get("automountServiceAccountToken") is False
+    # All three nodes are control planes; today none is tainted, and a future taint must not drop one.
+    assert {"operator": "Exists"} in pod.get("tolerations", []), pod.get("tolerations")
+    assert "nodeSelector" not in pod and "affinity" not in pod
+    # Nothing to serve or store: no ports, no volumes, no host namespaces.
+    assert "ports" not in warm and "volumeMounts" not in warm and "volumes" not in pod
+    assert not any(pod.get(k) for k in ("hostNetwork", "hostPID", "hostIPC"))
+
+
+def test_keepwarm_outside_forgejo_selectors(docs: list[dict]) -> None:
+    """The keep-warm pods must never receive Forgejo's traffic, nor count as Forgejo's pods."""
+    ds = one(docs, "DaemonSet", KEEPWARM)
+    labels = ds["spec"]["template"]["metadata"]["labels"]
+    assert ds["spec"]["selector"]["matchLabels"].items() <= labels.items()
+    selectors = [d["spec"].get("selector") or {} for d in docs if d["kind"] == "Service"]
+    selectors.append(one(docs, "Deployment", "forgejo")["spec"]["selector"]["matchLabels"])
+    for sel in selectors:
+        assert sel and not sel.items() <= labels.items(), f"{sel} selects the keep-warm pods"
+
+
+@pytest.mark.parametrize(
+    "pin, ok",
+    [
+        (SAMPLE_PIN, True),
+        ("git.realliance.net/realliance/forgejo:v15.0.11-realliance.1", False),
+        ("git.realliance.net/realliance/forgejo@sha256:" + "0" * 64, False),
+        ("git.realliance.net/realliance/forgejo:sha-abcdef1@sha256:" + "0" * 64, False),
+        ("ghcr.io/realliance/forgejo:v15.0.11-realliance.1@sha256:" + "0" * 64, False),
+    ],
+)
+def test_fork_pin_pattern(pin: str, ok: bool) -> None:
+    """The pin guard rejects a tag without a digest, a sha- tag and any other registry."""
+    assert bool(FORK_PIN_RE.match(pin)) is ok
+
+
+def test_fork_pin(values: dict) -> None:
+    image = values["image"]
+    if image.get("fullOverride"):
+        assert FORK_PIN_RE.match(image["fullOverride"]), image["fullOverride"]
+    # The upstream line stays: the chart ignores it under fullOverride, and deleting fullOverride
+    # alone falls back to it (docs/forgejo.md, "Fork image").
+    assert DIGEST_RE.match(image.get("digest", "")), image.get("digest")
+    assert image.get("rootless") is True
+    assert "tag" not in image and "repository" not in image and "registry" not in image
