@@ -502,3 +502,74 @@ Branch `np8-verifier`, commit `6ff066e8`, scripts only, not pushed (the controll
   - 7 re-runs in all (1, 2, 1, 1, 1, 0, 1). Every one came from the probe's own loop run in the window. No run ended AMBIGUOUS.
   - Run 1's exit code reads 127. A comment edit landed in the script while that run was still reading it, and bash failed in the dispatch code after `canary` had already printed PASS.
 - **Re-runs remain common:** 6 of 7 invocations needed one. Each costs about 65 s for one pod, and the exit-2 outcome is now negligible. Judging the run from a chain of its own attempts anchored at T0 would make them rare. That is a possible follow-up, not needed for soundness.
+
+## B2: forgejo-runner policies and netpol-gate (Task 8, 2026-11-06)
+
+**B2_done=2026-11-06T17:13:28Z**: the last Step 11 check, `canary` PASS, with Gate G after following it. Task 12 (B4) waits until **2026-11-13T17:13:28Z** or later.
+
+### Answers
+
+- Step 1's `B1_green_at ≥ 24 h` check: waived by Chris. Step 1 ran the runner-idle check and a `canary` PASS.
+- **The Step 9 STOP:** pre-approved by Chris, on condition that the static tests pass, the runner reports idle, and Gate G matches. All three held. The rollback, an immediate signed revert, was not needed.
+- **Counts come from the matrix (F8).** `runner` gives **22 rows, 19 dropped** on any node with `NODE_NAME` set: the 23 `all` rows less the node's own BMC.
+  - The plan's literal "19 rows, 16/16" predates Task 6's rows.
+  - The realliance-sso job test checks 20 rows, 17 of them timeouts: the `all` rows less `$HOST_IP` and `$PEER_IP`.
+- **`runner` follows the pre-work review's T8-1 to T8-6.**
+  - It uses `backend_dsts`, `deny_attempts`, `claim_rows` and `row_direction`, never any-port matching.
+  - It runs every row in one exec, timed on the pod's clock; `claim_rows` gives each overlapping row the attempt in its own slot.
+  - It passes `NODE_NAME`, and it assumes an idle runner.
+
+### What deployed
+
+Commit `8e48b7a8`, with the pre-work commits `c764c4aa` and `465c2cc6`:
+- `cluster/forgejo-runner` takes the default-deny, allow-dns and egress-internet-only components. They render 3 NetworkPolicies in `forgejo-runner`, with no ingress rule.
+- The `netpol-gate` init container uses the runner's image and securityContext and the §6.3 body, with requests 10m/32Mi and a 128Mi limit.
+
+### Live
+
+- **Before.**
+  - Step 4 (16:57Z): `runner` exit 1, all 19 dropped rows `open`, deny-logged 0/19; the gate one-liner gave `rc=1`.
+  - Step 5 (16:58Z): `test_runner_job_egress_confined` FAILED, as planned.
+- **Gate G before (17:04Z):** 3 Ready nodes; 145/145 PGs active+clean; HEALTH_WARN with MDS_CLIENT_RECALL; 63 apps, only `rook` and `rook-cluster` Degraded; no bad pods. NetworkPolicies: `ci-dispatch` 3, `ci-tiny` 3, `netpol-canary` 5. The edge snapshot has 51 rows and matches.
+- **The push waited for idle.** `ci-dispatch` was busy at 17:04:25Z, and all three repos read idle at 17:07:02Z.
+- **Pushed 2026-11-06T17:07:20Z**, `db4c50db..8e48b7a8`, a fast-forward.
+- **Rollout.**
+  - Argo synced at 17:07:24Z and was Synced/Healthy at 17:07:34Z. New runner pod `5qcvq` on middle, with 0 restarts.
+  - **`netpol-gate` logged 1 `egress not enforced yet; waiting` line** (17:07:23–17:07:29Z): the no-NRI enrolment delay was 3–6 s.
+  - The runner declared both connections and launched its poller at 17:07:30Z.
+- **Step 11, verification.**
+  - `runner` (17:08:55Z): `middle rows 22/22 deny-logged 19/19`, `runner: PASS (22 rows, 19/19 deny-logged)`, `stray` PASS.
+  - The gate one-liner gave `rc=0`.
+  - realliance-sso `test_runner_job_egress_confined` and `test_probe_job_hardened_and_workspace_wiped`: 2 passed (17:10:36Z).
+  - `canary` PASS on all three nodes (17:13:28Z).
+- **Gate G after (17:13–17:14Z):** it matches, plus the 3 `forgejo-runner` policies.
+  - 42 Argo revisions moved to `cdd66dbe`, the other agent's docs commits.
+  - The edge diff is empty.
+- **Pipeline criterion.** forge-bot has `.forgejo/workflows/ci.yaml` on `main` (last main run #48, success). Forgejo 15 has no rerun API (404), and the workflow has no `workflow_dispatch`, so the **UI re-run is pending for Chris**. The job test proves the pipeline's network paths: forge 443 through the reflection, GitHub, and the Go proxy. ko's registry push goes to the same forge 443.
+- **realliance-sso PR https://github.com/realliance/sso/pull/62** (`326c559`): Chris merges.
+
+## Restart gap (Task 9, 2026-11-06)
+
+Chris pre-approved the Step 2 STOP. The runner was idle (three `idle` lines at 17:16:17Z), and it runs on **middle**; that node's agent was `kube-network-policies-9rdg7`.
+
+| Event | UTC |
+|---|---|
+| **t0**, `kubectl -n kube-system delete pod/kube-network-policies-9rdg7` | **17:16:17.728Z** |
+| replacement `kube-network-policies-k456z` created | 17:16:22Z |
+| old pod gone (delete returned) | 17:16:23.215Z |
+| new agent started | 17:16:23.466Z |
+| its first nftables sync done: middle's rules back | **17:16:24.026Z** (t0 + 6.3 s) |
+| **t_ready**, k456z Ready | **17:16:24.815Z** (t0 + 7.1 s; expected within 60 s) |
+| check started: `canary --node middle && runner` | 17:16:37.658Z |
+| **t_enforced**: both PASSED on the first try | the check started at 17:16:37.658Z and ended 17:18:46Z |
+
+- **Observed gap, `t_enforced − t0`: at most 19.9 s**, measured to the start of the first passing check. That check began 12.8 s after t_ready, inside the expected 60 s.
+- **The agent's own log puts the rules back at t0 + 6.3 s.** With `--fail-open=true`, packets pass while no agent reads the queue, which left middle's policed pods (the runner, middle's probe) without enforcement for **at most 6.3 s**, and possibly less: when the old agent stopped judging inside its grace period is not logged.
+- **The check:** `canary --node middle` gave `rows 25/25 deny-logged 21/21`, and `runner` gave `22/22, 19/19`, with `stray` PASS (80 lines).
+- **Afterwards:** DS 3/3, the runner pod unchanged (0 restarts), 145/145 PGs active+clean, Argo unchanged.
+
+### Carries
+
+- **The pipeline UI re-run** (forge-bot run #48, or the next push to `main`): Chris.
+- **realliance-sso PR #62:** Chris merges.
+- **Task 12 (B4)** no earlier than B2_done + 7 days.
