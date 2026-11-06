@@ -40,3 +40,20 @@ The cluster already ran `main` bb4ae992: Argo synced netpol B1 review M5 to `net
 
     In this order the stored copy is always signed by a key still in the keyring.
   - **Clear the alert:** the counter stays above zero until the pod restarts. Once `ci_dispatch_config_verified` is 1, run `kubectl -n ci-dispatch delete pod ci-dispatch-0`. With no key rotated or expired, treat the alert as tampering.
+
+### Gate G before, re-run after the rebase (2026-11-06T01:23:38Z to 01:26Z)
+
+`main` was at 92ca5dee, and the branch was rebased onto it.
+
+- G1: 3 nodes `Ready`, none `SchedulingDisabled`. 145/145 PGs `active+clean`. No hop, drain or recovery.
+- G2: Ceph `HEALTH_OK`; only the three muted `AUTH_INSECURE_*` remain, after `MDS_CLIENT_RECALL` cleared. 9/9 OSDs up and in. Argo: 62 apps, all `Synced`; only `rook` is Degraded (`rook-cluster` is Healthy again with Ceph).
+- G3: 51 edge rows. The normalised diff against 00:50Z is empty, and the certs are the same.
+- G4:
+  - No pod outside `Running`/`Succeeded`.
+  - 5 NetworkPolicies, all in `netpol-canary`.
+  - Memory requests: **top 86 %, middle 85 %, bottom 88 %**.
+  - No pod over 100 restarts. One Warning event, `ResourceLimits` on `acid-chrismillerxyz`, unrelated.
+  - `ci-dispatch` and `ci-tiny` don't exist, and neither does any `ci-dispatch` PVC.
+- `scripts/netpol-verify.sh stray --since 15m` (`main`'s round 2, 920a2cf4) at 01:23:56Z: `stray: PASS (819 deny lines, policed: netpol-canary)`. Every window is covered, with no `GONE` or `STRAY` line. The count matches the NetworkPolicy ledger's 818 at 01:00Z.
+- Deny lines naming `ci-dispatch/` or `ci-tiny/`, 15 min, all three agents: 0.
+- `scripts/check-prometheus-rules.sh`: exit 0, `selected=41 groups=44 alerting=179 recording=82`; the only WARN is the existing `unselected music-streaming/gonic-alerts`.
