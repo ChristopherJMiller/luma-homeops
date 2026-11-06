@@ -371,9 +371,10 @@ tests:
   - name: CISweeperStale is quiet through a 10-minute absence (a pod move, an RBD detach)
     interval: 1m
     input_series:
-      # Fresh until 20 min, no samples from 21 to 30 min, fresh again from 31 min.
+      # Fresh until 20 min, then ten stale markers (a failed scrape: absent at once, no 5-min
+      # lookback), fresh again from 31 min. absent() is true for the whole 10 minutes.
       - series: 'ci_dispatch_sweeper_last_run_timestamp{namespace="ci-dispatch",job="ci-dispatch"}'
-        values: '0+60x20 _x10 1860+60x40'
+        values: '0+60x20 stale stale stale stale stale stale stale stale stale stale 1860+60x40'
     alert_rule_test:
       - {eval_time: 28m, alertname: CISweeperStale, exp_alerts: []}
       - {eval_time: 40m, alertname: CISweeperStale, exp_alerts: []}
