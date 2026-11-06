@@ -56,13 +56,13 @@ Each outcome has its own email to `alert_emails`. `Locked` and `LockFailed` are 
 
 | Outcome | Run ends | Alert |
 |---|---|---|
-| `Locked`: the assignment is gone. Every sweep repeats this until an apply restores it. | `Failed`, code `Locked` | `ci-sweeper-locked`, from the CI group's Activity Log when anyone deletes the assignment |
+| `Locked`: the assignment is gone. Every sweep repeats this until an apply restores it. | `Failed`, with `code` `Terminated` and `error.code` `Locked` | `ci-sweeper-locked`, from the CI group's Activity Log when anyone deletes the assignment |
 | `LockFailed`: the assignment delete failed. The groups went anyway, and every sweep retries. | `Cancelled`; the `Lock_failed` step says why | `ci-sweeper-lock-failed` (runs cancelled) |
-| `Degraded`: a read, delete, or tag write failed, or a list had a second page. The other rules still ran. | `Failed`, code `Degraded` | `ci-sweeper-failed` (runs failed, which `Locked` runs also raise) |
+| `Degraded`: a read, delete, or tag write failed, or a list had a second page. The other rules still ran. | `Failed`, with `error.code` `Degraded` | `ci-sweeper-failed` (runs failed, which `Locked` runs also raise) |
 
 To unlock:
 
-1. Find the cause first: the run's error, and the dispatcher's log.
+1. Find the cause first: the run's `error.code` and `error.message`, and the dispatcher's log (`docs/ci.md`, After a trip).
 2. Plan: it reads `1 to add, 0 to change`, the assignment under its fixed name. Chris applies.
 3. Then check that the next sweep ends `Succeeded`. If it ends `Locked` with no cause, a sweep that read the old state raced the apply: apply again.
 
@@ -72,6 +72,7 @@ Notes:
 
 - **The dispatcher's own gate is $0.48 an hour** (4 `small` or 2 `medium` jobs; Chris, 2026-11-06). The sweeper's $0.60 counts compute plus egress, which leaves about $0.12 an hour, about 380 KB/s across all groups, for traffic before two sweeps lock.
 - The egress term fails open. An unread metric (a 404 for a group deleted mid-sweep, say) adds nothing to the burn and skips the cap, and the run ends `Degraded`. Task 4 checks what a metric read returns for a deleted group.
+- **How the egress metric reads** (Task 5's drill). `interval=FULL` gives one average over the span, and that average is per sample, about 2 a minute, not weighted by time. A group's first 90 s or so has no sample, so average × age reads high for a young group: 1.33 times the bytes sent in the drill, the safe direction. The metric also lags the wall clock by about 2 min: a group under 2 min old reads 0, and a sweep's 10-minute rate window misses its newest 2 minutes or so.
 - The shape price reads only CPU and memory, and ignores `gpu`, `sku` and `limits`. The `aci-shape` Policy denies all three today; widen the price if that rule ever changes.
 - The first sweeps after the first apply can fail with 403 until the sweeper's role assignment propagates. Expect one `Degraded` email then.
 
