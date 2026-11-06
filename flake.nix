@@ -88,6 +88,7 @@
             krew
             pre-commit
             kubeseal
+            prometheus-alertmanager # amtool, for scripts/test-alertmanager-routes.sh
             nodejs_22
             kustomize
             talosctl
