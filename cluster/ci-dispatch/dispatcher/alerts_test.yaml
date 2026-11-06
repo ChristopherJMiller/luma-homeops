@@ -56,7 +56,7 @@ tests:
   - name: CIDispatchLaunchFailing fires on launch errors that persist for 15 minutes
     interval: 1m
     input_series:
-      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="tiny",backend="kube",outcome="error"}'
+      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="tiny",backend="galaxy",outcome="error"}'
         values: '0+1x40'
     alert_rule_test:
       - {eval_time: 10m, alertname: CIDispatchLaunchFailing, exp_alerts: []}
@@ -71,7 +71,7 @@ tests:
     input_series:
       - series: 'ci_dispatch_holds{namespace="ci-dispatch",class="tiny",reason="launch-failing"}'
         values: '0x40'
-      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="tiny",backend="kube",outcome="error"}'
+      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="tiny",backend="galaxy",outcome="error"}'
         values: '3x40'
     alert_rule_test:
       - {eval_time: 30m, alertname: CIDispatchLaunchFailing, exp_alerts: []}
@@ -108,7 +108,8 @@ tests:
         exp_alerts:
           - exp_labels: {severity: warning, namespace: ci-dispatch, job: ci-dispatch}
             exp_annotations:
-              summary: "ci-dispatch stored config rejected: the copy of ci.yaml in its ledger failed its proof, a sign of corruption or tampering (docs/ci.md)"
+              summary: "ci-dispatch stored config rejected: the copy of ci.yaml in its ledger failed its proof at start: usually a signer no longer in the keyring (a rotated or expired key), rarely corruption or tampering (docs/ci.md)"
+              description: "The counter stays above zero until the pod restarts. Once ci_dispatch_config_verified is 1, delete pod ci-dispatch-0 to clear it. With no key rotated or expired, treat it as tampering (docs/ci.md)."
   - name: CIDispatchStoredConfigRejected is quiet at zero
     interval: 1m
     input_series:
@@ -154,17 +155,46 @@ tests:
         exp_alerts:
           - exp_labels: {severity: warning}
             exp_annotations:
-              summary: "ci-dispatch undid more than 6 tiny launches an hour for an hour: jobs Forgejo holds, or crash leftovers, keep taking the launch slot (docs/ci.md)"
+              summary: "ci-dispatch undid more than 7 tiny launches an hour for an hour: jobs Forgejo holds, or crash leftovers, keep taking the launch slot (docs/ci.md)"
   - name: CIDispatchLaunchesUndone is quiet for one held job's whole back-off schedule
     interval: 1m
     input_series:
       # Undos at 3, 7, 12, 20, 33 and 46 min (3 min pickup, then 1/2/5/10/10 min back-off), then
-      # 109 and 172 min (60 min after the sixth): never more than 6 in an hour.
+      # 109 and 172 min (60 min after the sixth): never more than 6 in an hour. One-minute samples from
+      # zero: the counter-zero clamp keeps increase() from extrapolating the window's start.
       - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="tiny",backend="galaxy",outcome="undone"}'
         values: '0x2 1x3 2x4 3x7 4x12 5x12 6x62 7x62 8x28'
     alert_rule_test:
       - {eval_time: 60m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
       - {eval_time: 110m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
+      - {eval_time: 200m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
+  - name: CIDispatchLaunchesUndone is quiet for one held job sampled every 30 s from a non-zero counter
+    interval: 30s
+    input_series:
+      # The same schedule as a scrape sees it: 30 s samples, 10 undos counted before. increase()
+      # now extrapolates to the window's edges, so 6 undos read about 6.05; the threshold of 7
+      # leaves room for that.
+      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="tiny",backend="galaxy",outcome="undone"}'
+        values: '10x5 11x7 12x9 13x15 14x25 15x25 16x125 17x125 18x56'
+    alert_rule_test:
+      # The 6.05 reading lasts from 46 to 62 min, so 61 and 62 min are where a threshold of 6
+      # with a shorter `for` would fire.
+      - {eval_time: 60m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
+      - {eval_time: 61m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
+      - {eval_time: 62m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
+      - {eval_time: 110m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
+      - {eval_time: 200m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
+  - name: CIDispatchLaunchesUndone is quiet for two held jobs sharing the slot (for 1h carries it)
+    interval: 1m
+    input_series:
+      # Two held jobs take turns in the one global slot: undos at 3, 6, 9, 12, 15, 18, 23, 26, 36,
+      # 39, 49 and 52 min, then 112, 115, 175 and 178. Up to 12 in an hour, and above 7 for about
+      # 49 min. Only the hour-long `for` keeps this quiet; a shorter one fires.
+      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="tiny",backend="galaxy",outcome="undone"}'
+        values: '20x2 21x2 22x2 23x2 24x2 25x2 26x4 27x2 28x9 29x2 30x9 31x2 32x59 33x2 34x59 35x2 36x22'
+    alert_rule_test:
+      - {eval_time: 60m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
+      - {eval_time: 90m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
       - {eval_time: 200m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
   - name: CIDispatchOrphanCompute fires on an orphan that lasts 15 minutes
     interval: 1m

@@ -48,15 +48,19 @@ spec:
             severity: warning
           annotations:
             summary: "ci-dispatch cannot verify the Owner-signed limits (ci.yaml): it runs on the last verified copy or the code defaults (docs/ci.md)"
-        # The ledger keeps a copy of the last verified ci.yaml, proven again at start. A copy that
-        # fails the proof means corruption or tampering. The counter only grows within a process, so
-        # any value above zero fires, and the alert lasts until the pod restarts.
+        # The ledger keeps a copy of the last verified ci.yaml, proven again at every start. The usual
+        # cause of a failed proof is honest: its signer is no longer in the keyring (a rotated key) or
+        # the key expired. The rare one is a corrupt or tampered copy. The counter only grows within a
+        # process, so any value above zero fires, and the alert lasts until the pod restarts, even
+        # after a newer head verifies. Rotate keys so it never trips: add the new key, sign a new head
+        # with it and wait for ci_dispatch_config_verified 1, then remove the old key (docs/ci.md).
         - alert: CIDispatchStoredConfigRejected
           expr: ci_dispatch_store_rejected_total > 0
           labels:
             severity: warning
           annotations:
-            summary: "ci-dispatch stored config rejected: the copy of ci.yaml in its ledger failed its proof, a sign of corruption or tampering (docs/ci.md)"
+            summary: "ci-dispatch stored config rejected: the copy of ci.yaml in its ledger failed its proof at start: usually a signer no longer in the keyring (a rotated or expired key), rarely corruption or tampering (docs/ci.md)"
+            description: "The counter stays above zero until the pod restarts. Once ci_dispatch_config_verified is 1, delete pod ci-dispatch-0 to clear it. With no key rotated or expired, treat it as tampering (docs/ci.md)."
         # Findings never change which limits apply; they ask an Owner to look. owner-name-stale: the
         # name now resolves to another account. owner-name-missing: no account has the name.
         # owner-names-unchecked: the lookups failed (Forgejo error), which clears at the next good
@@ -71,17 +75,19 @@ spec:
             summary: "ci-dispatch config findings: an owner name in ci.yaml no longer matches its id, or the name lookups failed; the limits still bind to the ids (docs/ci.md)"
         # undone counts launches rolled back before they ran: a job Forgejo held (its runner sat idle
         # at the 3 min pickup timeout) and crash leftovers at start. One held job's back-off (1, 2, 5,
-        # 10 and 10 min, then 60 min after the sixth undo) allows at most 6 undos in any hour, so one
-        # stuck job never fires this. Past 6 an hour, held launches take over 18 min an hour of the
-        # one global tiny slot (ci.yaml global tiny_concurrent 1). Sustained for an hour, that means
-        # many jobs held at once or a back-off that no longer works. Dry-run launches nothing: 0 there.
+        # 10 and 10 min, then 60 min after the sixth undo) allows at most 6 undos in any hour, which
+        # increase() reads as up to about 6.05 at the window's edges; 7 leaves room. Past 7 an hour,
+        # held launches take over 21 min an hour of the one global tiny slot (ci.yaml global
+        # tiny_concurrent 1). `for: 1h` is load-bearing: two held jobs taking turns in the slot count
+        # up to 12 in their first hour and stay above 7 for about 49 min, so only churn that lasts a
+        # full hour fires. Don't shorten it. Dry-run launches nothing, so this reads 0 there.
         - alert: CIDispatchLaunchesUndone
-          expr: sum(increase(ci_dispatch_launches_total{outcome="undone"}[1h])) > 6
+          expr: sum(increase(ci_dispatch_launches_total{outcome="undone"}[1h])) > 7
           for: 1h
           labels:
             severity: warning
           annotations:
-            summary: "ci-dispatch undid more than 6 tiny launches an hour for an hour: jobs Forgejo holds, or crash leftovers, keep taking the launch slot (docs/ci.md)"
+            summary: "ci-dispatch undid more than 7 tiny launches an hour for an hour: jobs Forgejo holds, or crash leftovers, keep taking the launch slot (docs/ci.md)"
         - alert: CIDispatchOrphanCompute
           expr: max by (kind) (ci_dispatch_orphans) > 0
           for: 15m

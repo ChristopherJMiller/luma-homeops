@@ -48,9 +48,7 @@ RELEASE_IMAGE = (
     "git.realliance.net/realliance-ops/ci-dispatch:sha-9055e60"
     "@sha256:39ab99aa87f2e76dae145c67fb7e75fc5e2490d7de76cea95f1a4582ad7dc3ef"
 )
-# ci-dispatch v0.1.0's timing (internal/config, internal/loop, cmd/ci-dispatch): Start is healthy
-# for start_budget (3 min) plus the wedge limit (2 min) less the step budget (20 s), 280 s.
-START_HEALTHY_SECONDS = 180 + 120 - 20
+# ci-dispatch v0.1.0's shutdown (internal/loop, cmd/ci-dispatch): the step in flight, then the servers.
 SHUTDOWN_GRACE_SECONDS = 20
 SERVER_SHUTDOWN_SECONDS = 5
 PSA = "pod-security.kubernetes.io/enforce"
@@ -83,8 +81,9 @@ ALERTS = {
 # internal/metrics FindingKinds of v0.1.0, less stored-config-rejected (its own counter alerts).
 FINDING_KINDS = {"owner-name-stale", "owner-name-missing", "owner-names-unchecked"}
 # One Forgejo-held key's whole back-off schedule (3 min pickup, then 1/2/5/10/10 min) fits six
-# undos in its first hour, then one an hour (the 60 min wait after the sixth).
-UNDONE_PER_HOUR = 6
+# undos in its first hour, then one an hour (the 60 min wait after the sixth). increase() reads
+# six as about 6.05 at the window's edges, so the threshold is 7, with room to spare.
+UNDONE_PER_HOUR = 7
 
 
 def render(path: str) -> list[dict]:
@@ -233,13 +232,12 @@ def test_dispatcher_pod(dispatcher):
     assert {p["name"]: p["containerPort"] for p in c["ports"]} == {"http": 8080, "usage": 8081}
     for probe in ("startupProbe", "livenessProbe"):
         assert c[probe]["httpGet"] == {"path": "/healthz", "port": "http"}, probe
-    # Start may run 280 s and stay healthy (start_budget 3 min plus the 100 s wedge margin), so
-    # the startup probe allows 300 s. Liveness is a wedge detector: 3 misses, 30 s apart.
+    # /healthz reads 200 while Start is in flight, so the startup probe passes once main listens
+    # and covers only the time before that; liveness (3 misses, 30 s apart) catches a wedged Start,
+    # and Healthy's in-flight limit scales with start_budget by itself. Exact pins, no relation.
     timing = ("periodSeconds", "timeoutSeconds", "failureThreshold")
     assert {k: c["startupProbe"][k] for k in timing} == {"periodSeconds": 10, "timeoutSeconds": 5, "failureThreshold": 30}
     assert {k: c["livenessProbe"][k] for k in timing} == {"periodSeconds": 30, "timeoutSeconds": 5, "failureThreshold": 3}
-    start = c["startupProbe"]
-    assert start["periodSeconds"] * start["failureThreshold"] > START_HEALTHY_SECONDS
     # SIGTERM: loop.ShutdownGrace (20 s), then the servers' 5 s shutdown, inside the grace period.
     assert spec["terminationGracePeriodSeconds"] >= SHUTDOWN_GRACE_SECONDS + SERVER_SHUTDOWN_SECONDS
     assert "readinessProbe" not in c, "nothing routes to it but the scrape; a not-ready pod would hide it from Prometheus"

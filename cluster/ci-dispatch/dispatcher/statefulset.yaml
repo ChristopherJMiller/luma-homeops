@@ -82,10 +82,12 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
-          # main serves /healthz before Start, so the first probe passes while Start reconciles
-          # (reads the runners and Jobs, undoes half-made launches, removes orphans). Start runs under
-          # start_budget (3 min) and reads healthy for 280 s: that budget plus the 2 min wedge limit,
-          # less the 20 s step budget. 30 probes 10 s apart allow 300 s, so only a wedged Start fails.
+          # main serves /healthz before Start, and /healthz reads 200 while Start is in flight (it
+          # reads the runners and Jobs, undoes half-made launches, removes orphans) for up to
+          # start_budget plus the 100 s wedge margin: 280 s. So this probe passes on its first try once
+          # main listens, and its 300 s covers only the time before that (config, ledger open, secrets,
+          # keyring, clients). Liveness catches a Start wedged past 280 s, and that limit grows with
+          # start_budget by itself: raising start_budget needs no change here.
           startupProbe:
             httpGet:
               path: /healthz

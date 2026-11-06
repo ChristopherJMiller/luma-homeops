@@ -27,3 +27,16 @@ The cluster already ran `main` bb4ae992: Argo synced netpol B1 review M5 to `net
 - `scripts/netpol-verify.sh stray --since 15m` (from `main`, 3ef3cf6a) at 00:50:34Z: `stray: PASS (567 deny lines, policed: netpol-canary)`; every agent's log covers the window.
 - Deny lines naming `ci-dispatch/` or `ci-tiny/`, 15 min, all three agents: 0.
 - `scripts/check-prometheus-rules.sh`: exit 0, `selected=41 groups=44 alerting=179 recording=82`; the only WARN is the existing `unselected music-streaming/gonic-alerts`.
+
+### Review (2026-11-06): approved to push, 5 Minors
+
+- M1, M2, M3 and M5 are fixed: alert wording, the startup-probe comment, the undone threshold 7 with `for: 1h` load-bearing, and `backend="galaxy"` in the test data.
+- M4, Chris's ruling: linear history. The branch is rebased onto `main` with `--gpg-sign`, and the push is a fast-forward of it.
+- **Carry → Task 20 (`docs/ci.md`):** `CIDispatchStoredConfigRejected` fires at start when the ledger's copy of `ci.yaml` fails its proof. The usual cause is that its signer is no longer in the keyring: a rotated or expired key.
+  - **Rotate an Owner key in this order:**
+    1. Add the new key to `cluster/ci-dispatch/dispatcher/keyring/` (and forge-bot's, F3).
+    2. Sign a new head of `realliance-ops/forge` with it, and wait for `ci_dispatch_config_verified` 1.
+    3. Only then remove the old key.
+
+    In this order the stored copy is always signed by a key still in the keyring.
+  - **Clear the alert:** the counter stays above zero until the pod restarts. Once `ci_dispatch_config_verified` is 1, run `kubectl -n ci-dispatch delete pod ci-dispatch-0`. With no key rotated or expired, treat the alert as tampering.
