@@ -1,8 +1,8 @@
 ---
-# The five phase 1 alerts, all weekday (D7): none pages. CIDispatchOrphanCompute moves to the 24/7
-# route in phase 2, when orphans cost money; a `tiny` orphan pod dies at its Kubernetes deadline
-# anyway. Cases: alerts_test.yaml, run by scripts/test-ci-dispatch-alerts.sh. Metric names are the
-# ones internal/metrics of ci-dispatch exports. `release: prometheus` selects this rule.
+# The eight phase 1 alerts (nine rules), all weekday (D7): none pages. CIDispatchOrphanCompute moves
+# to the 24/7 route in phase 2, when orphans cost money; a `tiny` orphan pod dies at its Kubernetes
+# deadline anyway. Cases: alerts_test.yaml, run by scripts/test-ci-dispatch-alerts.sh. Metric names
+# are the ones internal/metrics of ci-dispatch v0.1.0 exports. `release: prometheus` selects this rule.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -48,6 +48,40 @@ spec:
             severity: warning
           annotations:
             summary: "ci-dispatch cannot verify the Owner-signed limits (ci.yaml): it runs on the last verified copy or the code defaults (docs/ci.md)"
+        # The ledger keeps a copy of the last verified ci.yaml, proven again at start. A copy that
+        # fails the proof means corruption or tampering. The counter only grows within a process, so
+        # any value above zero fires, and the alert lasts until the pod restarts.
+        - alert: CIDispatchStoredConfigRejected
+          expr: ci_dispatch_store_rejected_total > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "ci-dispatch stored config rejected: the copy of ci.yaml in its ledger failed its proof, a sign of corruption or tampering (docs/ci.md)"
+        # Findings never change which limits apply; they ask an Owner to look. owner-name-stale: the
+        # name now resolves to another account. owner-name-missing: no account has the name.
+        # owner-names-unchecked: the lookups failed (Forgejo error), which clears at the next good
+        # reload; 30 min rides out a short outage. The fourth kind, stored-config-rejected, has its
+        # own alert: CIDispatchStoredConfigRejected reads the same event from its counter.
+        - alert: CIDispatchConfigFindings
+          expr: max by (kind) (ci_dispatch_config_findings{kind=~"owner-name-stale|owner-name-missing|owner-names-unchecked"}) > 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ci-dispatch config findings: an owner name in ci.yaml no longer matches its id, or the name lookups failed; the limits still bind to the ids (docs/ci.md)"
+        # undone counts launches rolled back before they ran: a job Forgejo held (its runner sat idle
+        # at the 3 min pickup timeout) and crash leftovers at start. One held job's back-off (1, 2, 5,
+        # 10 and 10 min, then 60 min after the sixth undo) allows at most 6 undos in any hour, so one
+        # stuck job never fires this. Past 6 an hour, held launches take over 18 min an hour of the
+        # one global tiny slot (ci.yaml global tiny_concurrent 1). Sustained for an hour, that means
+        # many jobs held at once or a back-off that no longer works. Dry-run launches nothing: 0 there.
+        - alert: CIDispatchLaunchesUndone
+          expr: sum(increase(ci_dispatch_launches_total{outcome="undone"}[1h])) > 6
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "ci-dispatch undid more than 6 tiny launches an hour for an hour: jobs Forgejo holds, or crash leftovers, keep taking the launch slot (docs/ci.md)"
         - alert: CIDispatchOrphanCompute
           expr: max by (kind) (ci_dispatch_orphans) > 0
           for: 15m

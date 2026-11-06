@@ -10,15 +10,12 @@ Global Constraints, D5, D7, D16, Task 17).
 These tests never read `*.secret.*` files: they render the SealedSecrets, and open
 only the paths named here.
 
-Not deployed yet
-----------------
-DEPLOYED is False while the Application is not listed in
-cluster/applications/kustomization.yaml (Task 17 writes the manifests; Task 18
-deploys). Task 18 lists the Application and flips DEPLOYED to True in the same
-commit, and test_app_registered then requires the listing instead of its absence.
-Until Task 14 releases the image, the pin is `sha-PENDING`;
-test_dispatcher_image_pinned is xfail (strict) until then, and the commit that
-pins the real digest must delete its marker.
+Deployed
+--------
+DEPLOYED is True: Task 18 listed the Application in
+cluster/applications/kustomization.yaml, and test_app_registered requires the
+listing. The image is v0.1.0 (Task 14); test_dispatcher_image_pinned holds the
+exact pin.
 """
 
 import json
@@ -31,7 +28,7 @@ import yaml
 
 REPO = Path(__file__).resolve().parent.parent
 
-DEPLOYED = False
+DEPLOYED = True
 
 APP_FILE = "cluster/applications/ci-dispatch.yaml"
 APPS_KUSTOMIZATION = "cluster/applications/kustomization.yaml"
@@ -45,6 +42,17 @@ FORGE_BOT_KEYRING = REPO / "cluster/forge-bot/keyring"
 RENOVATE = REPO / ".renovaterc.json"
 IMAGE = "git.realliance.net/realliance-ops/ci-dispatch"
 IMAGE_RE = r"^git\.realliance\.net/realliance-ops/ci-dispatch:sha-[0-9a-f]{7}@sha256:[0-9a-f]{64}$"
+# Tag v0.1.0 (5a231e90, signed) = main 9055e60, built by ci-dispatch's CI; Chris approved it for
+# deploy (Task 14 Step 4). A new pin is a reviewed commit that changes this line too.
+RELEASE_IMAGE = (
+    "git.realliance.net/realliance-ops/ci-dispatch:sha-9055e60"
+    "@sha256:39ab99aa87f2e76dae145c67fb7e75fc5e2490d7de76cea95f1a4582ad7dc3ef"
+)
+# ci-dispatch v0.1.0's timing (internal/config, internal/loop, cmd/ci-dispatch): Start is healthy
+# for start_budget (3 min) plus the wedge limit (2 min) less the step budget (20 s), 280 s.
+START_HEALTHY_SECONDS = 180 + 120 - 20
+SHUTDOWN_GRACE_SECONDS = 20
+SERVER_SHUTDOWN_SECONDS = 5
 PSA = "pod-security.kubernetes.io/enforce"
 KEEP = "Prune=false,Delete=false"
 
@@ -66,9 +74,17 @@ ALERTS = {
     "CIDispatchStale",
     "CIDispatchLaunchFailing",
     "CIDispatchConfigUntrusted",
+    "CIDispatchStoredConfigRejected",
+    "CIDispatchConfigFindings",
+    "CIDispatchLaunchesUndone",
     "CIDispatchOrphanCompute",
     "CITinyQuotaFull",
 }
+# internal/metrics FindingKinds of v0.1.0, less stored-config-rejected (its own counter alerts).
+FINDING_KINDS = {"owner-name-stale", "owner-name-missing", "owner-names-unchecked"}
+# One Forgejo-held key's whole back-off schedule (3 min pickup, then 1/2/5/10/10 min) fits six
+# undos in its first hour, then one an hour (the 60 min wait after the sixth).
+UNDONE_PER_HOUR = 6
 
 
 def render(path: str) -> list[dict]:
@@ -217,6 +233,15 @@ def test_dispatcher_pod(dispatcher):
     assert {p["name"]: p["containerPort"] for p in c["ports"]} == {"http": 8080, "usage": 8081}
     for probe in ("startupProbe", "livenessProbe"):
         assert c[probe]["httpGet"] == {"path": "/healthz", "port": "http"}, probe
+    # Start may run 280 s and stay healthy (start_budget 3 min plus the 100 s wedge margin), so
+    # the startup probe allows 300 s. Liveness is a wedge detector: 3 misses, 30 s apart.
+    timing = ("periodSeconds", "timeoutSeconds", "failureThreshold")
+    assert {k: c["startupProbe"][k] for k in timing} == {"periodSeconds": 10, "timeoutSeconds": 5, "failureThreshold": 30}
+    assert {k: c["livenessProbe"][k] for k in timing} == {"periodSeconds": 30, "timeoutSeconds": 5, "failureThreshold": 3}
+    start = c["startupProbe"]
+    assert start["periodSeconds"] * start["failureThreshold"] > START_HEALTHY_SECONDS
+    # SIGTERM: loop.ShutdownGrace (20 s), then the servers' 5 s shutdown, inside the grace period.
+    assert spec["terminationGracePeriodSeconds"] >= SHUTDOWN_GRACE_SECONDS + SERVER_SHUTDOWN_SECONDS
     assert "readinessProbe" not in c, "nothing routes to it but the scrape; a not-ready pod would hide it from Prometheus"
 
     vols = {v["name"]: v for v in spec["volumes"]}
@@ -247,14 +272,11 @@ def test_dispatcher_pod(dispatcher):
     }
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Task 14 releases the image; the pin is sha-PENDING until then. Delete this marker with the real digest.",
-)
 def test_dispatcher_image_pinned(dispatcher):
     sts = one(dispatcher, "StatefulSet", "ci-dispatch")
     image = sts["spec"]["template"]["spec"]["containers"][0]["image"]
     assert re.match(IMAGE_RE, image), f"image is not a sha-<7>@sha256:<64> pin: {image}"
+    assert image == RELEASE_IMAGE
 
 
 def test_pvc_kept(dispatcher):
@@ -572,14 +594,26 @@ def test_monitoring(dispatcher):
     assert svc["spec"]["selector"] == {"app.kubernetes.io/name": "ci-dispatch"}
 
     rule = one(dispatcher, "PrometheusRule", "ci-dispatch-alerts")
-    assert rule["metadata"]["labels"]["release"] == "prometheus"
+    # The ruleSelector picks `release: prometheus`; a rule object without it never loads.
+    for pr in of(dispatcher, "PrometheusRule"):
+        assert pr["metadata"]["labels"]["release"] == "prometheus", pr["metadata"]["name"]
     rules = [r for g in rule["spec"]["groups"] for r in g["rules"]]
     assert {r["alert"] for r in rules} == ALERTS
-    assert len(rules) == 6, "CIDispatchLaunchFailing has two rules"
+    assert len(rules) == len(ALERTS) + 1, "CIDispatchLaunchFailing has two rules"
     for r in rules:
         assert r["labels"]["severity"] == "warning", f"{r['alert']}: D7, every phase 1 alert is weekday"
     launch = [r for r in rules if r["alert"] == "CIDispatchLaunchFailing"]
     assert sorted(r["labels"]["reason"] for r in launch) == ["errors", "held"]
+    by_name = {r["alert"]: r for r in rules if r["alert"] != "CIDispatchLaunchFailing"}
+    # A counter that only grows in a process: any rejection since start, not a recent increase.
+    assert by_name["CIDispatchStoredConfigRejected"]["expr"] == "ci_dispatch_store_rejected_total > 0"
+    # The findings alert names its kinds and leaves stored-config-rejected to the counter's alert.
+    findings = by_name["CIDispatchConfigFindings"]["expr"]
+    assert set(re.search(r'kind=~"([^"]+)"', findings).group(1).split("|")) == FINDING_KINDS
+    assert "stored-config-rejected" not in findings
+    undone = by_name["CIDispatchLaunchesUndone"]
+    assert 'increase(ci_dispatch_launches_total{outcome="undone"}[1h])' in undone["expr"]
+    assert undone["expr"].endswith(f"> {UNDONE_PER_HOUR}") and undone["for"] == "1h"
 
 
 def test_renovate_never_automerges_ci_dispatch():
@@ -610,14 +644,3 @@ def test_no_plain_secrets(whole):
         assert set(s["spec"]["encryptedData"]) == {key}
         assert len(s["spec"]["encryptedData"][key]) > 200, "a sealed value, not a placeholder"
         assert s["spec"]["template"]["metadata"]["namespace"] == "ci-dispatch"
-
-
-def test_nothing_synced_references_the_tree():
-    """Not deployed: nothing the root app renders may point at cluster/ci-dispatch yet."""
-    if DEPLOYED:
-        pytest.skip("deployed")
-    for p in (REPO / "cluster/applications").glob("*.yaml"):
-        if p.name == "ci-dispatch.yaml":
-            continue
-        assert "cluster/ci-dispatch" not in p.read_text(), f"{p.name} references the undeployed tree"
-    assert "ci-dispatch" not in (REPO / APPS_KUSTOMIZATION).read_text()

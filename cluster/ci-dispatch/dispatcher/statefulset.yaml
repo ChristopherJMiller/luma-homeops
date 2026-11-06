@@ -2,7 +2,12 @@
 # ci-dispatch: launches one `tiny` runner Job per waiting Forgejo Actions job, within each owner's
 # limits (plan: docs/superpowers/plans/2026-11-04-runner-classes-phase-0-1.md). Code and README:
 # git.realliance.net/realliance-ops/ci-dispatch. Tiny starts in dry-run (config.yaml `classes`):
-# it decides, logs and counts, and creates nothing.
+# it reads the queue, decides, logs and counts, and launches nothing.
+#
+# Dry-run still reaps, but only what carries the dispatcher's own name: a ci-tiny Job, or an
+# ephemeral instance-scope Forgejo runner, named ci-tiny-<job>-<attempt>-<try> with no active
+# launch for 10 min, and a ci-tiny Job past its expires-at. It never touches any other name: not a
+# drill's ci-probe-* runner, nor a member's own repo or org runner.
 #
 # A StatefulSet, not a Deployment with Recreate (D5): forge-bot's review showed a Deployment is no
 # singleton under eviction or drain, because its ReplicaSet starts the replacement while the old pod
@@ -39,7 +44,8 @@ spec:
       # The projected `kube` volume below replaces the automatic token with a one-hour one.
       automountServiceAccountToken: false
       enableServiceLinks: false
-      # SIGTERM finishes the step in flight (at most 20 s); 30 s leaves 10 s before the SIGKILL.
+      # On SIGTERM the step in flight finishes within loop.ShutdownGrace (20 s), then both servers
+      # stop within 5 s: 25 s, so 30 s leaves 5 s before the SIGKILL.
       terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
@@ -53,11 +59,10 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ci-dispatch
-          # Built by ci-dispatch's CI from the reviewed release commit, an OCI manifest, amd64.
-          # PENDING until Task 14 releases it: the real pin replaces this line (and the xfail in
-          # scripts/test_ci_dispatch_manifests.py). A new image never deploys itself: .renovaterc.json
-          # never automerges this image; its PR is the alarm. Re-pin by hand after review.
-          image: git.realliance.net/realliance-ops/ci-dispatch:sha-PENDING
+          # v0.1.0: tag v0.1.0 (signed) = main 9055e60, built by ci-dispatch's CI as an OCI manifest,
+          # amd64 (Task 14). A new image never deploys itself: .renovaterc.json never automerges this
+          # image, so its PR is the alarm. Re-pin by hand after review, with the test's RELEASE_IMAGE.
+          image: git.realliance.net/realliance-ops/ci-dispatch:sha-9055e60@sha256:39ab99aa87f2e76dae145c67fb7e75fc5e2490d7de76cea95f1a4582ad7dc3ef
           args:
             - --config=/etc/ci-dispatch/config/config.yaml
           env:
@@ -77,18 +82,23 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: [ALL]
-          # /healthz is served once the startup reconcile (runners and Jobs read, orphans removed)
-          # has run. The reconcile makes a handful of API calls, each with a 30 s timeout: allow 2 min.
+          # main serves /healthz before Start, so the first probe passes while Start reconciles
+          # (reads the runners and Jobs, undoes half-made launches, removes orphans). Start runs under
+          # start_budget (3 min) and reads healthy for 280 s: that budget plus the 2 min wedge limit,
+          # less the 20 s step budget. 30 probes 10 s apart allow 300 s, so only a wedged Start fails.
           startupProbe:
             httpGet:
               path: /healthz
               port: http
-            periodSeconds: 5
+            periodSeconds: 10
             timeoutSeconds: 5
-            failureThreshold: 24
-          # A wedge detector, not a health check of the reads: /healthz answers 503 only when no tick
-          # of ANY outcome (failed reads included) has finished in 3 intervals (15 s). A Forgejo or API
-          # outage never restarts the pod; CIDispatchStale covers it instead.
+            failureThreshold: 30
+          # A wedge detector, not a health check of the reads. /healthz answers 503 only when a tick
+          # has been in flight for over 2 min (its 20 s budget plus the wedge margin), or when no tick
+          # has finished within the idle limit (the 5 s interval plus the 2 min wedge limit). Every
+          # Forgejo and API call runs under the tick's budget, so an outage, even a hanging one, costs
+          # a tick its budget and the tick still finishes. A Forgejo or API outage never restarts the
+          # pod; CIDispatchStale covers it. Three misses 30 s apart restart a truly wedged loop.
           livenessProbe:
             httpGet:
               path: /healthz

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit-test the five phase 1 alerts of ci-dispatch (cluster/ci-dispatch/dispatcher/prometheusrule.yaml)
+# Unit-test the eight phase 1 alerts of ci-dispatch (cluster/ci-dispatch/dispatcher/prometheusrule.yaml)
 # with promtool, against the cases in cluster/ci-dispatch/dispatcher/alerts_test.yaml: each alert
 # fires on its trigger and stays quiet on its healthy twin. The rules file is linted first
 # (promtool --lint-fatal: the two CIDispatchLaunchFailing rules need distinct `reason` labels).

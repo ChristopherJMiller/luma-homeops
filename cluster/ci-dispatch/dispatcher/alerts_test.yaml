@@ -95,6 +95,77 @@ tests:
         values: '1x40'
     alert_rule_test:
       - {eval_time: 30m, alertname: CIDispatchConfigUntrusted, exp_alerts: []}
+  - name: CIDispatchStoredConfigRejected fires once a stored config fails its proof
+    interval: 1m
+    input_series:
+      # The counter moves at start (the restore) and stays until the process restarts.
+      - series: 'ci_dispatch_store_rejected_total{namespace="ci-dispatch",job="ci-dispatch"}'
+        values: '0x5 1x20'
+    alert_rule_test:
+      - {eval_time: 3m, alertname: CIDispatchStoredConfigRejected, exp_alerts: []}
+      - eval_time: 10m
+        alertname: CIDispatchStoredConfigRejected
+        exp_alerts:
+          - exp_labels: {severity: warning, namespace: ci-dispatch, job: ci-dispatch}
+            exp_annotations:
+              summary: "ci-dispatch stored config rejected: the copy of ci.yaml in its ledger failed its proof, a sign of corruption or tampering (docs/ci.md)"
+  - name: CIDispatchStoredConfigRejected is quiet at zero
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_store_rejected_total{namespace="ci-dispatch",job="ci-dispatch"}'
+        values: '0x40'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: CIDispatchStoredConfigRejected, exp_alerts: []}
+  - name: CIDispatchConfigFindings fires on a finding that lasts 30 minutes
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_config_findings{namespace="ci-dispatch",kind="owner-name-stale"}'
+        values: '1x60'
+      - series: 'ci_dispatch_config_findings{namespace="ci-dispatch",kind="owner-name-missing"}'
+        values: '0x60'
+      - series: 'ci_dispatch_config_findings{namespace="ci-dispatch",kind="owner-names-unchecked"}'
+        values: '0x60'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: CIDispatchConfigFindings, exp_alerts: []}
+      - eval_time: 40m
+        alertname: CIDispatchConfigFindings
+        exp_alerts:
+          - exp_labels: {severity: warning, kind: owner-name-stale}
+            exp_annotations:
+              summary: "ci-dispatch config findings: an owner name in ci.yaml no longer matches its id, or the name lookups failed; the limits still bind to the ids (docs/ci.md)"
+  - name: CIDispatchConfigFindings leaves stored-config-rejected to its own alert
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_config_findings{namespace="ci-dispatch",kind="stored-config-rejected"}'
+        values: '1x60'
+      - series: 'ci_dispatch_config_findings{namespace="ci-dispatch",kind="owner-name-stale"}'
+        values: '0x60'
+    alert_rule_test:
+      - {eval_time: 50m, alertname: CIDispatchConfigFindings, exp_alerts: []}
+  - name: CIDispatchLaunchesUndone fires on 12 undos an hour, sustained for an hour
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="tiny",backend="galaxy",outcome="undone"}'
+        values: '0+0.2x200'
+    alert_rule_test:
+      - {eval_time: 80m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
+      - eval_time: 120m
+        alertname: CIDispatchLaunchesUndone
+        exp_alerts:
+          - exp_labels: {severity: warning}
+            exp_annotations:
+              summary: "ci-dispatch undid more than 6 tiny launches an hour for an hour: jobs Forgejo holds, or crash leftovers, keep taking the launch slot (docs/ci.md)"
+  - name: CIDispatchLaunchesUndone is quiet for one held job's whole back-off schedule
+    interval: 1m
+    input_series:
+      # Undos at 3, 7, 12, 20, 33 and 46 min (3 min pickup, then 1/2/5/10/10 min back-off), then
+      # 109 and 172 min (60 min after the sixth): never more than 6 in an hour.
+      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="tiny",backend="galaxy",outcome="undone"}'
+        values: '0x2 1x3 2x4 3x7 4x12 5x12 6x62 7x62 8x28'
+    alert_rule_test:
+      - {eval_time: 60m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
+      - {eval_time: 110m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
+      - {eval_time: 200m, alertname: CIDispatchLaunchesUndone, exp_alerts: []}
   - name: CIDispatchOrphanCompute fires on an orphan that lasts 15 minutes
     interval: 1m
     input_series:
