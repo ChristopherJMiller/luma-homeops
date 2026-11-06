@@ -222,6 +222,52 @@ compares it with production (repo heads, an LFS object served from B2, the SSH h
 The fixture is `realliance-ops/restore-drill-fixture` (one 1 MiB LFS object; private, not in the
 inventory; moved from `realliance` on 2026-11-04, same repo id and LFS object) — keep it.
 
+### Getting one repo back without Forgejo
+
+When the forge is down and someone needs a repo now, an Owner gets it from the nightly dump. No
+cluster, no Forgejo:
+
+```bash
+docs/forgejo/repo-from-backup.sh realliance-ops/restore-drill-fixture
+```
+
+The script streams the newest `dump/forgejo-<UTC>.tar.gz` through `tar` and keeps only
+`repos/<owner>/<repo>.git` and its `.wiki.git`. The archive never touches the disk, and neither do
+`app.ini` and the database. It runs `git fsck`, lists the branches and clones a working copy into
+`./<repo>` (or the second argument). `origin` points at the forge, `origin/*` holds the branches as
+of the dump. `--list` names the repos in the dump, `--dump forgejo-<UTC>.tar.gz` picks an older one.
+
+It needs git, tar (GNU or `bsdtar`) and `rclone`, not the `b2` command-line tool. The one credential
+is the forge backup key. The script reads it from realliance-sso's `tofu -chdir=b2 output` when the
+realliance-sso and `sso-secrets` checkouts and nix are present. Elsewhere, export
+`FORGE_BACKUP_KEY_ID` and `FORGE_BACKUP_KEY` first (`read -rs` keeps the key out of the history).
+
+- **Freshness:** up to a day old, as of the last 01:30 dump (the UTC time in its name). Later pushes
+  exist only in people's clones.
+- **Not in the dump:** LFS objects, attachments and packages, which live in `realliance-forge-objects`.
+  Issues, PRs, releases and the wiki as Forgejo pages need a real restore.
+- **Forgejo gone for good:** `--all [dest]` extracts every bare repo and checks each with `git fsck`.
+  Move one to a new host with
+  `git -C <owner>/<repo>.git push <url> 'refs/heads/*:refs/heads/*' 'refs/tags/*:refs/tags/*'`.
+
+**LFS objects.** The working copy keeps LFS files as pointers. Each object is in
+`realliance-forge-objects` at `lfs/<oid[0:2]>/<oid[2:4]>/<oid[4:]>`. Fetch them with git-lfs and
+the read-only objects key (`forge_objects_ro_key_id` and `forge_objects_ro_key` in the same b2
+outputs). In the working copy, paste the key ID, Enter, then the key, Enter:
+
+```bash
+read -rs RCLONE_CONFIG_FORGEOBJ_ACCESS_KEY_ID
+read -rs RCLONE_CONFIG_FORGEOBJ_SECRET_ACCESS_KEY
+export RCLONE_CONFIG_FORGEOBJ_ACCESS_KEY_ID RCLONE_CONFIG_FORGEOBJ_SECRET_ACCESS_KEY
+export RCLONE_CONFIG_FORGEOBJ_TYPE=s3 RCLONE_CONFIG_FORGEOBJ_PROVIDER=Other RCLONE_CONFIG_FORGEOBJ_ENDPOINT=https://s3.us-east-005.backblazeb2.com
+git lfs ls-files --all --long | while read -r oid _; do rclone copyto "forgeobj:realliance-forge-objects/lfs/${oid:0:2}/${oid:2:2}/${oid:4}" ".git/lfs/objects/${oid:0:2}/${oid:2:2}/$oid"; done
+git lfs checkout
+git lfs fsck
+```
+
+**Drill 2026-11-06 passed:** the fixture came back in 4 s with `main` equal to production, and its
+LFS object matched its SHA-256. Log in `docs/backups.md`.
+
 ## Changing the structure
 
 Orgs, teams, Owners and critical repos: PR to `realliance-ops/forge` (signed commits; direct pushes
