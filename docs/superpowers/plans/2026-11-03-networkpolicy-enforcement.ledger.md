@@ -452,3 +452,36 @@ The window runs from 21:54:43 to 22:04:42Z. It starts after this task's `canary`
 ### Cross-plan
 
 The runner-classes plan's dry-run deploy may start now that the components are on `main` (Chris), which overlaps this soak. **Step 11's Gate G excludes the namespaces `ci-dispatch` and `ci-tiny`**: their pods, policies and Argo apps may change during the soak by design.
+
+### Review fixes (Task 7 review rounds 1 and 2, 2026-11-05/06)
+
+- **Round 1**, commit `3ef3cf6a`, scripts only, pushed 2026-11-05T22:53:33Z.
+  - `canary` matches each backend row on its post-DNAT IP:PORT and direction.
+  - It needs each row's own connect attempt, which the source port names.
+  - `idle`'s sync check no longer pipes into `grep -q`.
+  - `stray` flags node IPs and reports log coverage.
+  - New subcommand: `netpol-verify.sh alert`.
+  - New static pin: argo-cd `networkPolicy.create: false`.
+  - The live re-run (22:47Z) still read `rows 25/25 deny-logged 21/21` on every node, so the B1b PASS stood.
+- **The alert expression**, `bb4ae992`, `NetpolCanaryFailing … or desired == 0` (review M5).
+  - Pushed **2026-11-06T00:36:06Z** under Task 7's pre-approval (controller ruling: rule only, it only tightens monitoring).
+  - Argo was Synced/Healthy at `bb4ae992` by 00:37:18Z, and Prometheus's loaded query ended `… == 0` then.
+  - `alert` passed at 00:39:04Z (health ok, inactive). No pod rolled.
+- **Round 2**, commit `920a2cf4`, scripts only, pushed **2026-11-06T01:06:22Z**.
+  - `stray` reports a pod since deleted or moved as `GONE`, information only. A line is STRAY only when its IP is now held by another pod that started before the line.
+  - `canary` judges each pod on its own run's window, T0 to T1 on the pod's clock. A row that only a shared destination, or another run's attempts, could prove reads AMBIGUOUS: that pod gets one more run, and canary exits 2 if that run is ambiguous too, never PASS.
+  - `alert` compares the loaded query, normalised, with the object's expr.
+- **Live, 2026-11-06T00:59–01:02Z: PASS.**
+  - In `canary`, top's own loop run overlapped the exec, so its 4 attempts for the 2 overlapping rows triggered one re-run. The re-run was clean.
+  - Each node then read `rows 25/25 deny-logged 21/21`, and `canary: PASS (3 nodes)`.
+  - `stray`: PASS (818 deny lines; every window covered from 2026-11-04T18:40–41Z).
+  - `alert`: PASS, query matches the object's expr.
+
+### Carries from the review
+
+- **Step 11:**
+  - run `canary`, `stray --since 24h` and the ALERTS query at or after **2026-11-06T21:54:25Z**, plus `scripts/netpol-verify.sh alert`;
+  - `GONE` lines are information only;
+  - Gate G excludes `ci-dispatch` and `ci-tiny`.
+- **24 h windows and log rotation (N3).** kubectl reads only an agent's current log file. At about 5 MiB a day per agent and kubelet's 10 MiB file size, each log rotates about every two days, and for about a day afterwards `stray --since 24h` reads SHORT, which fails closed. The first rotation is due around 2026-11-07, after Step 11. **24 h gates (runner classes) need shorter windows, or must read the rotated files with `talosctl read /var/log/pods/…`** (read-only). Raising `containerLogMaxSize` is a machine-config change and needs an S4 ask.
+- **Task 8:** reuse `backend_dsts`, `deny_attempts`, `claim_rows` and the T0/T1 window, not `deny_match` with `IP:`.
