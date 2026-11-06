@@ -20,9 +20,11 @@
 - Fork patches never add DB migrations, so the same-version upstream image is always a boot fallback (Chris, 2026-11-05). CI enforces this (Task 2).
 - Keep-warm DaemonSet: it runs the forge image as `sleep` on all 3 nodes, one Argo sync wave before Forgejo (Chris, 2026-11-06). It replaces his earlier "no pre-pull" rule for this image.
 - Upstream pin: tag `v15.0.11`, commit `753f7ed`. Base image `code.forgejo.org/forgejo/forgejo@<digest>`, where `<digest>` is the `image.digest` in `cluster/applications/forgejo-release.yaml` (`sha256:3cd6bc2b74c8…f9f40c`, rootless index), platform `linux/amd64`.
-- Build flags (§1): `TAGS="bindata timetzdata"`, `CGO_ENABLED=0`, `GOTOOLCHAIN=go1.26.10`, `GOFLAGS=-trimpath`, `LDFLAGS=-buildid=`, `FORGEJO_GENERATE_SKIP_HASH=true`, all passed on the `make` command line.
+- Build flags (§1):
+  - On the `make` command line: `TAGS="bindata timetzdata"`, `GOFLAGS=-trimpath` (the Makefile assigns `GOFLAGS :=`), `FORGEJO_GENERATE_SKIP_HASH=true` and `FORGEJO_VERSION`.
+  - In the environment: `CGO_ENABLED=0`, `GOTOOLCHAIN=go1.26.10` and `LDFLAGS=-buildid=`. On the command line, `LDFLAGS` would replace the Makefile's own `-s -w` and the `-X` flags that set the version, and the binary would report "development" (Task 3 ruling). `scripts/build-binary.sh` holds the recipe.
 - Version: a tag build is `15.0.11-realliance.N+gitea-1.22.0`; a dispatch build is `15.0.11-realliance.dev.<sha7>+gitea-1.22.0`. Each build's version is unique, because `AssetVersion` busts browser caches from it.
-- Image: `git.realliance.net/realliance/forgejo`. Tags `v15.0.11-realliance.N` (tag builds) and `sha-<7>` (every build). The deploy pin is `…:v15.0.11-realliance.N@sha256:<64>`, the amd64 manifest digest. Never move a tag.
+- Image: `git.realliance.net/realliance/forgejo`. One tag per build, named after its version (Task 3 review I2): `v15.0.11-realliance.N` for a tag build, `sha-<7>` for a dispatch build, from `scripts/version.sh --image-tag`. A tag then always names one version and one digest. The deploy pin is `…:v15.0.11-realliance.N@sha256:<64>`, the amd64 manifest digest. Never move a tag.
 - Registry credential: a second named token on `realliance-ci`, `realliance-forgejo-registry` with scope `write:package`, in the repo secret `REGISTRY_TOKEN` on `realliance/forgejo` and in `sso-secrets` as `REALLIANCE_FORGEJO_REGISTRY_TOKEN` (§3). Never use `ops-ci`'s token.
 - No Renovate manager and no automerge for this image. Chris reviews the pin by hand (§3 risks).
 - The fork work happens in a separate clone, `~/Repos/realliance-forgejo-ci`. Never write in `~/Repos/realliance-forgejo`, where another session works (§5).
@@ -99,8 +101,12 @@
     4. `scripts/check-patches.sh`.
     5. `make check`, then `make apply`.
     6. In `upstream/`: `npm ci`, then `make frontend backend` with the Global Constraints flags and `FORGEJO_VERSION=$(scripts/version.sh "$GITHUB_REF")`.
-    7. Binary checks: `--version` matches, `go version -m` shows the tags, `CGO_ENABLED=0` and `-trimpath`, and `file` says "statically linked".
-    8. `build-image.sh`, then `publish-image.sh` with `sha-<7>`, plus `v15.0.11-realliance.N` on a tag build.
+    7. Binary checks (`scripts/check-binary.sh`):
+       - `readelf` shows no interpreter and no dynamic section. The class image has no `file`, but gcc brings binutils.
+       - No symbol table (`-s -w`) and an empty build id (`-buildid=`).
+       - `go version -m` shows go1.26.10, the tags, `CGO_ENABLED=0`, `-trimpath`, `vcs.revision` = the fork commit and `vcs.modified=false`.
+       - `--version` matches.
+    8. `build-image.sh`, then `publish-image.sh` with the one tag `version.sh --image-tag` names: `v15.0.11-realliance.N` on a tag build, `sha-<7>` on a dispatch.
     9. Print the pin line and `/proc/meminfo`'s peak.
 - [ ] **Step 3: PR** to realliance/forgejo from `ci-image`. Merge it as fast-forward: no deploy happens, and it touches no file the other session touches (§5).
 - [ ] **Step 4: Gate G1.** Wait for `medium` on (phase 2 Task 21).
