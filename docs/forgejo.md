@@ -315,7 +315,7 @@ The registry copy of `2.3` has the same digest as Quay's. Quay no longer serves 
 
 **Rotating `SITE_REGISTRY_TOKEN`.** The sso test `tests/forge/test_forge_ci.py` expects `realliance-ci` to hold exactly one token, named `realliance-net-registry`, and Forgejo token names are unique per user. The old token goes first, and publishing is down until the new one is in. Do it when no site CI run is in flight, and never put a token value in chat or a commit message.
 
-1. Delete the old token (`DELETE /api/v1/users/realliance-ci/tokens/realliance-net-registry`, as an administrator). Every copy stops working now.
+1. Delete the old token with the guarded database delete in `docs/ci.md` ("The guarded token delete"), with `ACCT=realliance-ci OLD=realliance-net-registry`. A database write: STOP and ask Chris first. Every copy stops working now. The API route `DELETE /api/v1/users/realliance-ci/tokens/…` can't do it here: the token routes take only password basic authentication, which this forge turns off.
 2. Mint the new one with the same name and scope `write:package` (`forgejo admin user generate-access-token --username realliance-ci --token-name realliance-net-registry --scopes write:package --raw`), and pipe it straight into the next two steps.
 3. Set the repo secret: `PUT /api/v1/repos/realliance/realliance.net/actions/secrets/SITE_REGISTRY_TOKEN`.
 4. Store it in `sso-secrets` as `REALLIANCE_NET_REGISTRY_TOKEN`, then commit that repo.
