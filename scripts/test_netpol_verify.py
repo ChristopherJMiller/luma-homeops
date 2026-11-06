@@ -89,9 +89,10 @@ case "$args" in
     case "$args" in *" --previous "*) f=$f.previous ;; esac
     [ -f "$f" ] || { echo "Error from server (BadRequest): previous terminated container not found" >&2; exit 1; }
     case "$args" in *" --limit-bytes="*) n=${args#* --limit-bytes=}; head -c "${n%% *}" "$f"; exit 0 ;; esac
-    # From a pod's second read on, a .rerun file (if any) stands for the logs after a re-run.
+    # Read n (from 0) of a log is its .read<n> file if there is one; from the second read on, a
+    # .rerun file (if any) stands for the logs after a re-run.
     c=$F/reads.${p%% *}; n=$(cat "$c" 2> /dev/null || echo 0); echo $((n + 1)) > "$c"
-    if [ "$n" -ge 1 ] && [ -f "$f.rerun" ]; then f=$f.rerun; fi
+    if [ -f "$f.read$n" ]; then f=$f.read$n; elif [ "$n" -ge 1 ] && [ -f "$f.rerun" ]; then f=$f.rerun; fi
     cat "$f" ;;
   *) echo "stub kubectl: unexpected call: $*" >&2; exit 1 ;;
 esac
@@ -509,38 +510,49 @@ def enforced_table(node: str, rows: list[list[str]], fail_refused: str | None = 
         lines.append(f"{verdict} {expect} {got} {host}:{port} {' '.join(note)}".rstrip())
     lines.append(f"SUMMARY {npass}/{len(rows)} enforced node={node}")
     if clocks:
-        lines.append(f"T1 {clock(60)}")
+        lines.append(f"T1 {clock(90)}")
     return "\n".join(lines) + "\n"
 
 
-def klog_now(ago_s: int = 0) -> str:
+def klog_now(ago_s: float = 0) -> str:
     return (datetime.now(timezone.utc) - timedelta(seconds=ago_s)).strftime("I%m%d %H:%M:%S.%f")
 
 
 def deny_line(src_pod: str, dst: str, dst_pod: str = "external", direction: str = "egress",
-              src: str = "10.244.3.9:40000", ago_s: int = 0) -> str:
+              src: str = "10.244.3.9:40000", ago_s: float = 0) -> str:
     return (f'{klog_now(ago_s)}       1 verdictlog.go:172] "Packet verdict" id=7 verdict="deny" family="IPv4" '
             f'protocol="TCP" src="{src}" dst="{dst}" srcPod="{src_pod}" dstPod="{dst_pod}" '
             f'direction="{direction}" evaluator="StandardNetworkPolicy"')
 
 
-def deny_lines(pod_name: str, rows: list[list[str]], objs: dict, skip: str | None = None, ago_s: int = 0) -> list[str]:
-    """Each dropped row's attempt as the enforcer logs it: one source port per row, three SYNs, to the
-    literal destination or to the backend's post-DNAT IP:PORTs in turn (kube-proxy picks a backend
-    per SYN); ingress at the echo for the 9377 row, egress otherwise."""
-    out = []
+# One dropped row to the next, live (2026-11-06): 3.020 to 3.073 s, the pair 3.022 s.
+ROW_GAP = 3.022
+
+
+def deny_lines(pod_name: str, rows: list[list[str]], objs: dict, skip: str | None = None, ago_s: float = 0,
+               shift: dict[str, float] | None = None, port_base: int = 41000) -> list[str]:
+    """Each dropped row's attempt as the enforcer logs it: one source port per row, three SYNs (at +0,
+    +1 and +3 s) to the literal destination or to the backend's post-DNAT IP:PORTs in turn
+    (kube-proxy picks a backend per SYN); ingress at the echo for the 9377 row, egress otherwise.
+    The rows run in order, ROW_GAP apart, the first one 1 s ago (plus AGO_S). shift: host:port ->
+    seconds later for that row's attempt."""
+    out, j = [], 0
     for i, (expect, _scope, host, port, backend, *_) in enumerate(rows):
-        if expect != "dropped" or f"{host}:{port}" == skip:
+        if expect != "dropped":
+            continue
+        start = ago_s + 1 - j * ROW_GAP - (shift or {}).get(f"{host}:{port}", 0)
+        j += 1
+        if f"{host}:{port}" == skip:
             continue
         dsts = [f"{host}:{port}"] if backend == "-" else resolve(objs, backend, int(port))
-        src = f"{PROBE_IP.get(pod_name.removeprefix('netpol-probe-'), '10.244.3.9')}:{41000 + i}"
-        for syn in range(3):
+        src = f"{PROBE_IP.get(pod_name.removeprefix('netpol-probe-'), '10.244.3.9')}:{port_base + i}"
+        for syn, off in enumerate((0, 1, 3)):
             dst = dsts[syn % len(dsts)]
             if f"{host}:{port}" == ECHO_9377:
                 out.append(deny_line(f"netpol-canary/{pod_name}", dst, dst_pod=f"netpol-canary/{ECHO_POD}",
-                                     direction="ingress", src=src, ago_s=ago_s))
+                                     direction="ingress", src=src, ago_s=start - off))
             else:
-                out.append(deny_line(f"netpol-canary/{pod_name}", dst, src=src, ago_s=ago_s))
+                out.append(deny_line(f"netpol-canary/{pod_name}", dst, src=src, ago_s=start - off))
     return out
 
 
@@ -553,10 +565,15 @@ def write_backends(f: Path, objs: dict) -> None:
         (f / "eps" / f"{ns}_{name}").write_text(json.dumps(eps))
 
 
-def k8s_pod(ref: str, ip: str, start: str = OLD, phase: str = "Running", host_network: bool = False) -> dict:
+def k8s_pod(ref: str, ip: str, start: str = OLD, phase: str = "Running", host_network: bool = False,
+            ready_to_start: str | None = None) -> dict:
+    """A pod as `kubectl get pods -A` lists it. ready_to_start: its PodReadyToStartContainers
+    condition last turned True then (the sandbox, and so the IP, came up)."""
     ns, name = ref.split("/")
-    return {"metadata": {"namespace": ns, "name": name}, "spec": {"hostNetwork": host_network},
-            "status": {"podIP": ip, "startTime": start, "phase": phase}}
+    status = {"podIP": ip, "startTime": start, "phase": phase}
+    if ready_to_start is not None:
+        status["conditions"] = [{"type": "PodReadyToStartContainers", "status": "True", "lastTransitionTime": ready_to_start}]
+    return {"metadata": {"namespace": ns, "name": name}, "spec": {"hostNetwork": host_network}, "status": status}
 
 
 def write_pods(f: Path, pods: list[dict]) -> None:
@@ -565,11 +582,12 @@ def write_pods(f: Path, pods: list[dict]) -> None:
 
 
 def canary_fixtures(tmp: Path, *, nodes=NODES, tables=None, rcs=None, extra_log=(), skip=None, np_items=POLICED,
-                    live_like=False, drop_lines=(), rerun_log=None) -> Path:
+                    live_like=False, drop_lines=(), rerun_log=None, read_logs=None) -> Path:
     """Probe pods on NODES answering enforced runs, three agents whose logs hold the deny lines,
     each backend's Service and EndpointSlices, and the pods now. tables/rcs: pod -> override; skip:
     (pod, host:port) not logged; drop_lines: substrings whose deny lines are removed; rerun_log: what
-    the agents' logs say from the second read on (after a re-run)."""
+    the agents' logs say from the second read on (after a re-run); read_logs: n -> what they say at
+    read n (from 1), before rerun_log."""
     fixtures(tmp, ds_doc=ds(3, 3), pods=agents(3), np_items=np_items)
     f = tmp / "fx"
     objs = backends(live_like)
@@ -590,6 +608,8 @@ def canary_fixtures(tmp: Path, *, nodes=NODES, tables=None, rcs=None, extra_log=
         (f / "logs" / a["metadata"]["name"]).write_text(LOG_START + "".join(x + "\n" for x in lines[i::3]))
         if rerun_log is not None:
             (f / "logs" / f"{a['metadata']['name']}.rerun").write_text(LOG_START + "".join(x + "\n" for x in rerun_log[i::3]))
+        for n, logged in (read_logs or {}).items():
+            (f / "logs" / f"{a['metadata']['name']}.read{n}").write_text(LOG_START + "".join(x + "\n" for x in logged[i::3]))
     return tmp
 
 
@@ -678,10 +698,11 @@ def test_canary_node_ip_row_not_satisfied_by_the_clusterip_row(tmp_path):
     assert "canary: PASS" not in r.stdout
 
 
-def test_canary_clusterip_row_all_syns_to_the_same_node_is_ambiguous(tmp_path):
+def test_canary_clusterip_row_all_syns_to_the_same_node_is_paired(tmp_path):
     """kube-proxy may send all three SYNs of the ClusterIP attempt to .240, the literal row's own
-    destination (1 in 27). Two attempts to .240:6443 cannot show which is the ClusterIP path, so the
-    row is AMBIGUOUS: one more run, and if that is the same, exit 2. Never a PASS."""
+    destination (1 in 27). Before review round 3 that read AMBIGUOUS, and canary ran the pod again.
+    With no other run in the window, the two attempts sit one row timeout apart in the probe's
+    order, so the earlier is the ClusterIP row's (R3-1): PASS, no re-run."""
     objs = backends(True)
     lines = []
     for n in NODES:
@@ -690,10 +711,9 @@ def test_canary_clusterip_row_all_syns_to_the_same_node_is_ambiguous(tmp_path):
                   for x in deny_lines(f"netpol-probe-{n}", rows, objs)]
     t = canary_fixtures(tmp_path, live_like=True, drop_lines=("Packet verdict",), extra_log=lines)
     r = run(t, "canary")
-    assert r.returncode == 2, r.stdout + r.stderr
-    assert re.search(r"^RERUN \w+ netpol-probe-\w+: overlapping rows ambiguous", r.stdout, re.M), r.stdout
-    assert "AMBIGUOUS 10.96.0.1:443" in r.stdout
-    assert r.stdout.rstrip().splitlines()[-1].startswith("canary: AMBIGUOUS (3 of 3 nodes still ambiguous")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "RERUN" not in r.stdout and "AMBIGUOUS" not in r.stdout
+    assert r.stdout.rstrip().splitlines()[-1] == "canary: PASS (3 nodes)"
 
 
 def test_canary_echo_9377_not_satisfied_by_9378(tmp_path):
@@ -899,6 +919,29 @@ def test_stray_ip_reused_by_a_later_pod_is_gone(tmp_path):
     assert "GONE [netpol-canary/ci-job-abc is gone] " in r.stdout
 
 
+def test_stray_holder_since_is_when_it_got_its_ip(tmp_path):
+    """Review round 3, R3-2: a pod whose sandbox the kubelet recreated (a node reboot) keeps its old
+    startTime, but got its IP when PodReadyToStartContainers last turned True. That was after the
+    line, so the deleted pod the line names had the IP then: GONE, not STRAY."""
+    lines = [deny_line("netpol-canary/ci-job-abc", "192.168.0.2:80", src="10.244.4.77:40000", ago_s=600)]
+    holder = k8s_pod("media/mm-plex-0", "10.244.4.77", start=iso_ago(86400), ready_to_start=iso_ago(300))
+    r = run(stray_fixtures(tmp_path, lines, pods_now=STRAY_PODS + [holder]), "stray")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "GONE [netpol-canary/ci-job-abc is gone] " in r.stdout
+
+
+@pytest.mark.parametrize("ready_to_start", [None, 3600])
+def test_stray_holder_since_falls_back_or_holds(tmp_path, ready_to_start):
+    """Without the condition, startTime stands in; with it turned True before the line, the IP was
+    the holder's already. Either way the holder had the IP before the line: STRAY."""
+    lines = [deny_line("netpol-canary/ci-job-abc", "192.168.0.2:80", src="10.244.4.77:40000", ago_s=600)]
+    holder = k8s_pod("media/mm-plex-0", "10.244.4.77", start=iso_ago(86400),
+                     ready_to_start=None if ready_to_start is None else iso_ago(ready_to_start))
+    r = run(stray_fixtures(tmp_path, lines, pods_now=STRAY_PODS + [holder]), "stray")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "which media/mm-plex-0 has held since" in r.stdout
+
+
 def test_stray_finished_pod_does_not_hold_its_ip(tmp_path):
     """A Succeeded pod keeps podIP in its status after the IP is free: it is not the IP's holder."""
     lines = [deny_line("netpol-canary/ci-job-abc", "192.168.0.2:80", src="10.244.4.77:40000", ago_s=600)]
@@ -1014,11 +1057,12 @@ def test_concurrent_loop_run_is_ambiguous_never_pass(tmp_path):
     r = run(canary_fixtures(tmp_path, live_like=True, skip=("netpol-probe-top", "10.96.0.1:443"), extra_log=loop), "canary")
     assert r.returncode == 2, r.stdout + r.stderr
     assert "canary: PASS" not in r.stdout
-    assert "RERUN top netpol-probe-top: overlapping rows ambiguous, one more run" in r.stdout
+    for k in (1, 2, 3):
+        assert f"RERUN top netpol-probe-top ({k} of 3): overlapping rows ambiguous, one more run" in r.stdout
     assert "AMBIGUOUS 10.96.0.1:443 (egress to default/kubernetes: " in r.stdout
     n, d = len(expand("top")), dropped_count("top")
     assert f"top rows {n}/{n} deny-logged {d - 1}/{d} ambiguous 1" in r.stdout
-    assert r.stdout.rstrip().splitlines()[-1].startswith("canary: AMBIGUOUS (1 of 3 nodes")
+    assert r.stdout.rstrip().splitlines()[-1] == "canary: AMBIGUOUS (1 of 3 nodes still ambiguous after 4 runs; run it again)"
 
 
 def test_overlapping_loop_run_is_rerun_and_then_passes(tmp_path):
@@ -1030,7 +1074,8 @@ def test_overlapping_loop_run_is_rerun_and_then_passes(tmp_path):
             for x in deny_lines("netpol-probe-middle", expand("middle"), objs) if ":6443" in x]
     r = run(canary_fixtures(tmp_path, live_like=True, extra_log=loop, rerun_log=normal), "canary")
     assert r.returncode == 0, r.stdout + r.stderr
-    assert "RERUN middle netpol-probe-middle: overlapping rows ambiguous, one more run" in r.stdout
+    assert "RERUN middle netpol-probe-middle (1 of 3): overlapping rows ambiguous, one more run" in r.stdout
+    assert "(2 of 3)" not in r.stdout
     assert "4 attempts for 2 overlapping rows: another run is in the window" in r.stdout
     n, d = len(expand("middle")), dropped_count("middle")
     assert f"middle rows {n}/{n} deny-logged {d}/{d}" in r.stdout
@@ -1062,6 +1107,69 @@ def test_shared_source_port_between_overlapping_rows_is_a_fail_never_a_pass(tmp_
     r = run(canary_fixtures(tmp_path, live_like=True, drop_lines=("Packet verdict",), extra_log=lines), "canary")
     assert r.returncode == 1, r.stdout + r.stderr
     assert "NOT-LOGGED 192.168.0.240:6443" in r.stdout
+    assert "canary: PASS" not in r.stdout
+
+
+def test_overlap_on_two_runs_resolves_on_the_third(tmp_path):
+    """Review round 3, R3-1: the pod's loop run overlapped canary's first run and its re-run (both
+    windows show its attempts), which used to end AMBIGUOUS with exit 2. Up to three re-runs: the
+    third run is clean, so canary PASSes."""
+    objs = backends(True)
+    normal = [x for n in NODES for x in deny_lines(f"netpol-probe-{n}", expand(n), objs)]
+    loop = deny_lines("netpol-probe-middle", expand("middle"), objs, ago_s=-10.5, port_base=51000)
+    r = run(canary_fixtures(tmp_path, live_like=True, extra_log=loop, read_logs={1: normal + loop, 2: normal}), "canary")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert "RERUN middle netpol-probe-middle (1 of 3)" in r.stdout and "RERUN middle netpol-probe-middle (2 of 3)" in r.stdout
+    assert "(3 of 3)" not in r.stdout
+    n, d = len(expand("middle")), dropped_count("middle")
+    assert f"middle rows {n}/{n} deny-logged {d}/{d}" in r.stdout
+    assert r.stdout.rstrip().splitlines()[-1] == "canary: PASS (3 nodes)"
+
+
+def test_one_row_offset_run_cannot_stand_in_for_a_clusterip_defect(tmp_path):
+    """The ClusterIP path never logs (a real defect), and another run sits exactly one row ahead, so
+    its literal .240:6443 attempt lands one row timeout before this run's: two all-.240 attempts
+    3.022 s apart, the shape pairing accepts. The other run also adds attempts to every other row,
+    so pairing stays off: AMBIGUOUS while it lasts, and NOT-LOGGED once a run is clean. Never PASS."""
+    objs = backends(True)
+    defect = [x for n in NODES for x in deny_lines(f"netpol-probe-{n}", expand(n), objs,
+                                                    skip="10.96.0.1:443" if n == "top" else None)]
+    ahead = deny_lines("netpol-probe-top", expand("top"), objs, skip="10.96.0.1:443", ago_s=ROW_GAP, port_base=51000)
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    # Only the overlapped runs: AMBIGUOUS after four runs, exit 2.
+    r = run(canary_fixtures(tmp_path / "a", live_like=True, drop_lines=("Packet verdict",), extra_log=defect + ahead), "canary")
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "canary: PASS" not in r.stdout
+    assert "top rows 25/25 deny-logged 20/21 ambiguous 1" in r.stdout
+    # The re-run is clean: NOT-LOGGED, exit 1.
+    r = run(canary_fixtures(tmp_path / "b", live_like=True, drop_lines=("Packet verdict",), extra_log=defect + ahead,
+                            read_logs={1: defect}), "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "RERUN top netpol-probe-top (1 of 3)" in r.stdout
+    assert "NOT-LOGGED 10.96.0.1:443" in r.stdout
+
+
+def test_a_clusterip_defect_still_fails_without_an_overlap(tmp_path):
+    """No other run in the window and no ClusterIP attempt: one attempt for two rows. Pairing needs
+    one per row, so the ClusterIP row is NOT-LOGGED on the first run."""
+    r = run(canary_fixtures(tmp_path, live_like=True, skip=("netpol-probe-bottom", "10.96.0.1:443")), "canary")
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "NOT-LOGGED 10.96.0.1:443" in r.stdout and "RERUN" not in r.stdout
+
+
+def test_pairing_needs_the_row_timeout_spacing(tmp_path):
+    """Two all-.240 attempts 1 s apart are not one run's two rows: no pairing, AMBIGUOUS."""
+    objs = backends(True)
+    lines = []
+    for n in NODES:
+        rows = expand(n)
+        shift = {"10.96.0.1:443": 2.0} if n == "top" else None
+        lines += [x.replace("192.168.0.241:6443", "192.168.0.240:6443").replace("192.168.0.242:6443", "192.168.0.240:6443")
+                  if n == "top" else x for x in deny_lines(f"netpol-probe-{n}", rows, objs, shift=shift)]
+    r = run(canary_fixtures(tmp_path, live_like=True, drop_lines=("Packet verdict",), extra_log=lines), "canary")
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "AMBIGUOUS 10.96.0.1:443" in r.stdout
     assert "canary: PASS" not in r.stdout
 
 

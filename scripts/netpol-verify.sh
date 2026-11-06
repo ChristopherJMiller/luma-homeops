@@ -55,8 +55,9 @@
 # backend's post-DNAT IP:PORTs (§3.4 item 1, backend_dsts), port anchored, and
 # from a connect attempt (source port) of its own (claim_rows). A timeout that no
 # agent logged is a FAIL: the packet may never have reached an enforcer. A row
-# that only a shared destination or a second run's attempts could prove reads
-# AMBIGUOUS; that pod gets one more run, and if that one is ambiguous too, `canary`
+# that only a shared destination or a second run's attempts could prove, and
+# that pairing by the row timeout cannot settle, reads AMBIGUOUS; that pod runs
+# again, up to CANARY_RERUNS (3) times, and if that leaves it ambiguous, `canary`
 # exits 2 and never PASSes. Then `stray` over the runs' windows. Prints
 # `<node> rows <p>/<N> deny-logged <d>/<D>` per pod. Exit 2 unless the pods are
 # there (3 Running on 3 nodes, or 1 on --node).
@@ -85,6 +86,8 @@ FLAGS=(fail-open=true log-verdicts=deny disable-nri=true nfqueue-id=98 metrics-b
 CANARY_NS=netpol-canary
 PROBE_SELECTOR=app.kubernetes.io/name=netpol-probe
 CANARY_NODES=3
+# How many more runs an AMBIGUOUS pod gets (review round 3, R3-1).
+CANARY_RERUNS=3
 # exec_timeout ROWS -> seconds to allow one `probe.sh once` in a pod: every row and the WAN lookup
 # at probe.sh's deadline, plus 30 s. A healthy run takes seconds. Needs probe.sh sourced.
 exec_timeout() { echo $((($1 + 1) * PROBE_DEADLINE_DEFAULT + 30)); }
@@ -107,6 +110,16 @@ metric() {
   grep -E "$re" "$1" | awk '{print $2}'
 }
 is_zero() { awk -v x="$1" 'BEGIN { exit !(x + 0 == 0) }'; }
+
+# sync_error LOG -> 0 if an agent log has a failed nftables sync. Upstream (controller.go, v1.1.3)
+# logs "Syncing nftables rules" at each sync and "syncing nftables rules" error=... on failure, so
+# match either case and key on error=. Captured, then tested: a pipeline into grep -q could die of
+# SIGPIPE on a long log under pipefail and miss the line (review round 1, M1).
+sync_error() {
+  local sync
+  sync=$(grep -iF 'syncing nftables rules' "$1")
+  grep -Eq '(^| )error=' <<< "$sync"
+}
 
 idle() {
   local n_np n desired ds_ready rows pass=0 failed=0 fail=0
@@ -131,7 +144,7 @@ idle() {
   [ "$rows" -eq "$n" ] || parse_fail "$rows pod rows for $n pods"
 
   while IFS=$'\t' read -r pod node ready restarts; do
-    local why=() m="$tmp/$pod.metrics" log="$tmp/$pod.log" v f total drops pid="?" packets="?" fl="?" sync
+    local why=() m="$tmp/$pod.metrics" log="$tmp/$pod.log" v f total drops pid="?" packets="?" fl="?"
     [ "$ready" = True ] || why+=("not-ready")
     if [[ ! "$restarts" =~ ^[0-9]+$ ]]; then why+=("restarts-unparseable=$restarts")
     elif [ "$restarts" -ne 0 ]; then why+=("restarts=$restarts"); fi
@@ -162,10 +175,7 @@ idle() {
         grep -Eq "\"flag\" name=\"${f%%=*}\" value=\"?${f#*=}\"?( |\$)" "$log" || { why+=("flag-${f%%=*}"); fl=bad; }
       done
       grep -Eq '^[EF][0-9]{4} ' "$log" && why+=("klog-error-lines=$(grep -Ec '^[EF][0-9]{4} ' "$log")")
-      # Captured, then tested: a pipeline into grep -q could die of SIGPIPE on a long log and miss it.
-      # Upstream logs "Syncing nftables rules" at each sync and "syncing nftables rules" error=... on failure.
-      sync=$(grep -iF 'syncing nftables rules' "$log")
-      grep -Eq '(^| )error=' <<< "$sync" && why+=("nftables-sync-error")
+      sync_error "$log" && why+=("nftables-sync-error")
     else
       why+=("logs-unreadable")
     fi
@@ -314,10 +324,11 @@ row_direction() {
   echo egress
 }
 
-# deny_attempts LOG -> "key<TAB>srcPod<TAB>srcPort<TAB>dst<TAB>direction" per deny line, where key
-# is the klog stamp "MMDD HH:MM:SS". The enforcer judges before SNAT, so a connect attempt keeps
-# one source port across its SYN retransmits, even when kube-proxy sends each SYN to another
-# backend: within one pod, the source port names the attempt.
+# deny_attempts LOG -> "key<TAB>srcPod<TAB>srcPort<TAB>dst<TAB>direction<TAB>seconds" per deny line,
+# where key is the klog stamp "MMDD HH:MM:SS" and seconds the same stamp to the microsecond, counted
+# from the start of the year (UTC). The enforcer judges before SNAT, so a connect attempt keeps one
+# source port across its SYN retransmits, even when kube-proxy sends each SYN to another backend:
+# within one pod, the source port names the attempt.
 deny_attempts() {
   grep -F '"Packet verdict"' "$1" | awk '
     function val(key,   s, v) {
@@ -327,34 +338,61 @@ deny_attempts() {
       sub(/^"/, "", v)
       return v
     }
+    BEGIN { split("0 31 59 90 120 151 181 212 243 273 304 334", cum, " ") }
     val("verdict") == "deny" {
       sp = val("src"); sub(/^.*:/, "", sp)
-      print substr($0, 2, 4) " " substr($0, 7, 8) "\t" val("srcPod") "\t" sp "\t" val("dst") "\t" val("direction")
+      secs = (cum[substr($0, 2, 2) + 0] + substr($0, 4, 2) - 1) * 86400 + substr($0, 7, 2) * 3600 + substr($0, 10, 2) * 60 + substr($0, 13, 9)
+      printf "%s\t%s\t%s\t%s\t%s\t%.6f\n", substr($0, 2, 4) " " substr($0, 7, 8), val("srcPod"), sp, val("dst"), val("direction"), secs
     }'
 }
 
+# One dropped row follows another 3 s apart: agnhost --timeout=3s, plus the spawn of the next tool.
+# Live, 2026-11-06: 473 consecutive attempts 3.020 to 3.073 s apart (the ClusterIP row to the
+# literal .240:6443 row, 3.022 to 3.024 s). claim_rows pairs attempts with this.
+ROW_GAP_MIN=2.9
+ROW_GAP_MAX=3.5
+
 # claim_rows REQS ATTEMPTS -> "row<TAB>status<TAB>why" per row of REQS ("row<TAB>direction<TAB>
-# dst,dst,..."); status 1 (logged), 0 (not logged) or A (ambiguous). ATTEMPTS is one pod's
-# deny_attempts within its run's window. Each must-drop row needs a logged attempt of its own: a
-# deny in the row's direction to one of its destinations, from a source port that no row
-# overlapping it has claimed. Rows with the same destinations and direction (top's .240:50000
-# twice) are the same traffic and share one claim.
+# dst,dst,..."), the must-drop rows in the order the probe runs them; status 1 (logged), 0 (not
+# logged) or A (ambiguous). ATTEMPTS is one pod's deny_attempts within its run's window. Each
+# must-drop row needs a logged attempt of its own: a deny in the row's direction to one of its
+# destinations, from a source port that no row overlapping it has claimed. Rows with the same
+# destinations and direction (top's .240:50000 twice) are the same traffic and share one claim.
 #
 # Overlapping rows (10.96.0.1:443, which lands on 192.168.0.24x:6443, and the literal
 # 192.168.0.240:6443) claim narrowest first. A wider row then needs a distinctive attempt, one
 # that reached a destination no narrower overlapping row has (.241 or .242 here). An attempt that
-# only reached the shared .240 may be the literal row's traffic from another run, so it makes the
-# row A, never 1. Also A: an overlapping group with more attempts than rows, which means another
-# run's attempts are in the window. Greedy matching is exact while overlapping rows nest, as they
-# do in matrix.txt.
+# only reached the shared .240 could be the literal row's traffic from another run, so that row is
+# A. Also A: an overlapping group with more attempts than rows, which means another run's attempts
+# are in the window. Greedy matching is exact while overlapping rows nest, as they do in matrix.txt.
+#
+# Pairing settles the first kind (review round 3, R3-1). With no other run in the window (no row of
+# the pod outside the group has more attempts than rows; another run adds attempts to the rows next
+# to the group, 3 s either side), the group holds one attempt per row, and its attempts sit
+# ROW_GAP_MIN to ROW_GAP_MAX seconds apart per row between them in the probe's order: then the
+# k-th attempt in time is the k-th row's, if it fits that row. In the 1-in-27 case where all three
+# ClusterIP SYNs land on .240, that names the earlier attempt the ClusterIP row's. A ClusterIP path
+# that never logs leaves one attempt for two rows, so it still reads NOT-LOGGED. Another run in
+# the window leaves the group A, and canary runs the pod again.
 claim_rows() {
-  awk -F'\t' '
+  awk -F'\t' -v gapmin="$ROW_GAP_MIN" -v gapmax="$ROW_GAP_MAX" '
     function overlaps(a, b,   n, arr, i) {
       n = split(cands[a], arr, ",")
       for (i = 1; i <= n; i++) if ((b, arr[i]) in incand) return 1
       return 0
     }
     function find(x) { while (comp[x] != x) x = comp[x]; return x }
+    # fitsrow(sp, r, g): the attempt has a line to the destinations of r in its direction, and no
+    # line in that direction to a destination of the group g outside them.
+    function fitsrow(sp, r, g,   m, hit) {
+      hit = 0
+      for (m = 1; m <= nl; m++) {
+        if (lsp[m] != sp || ldir[m] != rdir[r] || !((g, ldst[m]) in inunion)) continue
+        if (!((r, ldst[m]) in incand)) return 0
+        hit = 1
+      }
+      return hit
+    }
     FNR == NR {
       key = $2 "|" $3
       if (!(key in rid)) {
@@ -365,7 +403,7 @@ claim_rows() {
       rowreq[++nrows] = rid[key]; rowid[nrows] = $1; nrowsof[rid[key]]++
       next
     }
-    { nl++; lsp[nl] = $3; ldst[nl] = $4; ldir[nl] = $5 }
+    { nl++; lsp[nl] = $3; ldst[nl] = $4; ldir[nl] = $5; ltime[nl] = $6 + 0 }
     END {
       for (i = 1; i <= nreq; i++) ord[i] = i
       for (i = 1; i <= nreq; i++)
@@ -381,7 +419,7 @@ claim_rows() {
         for (i = 1; i <= n; i++) inunion[g, c[i]] = 1
       }
       for (o = 1; o <= nreq; o++) {
-        r = ord[o]; st[r] = 0; why[r] = ""; g = find(r)
+        r = ord[o]; st[r] = 0; why[r] = ""; kind[r] = ""; g = find(r)
         pick = ""; pickd = ""
         for (l = 1; l <= nl; l++) {
           if (ldir[l] != rdir[r] || !((r, ldst[l]) in incand)) continue
@@ -390,25 +428,52 @@ claim_rows() {
           if (blocked) continue
           # The attempt belongs to this row only if each of its lines to a destination in the group
           # goes to a destination of this row: a literal .240:6443 attempt never reaches .241.
-          fits = 1
-          for (m = 1; m <= nl; m++)
-            if (lsp[m] == lsp[l] && ldir[m] == rdir[r] && ((g, ldst[m]) in inunion) && !((r, ldst[m]) in incand)) { fits = 0; break }
-          if (!fits) continue
+          if (!fitsrow(lsp[l], r, g)) continue
           if (pick == "") pick = lsp[l]
           shared = 0
           for (p = 1; p < o; p++) if (overlaps(ord[p], r) && ((ord[p], ldst[l]) in incand)) { shared = 1; break }
           if (!shared && pickd == "") pickd = lsp[l]
         }
         if (pickd != "") { claimed[r, pickd] = 1; st[r] = 1 }
-        else if (pick != "") { claimed[r, pick] = 1; st[r] = "A"; why[r] = "its only attempts reached destinations a narrower row shares" }
+        else if (pick != "") { claimed[r, pick] = 1; st[r] = "A"; kind[r] = "shared"; why[r] = "its only attempts reached destinations a narrower row shares" }
       }
-      # More attempts than rows in an overlapping group means another run is in the window.
+      # Attempts per row and per group, and each attempt first SYN in the group.
       for (l = 1; l <= nl; l++)
         for (r = 1; r <= nreq; r++)
-          if (ldir[l] == rdir[r] && ((r, ldst[l]) in incand)) { g = find(r); if (!((g, lsp[l]) in seen)) { seen[g, lsp[l]] = 1; gatt[g]++ } }
+          if (ldir[l] == rdir[r] && ((r, ldst[l]) in incand)) {
+            if (!((r, lsp[l]) in rseen)) { rseen[r, lsp[l]] = 1; ratt[r]++ }
+            g = find(r)
+            if (!((g, lsp[l]) in seen)) { seen[g, lsp[l]] = 1; gatt[g]++; gsp[g, gatt[g]] = lsp[l]; first[g, lsp[l]] = ltime[l] }
+            else if (ltime[l] < first[g, lsp[l]]) first[g, lsp[l]] = ltime[l]
+          }
+      # Another run in the window: a row outside the overlapping groups has more attempts than rows.
+      # Inside a group, one attempt can match two rows, so the group count (below) is the measure.
+      other = 0
+      for (r = 1; r <= nreq; r++) if (greqs[find(r)] == 1 && ratt[r] > nrowsof[r]) other = 1
       for (r = 1; r <= nreq; r++) {
         g = find(r)
-        if (greqs[g] > 1 && gatt[g] > grows[g] && st[r] == 1) { st[r] = "A"; why[r] = gatt[g] " attempts for " grows[g] " overlapping rows: another run is in the window" }
+        if (greqs[g] > 1 && gatt[g] > grows[g] && st[r] == 1) { st[r] = "A"; kind[r] = "excess"; why[r] = gatt[g] " attempts for " grows[g] " overlapping rows: another run is in the window" }
+      }
+      # Pairing by the row timeout, for groups left A only by shared destinations.
+      for (g = 1; g <= nreq; g++) {
+        if (find(g) != g || greqs[g] < 2 || other || gatt[g] != grows[g]) continue
+        want = 0; bad = 0
+        for (r = 1; r <= nreq; r++) if (find(r) == g) { if (kind[r] == "shared") want = 1; if (kind[r] == "excess") bad = 1 }
+        if (!want || bad) continue
+        n = 0
+        for (k = 1; k <= nrows; k++) if (find(rowreq[k]) == g) { n++; prow[n] = rowreq[k]; ppos[n] = k }
+        for (i = 1; i <= n; i++) psp[i] = gsp[g, i]
+        for (i = 2; i <= n; i++)
+          for (j = i; j > 1 && first[g, psp[j]] < first[g, psp[j - 1]]; j--) { t = psp[j]; psp[j] = psp[j - 1]; psp[j - 1] = t }
+        ok = (n == gatt[g])
+        for (i = 1; ok && i <= n; i++) {
+          if (!fitsrow(psp[i], prow[i], g)) ok = 0
+          if (i > 1) {
+            gap = first[g, psp[i]] - first[g, psp[i - 1]]; steps = ppos[i] - ppos[i - 1]
+            if (gap < steps * gapmin || gap > steps * gapmax) ok = 0
+          }
+        }
+        if (ok) for (r = 1; r <= nreq; r++) if (find(r) == g) { st[r] = 1; why[r] = ""; kind[r] = "paired" }
       }
       for (k = 1; k <= nrows; k++) print rowid[k] "\t" st[rowreq[k]] "\t" why[rowreq[k]]
     }' "$1" "$2"
@@ -512,13 +577,18 @@ policed_namespaces() {
     "$tmp/np.json" 2> /dev/null) || parse_fail "the NetworkPolicy list"
 }
 
-# cluster_pods -> $tmp/pods-now.tsv: "ns/name<TAB>podIP<TAB>start<TAB>holds" for every pod now,
-# start as YYYYMMDDHHMMSS (UTC). holds is 1 when the pod holds its IP: Running or Pending and not
-# hostNetwork. A finished pod keeps its podIP in status after the IP is free again.
+# cluster_pods -> $tmp/pods-now.tsv: "ns/name<TAB>podIP<TAB>since<TAB>holds" for every pod now,
+# since as YYYYMMDDHHMMSS (UTC): when the pod got its current IP. That is the last transition of
+# its PodReadyToStartContainers condition, which the kubelet sets once the sandbox and its network
+# are up; a sandbox recreated after a node reboot gets a new IP while startTime stays put
+# (review round 3, R3-2). startTime when the condition is absent (Kubernetes before 1.29). holds is 1 when
+# the pod holds its IP: Running or Pending and not hostNetwork. A finished pod keeps its podIP in
+# status after the IP is free again.
 cluster_pods() {
   kc get pods -A -o json > "$tmp/allpods.json" 2> /dev/null < /dev/null || die "cannot list pods; is KUBECONFIG right?"
   jq -r '.items[] | [(.metadata.namespace + "/" + .metadata.name), (.status.podIP // "-"),
-      ((.status.startTime // "") | gsub("[-:TZ]"; "") | if . == "" then "-" else . end),
+      (([.status.conditions[]? | select(.type == "PodReadyToStartContainers") | .lastTransitionTime][0] // .status.startTime // "")
+        | gsub("[-:TZ]"; "") | if . == "" then "-" else . end),
       (if ((.status.phase == "Running" or .status.phase == "Pending") and (.spec.hostNetwork != true) and (.status.podIP // "") != "") then 1 else 0 end)]
       | @tsv' "$tmp/allpods.json" > "$tmp/pods-now.tsv" 2> /dev/null || parse_fail "the pod list"
 }
@@ -726,7 +796,7 @@ canary_logs() {
 }
 
 canary() {
-  local only=$1 root probe matrix n live running nodes want pod node hostip b p fail=0 amb=0 again k0 k1 lo="" hi=""
+  local only=$1 root probe matrix n live running nodes want pod node hostip b p fail=0 amb=0 again k0 k1 lo="" hi="" round
   root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
   probe=$root/cluster/netpol-canary/probe.sh
   matrix=$root/cluster/netpol-canary/matrix.txt
@@ -787,15 +857,18 @@ canary() {
     fi
   done < "$tmp/probes.tsv"
 
-  # An ambiguous pod gets one more run with a fresh window; the loop that overlapped it does not
-  # run again for an interval.
-  awk -F'\t' '{ print $1 "\t" $2 }' "$tmp/probes.tsv" | while IFS=$'\t' read -r pod node; do
-    [ "$(cat "$tmp/$pod.verdict")" = AMBIGUOUS ] && printf '%s\t%s\n' "$pod" "$node"
-  done > "$tmp/again.tsv"
-  if [ -s "$tmp/again.tsv" ]; then
+  # An ambiguous pod runs again with a fresh window, up to CANARY_RERUNS times. The loop's run
+  # recurs every PROBE_INTERVAL; its two attempts for the overlapping rows, 3 s apart, can straddle
+  # the end of one run and the start of the next (seen live, 2026-11-06), but no third. So of four
+  # back-to-back runs (about 65 s each) at least two are free of it; claim_rows pairs the rest.
+  for round in $(seq "$CANARY_RERUNS"); do
+    awk -F'\t' '{ print $1 "\t" $2 }' "$tmp/probes.tsv" | while IFS=$'\t' read -r pod node; do
+      [ "$(cat "$tmp/$pod.verdict")" = AMBIGUOUS ] && printf '%s\t%s\n' "$pod" "$node"
+    done > "$tmp/again.tsv"
+    [ -s "$tmp/again.tsv" ] || break
     while IFS=$'\t' read -r pod node; do
-      echo "RERUN $node $pod: overlapping rows ambiguous, one more run"
-      grep '^AMBIGUOUS ' "$tmp/$pod.report" | sed 's/^/  first run: /'
+      echo "RERUN $node $pod ($round of $CANARY_RERUNS): overlapping rows ambiguous, one more run"
+      grep '^AMBIGUOUS ' "$tmp/$pod.report" | sed 's/^/  last run: /'
       canary_exec "$pod" &
     done < "$tmp/again.tsv"
     wait
@@ -808,7 +881,7 @@ canary() {
         [ -n "$hi" ] && [[ ! "$k1" > "$hi" ]] || hi=$k1
       fi
     done < "$tmp/again.tsv"
-  fi
+  done
 
   while IFS=$'\t' read -r pod node _ _; do
     cat "$tmp/$pod.report"
@@ -834,7 +907,7 @@ canary() {
     return 1
   fi
   if [ "$amb" -ne 0 ]; then
-    echo "canary: AMBIGUOUS ($amb of $n still ambiguous after a second run; run it again)"
+    echo "canary: AMBIGUOUS ($amb of $n still ambiguous after $((CANARY_RERUNS + 1)) runs; run it again)"
     return 2
   fi
   echo "canary: PASS ($n)"
@@ -1110,6 +1183,18 @@ selftest() {
   # pipeline reads as no match.
   { printf '%s\n' "$line"; for t in $(seq 20000); do printf '%s\n' "${line/192.168.0.117:443/192.168.0.2:$t}"; done; } > "$log"
   rc 0 "deny_match long log, match first" deny_match "$log" $pod 192.168.0.117:443
+
+  # sync_error: either case of upstream's line, keyed on error=; a long log must not hide it (M1).
+  local ok_sync='I1105 22:00:01.000000       1 controller.go:508] "Syncing nftables rules" logger="nftables-sync" elapsed="1.1ms"'
+  local bad_sync='I1105 22:00:00.000000       1 controller.go:976] "syncing nftables rules" logger="nftables-sync" error="netlink receive: no such file or directory"'
+  printf '%s\n' "$ok_sync" "$ok_sync" > "$log"
+  rc 1 "sync_error clean syncs" sync_error "$log"
+  printf '%s\n' "$ok_sync" "$bad_sync" > "$log"
+  rc 0 "sync_error upstream error line" sync_error "$log"
+  printf '%s\n' "${bad_sync/syncing/Syncing}" > "$log"
+  rc 0 "sync_error capital S" sync_error "$log"
+  { printf '%s\n' "$bad_sync"; for t in $(seq 20000); do printf '%s\n' "$ok_sync"; done; } > "$log"
+  rc 0 "sync_error long log, error first" sync_error "$log"
 
   # netpol-connect.js
   local js=$root/scripts/netpol-connect.js lport lpid
