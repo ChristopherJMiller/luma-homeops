@@ -154,8 +154,10 @@ spec:
             reason: stale
           annotations:
             summary: "The Azure sweeper ci-sweeper has no finished run in 30 minutes: it is disabled or hung, so nothing but the budget bounds Azure compute (docs/ci.md)"
-        # The watcher cannot read the run history, or has not yet. 30 min rides out a pod move, a 6-min
-        # RBD detach and the break-glass scale to 0; CIDispatchStale covers a missing dispatcher.
+        # The watcher cannot read the run history, or has not yet, or the dispatcher is gone (a failed
+        # scrape marks the series stale at once). 30 min rides out a pod move or an RBD detach (6 min)
+        # shorter than that; CIDispatchStale covers a missing dispatcher. A longer gap pages 24/7, the
+        # break-glass scale to 0 and a node-loss stall included: expect or silence it then (docs/ci.md).
         - alert: CISweeperStale
           expr: absent(ci_dispatch_sweeper_last_run_timestamp)
           for: 30m
