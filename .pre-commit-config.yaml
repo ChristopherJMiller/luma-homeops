@@ -63,6 +63,18 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_pages_manifests.py
         pass_filenames: false
         files: ^(cluster/(pages|traefik|dns|cert-manager|applications)/.*|cloudflare/dns/.*\.tf|images/pages-relay/relay\.go|scripts/test_pages_manifests\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
+      # ci-dispatch and the `tiny` runner class (runner classes phase 1): the dispatcher pod's
+      # hardening and pin, restricted Pod Security on ci-dispatch AND ci-tiny (the kube guard
+      # relies on it for pod privilege fields), exact RBAC and quota, the web-only egress
+      # component, both policy sets, alerts, Renovate never automerging the image, and
+      # SealedSecrets only (docs/superpowers/plans/2026-11-04-runner-classes-phase-0-1.md).
+      # Alert cases run separately: scripts/test-ci-dispatch-alerts.sh (needs promtool and yq).
+      - id: ci-dispatch-manifests
+        name: ci-dispatch static tests
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_ci_dispatch_manifests.py
+        pass_filenames: false
+        files: ^(cluster/(ci-dispatch|components/netpol|forgejo-runner-general|forge-bot|applications)/.*|scripts/test_ci_dispatch_manifests\.py|\.renovaterc\.json|\.pre-commit-config\.yaml)$
       # Realliance.net on the forge: the general runner's fixed values (restricted PSA, pod
       # hardening, pinned slim image, wipe-on-start, nothing shared with the galaxy runner).
       # Later tasks add the site pin test to the same hook.

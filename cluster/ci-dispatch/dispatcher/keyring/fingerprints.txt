@@ -1,0 +1,7 @@
+# forge-bot's trust root: the Owners whose signature makes an inventory head trusted
+# (realliance-ops/forge). The keyring lives HERE, in luma-homeops, not in the inventory, so whoever
+# can change the inventory cannot also change who may sign it (spec "Trusted inventory").
+# One primary-key fingerprint per line; everything from '#' to the end of a line is a comment.
+# owners.asc holds the matching PUBLIC keys, each a byte-identical copy of keys/<name>.asc in
+# realliance/sso. Connor's key is added when he supplies it.
+E9245FED84E0EC721C7B5C336BFB8037115ADE26  # chris

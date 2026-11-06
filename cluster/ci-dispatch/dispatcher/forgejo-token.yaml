@@ -1,0 +1,14 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: ci-dispatch-forgejo
+  namespace: ci-dispatch
+spec:
+  encryptedData:
+    forgejo-token: AgANkpL1Vk8nM8HFumbBc+UB1YGT+CKnjt6T1QVikV3spwrranG8oPn6gBN2e9/yb2LC53psttIo7Ayrz1FDY64qCKahZUdYK5L7ZFOLlAJPpsXJUizSYOKbbtzvlffZ3FheYt341k3/wRvm9mLW261SVGCBmeSL/XAsoAfDmG5r8p95zj1by6XHHeA1HOTISSiIVK8xiriHczSQ4g//mHeI/zvwFGi+hzsABsigSPdTKSitrkRHZSd7R1UdO7oj9v9NZdrdS2flIrcYBu6whKgqyKx+VWvAbb7jkkte6AjKFc6+91hqo6cg2jWS5BqIo0D1lQZZ56mfMoiT1LVe1eS/ptaUU4y2sY7Co8uZ8aEaAKZYu6ZcxBpXmuoWVmYUahxX6HXH8HjmDmlpP21k2/MvwBMCtw8KoP1+XzwX9TNCDirB7Qn0n1ZIsOsfy5iF3u6WPzqluTT5Lu9HlZ+H7wSLfnuh12w/ZTHOgE4In3EdWrBpyZ5l40sOvLBbdxtW8eqyFiun/fIRP3sfPAB7C9ModCOc55bXs4Ce2txU0P9YB9GQZVCp+SnXsLhbWuioy2W5u7n4/s2khcjQWb9/2y1d6N88SSFRUIpZtrlLSaovUSBloIueAcAU0hvKEoUzcEIV9awUQRmYd75BsTx6ESA5OwbTz002y+tqXzftD9nH5dvj2yvQB7qZcphEYMucJGDJEuZIrseRFfX8ObKqYrjdkoUwmgVmCr7lJCWhUgGf2B1inXCmmVHD
+  template:
+    metadata:
+      name: ci-dispatch-forgejo
+      namespace: ci-dispatch
+    type: Opaque

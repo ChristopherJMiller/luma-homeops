@@ -1,0 +1,64 @@
+---
+# The five phase 1 alerts, all weekday (D7): none pages. CIDispatchOrphanCompute moves to the 24/7
+# route in phase 2, when orphans cost money; a `tiny` orphan pod dies at its Kubernetes deadline
+# anyway. Cases: alerts_test.yaml, run by scripts/test-ci-dispatch-alerts.sh. Metric names are the
+# ones internal/metrics of ci-dispatch exports. `release: prometheus` selects this rule.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: ci-dispatch-alerts
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+    release: prometheus
+spec:
+  groups:
+    - name: ci-dispatch
+      interval: 60s
+      rules:
+        # The success timestamp moves only when every read succeeded, so this also catches a long
+        # Forgejo or API outage. /healthz does not (a wedge detector), so the pod keeps running.
+        - alert: CIDispatchStale
+          expr: time() - ci_dispatch_loop_last_success_timestamp > 300 or absent(ci_dispatch_loop_last_success_timestamp)
+          for: 2m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ci-dispatch has not completed a loop with every read succeeding for 5 minutes (docs/ci.md)"
+        # Two rules, one name; the reason label tells them apart (promtool --lint-fatal needs it).
+        - alert: CIDispatchLaunchFailing
+          expr: max(ci_dispatch_holds{reason="launch-failing"}) > 0
+          labels:
+            severity: warning
+            reason: held
+          annotations:
+            summary: "ci-dispatch holds a job as launch-failing: three launches did not produce a runner (docs/ci.md)"
+        - alert: CIDispatchLaunchFailing
+          expr: sum(increase(ci_dispatch_launches_total{outcome="error"}[15m])) > 0
+          for: 15m
+          labels:
+            severity: warning
+            reason: errors
+          annotations:
+            summary: "ci-dispatch launches keep failing with errors (docs/ci.md)"
+        - alert: CIDispatchConfigUntrusted
+          expr: ci_dispatch_config_verified == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ci-dispatch cannot verify the Owner-signed limits (ci.yaml): it runs on the last verified copy or the code defaults (docs/ci.md)"
+        - alert: CIDispatchOrphanCompute
+          expr: max by (kind) (ci_dispatch_orphans) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ci-dispatch sees a ci-tiny Job or runner it has no launch for, for 15 minutes; the reaper should have removed it (docs/ci.md)"
+        - alert: CITinyQuotaFull
+          expr: kube_resourcequota{namespace="ci-tiny",resource="pods",type="used"} >= ignoring(type) kube_resourcequota{namespace="ci-tiny",resource="pods",type="hard"}
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ci-tiny has used all 3 pods of its quota for 30 minutes; jobs are waiting for a free slot (docs/ci.md)"
