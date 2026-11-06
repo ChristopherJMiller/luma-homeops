@@ -15,8 +15,9 @@ spec:
     - name: netpol-canary
       rules:
         - alert: NetpolCanaryFailing
-          # absent(): the DaemonSet is gone, so nothing checks enforcement.
-          expr: kube_daemonset_status_number_ready{namespace="netpol-canary",daemonset="netpol-probe"} < kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"} or absent(kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"})
+          # absent(): the DaemonSet is gone. == 0: it schedules nothing (a nodeSelector that matches no
+          # node). Either way nothing checks enforcement. Drains leave desired alone: DaemonSets ignore cordons.
+          expr: kube_daemonset_status_number_ready{namespace="netpol-canary",daemonset="netpol-probe"} < kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"} or absent(kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"}) or kube_daemonset_status_desired_number_scheduled{namespace="netpol-canary",daemonset="netpol-probe"} == 0
           for: 15m
           labels:
             severity: warning
