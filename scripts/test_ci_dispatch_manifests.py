@@ -42,11 +42,11 @@ FORGE_BOT_KEYRING = REPO / "cluster/forge-bot/keyring"
 RENOVATE = REPO / ".renovaterc.json"
 IMAGE = "git.realliance.net/realliance-ops/ci-dispatch"
 IMAGE_RE = r"^git\.realliance\.net/realliance-ops/ci-dispatch:sha-[0-9a-f]{7}@sha256:[0-9a-f]{64}$"
-# Tag v0.1.0 (5a231e90, signed) = main 9055e60, built by ci-dispatch's CI; Chris approved it for
-# deploy (Task 14 Step 4). A new pin is a reviewed commit that changes this line too.
+# Tag v0.2.0 (signed) = main 19b416f, built by ci-dispatch's CI; Chris approved it for
+# deploy (2026-11-06; v0.1.0 was Task 14 Step 4). A new pin is a reviewed commit that changes this line too.
 RELEASE_IMAGE = (
-    "git.realliance.net/realliance-ops/ci-dispatch:sha-9055e60"
-    "@sha256:39ab99aa87f2e76dae145c67fb7e75fc5e2490d7de76cea95f1a4582ad7dc3ef"
+    "git.realliance.net/realliance-ops/ci-dispatch:sha-19b416f"
+    "@sha256:cbd4c59a5150ba18a7a5ac56cfc798957976fd735682ee7c25ef8aeda2eb2d3b"
 )
 # ci-dispatch v0.1.0's shutdown (internal/loop, cmd/ci-dispatch): the step in flight, then the servers.
 SHUTDOWN_GRACE_SECONDS = 20

@@ -3,7 +3,7 @@
 `ci-dispatch` starts one fresh runner for each waiting Forgejo Actions job on `git.realliance.net`,
 within each owner's limits. Argo app `ci-dispatch` (`cluster/ci-dispatch/`) runs it in namespace
 `ci-dispatch`, and its runner Jobs in `ci-tiny`. Code: `git.realliance.net/realliance-ops/ci-dispatch`
-(v0.1.0). Spec: `docs/superpowers/specs/2026-11-04-runner-classes-design.md`. Plan and ledger:
+(v0.2.0). Spec: `docs/superpowers/specs/2026-11-04-runner-classes-design.md`. Plan and ledger:
 `docs/superpowers/plans/2026-11-04-runner-classes-phase-0-1.md` and `.ledger.md` beside it.
 
 | Piece | Where |
@@ -229,6 +229,7 @@ active) and an `outcome` (such as `finished`, `pickup-timeout`, `held` or `error
 | `label`, `denied`, `owner-limit` | hold | A label combination no class takes; a denied owner; out of `tiny` minutes for the day |
 | `invalid` | hold | The job's id, attempt or owner id is zero or less |
 | `launch-failing` | hold | Three tries made no runner, and the key stays held. Fix the cause; the member's rerun gets a new key |
+| `concurrency` | hold | Forgejo lists the job `blocked`: its concurrency group holds it behind an earlier run. Nothing launches until it waits again, and a launch already made for it is undone as held at once. Needs a forge with realliance/forgejo#14; on stock Forgejo the job shows `waiting` and the pickup timeout catches it as `backoff` |
 
 ## Alerts
 

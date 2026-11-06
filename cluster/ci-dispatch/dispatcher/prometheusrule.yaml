@@ -2,7 +2,7 @@
 # The eight phase 1 alerts (nine rules), all weekday (D7): none pages. CIDispatchOrphanCompute moves
 # to the 24/7 route in phase 2, when orphans cost money; a `tiny` orphan pod dies at its Kubernetes
 # deadline anyway. Cases: alerts_test.yaml, run by scripts/test-ci-dispatch-alerts.sh. Metric names
-# are the ones internal/metrics of ci-dispatch v0.1.0 exports. `release: prometheus` selects this rule.
+# are the ones internal/metrics of ci-dispatch v0.2.0 exports. `release: prometheus` selects this rule.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
