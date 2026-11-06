@@ -62,15 +62,18 @@ off='{"spec":{"syncPolicy":{"automated":null}}}'
 kubectl -n argo-cd patch application applications --type merge -p "$off"
 kubectl -n argo-cd patch application ci-dispatch --type merge -p "$off"
 kubectl -n ci-dispatch scale statefulset ci-dispatch --replicas=0
-kubectl -n ci-dispatch wait --for=delete pod/ci-dispatch-0 --timeout=90s   # timed out: STOP
-kubectl -n ci-tiny delete jobs --all       # each Job takes its Secret and pod
-kubectl -n ci-tiny get jobs,pods,secrets   # repeat until it lists nothing: pods take up to 30 s
+kubectl -n ci-dispatch wait --for=delete pod/ci-dispatch-0 --timeout=90s
+kubectl -n ci-tiny delete jobs --all
+kubectl -n ci-tiny get jobs,pods,secrets
 ```
 
 Wait for the pod before deleting: a launch in flight runs on for up to 20 s after the scale and can
 still create a Job. If the `wait` times out, on an unreachable node say, the dispatcher may still be
-running: stop there, and see node loss under Known limits. Delete every Job, not only the labelled
-ones: a compromised dispatcher's Kubernetes credentials can create Jobs with any labels.
+running, so stop there and see node loss under Known limits. Delete every Job, not only the labelled
+ones: a compromised dispatcher's Kubernetes credentials can create Jobs with any labels. Each Job
+takes its Secret and pod with it. Repeat the last `get` until it lists nothing: pods take up to 30 s.
+The code blocks in this file carry no trailing comments, because Chris's shell (`zsh`) has
+`interactivecomments` off, and a pasted `# …` would become arguments.
 
 Then make it last in git: pause `tiny`, which passes the hooks. Only once that change is on `main`,
 restore Argo: patch `applications` back to
@@ -173,9 +176,11 @@ nothing can `exec` into the pod: read the log, `ci-tiny` and the usage API.
 
 ```bash
 export KUBECONFIG=/tmp/galaxy-kubeconfig KEY=203-1
-kubectl -n ci-dispatch logs ci-dispatch-0 | grep "\"key\":\"$KEY\""   # since the pod started
-kubectl -n ci-tiny get jobs,pods -l ci-dispatch/key=$KEY               # gone once the Job ends
+kubectl -n ci-dispatch logs ci-dispatch-0 | grep "\"key\":\"$KEY\""
+kubectl -n ci-tiny get jobs,pods -l ci-dispatch/key=$KEY
 ```
+
+The log covers the time since the pod started, and the Job disappears once it ends.
 
 **The decision log in Azure,** by `key`: 31 days, and on a day that hits the 0.25 GB cap the later
 lines are missing. The `log-analytics` extension of `az` fails to install under nix, so query through
@@ -204,15 +209,16 @@ A `decision` line appears once per change of action or reason. `launched`, `laun
 
 ```bash
 kubectl -n ci-dispatch port-forward svc/ci-dispatch 18081:8081 >/dev/null &
-until curl -so /dev/null 127.0.0.1:18081/; do sleep 1; done   # any answer, even 401, means it listens
+until curl -so /dev/null 127.0.0.1:18081/; do sleep 1; done
 T=$(grep '^CI_DISPATCH_USAGE_TOKEN=' ~/Repos/realliance-sso-secrets/forge/secrets.env | cut -d= -f2-)
 u() { printf 'Authorization: Bearer %s\n' "$T" | curl -fsS -H @- "http://127.0.0.1:18081/v1/owners/$1"; }
 u '52/jobs?period=current&limit=200' | jq '.jobs[] | select(.job_id == 203)'
 u '52/usage?period=current' | jq '{tiny, holds, source: .paid.limit_source}'
-kill %%   # the port-forward
+kill %%
 ```
 
-`period` is `current`, `previous` or `YYYY-MM`, in UTC calendar months. `limit` is 50 by default and
+The `until` loop waits for the port-forward: any answer, even a 401, means it listens. `kill %%` ends
+the port-forward. `period` is `current`, `previous` or `YYYY-MM`, in UTC calendar months. `limit` is 50 by default and
 200 at most, newest first. Each launch try is a row, with a `state` (`ended`, `undone`, `reaped`, or
 active) and an `outcome` (such as `finished`, `pickup-timeout`, `held` or `error: <step>`).
 
@@ -260,7 +266,8 @@ On suspicion:
   delete.
 - **Runner secret:** its step 4 (delete the old row) first, then steps 1 to 3. The break-glass
   doesn't pause the Argo app `forgejo-runner`, so step 3 runs as written. The CI of
-  `realliance-ops/ci-dispatch` waits until then.
+  `realliance-ops/ci-dispatch` waits until then. Nobody has tested deleting a row while the runner
+  still holds that connection, so the CI of `galaxy-forge-bot` may stall until step 3 as well.
 
 ### The dispatcher token (`CI_DISPATCH_FORGEJO_TOKEN`)
 
@@ -293,22 +300,33 @@ powerful credential. Secret `ci-dispatch-forgejo`, key `forgejo-token`, source
 3. Commit signed. STOP: ask Chris. Push. Once Argo has synced, run
    `kubectl -n ci-dispatch delete pod ci-dispatch-0`, and wait for `Ready` and
    `ci_dispatch_config_verified` 1.
-4. Revoke the old token with the guarded delete below. STOP: ask Chris (a database write). Then run
-   realliance/sso `tests/forge/test_forge_ci_dispatch.py`.
+4. Revoke the old token. STOP: ask Chris (a database write). Set the two names, then run
+   [the guarded token delete](#the-guarded-token-delete). `OLD` is the old token's name, from
+   `names`; until the first rotation, that name is `ci-dispatch`.
 
-**The guarded token delete.** It runs on the `acid-forgejo` leader, as done for forge-ci's token on
-2026-11-04 (`docs/superpowers/plans/2026-11-04-bots-to-realliance-ops.ledger.md`): one transaction
-that raises unless it deleted exactly one row. `names` lists the account's token names, so run it
-before, to pick `OLD`, and after. `docs/forgejo.md` uses the same block for `realliance-ci`. Never use
-the API route `DELETE /api/v1/users/<account>/tokens/<name>`: the token routes take only password
-basic authentication, which this forge turns off.
+   ```bash
+   ACCT=ci-dispatch OLD=ci-dispatch
+   ```
+
+   Then run realliance/sso `tests/forge/test_forge_ci_dispatch.py`.
+
+### The guarded token delete
+
+It runs on the `acid-forgejo` leader, as done for forge-ci's token on 2026-11-04
+(`docs/superpowers/plans/2026-11-04-bots-to-realliance-ops.ledger.md`): one transaction that raises
+unless it deleted exactly one row. The block sets nothing itself: the caller sets `ACCT` and `OLD`
+first, and an unset one aborts it. `names` lists the account's token names before and after, and the
+delete runs only if `OLD` is among them. `docs/forgejo.md` uses the same block for `realliance-ci`.
+Never use the API route `DELETE /api/v1/users/<account>/tokens/<name>`: the token routes take only
+password basic authentication, which this forge turns off.
 
 ```bash
-ACCT=ci-dispatch OLD=ci-dispatch   # the account, and the old token's name (the first is ci-dispatch)
+: "${ACCT:?set ACCT, the account}" "${OLD:?set OLD, the old token name}"
 L=$(kubectl -n forgejo get pod -l application=spilo,galaxy=acid-forgejo,spilo-role=master -o name)
 names() { kubectl -n forgejo exec "$L" -c postgres -- psql -U postgres -d forgejo -Atc \
   "SELECT name FROM access_token WHERE uid = (SELECT id FROM \"user\" WHERE lower_name = '$ACCT')"; }
 names
+if names | grep -qx -- "$OLD"; then
 kubectl -n forgejo exec -i "$L" -c postgres -- psql -U postgres -d forgejo -v ON_ERROR_STOP=1 <<SQL
 DO \$\$ DECLARE n int; BEGIN
   DELETE FROM access_token WHERE name = '$OLD'
@@ -317,6 +335,7 @@ DO \$\$ DECLARE n int; BEGIN
   IF n <> 1 THEN RAISE EXCEPTION 'expected 1 row, deleted %', n; END IF;
 END \$\$;
 SQL
+else echo "STOP: $ACCT holds no token named $OLD"; fi
 names
 ```
 
@@ -326,14 +345,14 @@ The bearer token of the usage API. Secret `ci-dispatch-usage`, key `usage-token`
 `cluster/ci-dispatch/dispatcher/usage-token.secret.yaml`. It must be one printable line with no
 whitespace, or the process refuses to start. The process reads it once, at start.
 
-1. A new token in sso-secrets, checked by counts only:
+1. A new token in sso-secrets, checked by counts only: the two counts must read 1 and 0.
 
    ```bash
    cd ~/Repos/realliance-sso-secrets
    openssl rand -hex 32 | { read -r t && [ -n "$t" ] && sed -i '/^CI_DISPATCH_USAGE_TOKEN=/d' forge/secrets.env \
      && printf 'CI_DISPATCH_USAGE_TOKEN=%s\n' "$t" >> forge/secrets.env; }
-   grep '^CI_DISPATCH_USAGE_TOKEN=' forge/secrets.env | cut -d= -f2- | wc -l                         # 1
-   grep '^CI_DISPATCH_USAGE_TOKEN=' forge/secrets.env | cut -d= -f2- | LC_ALL=C grep -c '[^[:graph:]]'  # 0
+   grep '^CI_DISPATCH_USAGE_TOKEN=' forge/secrets.env | cut -d= -f2- | wc -l
+   grep '^CI_DISPATCH_USAGE_TOKEN=' forge/secrets.env | cut -d= -f2- | LC_ALL=C grep -c '[^[:graph:]]'
    git commit -S -am "forge: rotate the ci-dispatch usage token" && git push
    ```
 
@@ -379,7 +398,7 @@ The `galaxy` runner's repo-scoped connection for `realliance-ops/ci-dispatch`: s
    S=$S U=$U yq -i '.data."config.yml" |= (@base64d | from_yaml
      | .server.connections."galaxy-ci-dispatch".uuid = strenv(U)
      | .server.connections."galaxy-ci-dispatch".token = strenv(S) | to_yaml | @base64)' $f
-   yq '.data."config.yml" | @base64d | from_yaml | .server.connections | keys' $f   # names only
+   yq '.data."config.yml" | @base64d | from_yaml | .server.connections | keys' $f
    unset S
    ```
 
@@ -405,7 +424,7 @@ receives other repos' jobs.
 ```bash
 cd ~/Repos/realliance-sso && nix develop --command pytest tests/forge/test_forge_ci_dispatch.py -k site_admins
 T=$(grep '^FORGEJO_ADMIN_TOKEN=' ~/Repos/realliance-sso-secrets/forge/secrets.env | cut -d= -f2-)
-get() {  # every page of an admin listing: get '<path>?<query>'
+get() {
   for p in $(seq 1 10); do
     printf 'Authorization: token %s\n' "$T" \
       | curl -fsS -H @- "https://git.realliance.net/api/v1$1&limit=50&page=$p"
@@ -416,6 +435,8 @@ get '/admin/users?' | jq -r '.[] | select(.source_id == 0) | .login'
 get '/admin/actions/runners?visible=true' \
   | jq -r '.[] | select(.ephemeral | not) | "\(.id) \(.name) owner=\(.owner_id) repo=\(.repo_id)"'
 ```
+
+`get '<path>?<query>'` reads every page of an administrator listing.
 
 | List | Expected |
 |---|---|
@@ -438,8 +459,10 @@ kubectl create namespace ci-probe
 kubectl label namespace ci-probe pod-security.kubernetes.io/enforce=restricted
 CI_DRILL=runner-proofs CI_DRILL_REPORT=<scratch>/runner-proofs.json \
   nix develop --command pytest tests/forge/test_forge_runner_proofs.py -v
-kubectl delete namespace ci-probe   # S4: ask Chris
+kubectl delete namespace ci-probe
 ```
+
+Deleting the namespace is an S4 ask: ask Chris first.
 
 - Run one drill at a time. Its leftover sweep has no lock, so a second drill can delete the first
   one's runners.
