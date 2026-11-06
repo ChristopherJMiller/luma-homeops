@@ -20,10 +20,13 @@ listing.
 Phase 2 (Task 18) adds the paid classes `small` and `medium` in dry-run, the
 Azure credential, the dispatcher's internet egress on TCP 443, the money alerts
 and the ledger's restic backup. Its config needs v0.2.0, which phase 2 Task 16
-releases. Until then the StatefulSet pins `sha-PENDING`, and
-test_dispatcher_image_pinned is xfail (strict). The commit that pins v0.2.0 sets
-RELEASE_IMAGE and deletes the marker; test_dispatcher_image_pending keeps the
-pin and RELEASE_IMAGE in step, and refuses v0.1.0 outright.
+releases. Until then the StatefulSet pins an unpullable placeholder
+(`sha-PENDING@sha256:` and 64 zeros), and the branch carries the marker
+cluster/ci-dispatch/dispatcher/.release-pending, which names the one branch the
+placeholder may be committed on. test_dispatcher_image_pending FAILS anywhere
+else, main included. Task 19's re-pin is one commit: delete the marker, set the
+image, set RELEASE_IMAGE. Without the marker the pin must equal RELEASE_IMAGE
+exactly, and v0.1.0 is refused outright.
 """
 
 import fnmatch
@@ -58,10 +61,12 @@ V010_IMAGE = (
     "git.realliance.net/realliance-ops/ci-dispatch:sha-9055e60"
     "@sha256:39ab99aa87f2e76dae145c67fb7e75fc5e2490d7de76cea95f1a4582ad7dc3ef"
 )
-# v0.2.0 is not released yet (phase 2 Task 16). The StatefulSet pins PENDING_IMAGE until then. The
-# commit that pins the release sets RELEASE_IMAGE to its sha-<7>@sha256:<64> and deletes the xfail
-# marker on test_dispatcher_image_pinned. A new pin is a reviewed commit that changes this line too.
-PENDING_IMAGE = f"{IMAGE}:sha-PENDING"
+# v0.2.0 is not released yet (phase 2 Task 16). The StatefulSet pins PENDING_IMAGE until then: a
+# digest no registry can serve, so no push makes it pullable (review M2). RELEASE_PENDING marks the
+# branch it may live on. The commit that pins the release deletes RELEASE_PENDING and sets
+# RELEASE_IMAGE to its sha-<7>@sha256:<64>. A new pin is a reviewed commit that changes this line too.
+PENDING_IMAGE = f"{IMAGE}:sha-PENDING@sha256:{'0' * 64}"
+RELEASE_PENDING = REPO / "cluster/ci-dispatch/dispatcher/.release-pending"
 RELEASE_IMAGE = None
 # ci-dispatch v0.1.0's shutdown (internal/loop, cmd/ci-dispatch): the step in flight, then the servers.
 SHUTDOWN_GRACE_SECONDS = 20
@@ -361,24 +366,50 @@ def _image(docs: list[dict]) -> str:
     return one(docs, "StatefulSet", "ci-dispatch")["spec"]["template"]["spec"]["containers"][0]["image"]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="phase 2 Task 16 releases v0.2.0; the pin is sha-PENDING until then. "
-    "The re-pin commit sets RELEASE_IMAGE and deletes this marker.",
-)
+def _pending_branch() -> str | None:
+    """The branch RELEASE_PENDING names, or None once the file is gone (the release is pinned)."""
+    if not RELEASE_PENDING.is_file():
+        return None
+    m = re.search(r"^branch: (\S+)$", RELEASE_PENDING.read_text(), re.M)
+    assert m, f"{RELEASE_PENDING.relative_to(REPO)} names no branch"
+    return m.group(1)
+
+
+def _checked_out_branch() -> str | None:
+    """The branch HEAD points at; None when detached. Read-only, so the hook's GIT_* are harmless."""
+    out = subprocess.run(
+        ["git", "-C", str(REPO), "symbolic-ref", "--short", "-q", "HEAD"], capture_output=True, text=True
+    )
+    return out.stdout.strip() or None
+
+
 def test_dispatcher_image_pinned(dispatcher):
+    if _pending_branch() is not None:
+        pytest.skip("v0.2.0 is not pinned yet (.release-pending): test_dispatcher_image_pending holds the placeholder")
     image = _image(dispatcher)
     assert image == RELEASE_IMAGE, f"the pin is not the reviewed release: {image}"
     assert re.match(IMAGE_RE, image), f"image is not a sha-<7>@sha256:<64> pin: {image}"
 
 
 def test_dispatcher_image_pending(dispatcher):
-    """No silent re-pin: sha-PENDING exactly while RELEASE_IMAGE is unset, the release once it is set,
-    and never v0.1.0, which refuses this config and would crash-loop."""
+    """Review M2: the placeholder only with the marker and only on the branch the marker names, so a
+    commit on main (or anywhere else) fails until the re-pin; without the marker, the release pin
+    exactly; never v0.1.0, which refuses this config and would crash-loop."""
     image = _image(dispatcher)
     assert image != V010_IMAGE, "v0.1.0 refuses phase 2's config (azure, paid, paid classes in dry-run)"
-    assert (image == PENDING_IMAGE) == (RELEASE_IMAGE is None), (
-        "set RELEASE_IMAGE in the same commit that replaces sha-PENDING, and only then"
+    branch = _pending_branch()
+    if branch is None:
+        assert RELEASE_IMAGE is not None and image == RELEASE_IMAGE, (
+            "no .release-pending: the pin must be RELEASE_IMAGE, set in the same commit"
+        )
+        assert re.match(IMAGE_RE, image), f"image is not a sha-<7>@sha256:<64> pin: {image}"
+        return
+    assert image == PENDING_IMAGE, "while .release-pending exists the pin is the placeholder; the re-pin deletes it"
+    assert RELEASE_IMAGE is None, "the re-pin deletes .release-pending in the commit that sets RELEASE_IMAGE"
+    here = _checked_out_branch()
+    assert here == branch, (
+        f"the v0.2.0 placeholder may only be committed on {branch}, not {here}: "
+        "re-pin first (cluster/ci-dispatch/dispatcher/.release-pending says how)"
     )
 
 
