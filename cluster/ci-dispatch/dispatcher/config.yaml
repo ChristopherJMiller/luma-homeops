@@ -6,12 +6,13 @@
 # forgejo-token.yaml and usage-token.yaml); the Azure credential is four files under
 # /etc/ci-dispatch/azure (SealedSecret azure-credentials.yaml).
 #
-# Move a class from dry-run to on only by editing `classes` here and watching the decision log
-# for a day (docs/ci.md; for small and medium, the paid section there). dry-run decides, logs and
-# counts, and launches nothing; the reaper still runs, on the dispatcher's own names only: ci-tiny
-# Jobs, and ci-<class>-<job>-<attempt>-<try> runners and container groups. large has no backend
-# in phase 2: config.Load refuses it in any mode but off. This file equals ci-dispatch's
-# internal/config/testdata/site-config.yaml apart from the class image digest (F9): change both.
+# Move a class from dry-run to on only by editing `classes` here, once its dry-run checks pass
+# (docs/ci.md): a day of the decision log for tiny, the probes for small and medium. dry-run
+# decides, logs and counts, and launches nothing; the reaper still runs, on the dispatcher's own
+# names only: ci-tiny Jobs, and ci-<class>-<job>-<attempt>-<try> runners and container groups.
+# large has no backend in phase 2: config.Load refuses it in any mode but off. This file equals
+# ci-dispatch's internal/config/testdata/site-config.yaml apart from the class image digest (F9):
+# change both.
 forgejo:
   # The in-cluster Service (Forgejo pods, TCP 3000), never the public name through the router.
   url: http://forgejo-http.forgejo.svc.cluster.local:3000
@@ -28,7 +29,8 @@ inventory:
 classes:
   # tiny: dry-run from Task 18, on since Task 19. Quote every mode: YAML 1.1 reads a bare on or off as a bool.
   tiny: "on"
-  # small and medium: dry-run since phase 2 Task 19, for 24 h before on (E14).
+  # small and medium: dry-run since phase 2 Task 19, until its probes pass, then on (Task 21;
+  # Chris, 2026-11-06: probes, not a 24 h dry-run).
   small: "dry-run"
   medium: "dry-run"
   large: "off"
