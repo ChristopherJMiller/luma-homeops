@@ -10,7 +10,7 @@ tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 yq '.spec' "$repo/cluster/backups/prometheusrule.yaml" > "$tmp/rules.yaml"
 
 # CronJob name -> namespace, for every backup the alerts must cover.
-cronjobs="logical-backup-acid-forgejo:forgejo forgejo-dump:forgejo immich-backup:immich"
+cronjobs="logical-backup-acid-forgejo:forgejo forgejo-dump:forgejo immich-backup:immich restic-ci-dispatch:ci-dispatch"
 {
   echo "rule_files: [rules.yaml]"
   echo "evaluation_interval: 1m"

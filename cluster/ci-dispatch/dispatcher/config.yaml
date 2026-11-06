@@ -1,13 +1,17 @@
 ---
 # ci-dispatch's configuration: the Config of internal/config, in snake_case; unknown keys are
 # refused. It becomes the hash-suffixed ConfigMap ci-dispatch-config, so any change here restarts
-# the pod. Public: no secret and no hidden org, team or group name. The two secrets are files
-# under /etc/ci-dispatch/secrets (SealedSecrets forgejo-token.yaml and usage-token.yaml).
+# the pod. Public: no secret, no Azure id (tenant, client, subscription) and no hidden org, team or
+# group name. The two tokens are files under /etc/ci-dispatch/secrets (SealedSecrets
+# forgejo-token.yaml and usage-token.yaml); the Azure credential is four files under
+# /etc/ci-dispatch/azure (SealedSecret azure-credentials.yaml).
 #
 # Move a class from dry-run to on only by editing `classes` here and watching the decision log
-# for a day (docs/ci.md). Only `tiny` can be anything but off in phase 1: config.Load refuses a
-# paid class in another mode. dry-run decides, logs and counts, and launches nothing; the reaper
-# still runs, on the dispatcher's own ci-tiny-<job>-<attempt>-<try> Jobs and runners only.
+# for a day (docs/ci.md; for small and medium, the paid section there). dry-run decides, logs and
+# counts, and launches nothing; the reaper still runs, on the dispatcher's own names only: ci-tiny
+# Jobs, and ci-<class>-<job>-<attempt>-<try> runners and container groups. large has no backend
+# in phase 2: config.Load refuses it in any mode but off. This file equals ci-dispatch's
+# internal/config/testdata/site-config.yaml apart from the class image digest (F9): change both.
 forgejo:
   # The in-cluster Service (Forgejo pods, TCP 3000), never the public name through the router.
   url: http://forgejo-http.forgejo.svc.cluster.local:3000
@@ -24,8 +28,9 @@ inventory:
 classes:
   # tiny: dry-run from Task 18, on since Task 19. Quote every mode: YAML 1.1 reads a bare on or off as a bool.
   tiny: "on"
-  small: "off"
-  medium: "off"
+  # small and medium: dry-run since phase 2 Task 19, for 24 h before on (E14).
+  small: "dry-run"
+  medium: "dry-run"
   large: "off"
 kube:
   namespace: ci-tiny
@@ -44,6 +49,28 @@ tiny:
   # the 3 min the spec fixes stays, which also covers the pod's first seconds before the enforcer
   # enrols its IP (netpol-gate, NetworkPolicy plan B2). Task 19 Step 5 may still adjust it.
   pickup: 3m
+azure:
+  # Phase 2: the paid classes run as Azure Container Instances in westus3 (azure/ci/, terraform
+  # Chris applies). The ids are not here (E9): they are the files of the SealedSecret.
+  files: /etc/ci-dispatch/azure # tenant-id, client-id, subscription-id, client-secret
+  resource_group: rg-realliance-ci # the container groups; the Policy fence and the $85 budget
+  region: westus3
+  guard_resource_group: rg-realliance-ci-guard # the sweeper; never written by the dispatcher
+  sweeper: ci-sweeper # the Logic App whose run history CISweeperStale watches
+  poll: 30s # the container group list, at most this often
+paid:
+  # The class image (images/forgejo-runner-class): digest only, never a tag (F16, T2-N1); the
+  # Policy fence refuses anything else. Like every image we build, a merged base bump does not
+  # ship it (CLAUDE.md sharp edge 6): CI publishes a new sha-<7> build, and the digest here is
+  # re-pinned by hand in its own reviewed commit. Tag sha-4fb0c3b (phase 2 Task 1).
+  image: ghcr.io/christopherjmiller/forgejo-runner-class@sha256:fa7be53e5255636efb27c29e833fbaaa4fe9f144fa7ff066adc66bbff2ba2100
+  price_max_age: 168h # the last retail prices serve up to 7 days, then paid jobs wait
+  classes:
+    # runner_timeout equals runner.timeout in images/forgejo-runner-class/runner-<class>.yml (a test
+    # checks). The container's own timeout wrapper stops it 5 min before hard_stop, even with galaxy
+    # down; the reservation is the hard stop's worst case.
+    small: {runner_timeout: 30m, hard_stop: 40m, pickup: 6m}
+    medium: {runner_timeout: 45m, hard_stop: 55m, pickup: 6m}
 interval: 5s
 sweep: 5m
 ledger: /data/ledger.db

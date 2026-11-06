@@ -8,8 +8,10 @@
 # Out:
 #   - DNS (allow-dns);
 #   - Forgejo's API through the in-cluster Service forgejo-http:3000 (config.yaml forgejo.url);
-#   - the Kubernetes API, to the three node IPs on 6443 (D16).
-# It never dials git.realliance.net or the internet: public_url only builds links for the runners.
+#   - the Kubernetes API, to the three node IPs on 6443 (D16);
+#   - phase 2: Azure and the retail price feed on TCP 443, anywhere on the internet.
+# It never dials git.realliance.net: public_url only builds links for the runners, and the WAN /25
+# the forge resolves to is in the internet rule's except list.
 # The enforcer judges the post-DNAT destination, so the Forgejo and API rules select pods and node
 # IPs, never ClusterIPs (NetworkPolicy spec sections 3.4 and 6.2).
 apiVersion: networking.k8s.io/v1
@@ -53,3 +55,24 @@ spec:
             cidr: 192.168.0.242/32
       ports:
         - {protocol: TCP, port: 6443}
+    # Phase 2 (paid classes): login.microsoftonline.com (the token), management.azure.com (container
+    # groups, egress metrics, cost, the sweeper's run history) and prices.azure.com (retail prices).
+    # Microsoft's addresses move, so this is the internet less egress-internet-only's not-internet
+    # ranges (cluster, LAN, tailnet, our WAN /25), on TCP 443 only. Whoever holds this pod already
+    # holds the Azure credential; the fence, the sweeper and the budget bound what that buys.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8 # pods 10.244.0.0/16, Services 10.96.0.0/12
+              - 100.64.0.0/10 # CGNAT, the tailnet behind the router
+              - 127.0.0.0/8
+              - 169.254.0.0/16 # link-local, metadata-style addresses
+              - 172.16.0.0/12
+              - 192.168.0.0/16 # LAN, nodes, BMCs, KVM, voice VLAN, switch OOB, LB IPs
+              - 224.0.0.0/4 # multicast
+              - 240.0.0.0/4
+              - 152.44.247.0/25 # our WAN /25: the forge and the router's own services
+      ports:
+        - {protocol: TCP, port: 443}

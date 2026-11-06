@@ -4,20 +4,29 @@
 
 Runs as the `ci-dispatch-manifests` pre-commit hook. Everything is rendered with
 `kubectl kustomize`, the same build Argo runs, and checked against the values the
-runner classes plan fixes (docs/superpowers/plans/2026-11-04-runner-classes-phase-0-1.md:
-Global Constraints, D5, D7, D16, Task 17).
+runner classes plans fix (docs/superpowers/plans/2026-11-04-runner-classes-phase-0-1.md:
+Global Constraints, D5, D7, D16, Task 17; docs/superpowers/plans/2026-11-05-runner-classes-phase-2.md:
+Values, E9, E16, E17, F9, F16, F24, F34, T2-N1, Task 18).
 
 These tests never read `*.secret.*` files: they render the SealedSecrets, and open
 only the paths named here.
 
 Deployed
 --------
-DEPLOYED is True: Task 18 listed the Application in
+DEPLOYED is True: phase 1 Task 18 listed the Application in
 cluster/applications/kustomization.yaml, and test_app_registered requires the
-listing. The image is v0.1.0 (Task 14); test_dispatcher_image_pinned holds the
-exact pin.
+listing.
+
+Phase 2 (Task 18) adds the paid classes `small` and `medium` in dry-run, the
+Azure credential, the dispatcher's internet egress on TCP 443, the money alerts
+and the ledger's restic backup. Its config needs v0.2.0, which phase 2 Task 16
+releases. Until then the StatefulSet pins `sha-PENDING`, and
+test_dispatcher_image_pinned is xfail (strict). The commit that pins v0.2.0 sets
+RELEASE_IMAGE and deletes the marker; test_dispatcher_image_pending keeps the
+pin and RELEASE_IMAGE in step, and refuses v0.1.0 outright.
 """
 
+import fnmatch
 import json
 import re
 import subprocess
@@ -43,11 +52,17 @@ RENOVATE = REPO / ".renovaterc.json"
 IMAGE = "git.realliance.net/realliance-ops/ci-dispatch"
 IMAGE_RE = r"^git\.realliance\.net/realliance-ops/ci-dispatch:sha-[0-9a-f]{7}@sha256:[0-9a-f]{64}$"
 # Tag v0.1.0 (5a231e90, signed) = main 9055e60, built by ci-dispatch's CI; Chris approved it for
-# deploy (Task 14 Step 4). A new pin is a reviewed commit that changes this line too.
-RELEASE_IMAGE = (
+# deploy (phase 1 Task 14 Step 4). It refuses phase 2's config (unknown keys azure and paid, a paid
+# class not off) and exits at config.Load, so this tree must never run it.
+V010_IMAGE = (
     "git.realliance.net/realliance-ops/ci-dispatch:sha-9055e60"
     "@sha256:39ab99aa87f2e76dae145c67fb7e75fc5e2490d7de76cea95f1a4582ad7dc3ef"
 )
+# v0.2.0 is not released yet (phase 2 Task 16). The StatefulSet pins PENDING_IMAGE until then. The
+# commit that pins the release sets RELEASE_IMAGE to its sha-<7>@sha256:<64> and deletes the xfail
+# marker on test_dispatcher_image_pinned. A new pin is a reviewed commit that changes this line too.
+PENDING_IMAGE = f"{IMAGE}:sha-PENDING"
+RELEASE_IMAGE = None
 # ci-dispatch v0.1.0's shutdown (internal/loop, cmd/ci-dispatch): the step in flight, then the servers.
 SHUTDOWN_GRACE_SECONDS = 20
 SERVER_SHUTDOWN_SECONDS = 5
@@ -68,16 +83,85 @@ NOT_INTERNET = [
     "152.44.247.0/25",
 ]
 NODES = ["192.168.0.240/32", "192.168.0.241/32", "192.168.0.242/32"]
+# Every alert and its severity (phase 1 D7: weekday `warning`; phase 2 Task 18: the money alerts are
+# `critical`). Alertmanager routes the money set by name to the 24/7 receiver (phase 2 Task 9).
 ALERTS = {
-    "CIDispatchStale",
-    "CIDispatchLaunchFailing",
-    "CIDispatchConfigUntrusted",
-    "CIDispatchStoredConfigRejected",
-    "CIDispatchConfigFindings",
-    "CIDispatchLaunchesUndone",
-    "CIDispatchOrphanCompute",
-    "CITinyQuotaFull",
+    "CIDispatchStale": "warning",
+    "CIDispatchLaunchFailing": "warning",
+    "CIDispatchConfigUntrusted": "warning",
+    "CIDispatchStoredConfigRejected": "warning",
+    "CIDispatchConfigFindings": "warning",
+    "CIDispatchLaunchesUndone": "warning",
+    "CIDispatchOrphanCompute": "critical",
+    "CITinyQuotaFull": "warning",
+    "CIDispatchSpendHigh": "critical",
+    "CIDispatchLocked": "critical",
+    "CISweeperStale": "critical",
+    "CIDispatchDrift": "warning",
+    "CIDispatchPaidNotReady": "warning",
+    "CIDispatchEgressCapHit": "warning",
+    "CIDispatchAzureFailing": "warning",
 }
+# The alerts with two rules, and the label that tells their rules apart (promtool --lint-fatal).
+TWO_RULES = {
+    "CIDispatchLaunchFailing": ("reason", ["errors", "held"]),
+    "CIDispatchSpendHigh": ("level", ["80", "95"]),
+    "CISweeperStale": ("reason", ["absent", "stale"]),
+}
+# Phase 2's rules, exactly (Task 18 Step 2), keyed by name and, for a pair, the telling label.
+PHASE2_RULES = {
+    ("CIDispatchSpendHigh", "80"): (
+        'sum(ci_dispatch_period_usd{kind=~"used|reserved"}) / max(ci_dispatch_period_usd{kind="cap"}) >= 0.80',
+        "5m",
+    ),
+    ("CIDispatchSpendHigh", "95"): (
+        'sum(ci_dispatch_period_usd{kind=~"used|reserved"}) / max(ci_dispatch_period_usd{kind="cap"}) >= 0.95',
+        "5m",
+    ),
+    ("CIDispatchLocked", None): ("max(ci_dispatch_azure_locked) == 1", "2m"),
+    ("CIDispatchOrphanCompute", None): ("max by (kind) (ci_dispatch_orphans) > 0", "15m"),
+    ("CISweeperStale", "stale"): ("time() - max(ci_dispatch_sweeper_last_run_timestamp) > 1800", "2m"),
+    ("CISweeperStale", "absent"): ("absent(ci_dispatch_sweeper_last_run_timestamp)", "30m"),
+    ("CIDispatchDrift", None): ("max(ci_dispatch_drift_ratio) > 0.10", None),
+    ("CIDispatchPaidNotReady", None): (
+        'ci_dispatch_class_mode{class=~"small|medium"} >= 1 and on(class) ci_dispatch_paid_ready == 0',
+        "30m",
+    ),
+    ("CIDispatchEgressCapHit", None): ('increase(ci_dispatch_reaped_total{reason="egress-cap"}[1h]) > 0', None),
+    # The token-failure carry (phase 2 Task 7 review): an expired or rotated client secret answers
+    # AADSTS, which the client reads as ErrRejected, never ErrLocked, so CIDispatchLocked stays quiet.
+    # Every Azure call then fails; a lock is CIDispatchLocked's, so this one stands aside.
+    ("CIDispatchAzureFailing", None): (
+        'sum(increase(ci_dispatch_errors_total{api="azure"}[10m])) > 0 unless on() max(ci_dispatch_azure_locked) == 1',
+        "30m",
+    ),
+}
+
+# Phase 2 (F9): config.Load's `azure` and `paid` sections, Task 13's shape `paid.classes.<c>`.
+AZURE = {
+    "files": "/etc/ci-dispatch/azure",
+    "resource_group": "rg-realliance-ci",
+    "region": "westus3",
+    "guard_resource_group": "rg-realliance-ci-guard",
+    "sweeper": "ci-sweeper",
+    "poll": "30s",
+}
+PAID_CLASSES = {
+    "small": {"runner_timeout": "30m", "hard_stop": "40m", "pickup": "6m"},
+    "medium": {"runner_timeout": "45m", "hard_stop": "55m", "pickup": "6m"},
+}
+PULL_ALLOWANCE_SECONDS = 300  # aci.PullAllowance: the timeout wrapper is hard stop less this
+CLASS_IMAGE_RE = r"^ghcr\.io/christopherjmiller/forgejo-runner-class@sha256:[0-9a-f]{64}$"
+CLASS_IMAGE_DIR = REPO / "images/forgejo-runner-class"
+FENCE = REPO / "azure/ci/fence.json"
+# The SealedSecret ci-dispatch-azure: azure.LoadCredentials reads one file per key, by these names.
+AZURE_KEYS = ["tenant-id", "client-id", "subscription-id", "client-secret"]
+# The config tier's restic repo (docs/backups.md); the copy in ci-dispatch has the source's keys.
+RESTIC_SOURCE = REPO / "cluster/music-streaming/restic-config.yaml"
+RESTIC_HOST = "ci-dispatch-ledger"
+BACKUPS_RULE = REPO / "cluster/backups/prometheusrule.yaml"
+CANARY = REPO / "cluster/backups/restic-canary-cronjob.yaml"
+GUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
 # internal/metrics FindingKinds of v0.1.0, less stored-config-rejected (its own counter alerts).
 FINDING_KINDS = {"owner-name-stale", "owner-name-missing", "owner-names-unchecked"}
 # One Forgejo-held key's whole back-off schedule (3 min pickup, then 1/2/5/10/10 min) fits six
@@ -249,7 +333,8 @@ def test_dispatcher_pod(dispatcher):
     assert mounts["ledger"]["mountPath"] == "/data"
     assert vols["tmp"]["emptyDir"] == {"sizeLimit": "64Mi"}
     assert mounts["tmp"]["mountPath"] == "/tmp"
-    for name in ("config", "keyring", "secrets", "kube"):
+    assert set(vols) == {"ledger", "tmp", "config", "keyring", "secrets", "kube", "azure"}
+    for name in ("config", "keyring", "secrets", "kube", "azure"):
         assert mounts[name]["readOnly"] is True, name
 
     # The API token: automount is off, so a projected one with an hour's life, plus the CA bundle.
@@ -270,11 +355,29 @@ def test_dispatcher_pod(dispatcher):
     }
 
 
+def _image(docs: list[dict]) -> str:
+    return one(docs, "StatefulSet", "ci-dispatch")["spec"]["template"]["spec"]["containers"][0]["image"]
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="phase 2 Task 16 releases v0.2.0; the pin is sha-PENDING until then. "
+    "The re-pin commit sets RELEASE_IMAGE and deletes this marker.",
+)
 def test_dispatcher_image_pinned(dispatcher):
-    sts = one(dispatcher, "StatefulSet", "ci-dispatch")
-    image = sts["spec"]["template"]["spec"]["containers"][0]["image"]
+    image = _image(dispatcher)
+    assert image == RELEASE_IMAGE, f"the pin is not the reviewed release: {image}"
     assert re.match(IMAGE_RE, image), f"image is not a sha-<7>@sha256:<64> pin: {image}"
-    assert image == RELEASE_IMAGE
+
+
+def test_dispatcher_image_pending(dispatcher):
+    """No silent re-pin: sha-PENDING exactly while RELEASE_IMAGE is unset, the release once it is set,
+    and never v0.1.0, which refuses this config and would crash-loop."""
+    image = _image(dispatcher)
+    assert image != V010_IMAGE, "v0.1.0 refuses phase 2's config (azure, paid, paid classes in dry-run)"
+    assert (image == PENDING_IMAGE) == (RELEASE_IMAGE is None), (
+        "set RELEASE_IMAGE in the same commit that replaces sha-PENDING, and only then"
+    )
 
 
 def test_pvc_kept(dispatcher):
@@ -343,7 +446,8 @@ def _seconds(s: str) -> int:
 
 def test_config_values(dispatcher):
     cfg = dispatcher_config(dispatcher)
-    assert cfg["classes"] == {"tiny": "on", "small": "off", "medium": "off", "large": "off"}
+    # Phase 2 (F9): the paid classes in dry-run, large with no backend, tiny as phase 1 Task 19 left it.
+    assert cfg["classes"] == {"tiny": "on", "small": "dry-run", "medium": "dry-run", "large": "off"}
     assert cfg["forgejo"]["url"] == "http://forgejo-http.forgejo.svc.cluster.local:3000"
     assert cfg["forgejo"]["public_url"] == "https://git.realliance.net"
     assert cfg["inventory"]["repo"] == "realliance-ops/forge"
@@ -368,9 +472,62 @@ def test_config_values(dispatcher):
         cfg["kube"]["ca_file"],
         cfg["ledger"],
         cfg["snapshots"],
+        cfg["azure"]["files"],
     ):
         assert any(key == m or key.startswith(m + "/") for m in mounts), f"{key} is not under any mount"
     assert cfg["ledger"].startswith("/data/") and cfg["snapshots"].startswith("/data/")
+    # terminationGracePeriodSeconds 30 assumes the default 20 s step budget; every Azure call runs under it.
+    assert _seconds(cfg.get("step_budget", "20s")) <= SHUTDOWN_GRACE_SECONDS
+
+    # Azure (E9): names and region only; the tenant, client and subscription ids are in the SealedSecret.
+    assert cfg["azure"] == AZURE
+    paid = cfg["paid"]
+    assert set(paid) == {"image", "price_max_age", "classes"}, "no money key: the ceilings are code (I3)"
+    assert paid["price_max_age"] == "168h"
+    assert paid["classes"] == PAID_CLASSES
+    for c, v in paid["classes"].items():
+        hard, timeout, pickup = (_seconds(v[k]) for k in ("hard_stop", "runner_timeout", "pickup"))
+        # config.Load's own rules (Task 13): a hard stop of 1 h at most, the timeout wrapper
+        # (hard stop less the pull allowance) above the runner timeout, the pickup inside the hard stop.
+        assert hard <= 3600 and hard - PULL_ALLOWANCE_SECONDS > timeout and pickup < hard, c
+    # The class image: digest only, never a tag or tag@digest (F16, T2-N1), and one the fence admits.
+    image = paid["image"]
+    assert re.match(CLASS_IMAGE_RE, image), f"not a digest-only class image pin: {image}"
+    fence = json.loads(FENCE.read_text())
+    assert fnmatch.fnmatchcase(image, fence["image_like"]), "the Policy fence's `like` refuses it"
+    assert fence["image_contains"] in image
+
+
+def test_paid_runner_timeouts_match_image(dispatcher):
+    """The runner's own timeout, baked into the class image, is the one the dispatcher plans with."""
+    classes = dispatcher_config(dispatcher)["paid"]["classes"]
+    for c in ("small", "medium"):
+        runner = yaml.safe_load((CLASS_IMAGE_DIR / f"runner-{c}.yml").read_text())
+        assert _seconds(runner["runner"]["timeout"]) == _seconds(classes[c]["runner_timeout"]), c
+
+
+def test_azure_secret(dispatcher):
+    """E9: the four credential files, from one SealedSecret, read-only, 0440 under fsGroup 65532."""
+    sealed = one(dispatcher, "SealedSecret", "ci-dispatch-azure")
+    assert set(sealed["spec"]["encryptedData"]) == set(AZURE_KEYS)
+    assert sealed["spec"]["template"]["metadata"]["name"] == "ci-dispatch-azure"
+    assert sealed["spec"]["template"]["metadata"]["namespace"] == "ci-dispatch"
+    spec = one(dispatcher, "StatefulSet", "ci-dispatch")["spec"]["template"]["spec"]
+    assert spec["securityContext"]["fsGroup"] == 65532
+    vol = next(v for v in spec["volumes"] if v["name"] == "azure")
+    assert vol["projected"]["defaultMode"] == 0o440
+    assert vol["projected"]["sources"] == [
+        {"secret": {"name": "ci-dispatch-azure", "items": [{"key": k, "path": k} for k in AZURE_KEYS]}}
+    ]
+    (c,) = spec["containers"]
+    mount = next(m for m in c["volumeMounts"] if m["name"] == "azure")
+    assert mount == {"name": "azure", "mountPath": AZURE["files"], "readOnly": True}
+    # Only the dispatcher holds it: no other pod template in the namespace names the Secret.
+    for d in dispatcher:
+        if d["kind"] in ("CronJob", "Job", "Deployment", "DaemonSet") or (
+            d["kind"] == "StatefulSet" and d["metadata"]["name"] != "ci-dispatch"
+        ):
+            assert "ci-dispatch-azure" not in json.dumps(d), f"{d['kind']}/{d['metadata']['name']} reaches the Azure credential"
 
 
 def test_keyring_matches_forge_bot(dispatcher):
@@ -450,6 +607,18 @@ DISPATCHER_EGRESS = [
     {
         "to": [{"ipBlock": {"cidr": c}} for c in NODES],
         "ports": [{"protocol": "TCP", "port": 6443}],
+    },
+    {  # phase 2 (E17, Azure): the public internet, the not-internet ranges excepted, TCP 443 only
+        "to": [{"ipBlock": {"cidr": "0.0.0.0/0", "except": NOT_INTERNET}}],
+        "ports": [{"protocol": "TCP", "port": 443}],
+    },
+]
+# The ledger's restic job (E16): DNS, then B2 over HTTPS; nothing may dial it.
+RESTIC_EGRESS = [
+    DISPATCHER_EGRESS[0],
+    {
+        "to": [{"ipBlock": {"cidr": "0.0.0.0/0", "except": NOT_INTERNET}}],
+        "ports": [{"protocol": "TCP", "port": 443}],
     },
 ]
 DISPATCHER_INGRESS = [
@@ -543,8 +712,8 @@ def _component(path: str) -> list[dict]:
 
 def test_dispatcher_policy(dispatcher):
     pols = of(dispatcher, "NetworkPolicy")
-    assert {p["metadata"]["name"] for p in pols} == {"default-deny", "allow-dns", "ci-dispatch"}
-    assert len(pols) == 3
+    assert {p["metadata"]["name"] for p in pols} == {"default-deny", "allow-dns", "ci-dispatch", "restic-backup"}
+    assert len(pols) == 4
     for p in pols:
         assert p["metadata"]["namespace"] == "ci-dispatch"
     pol = one(pols, "NetworkPolicy", "ci-dispatch")
@@ -554,7 +723,7 @@ def test_dispatcher_policy(dispatcher):
     assert ing["from"] == [{"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "prometheus"}}}]
     assert ports(ing) == {("TCP", 8080)}, "the usage port is not for the scrape; clients reach it through the Service by policy-visible pods only if added later"
     egress = pol["spec"]["egress"]
-    assert len(egress) == 2
+    assert len(egress) == 3
     forgejo = next(r for r in egress if "podSelector" in r["to"][0])
     assert forgejo["to"] == [
         {
@@ -565,16 +734,24 @@ def test_dispatcher_policy(dispatcher):
         }
     ]
     assert ports(forgejo) == {("TCP", 3000)}
-    api = next(r for r in egress if "ipBlock" in r["to"][0])
+    api = next(r for r in egress if r["to"][0].get("ipBlock", {}).get("cidr") == NODES[0])
     assert [t["ipBlock"]["cidr"] for t in api["to"]] == NODES, "D16: the post-DNAT API server endpoints"
     assert all("except" not in t["ipBlock"] for t in api["to"])
     assert ports(api) == {("TCP", 6443)}
+    # Phase 2: Azure (token, ARM, metrics, cost, the sweeper's runs) and the retail price feed, on
+    # TCP 443 only, to the internet less egress-internet-only's not-internet ranges (the WAN /25
+    # included, so never git.realliance.net through the router).
+    internet = internet_rule(pol)
+    assert internet["to"] == [{"ipBlock": {"cidr": "0.0.0.0/0", "except": NOT_INTERNET}}]
+    only = one(_component(EGRESS_ONLY), "NetworkPolicy", "egress-internet-only")
+    assert internet["to"] == internet_rule(only)["to"], "the same except list as egress-internet-only"
+    assert internet["ports"] == [{"protocol": "TCP", "port": 443}]
     # Each rule carries a comment: the policy says what the pod needs.
     text = (REPO / DISPATCHER / "networkpolicy.yaml").read_text().splitlines()
     for marker in ("ingress:", "egress:"):
         assert any(line.strip() == marker for line in text)
     rule_starts = [i for i, line in enumerate(text) if line.startswith("    - ")]
-    assert len(rule_starts) == 3
+    assert len(rule_starts) == 4
     for i in rule_starts:
         assert text[i - 1].strip().startswith("#"), f"rule at line {i + 1} has no comment above it"
 
@@ -596,13 +773,19 @@ def test_monitoring(dispatcher):
     for pr in of(dispatcher, "PrometheusRule"):
         assert pr["metadata"]["labels"]["release"] == "prometheus", pr["metadata"]["name"]
     rules = [r for g in rule["spec"]["groups"] for r in g["rules"]]
-    assert {r["alert"] for r in rules} == ALERTS
-    assert len(rules) == len(ALERTS) + 1, "CIDispatchLaunchFailing has two rules"
+    assert {r["alert"] for r in rules} == set(ALERTS)
+    assert len(rules) == len(ALERTS) + len(TWO_RULES), "each alert in TWO_RULES has two rules, the rest one"
     for r in rules:
-        assert r["labels"]["severity"] == "warning", f"{r['alert']}: D7, every phase 1 alert is weekday"
-    launch = [r for r in rules if r["alert"] == "CIDispatchLaunchFailing"]
-    assert sorted(r["labels"]["reason"] for r in launch) == ["errors", "held"]
-    by_name = {r["alert"]: r for r in rules if r["alert"] != "CIDispatchLaunchFailing"}
+        assert r["labels"]["severity"] == ALERTS[r["alert"]], r["alert"]
+    for name, (label, values) in TWO_RULES.items():
+        pair = [r for r in rules if r["alert"] == name]
+        assert sorted(r["labels"][label] for r in pair) == values, name
+    for (name, tell), (expr, for_) in PHASE2_RULES.items():
+        label = TWO_RULES[name][0] if name in TWO_RULES else None
+        (r,) = [r for r in rules if r["alert"] == name and (label is None or r["labels"][label] == tell)]
+        assert r["expr"].strip() == expr, (name, tell)
+        assert r.get("for") == for_, (name, tell)
+    by_name = {r["alert"]: r for r in rules if r["alert"] not in TWO_RULES}
     # A counter that only grows in a process: any rejection since start, not a recent increase.
     assert by_name["CIDispatchStoredConfigRejected"]["expr"] == "ci_dispatch_store_rejected_total > 0"
     # The findings alert names its kinds and leaves stored-config-rejected to the counter's alert.
@@ -635,10 +818,122 @@ def test_renovate_never_automerges_ci_dispatch():
 def test_no_plain_secrets(whole):
     assert of(whole, "Secret") == [], "the render holds SealedSecrets only"
     sealed = {d["metadata"]["name"]: d for d in of(whole, "SealedSecret")}
-    assert set(sealed) == {"ci-dispatch-forgejo", "ci-dispatch-usage"}
-    for name, key in (("ci-dispatch-forgejo", "forgejo-token"), ("ci-dispatch-usage", "usage-token")):
+    restic_keys = set(yaml.safe_load(RESTIC_SOURCE.read_text())["spec"]["encryptedData"])
+    expected = {
+        "ci-dispatch-forgejo": {"forgejo-token"},
+        "ci-dispatch-usage": {"usage-token"},
+        "ci-dispatch-azure": set(AZURE_KEYS),
+        "restic-config": restic_keys,  # the config tier's repo, the source's keys exactly
+    }
+    assert set(sealed) == set(expected)
+    for name, keys in expected.items():
         s = sealed[name]
         assert s["metadata"]["namespace"] == "ci-dispatch"
-        assert set(s["spec"]["encryptedData"]) == {key}
-        assert len(s["spec"]["encryptedData"][key]) > 200, "a sealed value, not a placeholder"
+        assert set(s["spec"]["encryptedData"]) == keys, name
+        for key in keys:
+            assert len(s["spec"]["encryptedData"][key]) > 200, f"{name}/{key}: a sealed value, not a placeholder"
         assert s["spec"]["template"]["metadata"]["namespace"] == "ci-dispatch"
+
+
+def test_no_guid_in_public_files():
+    """E9, F14: no UUID-shaped string in cluster/ci-dispatch outside `*.secret.*`. The tenant, client
+    and subscription ids live in the SealedSecret only. The message names locations, never values."""
+    files = [p for p in sorted((REPO / ROOT).rglob("*")) if p.is_file() and ".secret." not in p.name]
+    assert files, f"nothing under {ROOT}"
+    hits = [
+        f"{p.relative_to(REPO)}:{n}"
+        for p in files
+        for n, line in enumerate(p.read_text(errors="replace").splitlines(), 1)
+        if GUID.search(line)
+    ]
+    assert not hits, f"UUID-shaped strings at {hits}"
+
+
+def test_restic_ledger_job(dispatcher):
+    """E16, F34: the ledger's nightly snapshots go to the config tier's restic repo at 03:50 UTC,
+    after the dispatcher's 03:00 snapshot, from a pod Pod Security `restricted` admits."""
+    cj = one(dispatcher, "CronJob", "restic-ci-dispatch")
+    assert cj["metadata"]["namespace"] == "ci-dispatch"
+    assert cj["metadata"]["labels"]["app.kubernetes.io/name"] == "restic-backup"
+    spec = cj["spec"]
+    assert spec["schedule"] == "50 3 * * *"
+    assert spec["concurrencyPolicy"] == "Forbid"
+    tmpl = spec["jobTemplate"]["spec"]["template"]
+    assert tmpl["metadata"]["labels"] == {"app.kubernetes.io/name": "restic-backup"}
+    ps = tmpl["spec"]
+    assert ps["restartPolicy"] == "Never"
+    assert ps["automountServiceAccountToken"] is False
+    sc = ps["securityContext"]
+    assert sc["runAsUser"] == 65532 and sc["runAsGroup"] == 65532 and sc["runAsNonRoot"] is True
+    assert sc["seccompProfile"] == {"type": "RuntimeDefault"}
+    assert "fsGroup" not in sc, "a read-only mount; nothing to chown"
+    (c,) = ps["containers"]
+    assert c["securityContext"] == {
+        "allowPrivilegeEscalation": False,
+        "readOnlyRootFilesystem": True,
+        "capabilities": {"drop": ["ALL"]},
+    }
+    env = {e["name"]: e["value"] for e in c["env"]}
+    assert env == {"RESTIC_CACHE_DIR": "/cache", "HOME": "/tmp", "RESTIC_HOST": RESTIC_HOST}
+    assert c["envFrom"] == [{"secretRef": {"name": "restic-config"}}]
+    # The ledger PVC, read-only on both sides; emptyDirs for the cache and HOME.
+    vols = {v["name"]: v for v in ps["volumes"]}
+    mounts = {m["mountPath"]: m for m in c["volumeMounts"]}
+    assert set(mounts) == {"/data", "/cache", "/tmp"}
+    assert set(vols) == {m["name"] for m in mounts.values()}
+    assert mounts["/data"]["readOnly"] is True
+    assert vols[mounts["/data"]["name"]]["persistentVolumeClaim"] == {"claimName": "ci-dispatch-ledger", "readOnly": True}
+    for path in ("/cache", "/tmp"):
+        assert "emptyDir" in vols[mounts[path]["name"]], path
+    # Only /data/snapshots: the live ledger.db may be mid-write; the snapshots are whole files.
+    script = "\n".join(c["args"])
+    backups = re.findall(r"^\s*restic backup ([^\n]*)", script, re.M)
+    assert len(backups) == 1 and backups[0].split()[:3] == ["/data/snapshots", "--host", '"$RESTIC_HOST"'], backups
+    # The PVC is RBD (RWO): the job runs on the dispatcher's node.
+    assert ps["affinity"] == {
+        "podAffinity": {
+            "requiredDuringSchedulingIgnoredDuringExecution": [
+                {
+                    "topologyKey": "kubernetes.io/hostname",
+                    "labelSelector": {"matchLabels": {"app.kubernetes.io/name": "ci-dispatch"}},
+                }
+            ]
+        }
+    }
+    # The same restic as every other job in the config tier.
+    others = set()
+    for p in (REPO / "cluster").rglob("*.yaml"):
+        if ".secret." in p.name or p.parent == REPO / DISPATCHER:
+            continue
+        others |= set(re.findall(r"image:\s*(ghcr\.io/restic/restic\S*)", p.read_text(errors="replace")))
+    assert len(others) == 1 and c["image"] == others.pop()
+
+
+def test_restic_policy(dispatcher):
+    """The restic pods: DNS and B2 over HTTPS out, nothing in."""
+    labels = {"app.kubernetes.io/name": "restic-backup"}
+    assert union(dispatcher, "ci-dispatch", "egress", labels) == canon(RESTIC_EGRESS, "egress")
+    assert union(dispatcher, "ci-dispatch", "ingress", labels) == []
+    pol = one(dispatcher, "NetworkPolicy", "restic-backup")
+    assert pol["spec"]["podSelector"] == {"matchLabels": labels}
+    assert pol["spec"]["policyTypes"] == ["Ingress", "Egress"]
+    assert "ingress" not in pol["spec"]
+    text = (REPO / DISPATCHER / "restic-networkpolicy.yaml").read_text().splitlines()
+    rule_starts = [i for i, line in enumerate(text) if line.startswith("    - ")]
+    assert len(rule_starts) == 1 and text[rule_starts[0] - 1].strip().startswith("#")
+
+
+def test_backup_alerts_cover_ledger():
+    """The backups alerts and the monthly canary know the new job and host."""
+    groups = yaml.safe_load(BACKUPS_RULE.read_text())["spec"]["groups"]
+    rules = {r["alert"]: r for g in groups for r in g["rules"]}
+    for name in ("BackupCronJobStale", "BackupCronJobNeverSucceeded"):
+        regex = re.search(r'cronjob=~"([^"]+)"', rules[name]["expr"]).group(1)
+        assert regex.startswith("restic-(home-assistant|plex|gonic|satellites|ci-dispatch)|"), name
+        assert re.fullmatch(regex, "restic-ci-dispatch"), name
+    failed = re.search(r'job_name=~"([^"]+)"', rules["BackupJobFailed"]["expr"]).group(1)
+    assert re.fullmatch(failed, "restic-ci-dispatch-29380000")
+    canary = yaml.safe_load(CANARY.read_text())
+    script = canary["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]["args"][-1]
+    hosts = [line.strip() for line in script.splitlines() if line.strip().startswith(f"{RESTIC_HOST}|")]
+    assert hosts == [f"{RESTIC_HOST}|-"], "snapshot-exists only: the newest snapshot file's name changes nightly"

@@ -1,0 +1,104 @@
+---
+# Nightly restic snapshot of the usage ledger's own snapshots into the config tier's restic repo
+# (docs/backups.md, host ci-dispatch-ledger). Phase 2 (E16, F34): the ledger now holds money, so it
+# leaves the cluster. The dispatcher writes /data/snapshots at 03:00 UTC (the newest seven, whole
+# files); this runs at 03:50 and backs up only that directory, never the live ledger.db, which
+# SQLite may be mid-write.
+#
+# The PVC is RBD (RWO): the pod runs on ci-dispatch-0's node (podAffinity) and mounts it read-only.
+# It runs as the dispatcher's uid 65532, which owns the snapshots, so the namespace stays Pod
+# Security `restricted`: no root, no DAC_OVERRIDE (unlike the other config-tier jobs). Credentials:
+# the SealedSecret restic-config.yaml, a copy of the config tier's (music-streaming), same keys.
+# Network: restic-networkpolicy.yaml (DNS, then B2 over HTTPS). Alerts: cluster/backups (stale,
+# never succeeded, failed); the monthly canary checks a snapshot of this host exists.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: restic-ci-dispatch
+  labels:
+    app.kubernetes.io/name: restic-backup
+    backup-tier: config
+spec:
+  schedule: "50 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: restic-backup
+        spec:
+          restartPolicy: Never # each attempt keeps its pod (and logs); OnFailure deletes them at backoffLimit
+          automountServiceAccountToken: false
+          enableServiceLinks: false
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - topologyKey: kubernetes.io/hostname
+                  labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: ci-dispatch
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532 # the dispatcher's uid: it owns /data/snapshots
+            runAsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: restic
+              image: ghcr.io/restic/restic:0.19.1@sha256:2f0373803493361f9304a57150d464677f69a9dad487afec202105aafb2592f2
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: [ALL]
+              envFrom:
+                - secretRef:
+                    name: restic-config
+              env:
+                - name: RESTIC_CACHE_DIR
+                  value: /cache
+                # restic and its TLS stack look under HOME; the root is read-only.
+                - name: HOME
+                  value: /tmp
+                - name: RESTIC_HOST
+                  value: ci-dispatch-ledger
+              command: ["/bin/sh"]
+              args:
+                - -c
+                - |
+                  set -eu
+                  echo "restic backup $RESTIC_HOST start $(date -u +%FT%TZ)"
+                  restic backup /data/snapshots --host "$RESTIC_HOST" --tag ci-dispatch --tag config --retry-lock 15m --no-scan --cleanup-cache
+                  restic snapshots --host "$RESTIC_HOST" --latest 1 --compact
+                  echo "restic backup $RESTIC_HOST done $(date -u +%FT%TZ)"
+              volumeMounts:
+                - name: data
+                  mountPath: /data
+                  readOnly: true
+                - name: cache
+                  mountPath: /cache
+                - name: tmp
+                  mountPath: /tmp
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: "1"
+                  memory: 512Mi
+          volumes:
+            - name: data
+              persistentVolumeClaim:
+                claimName: ci-dispatch-ledger # pvc.yaml
+                readOnly: true
+            - name: cache
+              emptyDir: {}
+            - name: tmp
+              emptyDir:
+                sizeLimit: 64Mi

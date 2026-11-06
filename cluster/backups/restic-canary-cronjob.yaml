@@ -54,7 +54,8 @@ spec:
                   set -u
                   fail=0
                   # host | a path that must exist and be non-empty in every snapshot,
-                  # or "-" = only require that a snapshot exists (volume may be empty)
+                  # or "-" = only require that a snapshot exists (volume may be empty, or,
+                  # for ci-dispatch-ledger, the snapshot file names change every night)
                   while IFS='|' read -r host path; do
                     if [ "$path" = "-" ]; then
                       if restic snapshots --host "$host" --latest 1 --json --retry-lock 15m 2>/dev/null | grep -q '"short_id"'; then
@@ -76,6 +77,7 @@ spec:
                   mm-plex-config|/data/Preferences.xml
                   gonic|/data/gonic.db
                   satellites-cephfs|-
+                  ci-dispatch-ledger|-
                   EOF
                   [ "$fail" = 0 ] && echo "restic canary OK $(date -u +%FT%TZ)" || { echo "restic canary FAILED"; exit 1; }
               volumeMounts:

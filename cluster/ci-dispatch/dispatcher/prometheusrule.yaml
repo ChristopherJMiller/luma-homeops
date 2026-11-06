@@ -1,8 +1,12 @@
 ---
-# The eight phase 1 alerts (nine rules), all weekday (D7): none pages. CIDispatchOrphanCompute moves
-# to the 24/7 route in phase 2, when orphans cost money; a `tiny` orphan pod dies at its Kubernetes
-# deadline anyway. Cases: alerts_test.yaml, run by scripts/test-ci-dispatch-alerts.sh. Metric names
-# are the ones internal/metrics of ci-dispatch v0.1.0 exports. `release: prometheus` selects this rule.
+# Phase 1's eight alerts (nine rules), weekday (D7), and phase 2's seven (nine rules) for the paid
+# classes. The money alerts are `critical`: CIDispatchSpendHigh, CIDispatchLocked,
+# CIDispatchOrphanCompute (since phase 2, when an orphan is a container group that bills) and
+# CISweeperStale. Alertmanager routes them, with CIDispatchDrift and CIDispatchPaidNotReady, by name
+# to the 24/7 receiver (cluster/prometheus-stack/alertmanager-config.secret.yaml, phase 2 Task 9);
+# the rest go to the weekday default. Cases: alerts_test.yaml, run by
+# scripts/test-ci-dispatch-alerts.sh. Metric names are the ones internal/metrics of ci-dispatch v0.2.0
+# exports. `release: prometheus` selects this rule.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
 metadata:
@@ -88,13 +92,15 @@ spec:
             severity: warning
           annotations:
             summary: "ci-dispatch undid more than 7 tiny launches an hour for an hour: jobs Forgejo holds, or crash leftovers, keep taking the launch slot (docs/ci.md)"
+        # Phase 1's expression; `critical` since phase 2, when kind="group" is an Azure container group
+        # that bills until it is gone. A `tiny` orphan pod still dies at its own deadline.
         - alert: CIDispatchOrphanCompute
           expr: max by (kind) (ci_dispatch_orphans) > 0
           for: 15m
           labels:
-            severity: warning
+            severity: critical
           annotations:
-            summary: "ci-dispatch sees a ci-tiny Job or runner it has no launch for, for 15 minutes; the reaper should have removed it (docs/ci.md)"
+            summary: "ci-dispatch sees compute it has no launch for, for 15 minutes: a ci-tiny Job or runner, or a container group in rg-realliance-ci; the reaper should have removed it (docs/ci.md)"
         - alert: CITinyQuotaFull
           expr: kube_resourcequota{namespace="ci-tiny",resource="pods",type="used"} >= ignoring(type) kube_resourcequota{namespace="ci-tiny",resource="pods",type="hard"}
           for: 30m
@@ -102,3 +108,92 @@ spec:
             severity: warning
           annotations:
             summary: "ci-tiny has used all 3 pods of its quota for 30 minutes; jobs are waiting for a free slot (docs/ci.md)"
+    # Phase 2: the paid classes small and medium on Azure Container Instances
+    # (docs/superpowers/plans/2026-11-05-runner-classes-phase-2.md, Task 18).
+    - name: ci-dispatch-paid
+      interval: 60s
+      rules:
+        # Two rules, one name; `level` tells them apart. The global cap is $80 a period, so these fire
+        # at $64 and $76 of used plus reserved money. The gate refuses any launch past the cap itself.
+        - alert: CIDispatchSpendHigh
+          expr: sum(ci_dispatch_period_usd{kind=~"used|reserved"}) / max(ci_dispatch_period_usd{kind="cap"}) >= 0.80
+          for: 5m
+          labels:
+            severity: critical
+            level: "80"
+          annotations:
+            summary: "ci-dispatch's paid spend this period, used plus reserved, is at 80 % of the $80 global cap ($64) (docs/ci.md)"
+        - alert: CIDispatchSpendHigh
+          expr: sum(ci_dispatch_period_usd{kind=~"used|reserved"}) / max(ci_dispatch_period_usd{kind="cap"}) >= 0.95
+          for: 5m
+          labels:
+            severity: critical
+            level: "95"
+          annotations:
+            summary: "ci-dispatch's paid spend this period, used plus reserved, is at 95 % of the $80 global cap ($76): new paid launches stop at the cap (docs/ci.md)"
+        # The gauge comes only from a single-group GET or a PUT answered 403 (and the list's lock
+        # probe, itself a single-group GET), never from an empty list: under the lock ACI lists 200
+        # with no groups. Only Chris's terraform apply restores the role assignment.
+        - alert: CIDispatchLocked
+          expr: max(ci_dispatch_azure_locked) == 1
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Azure has locked ci-dispatch out: the sweeper or the budget removed its role assignment, so paid classes wait not-ready until Chris restores it with a terraform apply (docs/ci.md)"
+        # Two rules, one name; `reason` tells them apart. The timestamp is the end of the sweeper's newest
+        # finished run (a run still going never moves it), read by the dispatcher's watcher every 5 min.
+        # The sweeper runs every 10 min, so 30 min is three missed runs.
+        - alert: CISweeperStale
+          expr: time() - max(ci_dispatch_sweeper_last_run_timestamp) > 1800
+          for: 2m
+          labels:
+            severity: critical
+            reason: stale
+          annotations:
+            summary: "The Azure sweeper ci-sweeper has no finished run in 30 minutes: it is disabled or hung, so nothing but the budget bounds Azure compute (docs/ci.md)"
+        # The watcher cannot read the run history, or has not yet. 30 min rides out a pod move, a 6-min
+        # RBD detach and the break-glass scale to 0; CIDispatchStale covers a missing dispatcher.
+        - alert: CISweeperStale
+          expr: absent(ci_dispatch_sweeper_last_run_timestamp)
+          for: 30m
+          labels:
+            severity: critical
+            reason: absent
+          annotations:
+            summary: "ci-dispatch has not reported the Azure sweeper's last run for 30 minutes: the dispatcher cannot read the sweeper's run history, so nobody watches the sweeper (docs/ci.md)"
+        # The day ratio (D-2, from 06:00 UTC, only when Azure's day is $0.50 or more) and the period
+        # ratio (day 3 of the next month) are set once and held, so no `for`.
+        - alert: CIDispatchDrift
+          expr: max(ci_dispatch_drift_ratio) > 0.10
+          labels:
+            severity: warning
+          annotations:
+            summary: "ci-dispatch's paid charges and Azure's cost differ by over 10 % for a closed day or period (docs/ci.md)"
+        # Per class, in dry-run too (F24): phase 2 Task 19 rolls back on it. Not ready means a lock, a
+        # failed Azure read, prices over price_max_age, or no egress pass in 5 min (E17).
+        - alert: CIDispatchPaidNotReady
+          expr: ci_dispatch_class_mode{class=~"small|medium"} >= 1 and on(class) ci_dispatch_paid_ready == 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "A paid class in dry-run or on has not been ready for 30 minutes (the class label names it): Azure locked or failing, prices over 7 days old, or no egress pass in 5 minutes (docs/ci.md)"
+        # E17: the dispatcher deleted its own group at the 10 GB cap. Fires for the hour after.
+        - alert: CIDispatchEgressCapHit
+          expr: increase(ci_dispatch_reaped_total{reason="egress-cap"}[1h]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "ci-dispatch deleted a container group that sent 10 GB to the internet, the per-job egress cap, in the last hour; its owner is charged the bytes (docs/ci.md)"
+        # The token-failure alert (phase 2 Task 7 review). An expired or rotated client secret answers
+        # AADSTS (7000222 when expired), which the client reads as ErrRejected, never ErrLocked, so
+        # CIDispatchLocked stays quiet while every Azure call fails. A lock fails them too, and is
+        # CIDispatchLocked's, so this one stands aside then.
+        - alert: CIDispatchAzureFailing
+          expr: sum(increase(ci_dispatch_errors_total{api="azure"}[10m])) > 0 unless on() max(ci_dispatch_azure_locked) == 1
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "ci-dispatch's Azure calls keep failing with no lock: usually an expired or rotated client secret (an AADSTS code in the log; rotate per docs/ci.md), else an Azure outage; paid classes wait not-ready (docs/ci.md)"

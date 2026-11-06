@@ -1,0 +1,34 @@
+---
+# The ledger's restic job (restic-cronjob.yaml) is default-deny in both directions like every pod
+# here (components default-deny and allow-dns), plus this: out to the restic repo on B2, nothing in.
+# It never matches the dispatcher's own policy (networkpolicy.yaml), which selects
+# app.kubernetes.io/name: ci-dispatch.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: restic-backup
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: restic-backup
+  # Ingress listed with no rule: nothing may dial the job, even without default-deny.
+  policyTypes: [Ingress, Egress]
+  egress:
+    # B2 (RESTIC_REPOSITORY, S3 over HTTPS): the internet less egress-internet-only's not-internet
+    # ranges (cluster, LAN, tailnet, our WAN /25), TCP 443 only.
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 0.0.0.0/8
+              - 10.0.0.0/8 # pods 10.244.0.0/16, Services 10.96.0.0/12
+              - 100.64.0.0/10 # CGNAT, the tailnet behind the router
+              - 127.0.0.0/8
+              - 169.254.0.0/16 # link-local, metadata-style addresses
+              - 172.16.0.0/12
+              - 192.168.0.0/16 # LAN, nodes, BMCs, KVM, voice VLAN, switch OOB, LB IPs
+              - 224.0.0.0/4 # multicast
+              - 240.0.0.0/4
+              - 152.44.247.0/25 # our WAN /25: the forge and the router's own services
+      ports:
+        - {protocol: TCP, port: 443}
