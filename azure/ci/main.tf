@@ -3,8 +3,8 @@
 #
 # Spec: the "Budget enforcement and backstops" section of
 # docs/superpowers/specs/2026-11-04-runner-classes-design.md. This module implements layers 5
-# (the role and Policy on the CI group) and 8 (the CI group's budget). Layer 9, the $120
-# subscription budget, stays in azure/logging/.
+# (the role and Policy on the CI group), 7 (the sweeper and its lock, sweeper.tf, Task 3) and 8
+# (the CI group's budget). Layer 9, the $120 subscription budget, stays in azure/logging/.
 #
 # Every number lives in fence.json, which scripts/test_azure_ci.py pins.
 #
@@ -24,6 +24,12 @@ terraform {
     time = {
       source  = "hashicorp/time"
       version = "~> 0.12"
+    }
+    # The sweeper's Logic App (sweeper.tf). azurerm has no resource that takes a raw workflow
+    # definition with a managed identity, so azapi creates that one resource and nothing else.
+    azapi = {
+      source  = "Azure/azapi"
+      version = "~> 2.0"
     }
   }
 
@@ -48,6 +54,12 @@ provider "azurerm" {
 
 # Auth comes from `az login`, the same session the state backend uses.
 provider "azuread" {}
+
+# The sweeper's workflow only (sweeper.tf). Like azurerm, it registers nothing as a side effect.
+provider "azapi" {
+  subscription_id            = var.subscription_id
+  skip_provider_registration = true
+}
 
 locals {
   fence = jsondecode(file("${path.module}/fence.json"))

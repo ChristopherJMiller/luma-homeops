@@ -3,7 +3,8 @@
 # After a lock the CI group still exists and the dispatcher's assignment doesn't, so a restore
 # plan knows the group's id and re-creates the assignment. The sweeper's input,
 # local.dispatcher_assignment_id, has to be a value that plan knows. Taken from the assignment's
-# computed id, it would be unknown, and the sweeper would plan a change during every restore.
+# computed id, it would be unknown, and the sweeper would plan a change during every restore. The
+# restore run also asserts that plan time knows the sweeper's whole workflow body (Task 3).
 #
 # scripts/test_azure_ci.py runs this from a copy of the module without ci.secret.auto.tfvars.
 
@@ -20,6 +21,8 @@ mock_provider "azuread" {
   }
 }
 
+mock_provider "azapi" {}
+
 mock_provider "time" {
   mock_resource "time_rotating" {
     defaults = {
@@ -34,13 +37,21 @@ variables {
   want_id         = "/subscriptions/test/resourceGroups/rg-realliance-ci/providers/Microsoft.Authorization/roleAssignments/${uuidv5("url", "realliance-ci/dispatcher-assignment")}"
 }
 
-# The group exists, so planning knows its id. The assignment's id has no override, so it stays
+# The groups exist, so planning knows their ids. The assignment's id has no override, so it stays
 # unknown until apply, as in a real restore.
 override_resource {
   target          = azurerm_resource_group.ci
   override_during = plan
   values = {
     id = "/subscriptions/test/resourceGroups/rg-realliance-ci"
+  }
+}
+
+override_resource {
+  target          = azurerm_resource_group.guard
+  override_during = plan
+  values = {
+    id = "/subscriptions/test/resourceGroups/rg-realliance-ci-guard"
   }
 }
 
@@ -55,6 +66,24 @@ run "restore_plan_knows_the_lock_target" {
   assert {
     condition     = output.dispatcher_assignment_id == var.want_id
     error_message = "The dispatcher_assignment_id output isn't the deterministic id at plan time."
+  }
+
+  # jsonencode of a value with any unknown part is unknown, and an unknown condition fails the run,
+  # so this passes only if the plan knows every part of the sweeper's body. The restore plan then
+  # leaves the workflow unchanged (1 to add, 0 to change).
+  assert {
+    condition     = length(jsonencode(azapi_resource.sweeper.body)) > 0
+    error_message = "The sweeper's workflow body is unknown at plan time, so a restore would change the sweeper."
+  }
+
+  assert {
+    condition     = azapi_resource.sweeper.body.properties.definition.actions.Trip.actions.Delete_dispatcher_assignment.inputs.uri == "https://management.azure.com${var.want_id}"
+    error_message = "The sweeper's lock doesn't delete the dispatcher's assignment in the restore plan."
+  }
+
+  assert {
+    condition     = azapi_resource.sweeper.body.properties.state == "Enabled"
+    error_message = "The sweeper must be enabled."
   }
 }
 

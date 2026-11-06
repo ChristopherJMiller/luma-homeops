@@ -1,0 +1,758 @@
+{
+  "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {},
+  "triggers": {
+    "Recurrence": {
+      "type": "Recurrence",
+      "recurrence": {
+        "frequency": "Minute",
+        "interval": ${interval_minutes}
+      },
+      "runtimeConfiguration": {
+        "concurrency": {
+          "runs": 1
+        }
+      }
+    }
+  },
+  "actions": {
+    "Init_burn": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "burn",
+            "type": "float",
+            "value": 0
+          }
+        ]
+      },
+      "runAfter": {}
+    },
+    "Init_deleted": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "deleted",
+            "type": "array",
+            "value": []
+          }
+        ]
+      },
+      "runAfter": {
+        "Init_burn": ["Succeeded"]
+      }
+    },
+    "Init_problems": {
+      "type": "InitializeVariable",
+      "inputs": {
+        "variables": [
+          {
+            "name": "problems",
+            "type": "array",
+            "value": []
+          }
+        ]
+      },
+      "runAfter": {
+        "Init_deleted": ["Succeeded"]
+      }
+    },
+    "Read_groups": {
+      "type": "Http",
+      "inputs": {
+        "method": "GET",
+        "uri": "https://management.azure.com${ci_group_id}/providers/Microsoft.ContainerInstance/containerGroups",
+        "queries": {
+          "api-version": "2023-05-01"
+        },
+        "authentication": {
+          "type": "ManagedServiceIdentity",
+          "audience": "https://management.azure.com/"
+        },
+        "retryPolicy": {
+          "type": "fixed",
+          "count": 1,
+          "interval": "PT5S"
+        }
+      },
+      "limit": {
+        "timeout": "${action_timeout}"
+      },
+      "runAfter": {
+        "Init_problems": ["Succeeded"]
+      }
+    },
+    "Read_resources": {
+      "type": "Http",
+      "inputs": {
+        "method": "GET",
+        "uri": "https://management.azure.com${ci_group_id}/resources",
+        "queries": {
+          "$expand": "createdTime",
+          "api-version": "2021-04-01"
+        },
+        "authentication": {
+          "type": "ManagedServiceIdentity",
+          "audience": "https://management.azure.com/"
+        },
+        "retryPolicy": {
+          "type": "fixed",
+          "count": 1,
+          "interval": "PT5S"
+        }
+      },
+      "limit": {
+        "timeout": "${action_timeout}"
+      },
+      "runAfter": {
+        "Init_problems": ["Succeeded"]
+      }
+    },
+    "Read_budget": {
+      "type": "Http",
+      "inputs": {
+        "method": "GET",
+        "uri": "https://management.azure.com${ci_group_id}/providers/Microsoft.Consumption/budgets/${budget_name}",
+        "queries": {
+          "api-version": "2023-05-01"
+        },
+        "authentication": {
+          "type": "ManagedServiceIdentity",
+          "audience": "https://management.azure.com/"
+        },
+        "retryPolicy": {
+          "type": "fixed",
+          "count": 1,
+          "interval": "PT5S"
+        }
+      },
+      "limit": {
+        "timeout": "${action_timeout}"
+      },
+      "runAfter": {
+        "Init_problems": ["Succeeded"]
+      }
+    },
+    "Read_tags": {
+      "type": "Http",
+      "inputs": {
+        "method": "GET",
+        "uri": "https://management.azure.com${ci_group_id}/providers/Microsoft.Resources/tags/default",
+        "queries": {
+          "api-version": "2021-04-01"
+        },
+        "authentication": {
+          "type": "ManagedServiceIdentity",
+          "audience": "https://management.azure.com/"
+        },
+        "retryPolicy": {
+          "type": "fixed",
+          "count": 1,
+          "interval": "PT5S"
+        }
+      },
+      "limit": {
+        "timeout": "${action_timeout}"
+      },
+      "runAfter": {
+        "Init_problems": ["Succeeded"]
+      }
+    },
+    "Read_dispatcher_assignment": {
+      "type": "Http",
+      "inputs": {
+        "method": "GET",
+        "uri": "https://management.azure.com${dispatcher_assignment_id}",
+        "queries": {
+          "api-version": "2022-04-01"
+        },
+        "authentication": {
+          "type": "ManagedServiceIdentity",
+          "audience": "https://management.azure.com/"
+        },
+        "retryPolicy": {
+          "type": "fixed",
+          "count": 1,
+          "interval": "PT5S"
+        }
+      },
+      "limit": {
+        "timeout": "${action_timeout}"
+      },
+      "runAfter": {
+        "Init_problems": ["Succeeded"]
+      }
+    },
+    "Now": {
+      "type": "Compose",
+      "inputs": "@utcNow()",
+      "runAfter": {
+        "Read_groups": ["Succeeded", "Failed", "TimedOut"],
+        "Read_resources": ["Succeeded", "Failed", "TimedOut"],
+        "Read_budget": ["Succeeded", "Failed", "TimedOut"],
+        "Read_tags": ["Succeeded", "Failed", "TimedOut"],
+        "Read_dispatcher_assignment": ["Succeeded", "Failed", "TimedOut"]
+      }
+    },
+    "Each_group": {
+      "type": "Foreach",
+      "foreach": "@body('Read_groups')?['value']",
+      "runtimeConfiguration": {
+        "concurrency": {
+          "repetitions": 1
+        }
+      },
+      "actions": {
+        "Find_created": {
+          "type": "Query",
+          "inputs": {
+            "from": "@coalesce(body('Read_resources')?['value'], json('[]'))",
+            "where": "@equals(toLower(item()?['id']), toLower(items('Each_group')?['id']))"
+          },
+          "runAfter": {}
+        },
+        "Created": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(body('Find_created'))?['createdTime'], addMinutes(outputs('Now'), -${egress_rate_window_minutes}))",
+          "runAfter": {
+            "Find_created": ["Succeeded"]
+          }
+        },
+        "Egress_total": {
+          "type": "Http",
+          "inputs": {
+            "method": "GET",
+            "uri": "https://management.azure.com@{items('Each_group')?['id']}/providers/Microsoft.Insights/metrics",
+            "queries": {
+              "api-version": "2023-10-01",
+              "metricnames": "${egress_metric}",
+              "aggregation": "Average",
+              "interval": "FULL",
+              "timespan": "@{formatDateTime(addMinutes(outputs('Created'), -1), 'yyyy-MM-ddTHH:mm:ssZ')}/@{formatDateTime(outputs('Now'), 'yyyy-MM-ddTHH:mm:ssZ')}"
+            },
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "audience": "https://management.azure.com/"
+            },
+            "retryPolicy": {
+              "type": "fixed",
+              "count": 1,
+              "interval": "PT5S"
+            }
+          },
+          "limit": {
+            "timeout": "${action_timeout}"
+          },
+          "runAfter": {
+            "Created": ["Succeeded"]
+          }
+        },
+        "Egress_rate": {
+          "type": "Http",
+          "inputs": {
+            "method": "GET",
+            "uri": "https://management.azure.com@{items('Each_group')?['id']}/providers/Microsoft.Insights/metrics",
+            "queries": {
+              "api-version": "2023-10-01",
+              "metricnames": "${egress_metric}",
+              "aggregation": "Average",
+              "interval": "FULL",
+              "timespan": "@{formatDateTime(addMinutes(outputs('Now'), -${egress_rate_window_minutes}), 'yyyy-MM-ddTHH:mm:ssZ')}/@{formatDateTime(outputs('Now'), 'yyyy-MM-ddTHH:mm:ssZ')}"
+            },
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "audience": "https://management.azure.com/"
+            },
+            "retryPolicy": {
+              "type": "fixed",
+              "count": 1,
+              "interval": "PT5S"
+            }
+          },
+          "limit": {
+            "timeout": "${action_timeout}"
+          },
+          "runAfter": {}
+        },
+        "Containers": {
+          "type": "Compose",
+          "inputs": "@coalesce(items('Each_group')?['properties']?['containers'], json('[]'))",
+          "runAfter": {}
+        },
+        "Requests": {
+          "type": "Compose",
+          "inputs": "@coalesce(first(outputs('Containers'))?['properties']?['resources']?['requests'], json('{}'))",
+          "runAfter": {
+            "Containers": ["Succeeded"]
+          }
+        },
+        "Shape_price": {
+          "type": "Compose",
+          "inputs": "@if(and(equals(length(outputs('Containers')), 1), greaterOrEquals(coalesce(outputs('Requests')?['cpu'], 0), 2), lessOrEquals(coalesce(outputs('Requests')?['cpu'], 0), 2), greaterOrEquals(coalesce(outputs('Requests')?['memoryInGB'], 0), 8), lessOrEquals(coalesce(outputs('Requests')?['memoryInGB'], 0), 8)), ${price_2_8}, if(and(equals(length(outputs('Containers')), 1), greaterOrEquals(coalesce(outputs('Requests')?['cpu'], 0), 4), lessOrEquals(coalesce(outputs('Requests')?['cpu'], 0), 4), greaterOrEquals(coalesce(outputs('Requests')?['memoryInGB'], 0), 16), lessOrEquals(coalesce(outputs('Requests')?['memoryInGB'], 0), 16)), ${price_4_16}, ${price_other}))",
+          "runAfter": {
+            "Requests": ["Succeeded"]
+          }
+        },
+        "Group_burn": {
+          "type": "Compose",
+          "inputs": "@add(outputs('Shape_price'), div(mul(mul(coalesce(first(coalesce(first(coalesce(first(coalesce(body('Egress_rate')?['value'], json('[]')))?['timeseries'], json('[]')))?['data'], json('[]')))?['average'], 0), 3600), ${egress_micro_per_gb}), 1000000000.0))",
+          "runAfter": {
+            "Shape_price": ["Succeeded"],
+            "Egress_rate": ["Succeeded", "Failed", "TimedOut"]
+          }
+        },
+        "Add_burn": {
+          "type": "IncrementVariable",
+          "inputs": {
+            "name": "burn",
+            "value": "@outputs('Group_burn')"
+          },
+          "runAfter": {
+            "Group_burn": ["Succeeded"]
+          }
+        },
+        "Egress_bytes": {
+          "type": "Compose",
+          "inputs": "@mul(coalesce(first(coalesce(first(coalesce(first(coalesce(body('Egress_total')?['value'], json('[]')))?['timeseries'], json('[]')))?['data'], json('[]')))?['average'], 0), div(sub(ticks(outputs('Now')), ticks(outputs('Created'))), 10000000))",
+          "runAfter": {
+            "Egress_total": ["Succeeded"]
+          }
+        },
+        "Over_egress_cap": {
+          "type": "If",
+          "expression": {
+            "greaterOrEquals": ["@outputs('Egress_bytes')", ${egress_cap_bytes}]
+          },
+          "actions": {
+            "Delete_over_cap": {
+              "type": "Http",
+              "inputs": {
+                "method": "DELETE",
+                "uri": "https://management.azure.com@{items('Each_group')?['id']}",
+                "queries": {
+                  "api-version": "2023-05-01"
+                },
+                "authentication": {
+                  "type": "ManagedServiceIdentity",
+                  "audience": "https://management.azure.com/"
+                },
+                "retryPolicy": {
+                  "type": "fixed",
+                  "count": 1,
+                  "interval": "PT5S"
+                }
+              },
+              "operationOptions": "DisableAsyncPattern",
+              "limit": {
+                "timeout": "${action_timeout}"
+              },
+              "runAfter": {}
+            },
+            "Note_cap_delete": {
+              "type": "If",
+              "expression": {
+                "or": [
+                  {"equals": ["@actions('Delete_over_cap')?['status']", "Succeeded"]},
+                  {"equals": ["@outputs('Delete_over_cap')?['statusCode']", 404]}
+                ]
+              },
+              "actions": {
+                "Mark_cap_deleted": {
+                  "type": "AppendToArrayVariable",
+                  "inputs": {
+                    "name": "deleted",
+                    "value": "@toLower(items('Each_group')?['id'])"
+                  },
+                  "runAfter": {}
+                }
+              },
+              "else": {
+                "actions": {
+                  "Flag_cap_delete": {
+                    "type": "AppendToArrayVariable",
+                    "inputs": {
+                      "name": "problems",
+                      "value": "@concat('egress-cap delete of ', items('Each_group')?['name'], ' ended ', actions('Delete_over_cap')?['status'])"
+                    },
+                    "runAfter": {}
+                  }
+                }
+              },
+              "runAfter": {
+                "Delete_over_cap": ["Succeeded", "Failed", "TimedOut"]
+              }
+            }
+          },
+          "runAfter": {
+            "Egress_bytes": ["Succeeded"]
+          }
+        },
+        "Check_egress": {
+          "type": "If",
+          "expression": {
+            "or": [
+              {"not": {"equals": ["@actions('Egress_total')?['status']", "Succeeded"]}},
+              {"not": {"equals": ["@actions('Egress_rate')?['status']", "Succeeded"]}},
+              {"not": {"equals": ["@actions('Egress_bytes')?['status']", "Succeeded"]}},
+              {"not": {"equals": ["@actions('Add_burn')?['status']", "Succeeded"]}}
+            ]
+          },
+          "actions": {
+            "Flag_egress": {
+              "type": "AppendToArrayVariable",
+              "inputs": {
+                "name": "problems",
+                "value": "@concat('egress or burn unread for ', items('Each_group')?['name'])"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Add_burn": ["Succeeded", "Failed", "TimedOut", "Skipped"],
+            "Over_egress_cap": ["Succeeded", "Failed", "TimedOut", "Skipped"]
+          }
+        }
+      },
+      "runAfter": {
+        "Now": ["Succeeded"]
+      }
+    },
+    "Old_compute": {
+      "type": "Query",
+      "inputs": {
+        "from": "@body('Read_resources')?['value']",
+        "where": "@and(equals(toLower(item()?['type']), toLower('${delete_type}')), less(ticks(item()?['createdTime']), ticks(addMinutes(outputs('Now'), -${max_age_minutes}))), not(contains(variables('deleted'), toLower(item()?['id']))))"
+      },
+      "runAfter": {
+        "Each_group": ["Succeeded", "Failed", "TimedOut"]
+      }
+    },
+    "Delete_old": {
+      "type": "Foreach",
+      "foreach": "@body('Old_compute')",
+      "runtimeConfiguration": {
+        "concurrency": {
+          "repetitions": 1
+        }
+      },
+      "actions": {
+        "Delete_old_group": {
+          "type": "Http",
+          "inputs": {
+            "method": "DELETE",
+            "uri": "https://management.azure.com@{items('Delete_old')?['id']}",
+            "queries": {
+              "api-version": "2023-05-01"
+            },
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "audience": "https://management.azure.com/"
+            },
+            "retryPolicy": {
+              "type": "fixed",
+              "count": 1,
+              "interval": "PT5S"
+            }
+          },
+          "operationOptions": "DisableAsyncPattern",
+          "limit": {
+            "timeout": "${action_timeout}"
+          },
+          "runAfter": {}
+        },
+        "Note_old_delete": {
+          "type": "If",
+          "expression": {
+            "or": [
+              {"equals": ["@actions('Delete_old_group')?['status']", "Succeeded"]},
+              {"equals": ["@outputs('Delete_old_group')?['statusCode']", 404]}
+            ]
+          },
+          "actions": {
+            "Mark_old_deleted": {
+              "type": "AppendToArrayVariable",
+              "inputs": {
+                "name": "deleted",
+                "value": "@toLower(items('Delete_old')?['id'])"
+              },
+              "runAfter": {}
+            }
+          },
+          "else": {
+            "actions": {
+              "Flag_old_delete": {
+                "type": "AppendToArrayVariable",
+                "inputs": {
+                  "name": "problems",
+                  "value": "@concat('age delete of ', items('Delete_old')?['name'], ' ended ', actions('Delete_old_group')?['status'])"
+                },
+                "runAfter": {}
+              }
+            }
+          },
+          "runAfter": {
+            "Delete_old_group": ["Succeeded", "Failed", "TimedOut"]
+          }
+        }
+      },
+      "runAfter": {
+        "Old_compute": ["Succeeded"]
+      }
+    },
+    "Live_groups": {
+      "type": "Query",
+      "inputs": {
+        "from": "@body('Read_groups')?['value']",
+        "where": "@not(contains(variables('deleted'), toLower(item()?['id'])))"
+      },
+      "runAfter": {
+        "Delete_old": ["Succeeded", "Failed", "TimedOut", "Skipped"]
+      }
+    },
+    "Trip": {
+      "type": "If",
+      "expression": {
+        "or": [
+          {
+            "and": [
+              {"greater": ["@variables('burn')", ${ceiling_micro_per_hour}]},
+              {"greaterOrEquals": ["@{coalesce(body('Read_tags')?['properties']?['tags']?['ci-sweeper-over-at'], '')}", "@{formatDateTime(addMinutes(outputs('Now'), -${repeat_window_minutes}), 'yyyy-MM-ddTHH:mm:ssZ')}"]}
+            ]
+          },
+          {"greaterOrEquals": ["@float(string(coalesce(body('Read_budget')?['properties']?['currentSpend']?['amount'], 0)))", ${budget_ci_usd}]},
+          {"equals": ["@outputs('Read_dispatcher_assignment')?['statusCode']", 404]}
+        ]
+      },
+      "actions": {
+        "Delete_dispatcher_assignment": {
+          "type": "Http",
+          "inputs": {
+            "method": "DELETE",
+            "uri": "https://management.azure.com${dispatcher_assignment_id}",
+            "queries": {
+              "api-version": "2022-04-01"
+            },
+            "authentication": {
+              "type": "ManagedServiceIdentity",
+              "audience": "https://management.azure.com/"
+            },
+            "retryPolicy": {
+              "type": "fixed",
+              "count": 1,
+              "interval": "PT5S"
+            }
+          },
+          "operationOptions": "DisableAsyncPattern",
+          "limit": {
+            "timeout": "${action_timeout}"
+          },
+          "runAfter": {}
+        },
+        "Delete_all_groups": {
+          "type": "Foreach",
+          "foreach": "@body('Live_groups')",
+          "actions": {
+            "Delete_group": {
+              "type": "Http",
+              "inputs": {
+                "method": "DELETE",
+                "uri": "https://management.azure.com@{items('Delete_all_groups')?['id']}",
+                "queries": {
+                  "api-version": "2023-05-01"
+                },
+                "authentication": {
+                  "type": "ManagedServiceIdentity",
+                  "audience": "https://management.azure.com/"
+                },
+                "retryPolicy": {
+                  "type": "fixed",
+                  "count": 1,
+                  "interval": "PT5S"
+                }
+              },
+              "operationOptions": "DisableAsyncPattern",
+              "limit": {
+                "timeout": "${action_timeout}"
+              },
+              "runAfter": {}
+            }
+          },
+          "runAfter": {
+            "Delete_dispatcher_assignment": ["Succeeded", "Failed", "TimedOut"]
+          }
+        },
+        "Lock_result": {
+          "type": "If",
+          "expression": {
+            "or": [
+              {"equals": ["@actions('Delete_dispatcher_assignment')?['status']", "Succeeded"]},
+              {"equals": ["@outputs('Delete_dispatcher_assignment')?['statusCode']", 404]}
+            ]
+          },
+          "actions": {
+            "Terminate_locked": {
+              "type": "Terminate",
+              "inputs": {
+                "runStatus": "Failed",
+                "runError": {
+                  "code": "Locked",
+                  "message": "@concat('Locked: the dispatcher role assignment is gone. Group deletes ended ', actions('Delete_all_groups')?['status'], '. Only a terraform apply of azure/ci restores the assignment.')"
+                }
+              },
+              "runAfter": {}
+            }
+          },
+          "else": {
+            "actions": {
+              "Terminate_lock_failed": {
+                "type": "Terminate",
+                "inputs": {
+                  "runStatus": "Failed",
+                  "runError": {
+                    "code": "LockFailed",
+                    "message": "@concat('The lock did not take: the assignment delete ended ', actions('Delete_dispatcher_assignment')?['status'], ' ', string(coalesce(outputs('Delete_dispatcher_assignment')?['statusCode'], 0)), '. Group deletes ended ', actions('Delete_all_groups')?['status'], '.')"
+                  }
+                },
+                "runAfter": {}
+              }
+            }
+          },
+          "runAfter": {
+            "Delete_all_groups": ["Succeeded", "Failed", "TimedOut"]
+          }
+        }
+      },
+      "else": {
+        "actions": {
+          "Over_ceiling": {
+            "type": "If",
+            "expression": {
+              "greater": ["@variables('burn')", ${ceiling_micro_per_hour}]
+            },
+            "actions": {
+              "Mark_over": {
+                "type": "Http",
+                "inputs": {
+                  "method": "PATCH",
+                  "uri": "https://management.azure.com${ci_group_id}/providers/Microsoft.Resources/tags/default",
+                  "queries": {
+                    "api-version": "2021-04-01"
+                  },
+                  "body": {
+                    "operation": "Merge",
+                    "properties": {
+                      "tags": {
+                        "ci-sweeper-over-at": "@{formatDateTime(outputs('Now'), 'yyyy-MM-ddTHH:mm:ssZ')}"
+                      }
+                    }
+                  },
+                  "authentication": {
+                    "type": "ManagedServiceIdentity",
+                    "audience": "https://management.azure.com/"
+                  },
+                  "retryPolicy": {
+                    "type": "fixed",
+                    "count": 1,
+                    "interval": "PT5S"
+                  }
+                },
+                "limit": {
+                  "timeout": "${action_timeout}"
+                },
+                "runAfter": {}
+              }
+            },
+            "else": {
+              "actions": {
+                "Clear_over": {
+                  "type": "If",
+                  "expression": {
+                    "not": {"equals": ["@{coalesce(body('Read_tags')?['properties']?['tags']?['ci-sweeper-over-at'], '')}", ""]}
+                  },
+                  "actions": {
+                    "Delete_over_tag": {
+                      "type": "Http",
+                      "inputs": {
+                        "method": "PATCH",
+                        "uri": "https://management.azure.com${ci_group_id}/providers/Microsoft.Resources/tags/default",
+                        "queries": {
+                          "api-version": "2021-04-01"
+                        },
+                        "body": {
+                          "operation": "Delete",
+                          "properties": {
+                            "tags": {
+                              "ci-sweeper-over-at": "@{body('Read_tags')?['properties']?['tags']?['ci-sweeper-over-at']}"
+                            }
+                          }
+                        },
+                        "authentication": {
+                          "type": "ManagedServiceIdentity",
+                          "audience": "https://management.azure.com/"
+                        },
+                        "retryPolicy": {
+                          "type": "fixed",
+                          "count": 1,
+                          "interval": "PT5S"
+                        }
+                      },
+                      "limit": {
+                        "timeout": "${action_timeout}"
+                      },
+                      "runAfter": {}
+                    }
+                  },
+                  "runAfter": {}
+                }
+              }
+            },
+            "runAfter": {}
+          }
+        }
+      },
+      "runAfter": {
+        "Live_groups": ["Succeeded", "Failed", "TimedOut"]
+      }
+    },
+    "If_degraded": {
+      "type": "If",
+      "expression": {
+        "or": [
+          {"not": {"equals": ["@actions('Read_groups')?['status']", "Succeeded"]}},
+          {"not": {"equals": ["@actions('Read_resources')?['status']", "Succeeded"]}},
+          {"not": {"equals": ["@actions('Read_budget')?['status']", "Succeeded"]}},
+          {"not": {"equals": ["@actions('Read_tags')?['status']", "Succeeded"]}},
+          {"not": {"equals": ["@actions('Read_dispatcher_assignment')?['status']", "Succeeded"]}},
+          {"not": {"equals": ["@actions('Each_group')?['status']", "Succeeded"]}},
+          {"not": {"equals": ["@actions('Old_compute')?['status']", "Succeeded"]}},
+          {"not": {"equals": ["@actions('Delete_old')?['status']", "Succeeded"]}},
+          {"not": {"equals": ["@actions('Live_groups')?['status']", "Succeeded"]}},
+          {"not": {"equals": ["@actions('Trip')?['status']", "Succeeded"]}},
+          {"not": {"equals": ["@{coalesce(body('Read_groups')?['nextLink'], '')}", ""]}},
+          {"not": {"equals": ["@{coalesce(body('Read_resources')?['nextLink'], '')}", ""]}},
+          {"greater": ["@length(variables('problems'))", 0]}
+        ]
+      },
+      "actions": {
+        "Terminate_degraded": {
+          "type": "Terminate",
+          "inputs": {
+            "runStatus": "Failed",
+            "runError": {
+              "code": "Degraded",
+              "message": "@concat('Reads: groups ', actions('Read_groups')?['status'], ', resources ', actions('Read_resources')?['status'], ', budget ', actions('Read_budget')?['status'], ', tags ', actions('Read_tags')?['status'], ', assignment ', actions('Read_dispatcher_assignment')?['status'], '. Steps: egress ', actions('Each_group')?['status'], ', age ', actions('Old_compute')?['status'], '/', actions('Delete_old')?['status'], ', trip ', actions('Trip')?['status'], '. ', join(variables('problems'), '; '))"
+            }
+          },
+          "runAfter": {}
+        }
+      },
+      "runAfter": {
+        "Trip": ["Succeeded", "Failed", "TimedOut"]
+      }
+    }
+  },
+  "outputs": {}
+}

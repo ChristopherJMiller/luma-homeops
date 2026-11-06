@@ -118,10 +118,38 @@ Taken 2026-11-05.
 ## Task 3
 
 - **Carry from Task 2's review:** `azure/ci/tests/restore.tftest.hcl`'s restore run must assert that the sweeper's body (the `azapi_resource` workflow definition) is known, so a restore plan leaves the sweeper unchanged.
+  - Done (2026-11-05): the restore run asserts that `jsonencode` of the whole body is known, that the lock's DELETE targets the deterministic id, and that the state is `Enabled`.
+
+`azure/ci/sweeper.tf` and `sweeper/workflow.json.tftpl`, the sweeper and its lock. Written and planned 2026-11-05; nothing applied (Chris applies Tasks 2 and 3 together in Task 4).
+
+- **Provider locked:** `Azure/azapi` 2.13.0 (released 2026-09-28, the newest 2.x), with `skip_provider_registration = true`.
+- **Trips** (any one): burn over 600_000 µ$ an hour with the tag under 12 min old; the CI budget's `currentSpend` at $85 or more; the dispatcher's assignment already missing (a GET answers 404).
+  - The trip DELETEs the assignment first, then every listed group whatever that DELETE did (`runAfter` Succeeded, Failed, TimedOut).
+  - The run then ends `Failed`: code `Locked` when the DELETE answered 2xx or 404, else `LockFailed`.
+- **Plan's calls:**
+  - The third trip, "already locked": while locked the dispatcher can't delete its own groups, so every sweep deletes them all. That covers a group made during RBAC propagation.
+  - `LockFailed` is a second terminal code, so a lock that didn't take never reads as `Locked`.
+  - Any failed read, delete or tag write, or a list with a `nextLink`, ends the run `Failed`, code `Degraded`. The other rules still run first. A budget read failure (after 2030-12-31, say) never blocks the age kill.
+  - Every HTTP action has `limit.timeout` PT1M and `inputs.retryPolicy` fixed, 1 retry after PT5S. DELETEs set `DisableAsyncPattern`. On a DELETE, 404 counts as done.
+  - The tag holds `yyyy-MM-ddTHH:mm:ssZ` and is compared as a string, so a garbage tag can't make the trip expression throw.
+  - The egress-total query starts 1 min before `createdTime`, so a brand-new group never asks for an empty span. Bytes = average × seconds since `createdTime` (E17).
+  - The history reader's assignable scope is the guard group (a custom role can't take a single resource); its one assignment is on the workflow.
+  - The ABAC condition stays in: the plan doesn't refuse it. If the apply does, drop `condition` and `condition_version` and ledger it here.
+- **Azure check:** the Logic Apps `validate` endpoint (it creates nothing) accepts the rendered definition with placeholder ids. A body naming an undefined action is refused, so it checks references. The first try caught `retryPolicy` on the action instead of in `inputs`.
+- **Plan:** `Plan: 26 to add, 0 to change, 0 to destroy.` Task 2's 19, plus:
+  - `azapi_resource.sweeper`
+  - `azurerm_role_definition.{sweeper,history_reader}`, `azurerm_role_assignment.{sweeper,history_reader}`
+  - `azurerm_monitor_action_group.sweeper_failed`, `azurerm_monitor_metric_alert.sweeper_failed`
+- **Tests:** static `196 passed, 4 skipped`; with `AZURE_CI_PLAN_JSON`, `200 passed`. The suite runs the template in a small Logic Apps simulator against a fake ARM. 20 of 20 mutations fail it, among them the assignment DELETE after the groups, any 4xx counted as locked, and the dropped timeout.
 
 ## Task 4
 
 - **Carry from Task 2 (review m3):** confirm a Policy deny before the dispatcher secret ships.
+- **Carries from Task 3:**
+  - The first sweeps after the apply may fail with 403 until the sweeper's assignment propagates: expect one `Degraded` email. Step 2's "two newest runs show `Succeeded`" comes after that.
+  - F33: if the plan shows the workflow `1 to change`, match the template to the server's normalised form.
+  - Step 4's egress check also confirms two runtime assumptions: an idle running group reports average 0, not "no data", and a group with no data yet answers with an empty `timeseries` or a point without `average`. Both feed average × seconds.
+  - The apply may refuse the ABAC condition on the sweeper's assignment: drop it and ledger it.
 
 ## Task 5
 

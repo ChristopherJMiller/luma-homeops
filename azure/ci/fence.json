@@ -22,5 +22,27 @@
     "cap_bytes": 10000000000,
     "micro_per_gb": 87000,
     "metric": "NetworkBytesTransmittedPerSecond"
+  },
+  "sweeper": {
+    "interval_minutes": 10,
+    "max_age_minutes": 90,
+    "ceiling_micro_per_hour": 600000,
+    "repeat_window_minutes": 12,
+    "action_timeout": "PT1M",
+    "price_micro_per_hour": {"2/8": 117000, "4/16": 233000, "other": 1000000},
+    "delete_types": ["Microsoft.ContainerInstance/containerGroups"],
+    "actions": [
+      "Microsoft.ContainerInstance/containerGroups/read",
+      "Microsoft.ContainerInstance/containerGroups/delete",
+      "Microsoft.Resources/subscriptions/resourceGroups/read",
+      "Microsoft.Resources/subscriptions/resourceGroups/resources/read",
+      "Microsoft.Resources/tags/read",
+      "Microsoft.Resources/tags/write",
+      "Microsoft.Consumption/budgets/read",
+      "Microsoft.Authorization/roleAssignments/read",
+      "Microsoft.Authorization/roleAssignments/delete",
+      "Microsoft.Insights/metrics/read"
+    ],
+    "egress_rate_window_minutes": 10
   }
 }
