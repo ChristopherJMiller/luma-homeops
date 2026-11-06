@@ -83,7 +83,7 @@ From `.superpowers/sdd/2026-11-05-runner-classes-phase-2/preflight.md` § 6. F1 
   - `Proxy: nil` on the Forgejo transport, which the Azure and price clients copy (F20).
 - Step budget 20 s, wedge limit `max(3 × step_budget, 2 min)`; every Azure call runs under the step's budget.
 - Paid-gate stub (`gate.go`, "No paid backend in v1"): replace it, never delete the gate (Task 11 M5 carry).
-- **Settle on observed absence** (phase 1 Task 14 review, M6). A paid launch never settles because a DELETE was accepted. ACI bills until the group is gone, so a row leaves its active state only once a list read after the delete lacks the group. The global hourly gate ($0.48 since 2026-11-06, I3) counts compute that still exists, not just ledger rows. (E10, Task 14)
+- **Settle on observed absence** (phase 1 Task 14 review, M6). A paid launch never settles because a DELETE was accepted. ACI bills until the group is gone, so a row leaves its active state only once a list read after the delete lacks the group and a single-group GET of it then answers `ErrNotFound` (E10). The global hourly gate ($0.48 since 2026-11-06, I3) counts compute that still exists, not just ledger rows. (E10, Task 14)
 - **Schema v1 is frozen** (Task 14 review, I1). Phase 1 deploys v1 with `CREATE INDEX launches_key ON launches(job_id, attempt)` before phase 2 exists, so every phase 2 ledger change is a v2 migration and `schema_v1.sql` is never edited. (Task 10)
 - **The job listing doesn't page** (Task 14 review, M3). Forgejo 15's `GET /admin/actions/runners/jobs` has no paging, and the client caps the body at 16 MiB. Past the cap (about 80k listed jobs) `readForge` fails every tick, and nothing launches for anyone, paid classes included. Running paid jobs still stop at their hard stops, and the reaper and the sweeper still delete compute, since neither needs Forgejo. The accepted risk goes in `docs/ci.md` (Task 20); the fix is a paged listing on the fork's `WISHLIST.md`.
 - **Spec amendments approved by Chris (2026-11-05)** are listed under Decided. Task 20 writes them into the spec in one commit.
@@ -208,9 +208,10 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   - ACI is listed at most every 30 s. `Listing.At` is the clock **before** the request is sent.
   - A paid launch's `ComputeAt`, and the ambiguous-create mark, are the clock **after** `CreateGroup` returns.
   - The loop records `deleteSent[name]` at each DELETE. It judges a group absent only from a `Listing` whose `At` is later than both `ComputeAt` (or `Registered` for a crash leftover) and `deleteSent`. A cached list, even one read in the same step, can't end a launch it predates.
+  - A list that lacks the group isn't enough on its own. The loop then reads that group (`azure.Group`, request #3), and only `ErrNotFound` confirms absence: `ErrLocked` is the lock, and any other error settles nothing that poll. This closes the RBAC-propagation window, when a list and a single read may disagree, at one GET per settle (Task 7 Step 6 review I1). Under the lock the list answers 200 with an empty `value`, but `azure.Groups` returns `ErrLocked` through a single-group read of its own (its lock probe, `ci-small-0-0-0`), so a locked listing never reads as a good one.
   - A DELETE answered 200, 202 or 204 settles nothing. A group whose `provisioningState` is `Deleting` is present, and a `registered` row whose group is `Deleting` is not adopted. Absence releases the reservation; the charge stops at `stop` (Values: F11).
   - Every ACI settle path waits for absence: finished, gone before pickup, pickup timeout, held undo, expired, crash leftover, and ambiguous create.
-  - An **ambiguous create** (`ErrUnavailable` after the PUT left) may have made a group. The loop sends `DeleteGroup`, keeps the row `registered`, and undoes it once a later list lacks the group.
+  - An **ambiguous create** (`ErrUnavailable` after the PUT left) may have made a group. The loop sends `DeleteGroup`, keeps the row `registered`, and undoes it once a later list lacks the group and a single-group GET answers `ErrNotFound`.
   - A **definite refusal** made nothing, so the loop undoes at once with no DELETE. Definite refusals are `ErrNotCreated`-wrapped (F3): `ErrExists`, `ErrPolicy`, `ErrNoCapacity`, `ErrLocked`, `ErrRefused`, and every other 4xx.
 - **E11. Azure error classes and their undo outcomes** (F20, F23):
   - 403 `AuthorizationFailed` → `ErrLocked`. Paid classes wait `not-ready` and `ci_dispatch_azure_locked` reads 1. The undo outcome is `locked`, which `Tries` skips, with no back-off: `not-ready` already gates relaunches. The lock shows only on a single-group GET or a PUT. Under the lock the list answers 200 with an empty `value` (Task 5), so `ci_dispatch_azure_locked` never comes from list emptiness.
@@ -245,7 +246,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
 
 1. **Money runaway through the dispatcher's own arithmetic.** Four causes: a launch in `reserved` or `registered` left out of the burn, a group that still runs with no active row (an orphan, or one still deleting), a configured ceiling above the code's, or a price feed answering $0. Expected: the burn counts every active row and every listed group no row claims, the code ceilings ($80 a period, $0.48 an hour since 2026-11-06, I3) bind whatever config says, and an hourly price never drops below the floor. Tests: Task 14 `TestBurnCountsEveryActiveState` and `TestBurnCountsUnclaimedGroups`; Task 12 `TestPaidCeilingClampsConfig` and `TestPaidPlanCountsOwnLaunches`; Task 6 `TestHourlyFloor`.
 2. **The lock doesn't lock.** The sweeper deletes the wrong assignment, the dispatcher reads 403 as an outage and keeps creating, or a group created during RBAC propagation survives. Expected: within two sweeps plus propagation (30 min at most), all compute is gone and the dispatcher's creates fail, until Chris applies. Tests: Task 3 `test_lock_deletes_only_the_dispatcher_assignment` and `test_trip_rule` (the assignment goes first); Task 2 `test_dispatcher_assignment_named`; Task 7 `TestErrorClasses`; Task 14 `TestACILockedWaitsNotReady`; Task 5 drill with `TestLiveLocked`, the service principal's own 403.
-3. **A reservation that never frees, or frees early.** Something deletes the group, Azure is unreadable, a DELETE is accepted but the group is still `Deleting`, or the cached list predates the launch. Expected: the reservation frees on the first fresh list that lacks the group. It never frees on an accepted DELETE, or on a list read before the PUT returned, even within the same step. It stays held while Azure is unreadable. Tests: Task 14 `TestReservationFreedWhenGroupVanishes`, `TestPaidNeverSettlesOnAcceptedDelete`, `TestStaleListNeverSettlesAFreshLaunch`, `TestReservationKeptWhileAzureUnreadable` and `TestNoActivePaidRowOutlivesExpiry`.
+3. **A reservation that never frees, or frees early.** Something deletes the group, Azure is unreadable, a DELETE is accepted but the group is still `Deleting`, or the cached list predates the launch. Expected: the reservation frees on the first fresh list that lacks the group, once a single-group GET answers `ErrNotFound` (E10). It never frees on an accepted DELETE, or on a list read before the PUT returned, even within the same step. It stays held while Azure is unreadable. Tests: Task 14 `TestReservationFreedWhenGroupVanishes`, `TestPaidNeverSettlesOnAcceptedDelete`, `TestStaleListNeverSettlesAFreshLaunch`, `TestReservationKeptWhileAzureUnreadable` and `TestNoActivePaidRowOutlivesExpiry`.
 4. **The runner credential leaks.** Paths: the group definition, an ARM error, a log line, the Activity Log, or the job's environment. Expected: it travels only as `secureValue`, no GET or error returns it, and it leaves the environment before the runner starts. Tests: Task 7 `TestGuardRefusesTokenInValue` and `TestErrorsNeverContainSecrets`; Task 13 `TestBodyTokenOnlySecure` and `TestBodyRedacts`; Task 1 smoke (`/proc/1/environ`); Task 8 `test_runner_credential_not_in_group_definition`.
 5. **The sweeper stops silently.** It's disabled, a hung run blocks a queue of concurrency 1, or the dispatcher's history read fails. Expected: `CISweeperStale` fires 30 min after the last *finished* run. Tests: Task 3 `test_every_http_action_has_a_timeout`; Task 15 `TestSweeperTimestampOnlyFromFinishedRuns`; Task 18 alert cases `CISweeperStale` (stale and absent).
 6. **Egress runaway.** A job, or a compromised dispatcher, sends data out of Azure past the per-job cap, or fast enough that egress outruns the compute ceiling. Expected:
@@ -878,6 +879,7 @@ type Backend interface {
     List(ctx context.Context) (Listing, error)
     Create(ctx context.Context, s Spec) error         // undoes its own partial steps (F3); see below
     Delete(ctx context.Context, name string) error    // absent is success
+    Gone(ctx context.Context, name string) (bool, error) // one read of name: true only on not-found (ACI: azure.Group → ErrNotFound, E10); tiny never calls it
     SettleOnAbsence() bool                            // tiny false, ACI true (F2)
     Timing(c model.Class) (hardStop, pickup time.Duration)
 }
@@ -897,7 +899,7 @@ var tinyName = model.NameRE(model.Tiny)                            // Kubernetes
   - `List` filters Jobs with `tinyName`, never `ownName`. `At` is read before the Jobs request.
 - **Two settle models** (F2):
   - `SettleOnAbsence() == false` (tiny): a successful `Delete` settles, as phase 1 does.
-  - `true` (ACI): the loop records `deleteSent[name]` and settles only on a `Listing` whose `At` > max(`ComputeAt`, `deleteSent[name]`) and that lacks the name. That covers every path: finished, gone before pickup, pickup timeout, held undo, expired, leftover, ambiguous create.
+  - `true` (ACI): the loop records `deleteSent[name]` and settles only on a `Listing` whose `At` > max(`ComputeAt`, `deleteSent[name]`) and that lacks the name, with `Gone(name)` then answering true (E10). That covers every path: finished, gone before pickup, pickup timeout, held undo, expired, leftover, ambiguous create.
   - A `registered` row whose compute is present is adopted unless it is `Deleting` or `Broken`.
 - **Names:** `claimed()` and `reconcileOne` derive names with `model.ComputeName(x.Class, x.Key, x.Try)`, never `tiny.Name` (F37). A paid crash leftover has `RunnerID` 0, so its name is the only handle.
 - **Read failures:** a failed `List` of backend B skips B's expire, reap, reconcile and launches. When every backend's `List` failed, the step skips the rest, as phase 1's Kubernetes failure does.
@@ -912,7 +914,8 @@ var tinyName = model.NameRE(model.Tiny)                            // Kubernetes
   - `TestSettleOnAbsenceSeam` (fake backend with `SettleOnAbsence() == true`, F2, F4):
     - an accepted `Delete` settles nothing;
     - a `Listing` with `At` before `deleteSent` that lacks the name settles nothing;
-    - the next `Listing` read after it settles, with that `At` as the end;
+    - the next `Listing` read after it settles, with that `At` as the end, once `Gone` answers true;
+    - a `Listing` that lacks the name settles nothing while `Gone` answers false or an error (a locked or stale list, E10);
     - a `registered` row whose compute is `Deleting` isn't adopted;
     - non-`Own` items are never reaped or adopted.
   - `TestCreateNotCreatedSkipsDelete` (F3): an error wrapping `ErrNotCreated` gives `Undo` with no `Delete`, and any other error gives `Delete` first.
@@ -1076,7 +1079,7 @@ func (lp *Loop) SetEgress(e map[string]Egress, at time.Time)            // the w
   - `ci_dispatch_burn_usd_per_hour` = that burn;
   - `ci_dispatch_period_usd{kind="used"}` and `{kind="reserved"}` from `PaidCommitted`'s global `Money`, and `{kind="cap"}` = `min(Global.PaidPerPeriod, CeilingPeriod)`;
   - `ci_dispatch_azure_locked`, and `ci_dispatch_paid_ready{class}`.
-- **Reconcile** follows Task 11's absence model (E10). A `Stopped` group is deleted, and its row settles once a later list, read after the DELETE, lacks it.
+- **Reconcile** follows Task 11's absence model (E10). A `Stopped` group is deleted, and its row settles once a later list, read after the DELETE, lacks it and `Gone` confirms that (a single-group GET answering `ErrNotFound`, E10).
 - **Decision log:** a paid launch's line carries `reserved_usd`, and its settled line `charged_usd` (spec, "Logs").
 
 - [ ] **Step 1: Write the failing tests** (the fake Azure records calls and can fail any of them; its `Deleting` phase lasts at most one poll, F39; fake clock):
@@ -1092,7 +1095,7 @@ func (lp *Loop) SetEgress(e map[string]Egress, at time.Time)            // the w
   - `TestStaleListNeverSettlesAFreshLaunch` (Review Focus 3, F4):
     - a launch created at t, against a cached list read at t − 20 s that lacks it, is not ended;
     - **same step:** a list read at the step's start, before the PUT, with `At` > the step's `now`, ends nothing;
-    - the first list read after `CreateGroup` returned that lacks the group ends the launch as `lost` or `finished`.
+    - the first list read after `CreateGroup` returned that lacks the group, with the group's own GET answering `ErrNotFound`, ends the launch as `lost` or `finished`.
   - `TestReservationFreedWhenGroupVanishes` (Review Focus 3): the sweeper deletes a running group. On the next fresh list the row ends with charge `min(78_000, CostOf(...))`, and `PaidCommitted`'s `Reserved` drops by the reservation.
   - `TestReservationKeptWhileAzureUnreadable` (Review Focus 3): with `List` failing for an hour, the row stays active, burn and committed keep counting it, and no paid launch happens.
   - `TestNoActivePaidRowOutlivesExpiry` (Review Focus 3, property, 500 seeded runs): random sequences of group states, deletions and Azure failures, with `Deleting` bounded at one poll. From the first moment Azure answers every call, each active paid row settles by `max(that moment, Expires) + 3 × poll`.
