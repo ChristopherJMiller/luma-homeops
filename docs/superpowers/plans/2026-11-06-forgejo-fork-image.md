@@ -91,23 +91,30 @@
   - `refs/tags/v15.0.12-realliance.1` exits 1, because `.gitmodules` says `v15.0.11`.
 
   Run it. Expected: FAIL. Implement `version.sh`, run again, expected PASS.
-- [ ] **Step 2: Write `image.yml`.**
-  - **Triggers:** `push: tags: ['v15.0.11-realliance.*']` and `workflow_dispatch`. No PR builds.
-  - **Runner:** `runs-on: medium`, `timeout-minutes: 40`, `concurrency: {group: image, cancel-in-progress: false}`.
-  - **Steps:**
-    1. Check out, with actions pinned by sha as in luma-homeops' `forgejo-runner-class-image.yml`.
-    2. Set a git identity for `am`.
+- [ ] **Step 2: Write `image.yml`.** Two jobs (ruling C2), so the registry token never shares a machine with the build. The workflow's header holds the rules and the accepted risk (Chris, 2026-11-06), and `scripts/test-ci.sh`'s `workflow` case checks them.
+  - **Triggers:** `push: tags: ['v15.0.11-realliance.*']` and `workflow_dispatch`. No PR builds. `concurrency: {group: image, cancel-in-progress: false}`.
+  - **Every step** (Task 3 review I1, I1-R):
+    - No `actions/checkout`. Each job checks out with an anonymous `git fetch` of the public repo at `$GITHUB_SHA`.
+    - Every step blanks `GITHUB_TOKEN` and `FORGEJO_TOKEN` in its own `env:`, because the runner puts the task token there. Every `run:` step also blanks `ACTIONS_RUNTIME_TOKEN`, so only the two artifact steps keep that JWT.
+    - Every `uses:` names its action by a 40-hex sha.
+  - **`build`** (`runs-on: medium`, `timeout-minutes: 40`) never sees `REGISTRY_TOKEN`:
+    1. The anonymous fetch.
+    2. A git identity for `am` (`GIT_COMMITTER_*` in the job's env).
     3. `scripts/ci-tools.sh`.
     4. `scripts/check-patches.sh`.
     5. `make check`, then `make apply`.
-    6. In `upstream/`: `npm ci`, then `make frontend backend` with the Global Constraints flags and `FORGEJO_VERSION=$(scripts/version.sh "$GITHUB_REF")`.
+    6. `scripts/build-binary.sh` with the version from `scripts/version.sh "$GITHUB_REF" "$GITHUB_SHA"`. In `upstream/`, it runs `npm ci`, then `make frontend backend` with the Global Constraints flags, and prints `/proc/meminfo`'s peak.
     7. Binary checks (`scripts/check-binary.sh`):
        - `readelf` shows no interpreter and no dynamic section. The class image has no `file`, but gcc brings binutils.
        - No symbol table (`-s -w`) and an empty build id (`-buildid=`).
        - `go version -m` shows go1.26.10, the tags, `CGO_ENABLED=0`, `-trimpath`, `vcs.revision` = the fork commit and `vcs.modified=false`.
        - `--version` matches.
-    8. `build-image.sh`, then `publish-image.sh` with the one tag `version.sh --image-tag` names: `v15.0.11-realliance.N` on a tag build, `sha-<7>` on a dispatch.
-    9. Print the pin line and `/proc/meminfo`'s peak.
+    8. `build-image.sh`. The job uploads `oci/` and `digest` as the artifact `image`, with Forgejo's patched upload-artifact v4 fork, and outputs the digest.
+  - **`publish`** (`needs: build`, `runs-on: tiny`, `timeout-minutes: 15`):
+    1. The anonymous fetch at the same `$GITHUB_SHA`.
+    2. Download the artifact, with the patched download-artifact v4 fork.
+    3. Without the token, check the artifact's digest against the build job's output. Name the one tag with `version.sh --image-tag`: `v15.0.11-realliance.N` on a tag build, `sha-<7>` on a dispatch.
+    4. `publish-image.sh image "$TAG"`, the only step with `REGISTRY_TOKEN`. It prints the pin line.
 - [ ] **Step 3: PR** to realliance/forgejo from `ci-image`. Merge it as fast-forward: no deploy happens, and it touches no file the other session touches (§5).
 - [ ] **Step 4: Gate G1.** Wait for `medium` on (phase 2 Task 21).
 - [ ] **Step 5: First run,** a `workflow_dispatch` on `main`. Expected: success, `sha-<7>` pushed. Ledger, for phase 2 Task 21 Step 5: wall time, start time, peak memory, the charge from the usage API, pass or fail. If wall time is over 75 % of 40 min, raise it as a finding.
