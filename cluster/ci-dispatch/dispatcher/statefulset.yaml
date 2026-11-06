@@ -63,11 +63,12 @@ spec:
       containers:
         - name: ci-dispatch
           # PENDING until phase 2 Task 16 releases v0.2.0: config.yaml's azure and paid sections need
-          # it, and v0.1.0 (sha-9055e60) refuses them and exits. The real pin replaces this line, and
-          # sets RELEASE_IMAGE and deletes the xfail in scripts/test_ci_dispatch_manifests.py, in one
-          # commit. A new image never deploys itself: .renovaterc.json never automerges this image,
-          # so its PR is the alarm. Re-pin by hand after review.
-          image: git.realliance.net/realliance-ops/ci-dispatch:sha-PENDING
+          # it, and v0.1.0 (sha-9055e60) refuses them and exits. The all-zero digest is one no registry
+          # can serve. The real pin replaces this line in one commit with deleting .release-pending
+          # and setting RELEASE_IMAGE in scripts/test_ci_dispatch_manifests.py (.release-pending says
+          # how). A new image never deploys itself: .renovaterc.json never automerges this image, so
+          # its PR is the alarm. Re-pin by hand after review.
+          image: git.realliance.net/realliance-ops/ci-dispatch:sha-PENDING@sha256:0000000000000000000000000000000000000000000000000000000000000000
           args:
             - --config=/etc/ci-dispatch/config/config.yaml
           env:
