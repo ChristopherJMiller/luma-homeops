@@ -485,3 +485,20 @@ The runner-classes plan's dry-run deploy may start now that the components are o
   - Gate G excludes `ci-dispatch` and `ci-tiny`.
 - **24 h windows and log rotation (N3).** kubectl reads only an agent's current log file. At about 5 MiB a day per agent and kubelet's 10 MiB file size, each log rotates about every two days, and for about a day afterwards `stray --since 24h` reads SHORT, which fails closed. The first rotation is due around 2026-11-07, after Step 11. **24 h gates (runner classes) need shorter windows, or must read the rotated files with `talosctl read /var/log/pods/…`** (read-only). Raising `containerLogMaxSize` is a machine-config change and needs an S4 ask.
 - **Task 8:** reuse `backend_dsts`, `deny_attempts`, `claim_rows` and the T0/T1 window, not `deny_match` with `IP:`.
+
+## Task 8 pre-work: verifier fixes R3-1 and R3-2 (2026-11-06)
+
+Branch `np8-verifier`, commit `6ff066e8`, scripts only, not pushed (the controller reviews first). It ran in the read-only window Chris allowed when he waived Step 11 as the tiny gate.
+
+- **R3-1: both mechanisms, and why.**
+  - **Pairing by the row timeout** settles the 1-in-27 case, where all three ClusterIP SYNs land on `.240`, with no re-run. Live, one dropped row follows the previous one 3.020 to 3.073 s later (n = 473; the ClusterIP row to the literal `.240:6443` row, 3.022 s). With no other run in the window, the overlapping pair's two attempts are therefore one per row, in the probe's order.
+  - **Why pairing alone is not enough.** Pairing is unsound while another run sits in the window: a run one row ahead puts its literal attempt in this run's ClusterIP slot. Such a run also adds attempts to the rows beside the pair, which turns pairing off.
+  - **Up to 3 re-runs (was 1)** cover loop overlap instead. The loop's two attempts for the pair can straddle the boundary between two back-to-back runs (seen live) but no third, so of four runs at least two are clean.
+  - AMBIGUOUS never PASSes. A ClusterIP path that never logs still reads NOT-LOGGED.
+- **R3-2.** The holder's "since" in `stray` is the `PodReadyToStartContainers` lastTransitionTime (all 239 pods have it), with `startTime` as the fallback.
+- **M1, the idle pipefail fix:** in place. The check is now a function, `sync_error`, with four `selftest` cases.
+- **Live, read-only `canary`: 7 runs, 2026-11-06T16:15–16:36Z.**
+  - All 7 ended `canary: PASS (3 nodes)`, every node at `rows 25/25 deny-logged 21/21`.
+  - 7 re-runs in all (1, 2, 1, 1, 1, 0, 1). Every one came from the probe's own loop run in the window. No run ended AMBIGUOUS.
+  - Run 1's exit code reads 127. A comment edit landed in the script while that run was still reading it, and bash failed in the dispatch code after `canary` had already printed PASS.
+- **Re-runs remain common:** 6 of 7 invocations needed one. Each costs about 65 s for one pod, and the exit-2 outcome is now negligible. Judging the run from a chain of its own attempts anchored at T0 would make them rare. That is a possible follow-up, not needed for soundness.
