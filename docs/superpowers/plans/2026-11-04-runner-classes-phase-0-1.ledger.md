@@ -129,3 +129,47 @@ It matches the 01:24Z before, apart from the two namespaces.
 - `check-prometheus-rules.sh`: exit 0, `selected=42 groups=45 alerting=188 recording=82`, the one gonic WARN.
 - `stray --since 15m` (17:22Z): `FAIL (0 of 752 deny lines stray, 1 agent logs short of 15m)`. The only cause is middle's agent `k456z`, 343 s old after Task 9's restart. `stray --since 5m`: PASS (275 deny lines, policed `ci-dispatch,ci-tiny,forgejo-runner,netpol-canary`). Deny lines naming `ci-dispatch/` or `ci-tiny/` over 15 min: 0 on each agent.
 - The runners are idle: the galaxy runner's last tasks (realliance-ops/ci-dispatch 180 and 181) ended at 17:19:46Z, and the general runner's last (realliance.net 143) on 2026-11-05.
+
+### Step 4: push and rollout
+
+- **Pushed 2026-11-06T17:24:40Z**: `main` 8dd46cfd → 7fd0efb8, a fast-forward of 2 signed commits (c7ca1f7a the change, 7fd0efb8 this ledger).
+- Argo created the new `ci-dispatch-0` at 17:24:43Z on `top` (ConfigMap `ci-dispatch-config-4cfh56gm69`) and was `Ready` at 17:25:04Z with 0 restarts; the app was `Synced/Healthy` at 17:25:04Z.
+- **`tiny_on=2026-11-06T17:24:54Z`**: the log's `serving` line with `"tiny":"on"`, then `running ready=true`. No `WARN` or `ERROR`. Metrics: `class_mode{class="tiny"}` 2, `config_verified` 1, `store_rejected_total` 0, `up` 1.
+
+### Step 5: acceptance (17:27:37–17:39:36Z, realliance/sso)
+
+- **Two test fixes first,** both in realliance/sso PR #63, found at this first live run:
+  - 9df453a, before the run: the egress test dialled the literal host `$PEER_IP`. NetworkPolicy Task 6 added two `$PEER_IP` rows after Task 16 wrote the suite, and the suite filled only `$WAN_IP`. It now skips `$HOST_IP` and `$PEER_IP`, as `test_forge_ci.py` does, and fails on any other variable: 23 rows (19 dropped, 3 open, 1 dns).
+  - dffeb57, after the run: `test_tiny_job_hardened` asserted that `KUBERNETES_SERVICE_HOST` is unset. The kubelet sets it, and `KUBERNETES_PORT*`, in every container, even with `enableServiceLinks: false`. The live pod's environment had them; its spec had `enableServiceLinks: false`, no service account token, a read-only root, uid/gid 1000, all capabilities dropped, `RuntimeDefault` and no privilege escalation. The check is now that no other `*_SERVICE_HOST` exists.
+- **Full run** (`CI_TINY_ACCEPTANCE=1 … pytest tests/forge/test_forge_ci_tiny.py -v`, sso ba3f9fc + 9df453a): **8 passed, 1 failed** in 11 min 59 s. The failure was `test_tiny_job_hardened`, on the `KUBERNETES_SERVICE_HOST` line only: with dffeb57, which changes that line alone, the test passed live (17:39:49Z, 17 s): every hardening property holds.
+- **Not rolled back.** The trigger is a failing acceptance test; this one failed on an assertion the kubelet can never meet, and no property of the pod was missing. Chris or the coordinator may overrule; the rollback is `tiny: "off"` (docs/ci.md).
+- 10 launches (keys 220-1 to 233-1, every one `try` 1): 9 settled `finished`, 1 reaped `gone-before-pickup` (the cancel half of `test_nothing_outlives_the_job`), charged 1 or 2 minutes each. `launches_total{outcome="error"}` and `{outcome="undone"}` 0, `reaped_total{reason="pickup"}` 0, every `errors_total` and `orphans` series 0. Holds and waits as designed: `owner-busy` (226-1), `owner-limit` (228-1, `forgejo-admin`), `label` (229-1, 231-1), `class-off` (230-1, `small`).
+- **Start times, `ci_dispatch_start_seconds`** (first sighting to running, so it includes queue waits): 5 observations, sum 90.0 s; 2 ≤ 10 s, 2 in 10–20 s, 1 in 30–60 s (the second job of `test_owner_runs_one_at_a_time`, which waited `owner-busy` for 40 s). The dispatcher observes a start only when a tick sees the job running, so the five jobs that ended within one tick have none. No launch hit the 3 min pickup timeout, so `tiny.pickup` stays 3m.
+- **`netpol-gate`:** 9 of the 10 pods captured (224's pod went before its gate finished). Each logged exactly **1** `egress not enforced yet; waiting` line, and each gate finished **6 s** after the pod's creation. Every pod ran on `middle`.
+
+### Step 6: stray and canary
+
+- `scripts/netpol-verify.sh canary` (17:40:58–17:43:09Z): `canary: PASS (3 nodes)`, bottom `rows 25/25 deny-logged 21/21`, `stray` PASS.
+- `scripts/netpol-verify.sh stray --since 30m` (17:46:43Z): `stray: PASS (1589 deny lines, 87 from pods since gone or moved, policed: ci-dispatch,ci-tiny,forgejo-runner,netpol-canary)`. The 87 are the `ci-tiny` pods' lines.
+- **The matrix expected every one of the 87 `ci-tiny` deny lines:** 3 per pod from `netpol-gate`'s API probe (to .240–.242:6443 after DNAT), and 60 from the egress job, 20 distinct targets, each a dropped row of the matrix or one of the two extras (github.com:22, 1.1.1.1:853). No deny line named `ci-dispatch/`, and none had a `ci-tiny` pod as destination. A live watch over the run printed no unexpected line.
+
+### Step 7: sizing (17:43Z)
+
+- `max_over_time(container_memory_working_set_bytes{namespace=~"ci-dispatch|ci-tiny"}[6h])`: dispatcher **10.9Mi** (6 h average 9.3–10.3Mi, the dry-run pod and the new one); `tiny` runner 3.5–19Mi (19Mi: the egress job's node probes), `netpol-gate` 3.1–3.6Mi.
+- CPU, `max_over_time(rate(container_cpu_usage_seconds_total[5m])[6h:1m])`: dispatcher **0.5m** (average 0.3–0.4m); `tiny` runner 0.3–2.7m. The jobs are seconds long, so these rates understate their peaks.
+- **Dispatcher request:** `max(48Mi, 10.9Mi × 1.25 = 13.6Mi)` = 48Mi, unchanged, so Step 7 needs no deploy. `tiny` stays at the spec's 250m/512Mi requests and 1/2Gi limits.
+
+### Gate G after (17:43–17:46Z)
+
+It matches the 17:21Z before.
+
+- G1: 3 nodes `Ready`, none cordoned. 145/145 PGs `active+clean` (2 scrubbing); 9/9 OSDs.
+- G2: Ceph `HEALTH_WARN`, `MDS_CLIENT_RECALL` and the muted `AUTH_INSECURE_*`. Argo: 63 apps, all `Synced`; only `rook` and `rook-cluster` Degraded.
+- G3: 51 edge rows; the normalised diff is empty, and the certs are the same.
+- G4: no pod outside `Running`/`Succeeded`, none over 100 restarts; NetworkPolicies unchanged (3, 3, 3, 5); memory requests top 86 %, middle 85 %, bottom 88 %, unchanged (no `tiny` pod running); `ci-tiny` empty; no Warning event in `ci-tiny` or `ci-dispatch`.
+- `check-prometheus-rules.sh`: exit 0, `selected=42 groups=45 alerting=188 recording=82`.
+- Alerts: no `NodeMemoryRequestsHigh`, `CIDispatch*` or `CITinyQuotaFull` in the last 30 min. **`PagesTakedownRequested` fires from 17:39:10Z, caused by this suite:** `test_owner_minutes_cap_holds` deletes a private `forgejo-admin` repo, and the pages relay turns every private repo delete into an `unpublish_requested` event (docs/pages.md: private repos aren't checked). It touched no site, and clears after 6 h, about 23:39Z.
+
+### Step 8
+
+- realliance/sso PR #63 (the two test fixes): draft → ready for review (17:47Z). **Chris** merges.
