@@ -60,10 +60,10 @@ Each outcome has its own email to `alert_emails`. `Locked` and `LockFailed` are 
 | `LockFailed`: the assignment delete failed. The groups went anyway, and every sweep retries. | `Cancelled`; the `Lock_failed` step says why | `ci-sweeper-lock-failed` (runs cancelled) |
 | `Degraded`: a read, delete, or tag write failed, or a list had a second page. The other rules still ran. | `Failed`, with `error.code` `Degraded` | `ci-sweeper-failed` (runs failed, which `Locked` runs also raise) |
 
-To unlock:
+To unlock, follow `docs/ci.md`, After a trip:
 
-1. Find the cause first: the run's `error.code` and `error.message`, and the dispatcher's log (`docs/ci.md`, After a trip).
-2. Plan: it reads `1 to add, 0 to change`, the assignment under its fixed name. Chris applies.
+1. Find the cause first.
+2. Plan: it reads `1 to add, 0 to change, 0 to destroy`, the assignment under its fixed name. From the rotation due date (2027-04-05) on, it reads `3 to add, 0 to change, 1 to destroy`: it also creates `time_rotating.dispatcher` and replaces the client secret, destroying the old one, so the credential's rotation (`docs/ci.md`, The Azure credential) runs in the same STOP. Chris applies.
 3. Then check that the next sweep ends `Succeeded`. If it ends `Locked` with no cause, a sweep that read the old state raced the apply: apply again.
 
 A budget lock holds until the month rolls over or Chris raises the budget: while `currentSpend` stays at $85 or more, the next sweep locks the restored assignment too.
@@ -72,7 +72,7 @@ Notes:
 
 - **The dispatcher's own gate is $0.48 an hour** (4 `small` or 2 `medium` jobs; Chris, 2026-11-06). The sweeper's $0.60 counts compute plus egress, which leaves about $0.12 an hour, about 380 KB/s across all groups, for traffic before two sweeps lock.
 - The egress term fails open. An unread metric (a 404 for a group deleted mid-sweep, say) adds nothing to the burn and skips the cap, and the run ends `Degraded`. Task 4 checks what a metric read returns for a deleted group.
-- **How the egress metric reads** (Task 5's drill). `interval=FULL` gives one average over the span, and that average is per sample, about 2 a minute, not weighted by time. A group's first 90 s or so has no sample, so average × age reads high for a young group: 1.33 times the bytes sent in the drill, the safe direction. The metric also lags the wall clock by about 2 min: a group under 2 min old reads 0, and a sweep's 10-minute rate window misses its newest 2 minutes or so.
+- **How the egress metric reads** (Tasks 4 and 5). `interval=FULL` gives one average over the span, and that average is per sample, about 2 a minute, not weighted by time. Sustained traffic reads high: average × age gave 1.28 to 1.33 times the bytes sent in Task 5's drill. A short burst, or anything in a group's first 90 s or so, which has no sample, can read low or 0: in Task 4, a 101 MB download that took 2.3 s, two minutes in, read 0 both ways. The metric also lags the wall clock by about 2 min: a group under 2 min old reads 0, and a sweep's 10-minute rate window misses its newest 2 minutes or so.
 - The shape price reads only CPU and memory, and ignores `gpu`, `sku` and `limits`. The `aci-shape` Policy denies all three today; widen the price if that rule ever changes.
 - The first sweeps after the first apply can fail with 403 until the sweeper's role assignment propagates. Expect one `Degraded` email then.
 

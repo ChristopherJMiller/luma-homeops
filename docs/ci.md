@@ -106,15 +106,16 @@ stop. Once the pod has terminated, delete each group from the CI group, inside `
 `az account show --query name -o tsv` printing `Realliance`:
 
 ```bash
-for n in $(az container list -g rg-realliance-ci --query "[?tags.\"forge-ci\"=='1'].name" -o tsv); do
+for n in $(az container list -g rg-realliance-ci --query "[].name" -o tsv); do
   az container delete -g rg-realliance-ci -n "$n" --yes -o none
 done
 az container list -g rg-realliance-ci --query "[].{name:name,state:provisioningState}" -o tsv
 ```
 
-The Policy fence refuses a group without the `forge-ci` tag, so the loop gets them all. Repeat the
-last `list` until it prints nothing: a group stays listed while it reads `Deleting`. Their reservations
-settle once the dispatcher runs again and lists the groups as gone.
+It deletes every group, whatever its tags: the fence checks only that `forge-ci` exists, not its
+value, and the CI group holds nothing but job compute. Repeat the last `list` until it prints
+nothing: a group stays listed while it reads `Deleting`. Their reservations settle once the
+dispatcher runs again and lists the groups as gone.
 
 Then make it last in git: pause `tiny`, and `small` and `medium` too, which passes the hooks. Only
 once that change is on `main`, restore Argo: patch `applications` back to
@@ -164,23 +165,21 @@ in `dry-run`, then, the dispatcher's token deletes runners of that one shape.
   `ci-owner-id`, `created-at` and `expires-at`.
 - The image is `ghcr.io/christopherjmiller/forgejo-runner-class`, by digest only (`paid.image` in
   `config.yaml`). Like every image built here, a merged base bump doesn't ship it: re-pin by hand.
-- The job runs as root, with open internet egress, no Docker and no cache. The runner credential
-  reaches the group only as a secure environment value.
-- A `timeout` wrapper ends the job 5 min before its hard stop, even with galaxy down. The pickup
-  timeout is 6 min.
-- Prices come from Azure's public retail feed once a day, never below the list prices in the table
-  (2026-11-04). Once the newest is 7 days old (`paid.price_max_age`), paid jobs wait `not-ready`.
+- The job runs as root, with open internet egress, no Docker and no cache, and the runner credential
+  only as a secure value. A `timeout` wrapper ends it 5 min before its hard stop, even with galaxy
+  down. The pickup timeout is 6 min.
+- Prices come from Azure's retail feed daily, never below the table's (2026-11-04). Once the newest
+  is 7 days old (`paid.price_max_age`), paid jobs wait `not-ready`.
 
-Run `az` inside `nix develop`, and check that `az account show --query name -o tsv` prints
-`Realliance`. Write ARM URLs with the `{subscriptionId}` placeholder, which `az` fills in, never with
-the id.
+Run `az` inside `nix develop`, with `az account show --query name -o tsv` printing `Realliance`, and
+write ARM URLs with the `{subscriptionId}` placeholder that `az` fills in, never the id.
 
 **Money.** A launch reserves its worst case, the hourly price over the whole hard stop, before it
-creates the group. The launch settles once a fresh list lacks the group and a GET of it answers not
-found. The owner then pays the compute from creation to stop in whole seconds, capped at the
-reservation, plus the group's internet egress (see The egress cap), and the reservation frees. The
-owner pays for every launch made for their job, even a wasted one. A launch that Forgejo held after
-the group existed pays its compute; an Azure capacity or quota refusal made nothing and costs nothing.
+creates the group. Once Azure confirms the group gone (Known limits), the owner pays the compute
+from creation to stop in whole seconds, capped at the reservation, plus the group's internet egress
+(The egress cap), and the reservation frees. The owner pays for every launch made for their job, even
+a wasted one. A launch that Forgejo held after the group existed pays its compute; an Azure capacity
+or quota refusal made nothing and costs nothing.
 
 **The gate.** A paid job passes the checks `tiny` has (Finding a job's record), then these in order:
 
@@ -197,18 +196,8 @@ The burn, `ci_dispatch_burn_usd_per_hour`, adds the hourly price of every active
 price of every listed group that no launch claims (orphans, groups still deleting, a drill's), and
 every group's recent egress rate.
 
-**Moving to `on`.** Paid classes go from `dry-run` to `on` once their probes pass, with no 24 h
-dry-run (Chris, 2026-11-06). The probes (phase 2 Task 19 Step 4), from a `forgejo-admin` scratch repo:
-
-- `ci_dispatch_paid_ready{class}` reads 1 for both classes;
-- a `runs-on: small` job logs one `launch` decision with `"mode":"dry-run"`;
-- a `runs-on: medium` job holds `owner-limit`, since its $0.2136 reservation is over the caps owner's
-  $0.15: the money gate on live data;
-- `az container list -g rg-realliance-ci --query "length(@)"` reads 0;
-- restic holds a snapshot of host `ci-dispatch-ledger` (`docs/backups.md`).
-
-Then set both to `on` in `config.yaml` and `test_config_values`, a deploy with its own STOP, and run
-realliance/sso `tests/forge/test_forge_ci_paid.py` with `CI_PAID_ACCEPTANCE=1`.
+**Moving to `on`** takes the probes of phase 2 Task 19 Step 4, then a deploy, with no 24 h dry-run
+(Chris, 2026-11-06), then the acceptance suite of Task 21.
 
 ### Paid limits and the caps owner
 
@@ -222,17 +211,13 @@ may lower them, never raise them.
 | `paid_usd_per_period` of one owner | $80 | $10 by default; `realliance` (52) $30; `forgejo-admin` (1) $0.15 |
 | `paid_concurrent` of one owner | 20 | 2 by default |
 
-- $10 buys about 85 h of `small`. A launch counts in the period of its creation.
-- The spec set $100 and $0.60. Chris lowered the period cap on 2026-11-05, to pay for the cache host,
-  and the hourly one on 2026-11-06. v0.3.0 treats a head over its ceilings as `untrusted`.
+- $10 buys about 85 h of `small`. A launch counts in the period of its creation. A head over the
+  ceilings reads `untrusted`.
 - **The caps owner** is `forgejo-admin` (id 1), the owner of the paid acceptance suite's jobs. $0.15
   fits one `small` reservation ($0.078), not two, and never a `medium`, so the suite proves the money
   gate at almost no cost. Keep it at $0.15.
-- Azure enforces its own limits, which never read `ci.yaml`. The sweeper locks when the burn it sees,
-  compute plus egress, stays over $0.60 an hour for two sweeps, or when the CI group's budget
-  `realliance-ci` reaches $85. The guard group's budget `realliance-ci-guard`, $5, only emails. The
-  $0.12 an hour between the dispatcher's $0.48 and the sweeper's $0.60 is the room legitimate egress
-  gets, about 380 KB/s across all groups, before two sweeps lock.
+- Azure's own limits never read `ci.yaml`: the sweeper's $0.60 an hour and the $85 budget
+  (`azure/ci/README.md`).
 
 ### Reading paid spend
 
@@ -243,10 +228,8 @@ u '52/usage?period=current' | jq '{paid, global}'
 u '52/jobs?period=current&limit=200' | jq '.jobs[] | select(.backend == "aci") | {job_id, class, minutes, cost_usd, state, outcome}'
 ```
 
-`paid` holds `limit_usd`, `limit_source`, `used_usd` (settled), `reserved_usd` (in flight),
-`remaining_usd`, `concurrent`, and per class the `jobs`, `minutes` and `used_usd`. `global.paid` reads
-`open`, `near-cap` (the period's money has reached 80 % of the cap) or `closed` (no paid class is on
-and ready, so a lock reads `closed` too).
+`used_usd` counts settled launches and `reserved_usd` those in flight. `global.paid` reads `open`,
+`near-cap` (80 % of the cap) or `closed` (no paid class on and ready, a lock included).
 
 **The month, every owner:** `ci_dispatch_period_usd` with `kind` `used`, `reserved` and `cap`, and
 `ci_dispatch_burn_usd_per_hour` for now. `CIDispatchSpendHigh` fires at 80 % and 95 % of the cap, $64
@@ -270,13 +253,10 @@ the safe side.
   last 5 min joins the burn, so a heavy sender stops new launches (`class-full`).
 - The sweeper reads the same metric with its own identity each run. It deletes any group at or over
   the cap, whatever its name, and adds each group's 10-min rate to its burn.
-- **How it reads:** the totals come from the metric's `FULL` average times the group's age. That
-  average is per sample, about 2 a minute, and the first 90 s or so has none, so a young group reads
-  high: the drill measured 1.28 to 1.33 times the bytes sent. It errs toward an early delete and a
-  high charge, the money-safe side.
-- **The metric lags** the wall clock by about 2 min. A crossing shows within about 5 min, and a fast
-  job can send tens of GB past the cap before it dies; the burn term stops new launches meanwhile.
-  Egress in the last 2 min or so before a DELETE is never charged (accepted, bounded by the cap).
+- **How the metric reads** (`azure/ci/README.md`, Notes): sustained traffic reads high, while a
+  short burst, or anything in a group's first 90 s or so, can read low or 0. It lags about 2 min, so
+  a crossing shows within about 5 min, and a fast job can send tens of GB past the cap first; the
+  burn term stops new launches meanwhile.
 - **Changing the cap or the price** takes both sides at once: `egress` in `azure/ci/fence.json` (the
   sweeper, Chris's apply) and `limits.EgressCapBytes` or `limits.EgressMicroPerGB` in ci-dispatch
   (the dispatcher, a release and a re-pin). The release checklist compares them.
@@ -435,7 +415,7 @@ page around the clock although they're `warning`. `CIDispatchEgressCapHit` and
 | `CITinyQuotaFull` | `ci-tiny` at its 3 pods for 30 min | `kubectl -n ci-tiny get pods`. With global `tiny_concurrent` 1, three pods means leftovers. A reaped pod may run out its 30 s grace while its replacement starts; the quota bounds that |
 | `CIDispatchSpendHigh`, `level` 80 or 95 | The period's used plus reserved money is at 80 % ($64) or 95 % ($76) of the $80 cap, for 5 min | Reading paid spend. The gate stops at the cap by itself; pause the paid classes if the spend looks wrong |
 | `CIDispatchLocked` | Azure answered with the sweeper's lock, for 2 min | After a trip |
-| `CISweeperStale`, `reason: stale` | The sweeper has no finished run in 30 min | Its runs (After a trip, step 1). With the sweeper turned off or hung, only the budget bounds Azure compute |
+| `CISweeperStale`, `reason: stale` | The sweeper has no finished run in 30 min | Its runs (After a trip, step 1). With the sweeper turned off or hung, only the budget bounds Azure compute: pause `small` and `medium` until it runs again |
 | `CISweeperStale`, `reason: absent` | No sweeper timestamp for 30 min: the watcher can't read the run history, or the dispatcher isn't running | `CIDispatchStale` covers a missing dispatcher. Expect it during a break-glass longer than 30 min, or a node loss: silence it then |
 | `CIDispatchDrift` | The ledger and Azure differ by over 10 % for a closed day or period | The month-end drift check. The gauge holds the ratio, so the alert repeats every 30 min until the next one: silence it once read |
 | `CIDispatchPaidNotReady` | A paid class in `dry-run` or `on` not ready for 30 min (the `class` label) | The log's `"api":"azure"` and `"api":"prices"` lines, `ci_dispatch_azure_locked`, `ci_dispatch_price_age_seconds`. In `dry-run` it's a rollback trigger |
@@ -444,11 +424,8 @@ page around the clock although they're `warning`. `CIDispatchEgressCapHit` and
 
 ## After a trip: the Azure lock
 
-The sweeper locks when the CI group's budget reaches $85, or when the burn it sees stays over $0.60
-an hour for two sweeps (`azure/ci/README.md`). The lock deletes the dispatcher's role assignment on
-the CI group, then every container group, and every later sweep keeps compute at zero. The signs:
-`CIDispatchLocked`, `ci_dispatch_azure_locked` 1, paid jobs waiting `not-ready`, `global.paid`
-`closed`, and the sweeper's emails (`ci-sweeper-locked`, `ci-sweeper-failed`). `tiny` carries on.
+The sweeper's lock (`azure/ci/README.md`) shows as `CIDispatchLocked`, `ci_dispatch_azure_locked` 1,
+paid jobs waiting `not-ready`, and the sweeper's emails. `tiny` carries on.
 
 1. **Find out why,** before anything else. The sweeper's newest runs, id-free fields only:
 
@@ -483,17 +460,19 @@ the CI group, then every container group, and every later sweep keeps compute at
    ```
 
    The plan must read `# azurerm_role_assignment.dispatcher will be created` and
-   `Plan: 1 to add, 0 to change, 0 to destroy.`: the assignment, under its fixed name. Anything else:
-   stop.
+   `Plan: 1 to add, 0 to change, 0 to destroy.`: the assignment, under its fixed name. **From the
+   rotation due date (2027-04-05) on,** it also creates `time_rotating.dispatcher` and replaces
+   `azuread_application_password.dispatcher`: `Plan: 3 to add, 0 to change, 1 to destroy.` That
+   apply destroys the old client secret, so in the same STOP run The Azure credential, steps 2 to 5.
+   Anything else: stop.
 4. **Check.** The next sweep ends `Succeeded` and removes both `ci-sweeper-*` tags. If it ends
    `Locked` with no cause, a sweep that read the old state raced the apply: apply again.
    `ci_dispatch_azure_locked` clears within one poll (30 s) of the assignment taking effect, and
    `ci_dispatch_paid_ready` returns to 1.
+5. **Resume** `small` and `medium` as you paused them, a deploy with its own STOP.
 
 While locked, the dispatcher can't read the groups, so launches in flight keep their reservations
-until the first good list after the unlock settles them. **From the rotation due date on, every
-`azure/ci/` apply also rotates the client secret** (The Azure credential): if the plan touches
-`azuread_application_password.dispatcher`, run the whole rotation in the same STOP.
+until the first good list after the unlock settles them.
 
 ## Rotating credentials
 
@@ -667,16 +646,10 @@ The `galaxy` runner's repo-scoped connection for `realliance-ops/ci-dispatch`: s
 
 ### The Azure credential (`CI_DISPATCH_AZURE_*`)
 
-The client secret of the service principal `realliance-ci-dispatch` lasts 180 days. At 150 days
-`time_rotating.dispatcher` (`azure/ci/fence.tf`) comes due, and the next apply replaces the secret
-**and destroys the old one in the same run**, without waiting for day 180. From that apply until the
-new secret is in the pod, every Azure call fails and the paid classes wait `not-ready`. That makes
-rotation one STOP, run back to back: Chris's apply, the pipe into sso-secrets, the reseal, the deploy
-push and the pod restart. `CIDispatchPaidNotReady` pages after 30 min, so keep the window shorter than
-that.
-
-The first rotation falls due **2027-04-05**, and that secret expires 2027-05-05 (phase 2 ledger,
-Task 4). The tenant, client and subscription ids don't change.
+The first apply of `azure/ci/` on or after **2027-04-05** (then every 150 days; the comment in
+`azure/ci/fence.tf`) replaces the client secret and destroys the old one at once, so from that apply
+until the pod restarts on the new one, the paid classes wait `not-ready`. Run it as one STOP, back to
+back, inside the 30 min before `CIDispatchPaidNotReady` pages. Only the client secret changes.
 
 1. STOP: ask Chris. He plans and applies, in a luma-homeops checkout. The plan must change only
    `time_rotating.dispatcher` and `azuread_application_password.dispatcher`:
@@ -781,26 +754,15 @@ timings, its group body and its cost, about $0.61.
    restore apply.
 2. Pause `small` and `medium` first. The dispatcher counts the drill's groups in its burn, and the lock
    pages `CIDispatchLocked` and `CIDispatchPaidNotReady` around the clock: expect both.
-3. **Age limit:** one `small` group `ci-drill-age-<hex>` running `sleep 7200`. It goes 90 to 102 min
-   after creation.
-4. **Rate trip:** five `medium` groups (20 cores, $1.165 an hour), then a sixth, `small`, which Azure
-   refuses with `ContainerGroupQuotaReached`. The first sweep over the line sets
-   `ci-sweeper-over-at`. The second deletes the dispatcher's assignment first, then the groups,
-   within 22 min of the creates, and ends `Failed`/`Terminated` with `error.code` `Locked`.
-5. **The lock:** `az role assignment list -g rg-realliance-ci --query "[].roleDefinitionName" -o tsv`
-   no longer lists `Realliance CI dispatcher`, and `TestLiveLocked` reads `ErrLocked` (plan Task 5
-   Step 4). Then Chris restores it as After a trip, step 3 does, and the next sweep ends `Succeeded`.
-
-Create each group with `az rest --method put` and the compliant body of phase 2 Task 4 Step 4:
-`az container create` can't set the two tags the fence requires. The reaper never touches a
-`ci-drill-*` group.
+3. Run the plan's Task 5, Steps 2 to 5: the age limit, the rate trip, the lock, and Chris's restore
+   (After a trip, step 3). The reaper never touches a `ci-drill-*` group.
 
 ## The month-end drift check
 
 The watcher compares the ledger's paid charges with Cost Management's for the CI group: each day
-from 06:00 UTC for the day before yesterday, once Azure's figure for it reaches $0.50, and on the
-third day of each month for the whole month before, with no floor. On the third, read
-`ci_dispatch_drift_ratio{window="period"}`: under 0.10 meets the spec. Over 0.10 fires
+from 06:00 UTC for the day before yesterday, once Azure's figure for it reaches $0.50, and from the
+third day of each month for the whole month before, once per process, with no floor. On the third,
+read `ci_dispatch_drift_ratio{window="period"}`: under 0.10 meets the spec. Over 0.10 fires
 `CIDispatchDrift`. Then:
 
 1. Read the ledger's daily rows from last night's snapshot, on the laptop, with the restic
@@ -816,9 +778,10 @@ third day of each month for the whole month before, with no floor. On the third,
 2. Compare them with the portal's Cost analysis for `rg-realliance-ci`, by day, and find the day that
    moved.
 3. The likely causes: rounding; the tail from a group's stop, where the ledger stops charging, to its
-   delete, where Azure stops billing; a launch undone after its PUT; egress, which the ledger reads
-   high on short jobs, prices without the free tier, and misses for the last 2 min or so before a
-   delete; and groups no launch owns, such as a drill's. Fix the cause, and check again next month.
+   delete, where Azure stops billing; a launch undone after its PUT; egress, which reads high on
+   sustained traffic and low on a short burst, ignores the free tier, and misses the last 2 min or
+   so before a delete; and groups no launch owns, such as a drill's. Fix the cause, and check again
+   next month.
 
 ## Releasing a dispatcher
 
@@ -835,10 +798,8 @@ done
 git -C ~/Repos/ci-dispatch ls-tree --name-only "$REL" internal/aci/testdata/policies/ | wc -l
 ```
 
-1. **The Policy rules.** `internal/aci/testdata/policies/` holds byte-for-byte copies of the six
-   `azure/ci/policies/*.json` (`fence_test.go` builds bodies against them). The loop must print no
-   `DIFFERS` line, and the count must read 6. After a fence change, copy the files across and run
-   `fence_test.go` before the release.
+1. **The Policy rules** in `internal/aci/testdata/policies/` (`fence_test.go`) are byte-for-byte
+   copies of `azure/ci/policies/*.json`: no `DIFFERS` line, and a count of 6.
 2. **The constants** (F19): the shape prices, 117_000 and 233_000 micro-dollars an hour and 1_000_000
    for any other shape, and the egress cap and price, 10_000_000_000 bytes and 87_000 a GB, must be
    equal in `internal/prices`, `internal/limits` and `azure/ci/fence.json`. The same goes for the $80
@@ -919,105 +880,46 @@ v0.3.0 deploy on, `restic-ci-dispatch` copies that directory to restic host `ci-
 1. STOP: ask Chris (S4: this scales a StatefulSet to 0). Pause the paid classes in git first if
    they're on.
 2. Stop the dispatcher as the break-glass does: pause both Argo apps, scale to 0, and wait for the pod
-   to go.
-3. Choose the file. On the laptop (`docs/backups.md`, Inspect / restore a file),
-   `restic snapshots --host ci-dispatch-ledger` and `restic ls <id> /data/snapshots` show which nightly
-   files each snapshot holds. The pod below takes the file from the volume when it's there, else from
-   restic snapshot `RID`.
-4. Run the restore pod below, with `SNAP` set to the file's name and `RID` to the restic snapshot.
-   It moves `ledger.db` and its `-wal` and `-shm` files into `/data/before-restore-<time>/`, then
-   copies the chosen file in as `ledger.db`. It carries the restic jobs' label, so their
-   NetworkPolicy lets it reach B2, and it has no `podAffinity`, since the dispatcher isn't running.
+   to go. Expect `CIDispatchStale` at once, and `CISweeperStale` `absent` (24/7) after 30 min.
+3. Choose the file and the restic snapshot that holds it, on the laptop (`docs/backups.md`,
+   Inspect / restore a file): `restic snapshots --host ci-dispatch-ledger`, then
+   `restic ls <id> /data/snapshots`.
+4. Run `scripts/ci-dispatch-ledger-restore.sh <file> <id>`. It refuses unless the StatefulSet is at 0
+   and its pod has terminated, then starts pod `ledger-restore`. The pod takes the file from the
+   volume when it's still there, else from that restic snapshot, and checks it for the SQLite header
+   before it moves `ledger.db` and its `-wal` and `-shm` files into `/data/before-restore-<time>/`.
    Watch `kubectl -n ci-dispatch get pod ledger-restore` until it reads `Completed`: the volume may
-   take minutes to move between nodes, so wait (S3). Read its log, then
-   `kubectl -n ci-dispatch delete pod ledger-restore`.
-5. Restore Argo as the break-glass's last paragraph does. The dispatcher starts on the restored
-   ledger, and its reconcile and reaper remove what no row knows: a group or runner launched after
-   the snapshot goes after 10 min.
+   take minutes to move between nodes, so wait (S3). Read its log, then delete the pod. `Error` means
+   nothing moved: read the log, fix the file or the id, delete the pod, and run it again.
+5. Patch `applications` back as the break-glass's last paragraph says, with no pause commit. That
+   restores the policy of `ci-dispatch` from git, which scales the dispatcher back up on the restored
+   ledger. Its reconcile and reaper remove what no row knows: a group or runner launched after the
+   snapshot goes after 10 min.
 6. Every launch after the snapshot drops out of the accounting, `tiny` minutes included. Ledger the
    restore, then turn the paid classes back on, a deploy with its own STOP.
 
-The restore pod, for step 4:
-
-```bash
-export KUBECONFIG=/tmp/galaxy-kubeconfig SNAP=<the file name> RID=latest
-sed -e "s/@SNAP@/$SNAP/" -e "s/@RID@/$RID/" <<'EOF' | kubectl -n ci-dispatch apply -f -
-apiVersion: v1
-kind: Pod
-metadata:
-  name: ledger-restore
-  labels:
-    app.kubernetes.io/name: restic-backup
-spec:
-  restartPolicy: Never
-  automountServiceAccountToken: false
-  enableServiceLinks: false
-  securityContext:
-    runAsNonRoot: true
-    runAsUser: 65532
-    runAsGroup: 65532
-    fsGroup: 65532
-    seccompProfile: {type: RuntimeDefault}
-  containers:
-    - name: restore
-      image: ghcr.io/restic/restic:0.19.1@sha256:2f0373803493361f9304a57150d464677f69a9dad487afec202105aafb2592f2
-      securityContext:
-        allowPrivilegeEscalation: false
-        readOnlyRootFilesystem: true
-        capabilities: {drop: [ALL]}
-      envFrom:
-        - secretRef: {name: restic-config}
-      env:
-        - {name: HOME, value: /tmp}
-        - {name: RESTIC_CACHE_DIR, value: /tmp/cache}
-      command: [/bin/sh, -c]
-      args:
-        - |
-          set -eu
-          cd /data
-          f=snapshots/@SNAP@
-          if [ ! -s "$f" ]; then
-            restic restore @RID@ --host ci-dispatch-ledger --include "/data/$f" --target /tmp/r --retry-lock 15m
-            f=/tmp/r/data/$f
-          fi
-          old=before-restore-$(date -u +%Y%m%dT%H%M%SZ)
-          mkdir "$old"
-          for x in ledger.db ledger.db-wal ledger.db-shm; do [ ! -e "$x" ] || mv "$x" "$old/"; done
-          cp "$f" ledger.db.part
-          mv ledger.db.part ledger.db
-          ls -l /data "/data/$old"
-      volumeMounts:
-        - {name: data, mountPath: /data}
-        - {name: tmp, mountPath: /tmp}
-  volumes:
-    - name: data
-      persistentVolumeClaim: {claimName: ci-dispatch-ledger}
-    - name: tmp
-      emptyDir: {sizeLimit: 512Mi}
-EOF
-```
-
 ### Downgrading below v0.3.0
 
-F10: v0.1.0 and v0.2.0 refuse schema v2, so going below v0.3.0 after its migration takes the newest
-**v1** snapshot, the last one from before the v0.3.0 deploy (the phase 2 ledger holds the deploy
-time). The target is the pin before that deploy, v0.2.0. The paid classes stay `off`, since no
-earlier release has them.
+F10: v0.1.0 and v0.2.0 refuse schema v2, so going back to v0.2.0, the pin before the v0.3.0 deploy,
+takes a **v1** copy of the ledger. Its source is restic host **`ci-dispatch-ledger-pre-v0.3.0`**: one
+snapshot of `/data/snapshots`, taken at the v0.3.0 deploy before the migration (phase 2 Task 19).
+`restic forget --group-by host` keeps a host's only snapshot under every keep rule, so it stays. The
+paid classes stay `off`, since v0.2.0 has none.
 
-1. Check the file on the laptop first, with the restic environment of `docs/backups.md`. Its schema
-   version must print 1:
+1. On the laptop, with the restic environment of `docs/backups.md`: `restic snapshots --host
+   ci-dispatch-ledger-pre-v0.3.0` gives the id, and `restic ls <id> /data/snapshots` the newest file.
+   Its schema version must print 1:
 
    ```bash
    nix develop --command restic restore <id> --include /data/snapshots/<the file> --target ./out
    nix shell nixpkgs#sqlite --command sqlite3 ./out/data/snapshots/<the file> 'SELECT schema_version FROM meta'
    ```
 
-2. Run Restoring the ledger, steps 1 to 4, with that file and `RID` set to that `<id>`. Before step
-   5, revert the whole v0.3.0 deploy in git, every commit of it, and push, so that Argo restores the
-   v0.2.0 pin when it resumes.
-3. Once the pod runs v0.2.0, confirm `ci_dispatch_config_verified` 1. Then delete any paid group still
-   listed, as the break-glass does: v0.2.0 can't see them, and the sweeper would take 90 min.
+2. Run Restoring the ledger, steps 1 to 4, with that file and id. Before step 5, revert the whole
+   v0.3.0 deploy in git, every commit of it, and push, so that Argo brings back the v0.2.0 pin.
+3. Once the pod runs v0.2.0, confirm `ci_dispatch_config_verified` 1, and delete any paid group still
+   listed, as the break-glass does: v0.2.0 can't see them. Its reaper knows only `ci-tiny-*`, so the
+   paid runs' runner rows stay, harmless.
 
-The downgrade loses everything since that snapshot, `tiny` minutes included, and the loss grows with
-every day after the deploy. The v1 file also ages out: the volume keeps seven nights, and restic's
-retention (`docs/backups.md`) keeps a snapshot holding it for some weeks, not for good.
+The downgrade loses everything since that copy, `tiny` minutes included, and the loss grows with every
+day after the deploy.

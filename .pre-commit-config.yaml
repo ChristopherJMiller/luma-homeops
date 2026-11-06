@@ -143,6 +143,15 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_netpol_verify.py
         pass_filenames: false
         files: ^(scripts/(netpol-verify\.sh|test_netpol_verify\.py|netpol-connect\.js)|cluster/netpol-canary/(probe\.sh|matrix\.txt))$
+      # ci-dispatch's ledger restore (docs/ci.md, Restoring the ledger) against a fake /data and stub
+      # restic and kubectl: a missing or non-SQLite replacement must fail and leave the live ledger
+      # untouched; the pod stays Pod Security `restricted` with the restic jobs' image.
+      - id: ci-dispatch-ledger-restore
+        name: ci-dispatch ledger restore self-test (no cluster)
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_ci_dispatch_ledger_restore.py
+        pass_filenames: false
+        files: ^(scripts/(ci-dispatch-ledger-restore(-pod)?\.sh|test_ci_dispatch_ledger_restore\.py)|cluster/music-streaming/restic-backup-cronjob\.yaml)$
       # Dex client ids starting `mcp-` are reserved for the MCP facade, which
       # creates and deletes them itself (dynamic client registration). A static
       # client with that prefix would be adopted or swept by it. `idEnv` is
