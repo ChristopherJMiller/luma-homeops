@@ -309,6 +309,18 @@ tests:
         values: '80x30'
     alert_rule_test:
       - {eval_time: 20m, alertname: CIDispatchSpendHigh, exp_alerts: []}
+  - name: CIDispatchSpendHigh is quiet when the cap gauge reads 0 (built-in limits), whatever is used
+    interval: 1m
+    input_series:
+      # Without the guard, 5 / 0 is +Inf, which is >= 0.95: both levels would page.
+      - series: 'ci_dispatch_period_usd{namespace="ci-dispatch",kind="used"}'
+        values: '5x30'
+      - series: 'ci_dispatch_period_usd{namespace="ci-dispatch",kind="reserved"}'
+        values: '0x30'
+      - series: 'ci_dispatch_period_usd{namespace="ci-dispatch",kind="cap"}'
+        values: '0x30'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: CIDispatchSpendHigh, exp_alerts: []}
   - name: CIDispatchLocked fires two minutes into a lock
     interval: 1m
     input_series:

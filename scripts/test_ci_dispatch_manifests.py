@@ -109,13 +109,15 @@ TWO_RULES = {
     "CISweeperStale": ("reason", ["absent", "stale"]),
 }
 # Phase 2's rules, exactly (Task 18 Step 2), keyed by name and, for a pair, the telling label.
+# SpendHigh's denominator drops a zero cap (review M1): the built-in limits carry a 0 cap, and
+# money over 0 would read +Inf and page both levels.
 PHASE2_RULES = {
     ("CIDispatchSpendHigh", "80"): (
-        'sum(ci_dispatch_period_usd{kind=~"used|reserved"}) / max(ci_dispatch_period_usd{kind="cap"}) >= 0.80',
+        'sum(ci_dispatch_period_usd{kind=~"used|reserved"}) / max(ci_dispatch_period_usd{kind="cap"} > 0) >= 0.80',
         "5m",
     ),
     ("CIDispatchSpendHigh", "95"): (
-        'sum(ci_dispatch_period_usd{kind=~"used|reserved"}) / max(ci_dispatch_period_usd{kind="cap"}) >= 0.95',
+        'sum(ci_dispatch_period_usd{kind=~"used|reserved"}) / max(ci_dispatch_period_usd{kind="cap"} > 0) >= 0.95',
         "5m",
     ),
     ("CIDispatchLocked", None): ("max(ci_dispatch_azure_locked) == 1", "2m"),
