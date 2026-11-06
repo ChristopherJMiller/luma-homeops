@@ -84,7 +84,7 @@ tokens keep working.
    `PATCH /api/v1/admin/users/<name>` with `prohibit_login: true`, `login_name`, `source_id`).
    This blocks their web session ("Account is suspended"), API tokens and SSH immediately.
 
-3. If the person was a `realliance` member, rotate `SITE_REGISTRY_TOKEN` (see Rotating `SITE_REGISTRY_TOKEN` under realliance.net). Any member can read it through a branch-push workflow, and a registry push with it deploys to galaxy.
+3. If the person was a `realliance` member, rotate both `realliance-ci` tokens (see Rotating `realliance-ci`'s tokens under realliance.net). Any member can read them through a branch-push workflow, and a registry push with the site token deploys to galaxy.
 
 Reversing steps 1 and 2 restores everything (step 3 is not reversible). Until step 2 is done, access lingers — that is the known gap.
 `tests/forge/test_forge_access.py::test_offboarding_blocks_web_token_and_ssh_and_is_reversible`
@@ -355,17 +355,22 @@ The registry copy of `2.3` has the same digest as Quay's. Quay no longer serves 
   3. Remove `cluster/forgejo-runner-general/`, its Argo wiring, `images/forgejo-runner-general/` and the GitHub image workflow. In the same commit drop `scripts/test_runner_general.py` and its `realliance-net` pre-commit hook entry (the test cannot render without the directory), and the Renovate rule for the runner image.
   4. Argo prunes the namespace and the PVC; the storage class keeps the volume as a Released PV. That delete is an S4 ask, then a manual PV delete.
   5. Remove the sso test `test_forge_runner_general.py`.
-  6. Only if the site stops publishing too: delete the repo secret `SITE_REGISTRY_TOKEN`, revoke the `realliance-ci` token and drop its `sso-secrets` entry (this also fails the sso `test_realliance_ci_*` and `test_site_registry_token_scope` tests, so remove them with it).
+  6. Only if the site stops publishing too: delete the repo secret `SITE_REGISTRY_TOKEN`, revoke the `realliance-ci` token and drop its `sso-secrets` entry (this also fails the sso `test_realliance_ci_tokens` and `test_site_registry_token_scope` tests, so update them with it).
 
-**Tokens.** `SITE_REGISTRY_TOKEN` is a repo secret holding a `write:package` token for `realliance-ci`, a local account in team `realliance/ci` (packages only, no repos). Forgejo 15 cannot narrow it: it reaches every `realliance` package. Rotate it when any member leaves (a member can read it through a branch-push workflow), and when it may have leaked. The source is `REALLIANCE_NET_REGISTRY_TOKEN` in `sso-secrets`. The procedure is in Rotating `SITE_REGISTRY_TOKEN`, below.
+**Tokens.** `SITE_REGISTRY_TOKEN` is a repo secret holding a `write:package` token for `realliance-ci`, a local account in team `realliance/ci` (packages only, no repos). Forgejo 15 cannot narrow it: it reaches every `realliance` package. Rotate it when any member leaves (a member can read it through a branch-push workflow), and when it may have leaked. The source is `REALLIANCE_NET_REGISTRY_TOKEN` in `sso-secrets`. A second token, `realliance-forgejo-registry`, is the Forgejo fork's repo secret `REGISTRY_TOKEN` (source `REALLIANCE_FORGEJO_REGISTRY_TOKEN`); it publishes the fork image, which only a hand-reviewed digest pin puts on the live forge. Both rotate together, as in Rotating `realliance-ci`'s tokens, below.
 
-**Rotating `SITE_REGISTRY_TOKEN`.** The sso test `tests/forge/test_forge_ci.py` expects `realliance-ci` to hold exactly one token, named `realliance-net-registry`, and Forgejo token names are unique per user. The old token goes first, and publishing is down until the new one is in. Do it when no site CI run is in flight, and never put a token value in chat or a commit message.
+**Rotating `realliance-ci`'s tokens.** The sso test `tests/forge/test_forge_ci.py` expects `realliance-ci` to hold exactly two tokens, each `write:package`, and Forgejo token names are unique per user. Rotate each with the steps below, using its row; the old token goes first, and that publisher is down until the new one is in. Do it when no site or fork image CI run is in flight, and never put a token value in chat or a commit message.
 
-1. Delete the old token: set `ACCT=realliance-ci OLD=realliance-net-registry`, then run [the guarded token delete](ci.md#the-guarded-token-delete) in `docs/ci.md`. A database write: STOP and ask Chris first. Every copy stops working now. The API route `DELETE /api/v1/users/realliance-ci/tokens/…` can't do it here: the token routes take only password basic authentication, which this forge turns off.
-2. Mint the new one with the same name and scope `write:package` (`forgejo admin user generate-access-token --username realliance-ci --token-name realliance-net-registry --scopes write:package --raw`), and pipe it straight into the next two steps.
-3. Set the repo secret: `PUT /api/v1/repos/realliance/realliance.net/actions/secrets/SITE_REGISTRY_TOKEN`.
-4. Store it in `sso-secrets` as `REALLIANCE_NET_REGISTRY_TOKEN`, then commit that repo.
-5. Run the sso one-token test (`tests/forge/test_forge_ci.py`), then re-run the site's latest CI job from the forge UI and check that it publishes.
+| Token name | Repo and secret | `sso-secrets` key |
+|---|---|---|
+| `realliance-net-registry` | `realliance/realliance.net`, `SITE_REGISTRY_TOKEN` | `REALLIANCE_NET_REGISTRY_TOKEN` |
+| `realliance-forgejo-registry` | `realliance/forgejo`, `REGISTRY_TOKEN` | `REALLIANCE_FORGEJO_REGISTRY_TOKEN` |
+
+1. Delete the old token: set `ACCT=realliance-ci` and `OLD=` the row's token name, then run [the guarded token delete](ci.md#the-guarded-token-delete) in `docs/ci.md`. A database write: STOP and ask Chris first. Every copy stops working now. The API route `DELETE /api/v1/users/realliance-ci/tokens/…` can't do it here: the token routes take only password basic authentication, which this forge turns off.
+2. Mint the new one with the same name and scope `write:package` (`forgejo admin user generate-access-token --username realliance-ci --token-name <token name> --scopes write:package --raw`), and pipe it straight into the next two steps.
+3. Set the row's repo secret: `PUT /api/v1/repos/<repo>/actions/secrets/<secret>`.
+4. Store it in `sso-secrets` under the row's key, then commit that repo.
+5. Run the sso token tests (`tests/forge/test_forge_ci.py -k 'realliance_ci_tokens or site_registry_token_scope'`), then re-run that repo's latest CI job from the forge UI and check that it publishes.
 
 **Dependencies.** New pods cannot pull while Forgejo is down. A WAN-IP change breaks node pulls until the router's reflection rules follow (the inherited hairpin limit).
 
