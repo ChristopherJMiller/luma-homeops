@@ -123,7 +123,7 @@ From `.superpowers/sdd/2026-11-05-runner-classes-phase-2/preflight.md` § 6. F1 
 - **Money in micro-dollars.**
   - Reservation = `ceil(hourly × hard stop / 1 h)`: `small` 78_000, `medium` 213_584.
   - Charge = `min(reserved, CostOf(hourly, stop − compute_at))` (F11, F12).
-    - `stop` is the container's `finishTime` when the list carries it, else the read time of the first list that shows the group stopped (`stopped_at`), else the read time of the first list that lacks it.
+    - `stop` is the container's `finishTime` when the list carries it, else the read time of the first list that shows the group stopped (`stopped_at`), else the read time of the first list that lacks it and whose confirming GET answers `ErrNotFound` (E10).
     - The reservation releases only on absence (M6).
     - `CostOf` rounds the duration up to whole seconds, then computes `ceil(secs × hourly / 3600)` in int64.
   - Burn = the sum of `HourlyMicro` over the loop's `Active()` paid rows (`reserved`, `registered`, `created`, `running`), plus `Compute.Hourly` (= `prices.ShapePrice`) of every listed group that no active row claims (F2, F13). That covers orphans, groups still deleting after an undo, and anything else in the CI group, and it is the sweeper's own pricing. The dispatcher's burn is therefore never below the sweeper's. (M6)
@@ -879,7 +879,7 @@ type Backend interface {
     List(ctx context.Context) (Listing, error)
     Create(ctx context.Context, s Spec) error         // undoes its own partial steps (F3); see below
     Delete(ctx context.Context, name string) error    // absent is success
-    Gone(ctx context.Context, name string) (bool, error) // one read of name: true only on not-found (ACI: azure.Group → ErrNotFound, E10); tiny never calls it
+    Gone(ctx context.Context, name string) (bool, error) // one read of name: true only on not-found (ACI: azure.Group → ErrNotFound, E10); tiny: (false, errGoneUnused), no Kubernetes read
     SettleOnAbsence() bool                            // tiny false, ACI true (F2)
     Timing(c model.Class) (hardStop, pickup time.Duration)
 }
@@ -896,7 +896,8 @@ var tinyName = model.NameRE(model.Tiny)                            // Kubernetes
 - **The tiny backend** wraps `Kube`:
   - `Create` = `CreateJob` (suspended), `CreateSecret(tiny.SecretManifest)`, `ResumeJob`, in D17's order;
   - `Delete` = `DeleteJob`, then a best-effort `DeleteSecret`;
-  - `List` filters Jobs with `tinyName`, never `ownName`. `At` is read before the Jobs request.
+  - `List` filters Jobs with `tinyName`, never `ownName`. `At` is read before the Jobs request;
+  - `Gone` returns `(false, errGoneUnused)`, never true, and reads nothing from Kubernetes. Tiny settles on `Delete`, so the loop never calls it, and phase 1's guarded kube client keeps its seven request kinds (no single-Job GET).
 - **Two settle models** (F2):
   - `SettleOnAbsence() == false` (tiny): a successful `Delete` settles, as phase 1 does.
   - `true` (ACI): the loop records `deleteSent[name]` and settles only on a `Listing` whose `At` > max(`ComputeAt`, `deleteSent[name]`) and that lacks the name, with `Gone(name)` then answering true (E10). That covers every path: finished, gone before pickup, pickup timeout, held undo, expired, leftover, ambiguous create.
@@ -918,6 +919,7 @@ var tinyName = model.NameRE(model.Tiny)                            // Kubernetes
     - a `Listing` that lacks the name settles nothing while `Gone` answers false or an error (a locked or stale list, E10);
     - a `registered` row whose compute is `Deleting` isn't adopted;
     - non-`Own` items are never reaped or adopted.
+  - `TestGoneOnlyForAbsenceBackends`: through phase 1's whole tiny flow (launch, finish, reap, undo, crash leftover), the loop never calls `Gone` on a backend whose `SettleOnAbsence()` is false. A fake tiny-model backend fails the test if `Gone` is called.
   - `TestCreateNotCreatedSkipsDelete` (F3): an error wrapping `ErrNotCreated` gives `Undo` with no `Delete`, and any other error gives `Delete` first.
   - `TestAzureOnlyReadFailureKeepsReadOK` (F39): a fake second backend failing `List` leaves `ReadOK` true and the success timestamp moving.
   - **Regression:** every phase 1 test in `internal/loop` passes **unedited**, `TestStartupReconcileAfterCrashMidLaunch` and `TestUndoAtEveryStep` included. One exception is allowed (F3): if `TestUndoAtEveryStep`'s CreateJob row can only hold by gaining a harmless trailing `DeleteSecret`, that row alone may change. Step 4 then names it.
@@ -1039,6 +1041,7 @@ func Body(s Spec) (secret.Value, error)   // the PUT body; shape from model.Shap
 ```go
 type Azure interface {
     Groups(ctx context.Context) ([]azure.Group, error)
+    Group(ctx context.Context, name string) (azure.Group, error) // Gone's confirming read (E10)
     CreateGroup(ctx context.Context, name string, body secret.Value) error
     DeleteGroup(ctx context.Context, name string) error
 }
@@ -1054,6 +1057,7 @@ func (lp *Loop) SetEgress(e map[string]Egress, at time.Time)            // the w
 - **List** is cached for `azure.poll`. `Listing.At` is the backend clock read **before** the `Groups` request (F4). `Items` holds every group: `Own` = `azure.GroupName` matches, `Hourly` = `prices.ShapePrice(CPU, MemoryGB)`.
   - `Running` = state `Running`; `Ran` = terminated with exit 0; `Stopped` = state `Stopped`, `Succeeded` or `Failed`; `Broken` = provisioning `Failed`; `Deleting` = provisioning `Deleting`;
   - `Finish` = the container's finish time; `Created` = tag `created-at`, else first seen; `ExpiresAt` = tag `expires-at`.
+- **`Gone(name)`** = `Group(ctx, name)` (E10). `ErrNotFound` gives true, and only then does the row settle, with the end at the `At` of the listing that lacked it. A 200 (present or `Deleting`) gives false. Any error settles nothing that poll. An `ErrLocked` from it also sets `locked` and `ci_dispatch_azure_locked`, exactly as a `List` or `CreateGroup` `ErrLocked` does, until a good `List`.
 - **A paid launch:**
   - It reserves with `ReservedMicro = CostOf(hourly, hardStop)`, `HourlyMicro = hourly` and `ReservedMinutes = hardStop` in minutes, then registers, `SetRegistered`, `CreateGroup(aci.Body)`, `SetCreated`.
   - `hourly` is `max(stored price, prices.Floor(c))`, re-applied on every read of stored prices (F23).
@@ -1082,12 +1086,13 @@ func (lp *Loop) SetEgress(e map[string]Egress, at time.Time)            // the w
 - **Reconcile** follows Task 11's absence model (E10). A `Stopped` group is deleted, and its row settles once a later list, read after the DELETE, lacks it and `Gone` confirms that (a single-group GET answering `ErrNotFound`, E10).
 - **Decision log:** a paid launch's line carries `reserved_usd`, and its settled line `charged_usd` (spec, "Logs").
 
-- [ ] **Step 1: Write the failing tests** (the fake Azure records calls and can fail any of them; its `Deleting` phase lasts at most one poll, F39; fake clock):
+- [ ] **Step 1: Write the failing tests** (the fake Azure records calls and can fail any of them; its `Deleting` phase lasts at most one poll, F39; fake clock). The fake answers `Group` from its own state: 404 (`ErrNotFound`) when the group is absent, 200 when it is present or `Deleting`, 403 (`ErrLocked`) while the fake is locked, and any failure a test injects.
+  - `TestACIAbsenceNeedsGroupNotFound` (E10): a `Stopped` own group has been deleted, and a fresh list after the DELETE lacks it. While `Group` answers 200, `ErrLocked` or `ErrUnavailable`, nothing settles: no `End`, and the reservation and the burn hold. The `ErrLocked` answer also sets `locked` and `ci_dispatch_azure_locked` to 1. When `Group` answers `ErrNotFound`, the row settles, with that confirming listing's `At` as the end.
   - `TestACILaunchOrder`: reserve (78_000 µ$, 40 min) → register → set-registered → create-group → set-created, with the body from `aci.Body`. `ComputeAt` is the clock after `CreateGroup` returned.
-  - `TestACIErrorOutcomes` (table, the error table above): for each answer, the ledger call, `Tries` before and after, the back-off end from `gate.BackoffUntil`/`HeldBackoffAfter`, whether `DeleteGroup` was sent, and charge 0. `ErrUnavailable` gives `DeleteGroup` and leaves the row `registered`. A later list showing it `Deleting` changes nothing, the first list without it gives the error undo, and a failed `DeleteGroup` leaves the row active.
-  - `TestACIHeldUndoCharges` (F1): a pickup-idle group, created 6 min before, is deleted. On the list that lacks it, `UndoHeld` charges `CostOf(117_000, 6 min)` = 11_700, `Tries` stays 0, and the next wait is 1 min. After the key's sixth held undo the wait is 60 min.
+  - `TestACIErrorOutcomes` (table, the error table above): for each answer, the ledger call, `Tries` before and after, the back-off end from `gate.BackoffUntil`/`HeldBackoffAfter`, whether `DeleteGroup` was sent, and charge 0. `ErrUnavailable` gives `DeleteGroup` and leaves the row `registered`. A later list showing it `Deleting` changes nothing, the first list without it whose `Group` answers `ErrNotFound` gives the error undo, and a failed `DeleteGroup` leaves the row active.
+  - `TestACIHeldUndoCharges` (F1): a pickup-idle group, created 6 min before, is deleted. On the list that lacks it, with its `Group` answering `ErrNotFound`, `UndoHeld` charges `CostOf(117_000, 6 min)` = 11_700, `Tries` stays 0, and the next wait is 1 min. After the key's sixth held undo the wait is 60 min.
   - `TestACINoCapacityBacksOff`: `ErrNoCapacity` gives `UndoHeld(…, 0)` with no try, then `Wait backoff` for 1 min, on the same schedule.
-  - `TestPaidNeverSettlesOnAcceptedDelete` (Review Focus 3, M6): a `Stopped` group's `DeleteGroup` answers 202. The next fresh list shows it with `provisioningState` `Deleting`: no `End`, burn still counts 117_000, and the gate sees the reservation. The list after that lacks it, giving `End`, with the charge stopped at the `Stopped` sighting (F11).
+  - `TestPaidNeverSettlesOnAcceptedDelete` (Review Focus 3, M6): a `Stopped` group's `DeleteGroup` answers 202. The next fresh list shows it with `provisioningState` `Deleting`: no `End`, burn still counts 117_000, and the gate sees the reservation. The list after that lacks it and its `Group` answers `ErrNotFound`, giving `End`, with the charge stopped at the `Stopped` sighting (F11).
   - `TestBurnCountsEveryActiveState` (Review Focus 1, moved from Task 10 by F13): `Active()` rows in `reserved`, `registered`, `created` and `running` (117_000 each) give a burn of 468_000. Ended, undone and reaped rows add nothing.
   - `TestBurnCountsUnclaimedGroups` (Review Focus 1, M6): one active `small` row plus listed groups no row claims, namely a `ci-small-…` orphan, a `Deleting` 2/8 group whose row was undone, and a `ci-drill-…` 4/16 group. The burn is 117_000 + 117_000 + 117_000 + 233_000 = 584_000. The next `small` job then waits `class-full`, since 584_000 + 117_000 > 480_000. A listed 2/16 group counts 1_000_000.
   - `TestMoneyGauges` (F8): after a launch, burn is 0.117 and `period_usd{reserved}` 0.078. After its settle at 10 min, `period_usd{used}` is 0.0195 and `{reserved}` 0. `paid_ready` and `azure_locked` follow the fake. `price_age` stays absent until `SetPrices`.
@@ -1096,7 +1101,7 @@ func (lp *Loop) SetEgress(e map[string]Egress, at time.Time)            // the w
     - a launch created at t, against a cached list read at t − 20 s that lacks it, is not ended;
     - **same step:** a list read at the step's start, before the PUT, with `At` > the step's `now`, ends nothing;
     - the first list read after `CreateGroup` returned that lacks the group, with the group's own GET answering `ErrNotFound`, ends the launch as `lost` or `finished`.
-  - `TestReservationFreedWhenGroupVanishes` (Review Focus 3): the sweeper deletes a running group. On the next fresh list the row ends with charge `min(78_000, CostOf(...))`, and `PaidCommitted`'s `Reserved` drops by the reservation.
+  - `TestReservationFreedWhenGroupVanishes` (Review Focus 3): the sweeper deletes a running group. On the next fresh list, with its `Group` answering `ErrNotFound`, the row ends with charge `min(78_000, CostOf(...))`, and `PaidCommitted`'s `Reserved` drops by the reservation.
   - `TestReservationKeptWhileAzureUnreadable` (Review Focus 3): with `List` failing for an hour, the row stays active, burn and committed keep counting it, and no paid launch happens.
   - `TestNoActivePaidRowOutlivesExpiry` (Review Focus 3, property, 500 seeded runs): random sequences of group states, deletions and Azure failures, with `Deleting` bounded at one poll. From the first moment Azure answers every call, each active paid row settles by `max(that moment, Expires) + 3 × poll`.
   - `TestPricesFloorReappliedOnRead` (F23): a stored price of 50_000 for `small` reserves as 117_000.
