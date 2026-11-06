@@ -9,9 +9,9 @@ It runs under every POSIX shell found here: `sh`, plus `dash` and `busybox sh` w
 runs busybox). What it pins: the replacement is copied, compared with its source and checked for
 the SQLite header before anything moves, and every step checks its own exit status. So a missing
 file, an `--include` that matched nothing (restic exits 0 then), a failed restore, a non-SQLite
-file, a short copy (stub `cp`), a colliding before-restore name (stub `date`) or a move that fails
-halfway (stub `mv`) all fail and leave ledger.db and its -wal and -shm files byte-for-byte as they
-were.
+file, a short copy (stub `cp`), a colliding before-restore name (stub `date`), or a move that fails
+(stub `mv`: setting the -wal or the -shm aside, or the final rename) all fail and leave ledger.db and
+its -wal and -shm files byte-for-byte as they were.
 
 `ci-dispatch-ledger-restore.sh` runs against a stub `kubectl`: it refuses bad names, any snapshot
 id that isn't hex (`latest` included), an Argo app that still syncs automatically, a dispatcher that
@@ -257,9 +257,12 @@ class TestPodScript:
         assert r.returncode == 1, r.stderr
         assert_untouched(world)
 
-    def test_move_aside_fails_halfway(self, world, shell, busybox):
-        # ledger.db moves aside, then the -wal won't: ledger.db must come back.
-        stub(world, busybox, "mv", 'case "$1" in ledger.db-wal) echo "mv: denied" >&2; exit 1 ;; esac\n'
+    # A move that fails: setting the -wal or the -shm aside (with one or two files already moved),
+    # or the final rename of ledger.db.part. Every file already moved must come back, the -wal
+    # included: a ledger.db without its -wal loses committed transactions.
+    @pytest.mark.parametrize("failing", ["ledger.db-wal", "ledger.db-shm", "ledger.db.part"])
+    def test_a_move_fails(self, world, shell, busybox, failing):
+        stub(world, busybox, "mv", f'case "$1" in {failing}) echo "mv: denied" >&2; exit 1 ;; esac\n'
                                    'exec REAL "$@"\n')
         (world["data"] / "snapshots" / SNAP).write_bytes(SQLITE)
         r = run_pod(world, shell, busybox)

@@ -895,7 +895,8 @@ v0.3.0 deploy on, `restic-ci-dispatch` copies that directory to restic host `ci-
    `-shm` files into `/data/before-restore-<time>/`.
    Watch `kubectl -n ci-dispatch get pod ledger-restore` until it reads `Completed`: the volume may
    take minutes to move between nodes, so wait (S3). Read its log, then delete the pod. `Error` means
-   nothing moved: read the log, fix the file or the id, delete the pod, and run it again.
+   nothing moved, since any file it had set aside goes back; only if the log says "move it back by
+   hand" did one stay in `before-restore-*`. Fix the file or the id, delete the pod, and run it again.
 5. Patch `applications` back as the break-glass's last paragraph says, with no pause commit. That
    restores the policy of `ci-dispatch` from git, which scales the dispatcher back up on the restored
    ledger. Its reconcile and reaper remove what no row knows: a group or runner launched after the

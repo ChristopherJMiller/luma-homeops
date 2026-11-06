@@ -7,8 +7,8 @@
 # its source byte for byte and starts with the SQLite header, so any failure (a misspelt name, an
 # --include that matched nothing, which restic answers with exit 0, a short copy) leaves the live
 # ledger as it was. The old ledger.db and its -wal and -shm files go into before-restore-<time>/;
-# if one of them can't move, the ones already moved go back. Every step checks its own exit status
-# rather than trusting `set -e` alone.
+# if one of them can't move, or the final rename fails, every file already moved goes back. Every
+# step checks its own exit status rather than trusting `set -e` alone.
 #
 # Tests: scripts/test_ci_dispatch_ledger_restore.py (fake /data, stub restic, cp, mv and date).
 set -eu
@@ -20,6 +20,13 @@ fail() {
   rm -f ledger.db.part
   echo "restore: $*" >&2
   exit 1
+}
+
+# put_back moves every file in $moved back from $old, and names any it can't.
+put_back() {
+  for y in $moved; do
+    mv "$old/$y" "$y" || echo "restore: $y is still in $old: move it back by hand" >&2
+  done
 }
 
 case $SNAP in
@@ -56,17 +63,15 @@ moved=
 for x in ledger.db ledger.db-wal ledger.db-shm; do
   if [ -e "$x" ]; then
     if ! mv "$x" "$old/"; then
-      for y in $moved; do
-        mv "$old/$y" "$y" || echo "restore: $y is still in $old: move it back by hand" >&2
-      done
+      put_back
       fail "can't move $x aside; put back:${moved:- nothing}; nothing replaced"
     fi
     moved="$moved $x"
   fi
 done
 if ! mv ledger.db.part ledger.db; then
-  echo "restore: the old files are in $old and $SNAP is ledger.db.part: rename it by hand" >&2
-  exit 1
+  put_back
+  fail "can't rename ledger.db.part to ledger.db; put back:${moved:- nothing}; nothing replaced"
 fi
 echo "restore: $SNAP is now ledger.db; the old files are in $old"
 ls -l "$DATA" "$DATA/$old"
