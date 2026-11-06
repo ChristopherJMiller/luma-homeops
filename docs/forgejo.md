@@ -436,7 +436,7 @@ export KUBECONFIG=/tmp/galaxy-kubeconfig
 **Fallback to upstream.** Trigger: Forgejo's pod is in `ErrImagePull`, `ImagePullBackOff` or `CrashLoopBackOff` on the fork image.
 
 1. Delete the `fullOverride:` line in `cluster/applications/forgejo-release.yaml`, commit, and push to GitHub `main`. The chart then renders `code.forgejo.org/forgejo/forgejo:15.0.11-rootless@sha256:3cd6bc2b…`. Argo reads GitHub, and both the chart and that image come from code.forgejo.org, so this works with the forge down. `kubectl set image` doesn't: self-heal reverts it.
-2. Argo rolls the DaemonSet to upstream first, then Forgejo. If the sync waits at wave -1, see When the sync waits at wave -1. Watch with `Monitor`.
+2. Argo rolls the DaemonSet to upstream first, then Forgejo. If the sync waits at wave -1, see When the sync waits at wave -1, but never revert this fallback commit: that re-applies the broken fork. If a keep-warm pod can't pull upstream, use the node case there, or wait for code.forgejo.org. Watch with `Monitor`.
 3. `gitea migrate` is a no-op, and the data stays intact. Lost while on upstream: the jj UI and the PR-round views, the `blocked` status (ci-dispatch falls back to guessing), the Usage tab and the account link (restore the old navbar override from git history for the link). Round refs stay hidden from fetches, because `transfer.hideRefs` persists in Forgejo's git config file on `/data`. They still count in commit counts and graphs, and a mirror-mode push mirror could push `refs/realliance/*`.
 4. Roll forward only with the keep-warm DaemonSet in place, or while Forgejo is up with the image cached on every node.
 

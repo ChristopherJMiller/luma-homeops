@@ -140,7 +140,7 @@
   - add a NetworkPolicy ingress rule from the Forgejo pods to the ci-dispatch usage API.
 
   `test_fork_pin` passes.
-- [ ] **Step 3: STOP, then ask Chris** to approve the rollout. Downtime is 1–3 min. Rollback triggers: any Step 5 failure, or the pod not Ready within 10 min. Rollback is §4e.
+- [ ] **Step 3: STOP, then ask Chris** to approve the rollout. Downtime is 1–3 min. Rollback triggers: any Step 5 failure, or the pod not Ready within 10 min. Rollback is "Fallback to upstream" in `docs/forgejo.md` (it supersedes research §4e and §4d's Deployment-only sync).
 - [ ] **Step 4: Push** when no Actions job is running. `Monitor` the DaemonSet (wave −1) to 3/3 on the new digest, then Forgejo's Recreate to Ready.
   - The `Monitor` watches each keep-warm pod's state, not only the counts. It stops on `CrashLoopBackOff`, `OOMKilled`, `Error`, `ErrImagePull` or `ImagePullBackOff`, and has a time bound. On a crash loop, read `kubectl -n forgejo logs <pod> --previous`, then follow the runbook's crash-loop case: revert the pin, never sync Forgejo.
   - This is the DaemonSet's first update (Task 4 proved only its creation). Ledger the operation message `waiting for healthy state of apps/DaemonSet/forgejo-keepwarm` as the evidence that the wave ran before the Recreate.

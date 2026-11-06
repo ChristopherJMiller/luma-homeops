@@ -158,7 +158,7 @@ Research only, for the implementation plan. This research changed nothing. Abbre
   - it runs `/app/gitea/gitea --version` and then sleeps (DaemonSet), while the old pod still serves the registry;
   - it doubles as a "binary starts on Alpine" gate: a failed hook fails the sync, and the old pod keeps running.
 - This *is* in-cluster pre-pulling, so **it needs Chris's sign-off** against the "no pre-pulling" decision. The alternatives are manual `talosctl image pull` per release (declined), a ghcr copy (declined), or a forge that can't roll forward.
-- Hook caveat: with a node NotReady, a DaemonSet hook never turns healthy. The emergency sync is selective, without hooks: `argocd app sync forgejo-release --resource apps:Deployment:forgejo`.
+- Hook caveat: with a node NotReady, a DaemonSet hook never turns healthy. *Superseded 2026-11-06 (fork Task 4 review I3): the emergency sync must also name the chart's 3 Secrets; see `docs/forgejo.md`, "When the sync waits at wave -1".*
 - Before each Talos drain of Forgejo's node, check `talosctl image list` on the target nodes; add this to the talos-upgrade skill.
 
 **4e. Fallback runbook (pin the same-version upstream digest).** Trigger: the Forgejo pod is in `ErrImagePull`/`ImagePullBackOff`/`CrashLoopBackOff` on the fork image.
