@@ -830,6 +830,42 @@ def test_monitoring(dispatcher):
     assert undone["expr"].endswith(f"> {UNDONE_PER_HOUR}") and undone["for"] == "1h"
 
 
+def test_hook_watches_every_input():
+    """Review M3: the ci-dispatch-manifests hook runs whenever a file these tests read changes, so a
+    commit that touches only an input elsewhere (the backups regex, the source restic Secret, another
+    restic job, the class image's runner timeouts, the fence) still meets the cross-checks."""
+    hooks = [h for r in yaml.safe_load((REPO / ".pre-commit-config.yaml").read_text())["repos"] for h in r["hooks"]]
+    (hook,) = [h for h in hooks if h["id"] == "ci-dispatch-manifests"]
+    files = re.compile(hook["files"])
+    inputs = [
+        f"{DISPATCHER}/config.yaml",
+        f"{DISPATCHER}/.release-pending",
+        f"{TINY}/runner-config.yaml",
+        f"{EGRESS_WEB}/networkpolicy.yaml",
+        f"{EGRESS_ONLY}/networkpolicy.yaml",
+        APP_FILE,
+        APPS_KUSTOMIZATION,
+        "scripts/test_ci_dispatch_manifests.py",
+        ".pre-commit-config.yaml",
+    ] + [
+        str(p.relative_to(REPO))
+        for p in (
+            GENERAL_RUNNER,
+            FORGE_BOT_KEYRING / "owners.asc",
+            RENOVATE,
+            BACKUPS_RULE,
+            CANARY,
+            RESTIC_SOURCE,
+            FENCE,
+            CLASS_IMAGE_DIR / "runner-small.yml",
+            CLASS_IMAGE_DIR / "runner-medium.yml",
+            *_restic_job_files(),
+        )
+    ]
+    missed = [path for path in inputs if not files.search(path)]
+    assert not missed, f"the hook never runs on a change to {missed}"
+
+
 def test_renovate_never_automerges_ci_dispatch():
     rules = json.loads(RENOVATE.read_text())["packageRules"]
     idx = [i for i, r in enumerate(rules) if IMAGE in r.get("matchPackageNames", [])]
@@ -935,11 +971,20 @@ def test_restic_ledger_job(dispatcher):
     }
     # The same restic as every other job in the config tier.
     others = set()
-    for p in (REPO / "cluster").rglob("*.yaml"):
-        if ".secret." in p.name or p.parent == REPO / DISPATCHER:
-            continue
+    for p in _restic_job_files():
         others |= set(re.findall(r"image:\s*(ghcr\.io/restic/restic\S*)", p.read_text(errors="replace")))
     assert len(others) == 1 and c["image"] == others.pop()
+
+
+def _restic_job_files() -> list[Path]:
+    """Every manifest outside this tree that runs restic: the config tier's other jobs."""
+    return sorted(
+        p
+        for p in (REPO / "cluster").rglob("*.yaml")
+        if ".secret." not in p.name
+        and not p.is_relative_to(REPO / ROOT)
+        and "ghcr.io/restic/restic" in p.read_text(errors="replace")
+    )
 
 
 def test_restic_policy(dispatcher):
