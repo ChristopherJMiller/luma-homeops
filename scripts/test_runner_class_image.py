@@ -83,10 +83,18 @@ def test_renovate_never_automerges_class_image():
 import os
 import shutil
 import subprocess
+import warnings
 
 import pytest
 
-SH = shutil.which("dash") or shutil.which("sh")
+# The image's /bin/sh is dash, so these tests run under dash or not at all: another sh (bash, in
+# the old fallback) accepts things dash refuses and the reverse. The dev shell ships dash
+# (flake.nix); without it they skip, with a warning in pytest's summary, never silently.
+SH = shutil.which("dash")
+NO_DASH = (
+    "dash is not on PATH, so the entry script's behavioural tests did NOT run: "
+    "run them inside `nix develop`, whose flake ships dash (the image's /bin/sh)"
+)
 GOOD = ["30m", "small", "h_1-X", "https://git.example/", "0a1b2c"]
 
 
@@ -94,6 +102,9 @@ GOOD = ["30m", "small", "h_1-X", "https://git.example/", "0a1b2c"]
 def rig(tmp_path):
     """The entry script with /run/ci and /work/act under tmp_path; a stub `timeout` that prints
     its argv and its own environment (it is what the script exec's)."""
+    if SH is None:
+        warnings.warn(NO_DASH)
+        pytest.skip(NO_DASH)
     src = (IMG / "ci-class-entry").read_text()
     entry = tmp_path / "entry"
     entry.write_text(src.replace("/run/ci", f"{tmp_path}/run/ci").replace("/work/act", f"{tmp_path}/act"))
@@ -144,6 +155,7 @@ BAD = {
     "timeout-newline": ["3m\nx", *GOOD[1:]],
     "timeout-0": ["0m", *GOOD[1:]],
     "timeout-00": ["00m", *GOOD[1:]],
+    "timeout-000": ["000m", *GOOD[1:]],  # zero again, and three digits: pinned so neither rule regresses alone
     "url-empty": [*GOOD[:3], "", GOOD[4]],
     "uuid-empty": [*GOOD[:4], ""],
     "url-newline": [*GOOD[:3], "u\nv", GOOD[4]],
