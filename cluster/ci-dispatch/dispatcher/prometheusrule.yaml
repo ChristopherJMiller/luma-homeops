@@ -68,15 +68,19 @@ spec:
         # Findings never change which limits apply; they ask an Owner to look. owner-name-stale: the
         # name now resolves to another account. owner-name-missing: no account has the name.
         # owner-names-unchecked: the lookups failed (Forgejo error), which clears at the next good
-        # reload; 30 min rides out a short outage. The fourth kind, stored-config-rejected, has its
-        # own alert: CIDispatchStoredConfigRejected reads the same event from its counter.
+        # reload; 30 min rides out a short outage. paid-class-unlaunchable (v0.2.0): a paid class is
+        # on in ci.yaml, but global.paid_usd_per_hour is unset or 0, or no owner has a paid_concurrent
+        # above 0, so its jobs would wait forever with no hold. Its log line carries only the kind:
+        # check those two settings in ci.yaml.
+        # stored-config-rejected has its own alert: CIDispatchStoredConfigRejected reads the same
+        # event from its counter.
         - alert: CIDispatchConfigFindings
-          expr: max by (kind) (ci_dispatch_config_findings{kind=~"owner-name-stale|owner-name-missing|owner-names-unchecked"}) > 0
+          expr: max by (kind) (ci_dispatch_config_findings{kind=~"owner-name-stale|owner-name-missing|owner-names-unchecked|paid-class-unlaunchable"}) > 0
           for: 30m
           labels:
             severity: warning
           annotations:
-            summary: "ci-dispatch config findings: an owner name in ci.yaml no longer matches its id, or the name lookups failed; the limits still bind to the ids (docs/ci.md)"
+            summary: "ci-dispatch config findings (the kind label names it): an owner name in ci.yaml no longer matches its id, the name lookups failed, or a paid class is on but no hourly cap or paid concurrency lets it launch (docs/ci.md)"
         # undone counts launches rolled back before they ran: a job Forgejo held (its runner sat idle
         # at the 3 min pickup timeout) and crash leftovers at start. One held job's back-off (1, 2, 5,
         # 10 and 10 min, then 60 min after the sixth undo) allows at most 6 undos in any hour, which

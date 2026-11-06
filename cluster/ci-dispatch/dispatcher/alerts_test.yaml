@@ -134,7 +134,23 @@ tests:
         exp_alerts:
           - exp_labels: {severity: warning, kind: owner-name-stale}
             exp_annotations:
-              summary: "ci-dispatch config findings: an owner name in ci.yaml no longer matches its id, or the name lookups failed; the limits still bind to the ids (docs/ci.md)"
+              summary: "ci-dispatch config findings (the kind label names it): an owner name in ci.yaml no longer matches its id, the name lookups failed, or a paid class is on but no hourly cap or paid concurrency lets it launch (docs/ci.md)"
+  - name: CIDispatchConfigFindings fires on a paid class that can never launch
+    interval: 1m
+    input_series:
+      # small is on in ci.yaml, but global.paid_usd_per_hour is unset: its jobs would wait forever.
+      - series: 'ci_dispatch_config_findings{namespace="ci-dispatch",kind="paid-class-unlaunchable"}'
+        values: '1x60'
+      - series: 'ci_dispatch_config_findings{namespace="ci-dispatch",kind="owner-name-stale"}'
+        values: '0x60'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: CIDispatchConfigFindings, exp_alerts: []}
+      - eval_time: 40m
+        alertname: CIDispatchConfigFindings
+        exp_alerts:
+          - exp_labels: {severity: warning, kind: paid-class-unlaunchable}
+            exp_annotations:
+              summary: "ci-dispatch config findings (the kind label names it): an owner name in ci.yaml no longer matches its id, the name lookups failed, or a paid class is on but no hourly cap or paid concurrency lets it launch (docs/ci.md)"
   - name: CIDispatchConfigFindings leaves stored-config-rejected to its own alert
     interval: 1m
     input_series:
