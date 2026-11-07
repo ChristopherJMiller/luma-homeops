@@ -580,6 +580,11 @@ The bearer token of the usage API. Secret `ci-dispatch-usage`, key `usage-token`
 `cluster/ci-dispatch/dispatcher/usage-token.secret.yaml`. It must be one printable line with no
 whitespace, or the process refuses to start. The process reads it once, at start.
 
+Forgejo holds a second copy for the fork's CI Usage tab, in Secret `forgejo-ci-usage`, key
+`realliance.ci_usage` (`TOKEN=<token>`, an app.ini section), source
+`cluster/forgejo/ci-usage.secret.yaml`. Forgejo also reads it at start. Until both hold the new
+token and both have restarted, the Usage tab reads "usage unavailable" and job pages show no held note.
+
 1. A new token in sso-secrets, checked by counts only: the two counts must read 1 and 0.
 
    ```bash
@@ -591,17 +596,23 @@ whitespace, or the process refuses to start. The process reads it once, at start
    git commit -S -am "forge: rotate the ci-dispatch usage token" && git push
    ```
 
-2. Copy it into the source, and reseal:
+2. Copy it into both sources, and reseal both:
 
    ```bash
    f=cluster/ci-dispatch/dispatcher/usage-token
+   g=cluster/forgejo/ci-usage
    T=$(grep '^CI_DISPATCH_USAGE_TOKEN=' ~/Repos/realliance-sso-secrets/forge/secrets.env | cut -d= -f2-) \
      yq -i '.stringData."usage-token" = strenv(T)' $f.secret.yaml
-   rm $f.yaml && bash -O globstar ./sign.sh && git diff --no-textconv --stat
+   T=$(grep '^CI_DISPATCH_USAGE_TOKEN=' ~/Repos/realliance-sso-secrets/forge/secrets.env | cut -d= -f2-) \
+     yq -i '.stringData."realliance.ci_usage" = "TOKEN=" + strenv(T) + "\n"' $g.secret.yaml
+   rm $f.yaml $g.yaml && bash -O globstar ./sign.sh && git diff --no-textconv --stat
    ```
 
 3. Step 3 of the dispatcher token. The old token stops working at the restart. Check the new one
    with a single call: `u '1/usage?period=current' | jq .owner_id` prints 1 (Finding a job's record).
+4. Restart Forgejo with the same commit or the next: bump `realliance/templates-rev` in
+   `cluster/applications/forgejo-release.yaml` (1 to 3 minutes of downtime, so no Actions job may
+   run). Then the Usage tab under Settings, Actions shows meters again.
 
 ### The `galaxy-ci-dispatch` runner secret (`RUNNER_CI_DISPATCH_SECRET`)
 

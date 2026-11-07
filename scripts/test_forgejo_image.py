@@ -221,6 +221,72 @@ def test_fork_pin(repo_values: dict) -> None:
     assert "tag" not in image and "repository" not in image and "registry" not in image
 
 
+ACCOUNT_URL = "https://sso.realliance.net/realms/realliance/account/"
+USAGE_URL = "http://ci-dispatch.ci-dispatch.svc.cluster.local:8081"
+USAGE_SECRET = "forgejo-ci-usage"
+NAVBAR_STUB = "/data/gitea/templates/user/settings/navbar.tmpl"
+
+
+def test_fork_config(docs: list[dict], repo_values: dict) -> None:
+    """The fork's own app.ini sections (realliance/forgejo#16): the account link and the usage API's
+    URL inline; the usage TOKEN only from a SealedSecret, never in this public file; the ci-dispatch
+    Service really serves the usage port at that URL; and no user settings menu override, since the
+    fork's patch carries the link and an override would hide the Usage tab."""
+    gitea = repo_values["gitea"]
+    assert gitea["config"]["realliance"] == {"ACCOUNT_URL": ACCOUNT_URL}
+    assert gitea["config"]["realliance.ci_usage"] == {"URL": USAGE_URL}, "TOKEN never inline"
+    assert {"secret": {"secretName": USAGE_SECRET}} in gitea["additionalConfigSources"]
+
+    sealed = yaml.safe_load((REPO / "cluster/forgejo/ci-usage.yaml").read_text())
+    assert sealed["kind"] == "SealedSecret" and sealed["metadata"] == {"name": USAGE_SECRET, "namespace": "forgejo"}
+    assert set(sealed["spec"]["encryptedData"]) == {"realliance.ci_usage"}, "one key: the section name"
+    kust = yaml.safe_load((REPO / "cluster/forgejo/kustomization.yaml").read_text())
+    assert "ci-usage.yaml" in kust["resources"]
+
+    svc = yaml.safe_load((REPO / "cluster/ci-dispatch/dispatcher/service.yaml").read_text())
+    host = f"{svc['metadata']['name']}.ci-dispatch.svc.cluster.local"
+    usage_port = {p["name"]: p["port"] for p in svc["spec"]["ports"]}["usage"]
+    assert USAGE_URL == f"http://{host}:{usage_port}"
+
+    (gen,) = [g for g in kust["configMapGenerator"] if g["name"] == "forgejo-custom-templates"]
+    assert not [f for f in gen["files"] if "navbar" in f], gen["files"]
+    assert not (REPO / "cluster/forgejo/custom/templates/user").exists()
+    dep = one(docs, "Deployment", "forgejo")
+    (main,) = [c for c in dep["spec"]["template"]["spec"]["containers"] if c["name"] == "forgejo"]
+    assert not [m for m in main["volumeMounts"] if m["mountPath"].startswith("/data/gitea/templates/user/")]
+
+
+def run_pre(script: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["bash", "-euo", "pipefail", "-c", script], capture_output=True, text=True, check=False)
+
+
+def test_navbar_stub_cleanup(docs: list[dict], repo_values: dict, tmp_path: Path) -> None:
+    """The old override's subPath mount left an empty navbar.tmpl on /data, which Forgejo would load as
+    an empty menu. initPreScript removes it when it is empty, keeps any real file, and never fails the
+    init container (it runs under the chart's `set -euo pipefail`)."""
+    init = one(docs, "Secret", "forgejo-init")
+    script = (init.get("stringData") or {}).get("init_directory_structure.sh", "")
+    assert NAVBAR_STUB in script, "initPreScript reaches the init-directories script"
+    pre = repo_values["initPreScript"].replace("/data/", f"{tmp_path}/")
+    stub = Path(str(tmp_path) + NAVBAR_STUB.removeprefix("/data"))
+    stub.parent.mkdir(parents=True)
+    for content, kept in (("", False), ("{{/* a real override */}}\n", True)):
+        stub.write_text(content)
+        r = run_pre(pre)
+        assert r.returncode == 0, r.stderr
+        assert stub.exists() is kept, (content, r.stdout)
+    stub.unlink()
+    r = run_pre(pre)
+    assert r.returncode == 0 and r.stdout == "", "a missing stub is the steady state: silent, no error"
+    stub.write_text("")
+    stub.parent.chmod(0o555)
+    try:
+        r = run_pre(pre)
+        assert r.returncode == 0, "a failed rm must not stop the forge from starting"
+    finally:
+        stub.parent.chmod(0o755)
+
+
 def code_blocks(path: Path) -> list[str]:
     return re.findall(r"^```[a-z]*\n(.*?)^```", path.read_text(), re.S | re.M)
 

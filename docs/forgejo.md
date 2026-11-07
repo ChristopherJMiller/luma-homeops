@@ -378,12 +378,12 @@ The registry copy of `2.3` has the same digest as Quay's. Quay no longer serves 
 
 The forge's own image is `realliance/forgejo`'s patch queue on top of upstream 15.0.11: `git.realliance.net/realliance/forgejo`. Plan: `docs/superpowers/plans/2026-11-06-forgejo-fork-image.md`. Research and evidence: `docs/superpowers/specs/2026-11-06-forgejo-fork-image-research.md`.
 
-**The pin.** `cluster/applications/forgejo-release.yaml` sets `image.fullOverride` to `git.realliance.net/realliance/forgejo:v15.0.11-realliance.N@sha256:<amd64 digest>`. The upstream `digest:` line stays below it as the fallback; the chart ignores that line while `fullOverride` has a value. Until the first release, `fullOverride` is absent and the forge runs upstream `15.0.11-rootless`. No Renovate manager sees the pin, so Chris reviews each one. `scripts/test_forgejo_image.py` (pre-commit hook `forgejo-image`) checks the pin's form, the fallback line, the keep-warm DaemonSet and the selective sync below. The hook pulls the chart from code.forgejo.org on each run, so an outage there blocks every commit that touches `forgejo-release.yaml`; skip it (`SKIP=forgejo-image`) only with Chris's word.
+**The pin.** `cluster/applications/forgejo-release.yaml` sets `image.fullOverride` to `git.realliance.net/realliance/forgejo:v15.0.11-realliance.N@sha256:<amd64 digest>`. The upstream `digest:` line stays below it as the fallback; the chart ignores that line while `fullOverride` has a value. The first release, `v15.0.11-realliance.1`, went live on 2026-11-07. No Renovate manager sees the pin, so Chris reviews each one. `scripts/test_forgejo_image.py` (pre-commit hook `forgejo-image`) checks the pin's form, the fallback line, the keep-warm DaemonSet and the selective sync below. The hook pulls the chart from code.forgejo.org on each run, so an outage there blocks every commit that touches `forgejo-release.yaml`; skip it (`SKIP=forgejo-image`) only with Chris's word.
 
 **Build and release.**
 
 1. Changes reach the fork's `main` as patches through a PR. CI refuses a patch that adds a database migration, so the same-version upstream image always boots on the same database.
-2. An Owner pushes a signed tag `v15.0.11-realliance.N` on `main`. The `image` workflow builds on the paid `medium` class and pushes the tags `v15.0.11-realliance.N` and `sha-<7>` as `realliance-ci`. It never moves a tag.
+2. An Owner pushes a signed tag `v15.0.11-realliance.N` on `main`. The `image` workflow builds on the paid `medium` class and pushes the one tag `v15.0.11-realliance.N` as `realliance-ci`. It never moves a tag.
 3. The job prints the pin line. Chris reviews the digest, then the pin goes in as one signed commit. A `workflow_dispatch` build gets only `sha-<7>` and a `dev` version: a pipeline test, never a pin.
 
 **Deploy order.**
@@ -391,6 +391,12 @@ The forge's own image is `realliance/forgejo`'s patch queue on top of upstream 1
 1. `ci-dispatch` first: the live dispatcher must carry #3 (blocked jobs) before the forge runs an image with the `blocked` patch.
 2. No Actions job may run: every runner reads Idle or Offline under Site administration, Actions, Runners. A runner mid-job loses the forge, and a paid one keeps billing.
 3. Push the pin. Argo syncs wave -1 first, the keep-warm DaemonSet, on all three nodes. Only once it reads 3/3 Ready does Forgejo's Recreate start: 1 to 3 minutes of downtime. Watch with `Monitor` (the safe-rollout skill), and watch each keep-warm pod's state, not only the 3/3 count.
+
+**Fork config.** The patches read two app.ini sections that upstream ignores, so the fallback boots with them in place.
+
+- `[realliance] ACCOUNT_URL`: the "Realliance account ↗" link at the top of the user settings menu. Empty hides it.
+- `[realliance.ci_usage]`: the Usage tab under Settings, Actions, and the held note on a queued job. `URL` is ci-dispatch's usage API on its ClusterIP Service, port 8081, which ci-dispatch's NetworkPolicy opens to Forgejo's pods only. `TOKEN` comes from Secret `forgejo-ci-usage` through `additionalConfigSources`; rotate it with ci-dispatch's copy (`docs/ci.md`, "The usage token"). An empty `URL` turns the feature off.
+- `initPreScript` deletes the empty `templates/user/settings/navbar.tmpl` that the old menu override's `subPath` mount left on `/data`. Forgejo would load that file as an empty menu.
 
 **The keep-warm DaemonSet.** `forgejo-keepwarm` (namespace `forgejo`, Argo sync wave -1, from the chart's `extraDeploy`) runs `{{ include "gitea.image" . }}`, the Deployment's own image with the fallback included, as `/app/gitea/gitea --version && exec sleep 2147483647` on every node.
 
@@ -437,26 +443,27 @@ export KUBECONFIG=/tmp/galaxy-kubeconfig
 
 1. Delete the `fullOverride:` line in `cluster/applications/forgejo-release.yaml`, commit, and push to GitHub `main`. The chart then renders `code.forgejo.org/forgejo/forgejo:15.0.11-rootless@sha256:3cd6bc2b…`. Argo reads GitHub, and both the chart and that image come from code.forgejo.org, so this works with the forge down. `kubectl set image` doesn't: self-heal reverts it.
 2. Argo rolls the DaemonSet to upstream first, then Forgejo. If the sync waits at wave -1, see When the sync waits at wave -1, but never revert this fallback commit: that re-applies the broken fork. If a keep-warm pod can't pull upstream, use the node case there, or wait for code.forgejo.org. Watch with `Monitor`.
-3. `gitea migrate` is a no-op, and the data stays intact. Lost while on upstream: the jj UI and the PR-round views, the `blocked` status (ci-dispatch falls back to guessing), the Usage tab and the account link (restore the old navbar override from git history for the link). Round refs stay hidden from fetches, because `transfer.hideRefs` persists in Forgejo's git config file on `/data`. They still count in commit counts and graphs, and a mirror-mode push mirror could push `refs/realliance/*`.
+3. `gitea migrate` is a no-op, and the data stays intact. Lost while on upstream: the jj UI and the PR-round views, the `blocked` status (ci-dispatch falls back to guessing), the Usage tab and the account link (to keep the link, restore the old `navbar.tmpl` override and its mount from git history, commit 4af18b65). Round refs stay hidden from fetches, because `transfer.hideRefs` persists in Forgejo's git config file on `/data`. They still count in commit counts and graphs, and a mirror-mode push mirror could push `refs/realliance/*`.
 4. Roll forward only with the keep-warm DaemonSet in place, or while Forgejo is up with the image cached on every node.
 
 **Before a drain of Forgejo's node** (a Talos hop, a rebuild): check that the other nodes hold the image. The `talos-upgrade` skill carries the check.
 
 ## Template overrides (custom/)
 
-Forgejo has no plugin API; small UI changes are copies of upstream templates under
-`cluster/forgejo/custom/templates/`, shipped as ConfigMap `forgejo-custom-templates` and mounted
-into `$GITEA_CUSTOM/templates/` (see `extraContainerVolumeMounts` in `forgejo-release.yaml`).
+Forgejo has no plugin API. A UI change is a patch in the fork image (Fork image), or a file under
+`cluster/forgejo/custom/templates/`, shipped as ConfigMap `forgejo-custom-templates` and mounted into
+`$GITEA_CUSTOM/templates/` (see `extraContainerVolumeMounts` in `forgejo-release.yaml`).
 
 | Override | Upstream file | Change |
 |---|---|---|
-| `user-settings-navbar.tmpl` | `templates/user/settings/navbar.tmpl` (15.0.11) | "Realliance account ↗" link to the SSO account page, top of the settings menu |
+| `custom-header.tmpl` | `templates/custom/header.tmpl`, an empty `<head>` hook | loads `realliance-fonts.css` (Typography, below) |
 
-**On every Forgejo upgrade:** re-diff each override against the new upstream file
-(`curl -sL https://codeberg.org/forgejo/forgejo/raw/tag/v<version>/templates/user/settings/navbar.tmpl | diff - <(tail -n +4 cluster/forgejo/custom/templates/user/settings/navbar.tmpl)`
-should show only the added lines), carry the change over, and bump `realliance/templates-rev`
-(Forgejo reads templates at start). `tests/forge/test_forge_signin.py::test_settings_link_to_realliance_account`
-catches a lost override.
+**Never copy a whole upstream template here.** A copy shadows every patch to that file: the old
+user settings menu copy would have hidden the fork's Usage tab. Its "Realliance account ↗" link moved
+into the patch queue on 2026-11-07. `tests/forge/test_forge_signin.py::test_settings_link_to_realliance_account`
+in realliance-sso catches a lost link. Removing a `subPath` mount leaves its empty mount point on `/data`,
+which Forgejo then loads as an empty template: delete it in `initPreScript`, as for `navbar.tmpl`.
+Forgejo reads templates at start, so after an edit bump `realliance/templates-rev`.
 
 ## Typography (fonts)
 
@@ -492,7 +499,7 @@ For the hop:
 
 - Pin `[service].ADD_MEMBERS_BY_INVITATIONS=false` before the hop, not now (15 lacks the setting, and it restarts Forgejo).
 - Port the Catppuccin oklch shim.
-- Re-copy `navbar.tmpl`.
+- Rebase the fork's patch queue onto 19 (the account link and the Usage tab live in `templates/user/settings/navbar.tmpl` patches now, not a copy here).
 - The administrator API can create true system hooks with `config.is_system_webhook`.
 - Add a Renovate custom manager for `image.tag`/`image.digest`: no manager sees them inside `valuesObject`.
 - `INTERNAL_TOKEN` no longer exists in 18 and later.

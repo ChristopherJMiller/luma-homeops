@@ -1,0 +1,14 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: forgejo-ci-usage
+  namespace: forgejo
+spec:
+  encryptedData:
+    realliance.ci_usage: AgCARUdLjtbiGx79kw6X1nwf/zSf1GlqHEHwJdx3078QBkKWLTQQfWpC9xi6hXgTJqMTDXVxd25RFzllKJpfYteg/jMEt98NQGjL8BEK2ClcyyOeaRLQh5ZESczKgFBsOTbpnEZbuz1hrM1BnrnIpBcDzdbxjFKzOBhkAnETuMSLZ62rjrFYMucpfYgyy6ZlVQqxCJ1V+sJWmGXczicIELuZzGzOBW+zDIZ38L6vyfRUNPOkxzKSmU+vyooP3qbL0DwW21XGPiVBox6xvbZ4+CGiQ2G/zADtNq3kGb/Zi+bzy+iY31/rYgWotOPdiaYwzJf+05E6tOm7HLrTEvaYhkHUVLW7rfoXmgqZ0VEMmi2yevO1emyTWrwsPJKk5DRrRSQB0TBA92reOZu9Fwi2qE89Dlv8hq4XqDkVelvh8sk0NSLov8Jz/QvUeiOf5jpZbGva03O8q3+QeAXFDrOIEA3PbsCd09VlPdhiJUERuCNY5ebTRhLDPQdee0zPNL97pNYIQv4JJG+pDsHxhK5/bNic1yQ9kE2/5bfu2w4hD1+gnqjOd5bPgO5QEK8Xa+xMFFjWZQvCr1zLu5aH0mr6fIZiAuehCP5G8mk+zil3AxQXTLabAnj+MmEepVglA0dOsfasCzKupmo/5wnZV2J+lXD8btPeNrRK3T7Bz/tkuEXjbWBqByIsLxegRwVqMRbP6+x5cxjHZtNGs7jjV1MynzMYUaPaKjYsZENoyCbxNaOmr90ciTLzB4pU8qGGEBarAEZU2PlAk7rtV9y44CZ5T9Ugompmj23KtQ==
+  template:
+    metadata:
+      name: forgejo-ci-usage
+      namespace: forgejo
+    type: Opaque

@@ -37,6 +37,9 @@ spec:
           type: Recreate # one RWO repos volume
         image:
           rootless: true
+          # The Realliance fork (docs/forgejo.md, "Fork image"): hand-reviewed, no Renovate manager.
+          # Delete this line to fall back to the upstream digest below ("Fallback to upstream").
+          fullOverride: git.realliance.net/realliance/forgejo:v15.0.11-realliance.1@sha256:bfdeb54e93713b2058feac802ff93cb27aafdb7cbbcefde39319489f9f3bb1be
           # 15.0.11-rootless, pinned by digest (the chart derives the tag from appVersion; bump both together)
           digest: sha256:3cd6bc2b74c87cbde0a0fd527c9665cb416f5a0540dee54fe5afb3fa2df9f40c
         resources:
@@ -130,12 +133,6 @@ spec:
         extraContainerVolumeMounts:
           - name: repos
             mountPath: /repos
-          # Template overrides under $GITEA_CUSTOM (/data/gitea). Forgejo reads them at start:
-          # after editing one, bump gitea.podAnnotations realliance/templates-rev to restart.
-          - name: custom-templates
-            mountPath: /data/gitea/templates/user/settings/navbar.tmpl
-            subPath: user-settings-navbar.tmpl
-            readOnly: true
           - name: themes
             mountPath: /data/gitea/public/assets/css
             readOnly: true
@@ -145,11 +142,23 @@ spec:
           - name: img
             mountPath: /data/gitea/public/assets/img
             readOnly: true
+          # Template override under $GITEA_CUSTOM (/data/gitea). Forgejo reads it at start: after
+          # editing it, bump gitea.podAnnotations realliance/templates-rev to restart.
           # <head> hook, after the theme sheet: preloads the body font, loads realliance-fonts.css
           - name: custom-templates
             mountPath: /data/gitea/templates/custom/header.tmpl
             subPath: custom-header.tmpl
             readOnly: true
+        # A subPath mount inside /data leaves its mount point on the volume: the old user settings
+        # menu override (dropped 2026-11-07, the fork image carries the link) left an empty
+        # templates/user/settings/navbar.tmpl, and Forgejo would load it as an empty menu. Runs in
+        # init-directories (uid 1000; the directory is group 1000 writable through fsGroup). A failed
+        # rm only logs: an empty menu is better than a forge that won't start.
+        initPreScript: |
+          stub=/data/gitea/templates/user/settings/navbar.tmpl
+          if [ -f "$stub" ] && [ ! -s "$stub" ]; then
+            if rm -f "$stub"; then echo "removed the empty $stub"; else echo "could not remove the empty $stub"; fi
+          fi
 
         # Forgejo's own GPG key "Realliance Forge <git@realliance.net>" (ID 50ACEA5F43099C00). Without
         # it Forgejo refuses every merge into a branch that requires signed commits ("won't sign: nokey").
@@ -198,6 +207,8 @@ spec:
           additionalConfigSources:
             - secret:
                 secretName: forgejo-app-ini
+            - secret:
+                secretName: forgejo-ci-usage # [realliance.ci_usage] TOKEN (cluster/forgejo/ci-usage.secret.yaml)
           additionalConfigFromEnvs:
             - name: FORGEJO__DATABASE__PASSWD
               valueFrom:
@@ -299,6 +310,17 @@ spec:
               ENABLED: true
               DEFAULT_ACTIONS_URL: https://github.com # `uses: actions/x@<sha>` resolves on GitHub
               ARTIFACT_RETENTION_DAYS: 30
+            # Fork-only sections (realliance/forgejo patch queue; upstream ignores them, so the
+            # fallback image boots with them in place).
+            realliance:
+              # "Realliance account ↗" at the top of the user settings menu; empty hides it.
+              ACCOUNT_URL: https://sso.realliance.net/realms/realliance/account/
+            realliance.ci_usage:
+              # Settings > Actions > Usage and the held note on a queued job read ci-dispatch's usage
+              # API on its ClusterIP Service (ci-dispatch's NetworkPolicy admits these pods on 8081).
+              # TOKEN comes from Secret forgejo-ci-usage; TIMEOUT stays at its 3 s default. An empty
+              # URL turns the feature off.
+              URL: http://ci-dispatch.ci-dispatch.svc.cluster.local:8081
   destination:
     server: https://kubernetes.default.svc
     namespace: forgejo

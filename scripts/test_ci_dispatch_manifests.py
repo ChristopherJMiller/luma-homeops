@@ -666,11 +666,19 @@ RESTIC_EGRESS = [
         "ports": [{"protocol": "TCP", "port": 443}],
     },
 ]
+FORGEJO_PODS = {
+    "namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "forgejo"}},
+    "podSelector": {"matchLabels": {"app.kubernetes.io/name": "forgejo", "app.kubernetes.io/instance": "forgejo"}},
+}
 DISPATCHER_INGRESS = [
     {
         "from": [{"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "prometheus"}}}],
         "ports": [{"protocol": "TCP", "port": 8080}],
-    }
+    },
+    {  # the fork's CI Usage tab ([realliance.ci_usage]): Forgejo's own pods, the usage port only
+        "from": [FORGEJO_PODS],
+        "ports": [{"protocol": "TCP", "port": 8081}],
+    },
 ]
 
 
@@ -764,9 +772,13 @@ def test_dispatcher_policy(dispatcher):
     pol = one(pols, "NetworkPolicy", "ci-dispatch")
     assert pol["spec"]["podSelector"] == {"matchLabels": {"app.kubernetes.io/name": "ci-dispatch"}}
     assert pol["spec"]["policyTypes"] == ["Ingress", "Egress"]
-    (ing,) = pol["spec"]["ingress"]
+    (ing, usage) = pol["spec"]["ingress"]
     assert ing["from"] == [{"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "prometheus"}}}]
-    assert ports(ing) == {("TCP", 8080)}, "the usage port is not for the scrape; clients reach it through the Service by policy-visible pods only if added later"
+    assert ports(ing) == {("TCP", 8080)}, "the usage port is not for the scrape"
+    # The fork's CI Usage tab: Forgejo's pods, both selectors in one peer (so not the whole namespace,
+    # not the keep-warm or backup pods), on the usage port only.
+    assert usage["from"] == [FORGEJO_PODS]
+    assert ports(usage) == {("TCP", 8081)}
     egress = pol["spec"]["egress"]
     assert len(egress) == 3
     forgejo = next(r for r in egress if "podSelector" in r["to"][0])
@@ -796,7 +808,7 @@ def test_dispatcher_policy(dispatcher):
     for marker in ("ingress:", "egress:"):
         assert any(line.strip() == marker for line in text)
     rule_starts = [i for i, line in enumerate(text) if line.startswith("    - ")]
-    assert len(rule_starts) == 4
+    assert len(rule_starts) == 5
     for i in rule_starts:
         assert text[i - 1].strip().startswith("#"), f"rule at line {i + 1} has no comment above it"
 

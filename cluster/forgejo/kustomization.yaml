@@ -10,6 +10,7 @@ resources:
   - logical-backup-s3.yaml
   - patroni-restapi.yaml
   - app-ini.yaml
+  - ci-usage.yaml # SealedSecret forgejo-ci-usage: [realliance.ci_usage] TOKEN, for ci-dispatch's usage API
   - oidc.yaml
   - admin.yaml
   - signing.yaml
@@ -20,10 +21,10 @@ resources:
   - backup-b2.yaml
   - backup-cronjob.yaml
 configMapGenerator:
-  # Forgejo custom/ template overrides, mounted by the Helm release (forgejo-release.yaml).
+  # Forgejo custom/ template overrides, mounted by the Helm release (forgejo-release.yaml). The fork
+  # image's patch carries the Realliance account link, so the user settings menu has no override.
   - name: forgejo-custom-templates
     files:
-      - user-settings-navbar.tmpl=custom/templates/user/settings/navbar.tmpl
       - custom-header.tmpl=custom/templates/custom/header.tmpl # loads realliance-fonts.css on every page
     options:
       disableNameSuffixHash: true # referenced by name from the other Application
