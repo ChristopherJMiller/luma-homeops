@@ -19,14 +19,14 @@ listing.
 
 Phase 2 (Task 18) adds the paid classes `small` and `medium` in dry-run, the
 Azure credential, the dispatcher's internet egress on TCP 443, the money alerts
-and the ledger's restic backup. Its config needs v0.2.0, which phase 2 Task 16
-releases. Until then the StatefulSet pins an unpullable placeholder
+and the ledger's restic backup. Its config needs v0.3.0, which phase 2 Task 16
+releases; main runs v0.2.0, tiny only. Until then the StatefulSet pins an unpullable placeholder
 (`sha-PENDING@sha256:` and 64 zeros), and the branch carries the marker
 cluster/ci-dispatch/dispatcher/.release-pending, which names the one branch the
 placeholder may be committed on. test_dispatcher_image_pending FAILS anywhere
 else, main included. Task 19's re-pin is one commit: delete the marker, set the
 image, set RELEASE_IMAGE. Without the marker the pin must equal RELEASE_IMAGE
-exactly, and v0.1.0 is refused outright.
+exactly, and v0.1.0 and v0.2.0 are refused outright.
 """
 
 import fnmatch
@@ -54,17 +54,22 @@ FORGE_BOT_KEYRING = REPO / "cluster/forge-bot/keyring"
 RENOVATE = REPO / ".renovaterc.json"
 IMAGE = "git.realliance.net/realliance-ops/ci-dispatch"
 IMAGE_RE = r"^git\.realliance\.net/realliance-ops/ci-dispatch:sha-[0-9a-f]{7}@sha256:[0-9a-f]{64}$"
-# Tag v0.1.0 (5a231e90, signed) = main 9055e60, built by ci-dispatch's CI; Chris approved it for
-# deploy (phase 1 Task 14 Step 4). It refuses phase 2's config (unknown keys azure and paid, a paid
-# class not off) and exits at config.Load, so this tree must never run it.
+# Tag v0.1.0 (5a231e90, signed) = main 9055e60 (phase 1 Task 14 Step 4), and tag v0.2.0 (signed) =
+# main 19b416f: v0.1.0 plus blocked-job holds and the attempt on holds, tiny only, deployed
+# 2026-11-06 and main's pin until phase 2's re-pin. Both refuse phase 2's config (unknown keys azure
+# and paid, a paid class not off) and exit at config.Load, so this tree must never run either.
 V010_IMAGE = (
     "git.realliance.net/realliance-ops/ci-dispatch:sha-9055e60"
     "@sha256:39ab99aa87f2e76dae145c67fb7e75fc5e2490d7de76cea95f1a4582ad7dc3ef"
 )
-# v0.2.0 is not released yet (phase 2 Task 16). The StatefulSet pins PENDING_IMAGE until then: a
+V020_IMAGE = (
+    "git.realliance.net/realliance-ops/ci-dispatch:sha-19b416f"
+    "@sha256:b50069b0a8a976e15d0ea0fc75d408f7f19d20f347da995376165f9320affd57"
+)
+# v0.3.0, phase 2's paid release, is not out yet (Task 16). The StatefulSet pins PENDING_IMAGE until then: a
 # digest no registry can serve, so no push makes it pullable (review M2). RELEASE_PENDING marks the
 # branch it may live on. The commit that pins the release deletes RELEASE_PENDING and sets
-# RELEASE_IMAGE to its sha-<7>@sha256:<64>. A new pin is a reviewed commit that changes this line too.
+# RELEASE_IMAGE to v0.3.0's sha-<7>@sha256:<64>. A new pin is a reviewed commit that changes this line too.
 PENDING_IMAGE = f"{IMAGE}:sha-PENDING@sha256:{'0' * 64}"
 RELEASE_PENDING = REPO / "cluster/ci-dispatch/dispatcher/.release-pending"
 RELEASE_IMAGE = None
@@ -169,8 +174,8 @@ RESTIC_HOST = "ci-dispatch-ledger"
 BACKUPS_RULE = REPO / "cluster/backups/prometheusrule.yaml"
 CANARY = REPO / "cluster/backups/restic-canary-cronjob.yaml"
 GUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
-# internal/metrics FindingKinds of v0.2.0, less stored-config-rejected (its own counter alerts).
-# paid-class-unlaunchable (v0.2.0, Task 13 review M2): a paid class is on in ci.yaml, but no hourly
+# internal/metrics FindingKinds of v0.3.0, less stored-config-rejected (its own counter alerts).
+# paid-class-unlaunchable (v0.3.0, Task 13 review M2): a paid class is on in ci.yaml, but no hourly
 # cap or no paid concurrency admits a job, so its jobs would wait forever with no hold.
 FINDING_KINDS = {"owner-name-stale", "owner-name-missing", "owner-names-unchecked", "paid-class-unlaunchable"}
 # One Forgejo-held key's whole back-off schedule (3 min pickup, then 1/2/5/10/10 min) fits six
@@ -387,7 +392,7 @@ def _checked_out_branch() -> str | None:
 
 def test_dispatcher_image_pinned(dispatcher):
     if _pending_branch() is not None:
-        pytest.skip("v0.2.0 is not pinned yet (.release-pending): test_dispatcher_image_pending holds the placeholder")
+        pytest.skip("v0.3.0 is not pinned yet (.release-pending): test_dispatcher_image_pending holds the placeholder")
     image = _image(dispatcher)
     assert image == RELEASE_IMAGE, f"the pin is not the reviewed release: {image}"
     assert re.match(IMAGE_RE, image), f"image is not a sha-<7>@sha256:<64> pin: {image}"
@@ -396,9 +401,11 @@ def test_dispatcher_image_pinned(dispatcher):
 def test_dispatcher_image_pending(dispatcher):
     """Review M2: the placeholder only with the marker and only on the branch the marker names, so a
     commit on main (or anywhere else) fails until the re-pin; without the marker, the release pin
-    exactly; never v0.1.0, which refuses this config and would crash-loop."""
+    exactly; never v0.1.0 or v0.2.0, which refuse this config and would crash-loop."""
     image = _image(dispatcher)
-    assert image != V010_IMAGE, "v0.1.0 refuses phase 2's config (azure, paid, paid classes in dry-run)"
+    assert image not in (V010_IMAGE, V020_IMAGE), (
+        "v0.1.0 and v0.2.0 refuse phase 2's config (azure, paid, paid classes in dry-run): pin v0.3.0"
+    )
     branch = _pending_branch()
     if branch is None:
         assert RELEASE_IMAGE is not None and image == RELEASE_IMAGE, (
@@ -410,7 +417,7 @@ def test_dispatcher_image_pending(dispatcher):
     assert RELEASE_IMAGE is None, "the re-pin deletes .release-pending in the commit that sets RELEASE_IMAGE"
     here = _checked_out_branch()
     assert here == branch, (
-        f"the v0.2.0 placeholder may only be committed on {branch}, not {here}: "
+        f"the v0.3.0 placeholder may only be committed on {branch}, not {here}: "
         "re-pin first (cluster/ci-dispatch/dispatcher/.release-pending says how)"
     )
 

@@ -1,5 +1,6 @@
 # Branch-only marker (runner classes phase 2, Task 18 review M2). Not a manifest; nothing renders it.
 #
+# The branch was rebased onto main (which runs v0.2.0, tiny only) as ci-phase2-manifests-v3.
 # While this file exists, statefulset.yaml pins an image no registry can serve:
 #   git.realliance.net/realliance-ops/ci-dispatch:sha-PENDING@sha256:<64 zeros>
 # and test_dispatcher_image_pending (scripts/test_ci_dispatch_manifests.py) passes only when the
@@ -8,9 +9,9 @@
 #
 # Task 19's re-pin is ONE commit that does all three:
 #   1. deletes this file;
-#   2. sets the StatefulSet image to v0.2.0's sha-<7>@sha256:<64> (the digest Task 16 ledgered);
+#   2. sets the StatefulSet image to v0.3.0's sha-<7>@sha256:<64> (the digest Task 16 ledgered);
 #   3. sets RELEASE_IMAGE in scripts/test_ci_dispatch_manifests.py to the same string.
 #
 # A fast-forward or a conflict-free merge runs no hook, so before pushing to main also check that
 # `git grep -n sha-PENDING -- cluster/` prints nothing.
-branch: ci-phase2-manifests
+branch: ci-phase2-manifests-v3

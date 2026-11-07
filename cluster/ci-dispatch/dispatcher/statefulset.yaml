@@ -62,8 +62,8 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ci-dispatch
-          # PENDING until phase 2 Task 16 releases v0.2.0: config.yaml's azure and paid sections need
-          # it, and v0.1.0 (sha-9055e60) refuses them and exits. The all-zero digest is one no registry
+          # PENDING until phase 2 Task 16 releases v0.3.0: config.yaml's azure and paid sections need
+          # it. v0.2.0 (sha-19b416f, main's pin until this deploys) and v0.1.0 refuse them and exit. The all-zero digest is one no registry
           # can serve. The real pin replaces this line in one commit with deleting .release-pending
           # and setting RELEASE_IMAGE in scripts/test_ci_dispatch_manifests.py (.release-pending says
           # how). A new image never deploys itself: .renovaterc.json never automerges this image, so

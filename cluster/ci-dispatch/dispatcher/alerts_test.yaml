@@ -438,7 +438,7 @@ tests:
         exp_alerts:
           - exp_labels: {severity: warning, namespace: ci-dispatch, class: small}
             exp_annotations:
-              summary: "A paid class in dry-run or on has not been ready for 30 minutes (the class label names it): Azure locked or failing, prices over 7 days old, or no egress pass in 5 minutes (docs/ci.md)"
+              summary: "A paid class in dry-run or on has not been ready for 30 minutes (the class label names it): Azure locked or failing, prices over 7 days old, no succeeded sweeper run in 30 minutes, or a container group whose egress reads keep failing (docs/ci.md)"
   - name: CIDispatchPaidNotReady is quiet for a class that is off, or ready
     interval: 1m
     input_series:

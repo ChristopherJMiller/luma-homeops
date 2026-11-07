@@ -3,15 +3,14 @@
 `ci-dispatch` starts one fresh runner for each waiting Forgejo Actions job on `git.realliance.net`,
 within each owner's limits. Argo app `ci-dispatch` (`cluster/ci-dispatch/`) runs it in namespace
 `ci-dispatch`, and its runner Jobs in `ci-tiny`. Code: `git.realliance.net/realliance-ops/ci-dispatch`
-(v0.2.0). Spec: `docs/superpowers/specs/2026-11-04-runner-classes-design.md`. Plan and ledger:
+(v0.3.0). Spec: `docs/superpowers/specs/2026-11-04-runner-classes-design.md`. Plan and ledger:
 `docs/superpowers/plans/2026-11-04-runner-classes-phase-0-1.md` and `.ledger.md` beside it.
 
 Phase 2 adds the paid classes `small` and `medium` on Azure Container Instances (ACI): plan
 `docs/superpowers/plans/2026-11-05-runner-classes-phase-2.md` and its ledger, and the Azure side in
-`azure/ci/` (its `README.md`). They ship in ci-dispatch **v0.3.0**, the first release with ledger
-schema v2. The current build, v0.2.0 (v0.1.0 plus blocked-job holds and the attempt on holds), runs
-`tiny` only and refuses any paid mode but `off`. Until the v0.3.0 deploy (phase 2 Task 19), the paid
-sections below describe what that deploy brings.
+`azure/ci/` (its `README.md`). They ship in ci-dispatch v0.3.0, the first release with ledger
+schema v2, deployed by phase 2 Task 19. The release before it, v0.2.0 (v0.1.0 plus blocked-job
+holds and the attempt on holds), runs `tiny` only (to go back to it, see Downgrading below v0.3.0).
 
 | Piece | Where |
 |---|---|
@@ -129,7 +128,7 @@ dispatcher starts again.
 | `runs-on` | Backend |
 |---|---|
 | `tiny` | A pod in `ci-tiny`: 1 CPU, 2 GiB, `/work` a 1 GiB memory volume, 4096 tasks (`podPidsLimit` on every node, `docs/node-rebuild.md`). Runner timeout 15 min, Job deadline 20 min. Each launch reserves 20 of the owner's daily minutes |
-| `small`, `medium` | One ACI container group per job, from v0.3.0 on (see Paid classes). Before it, as `large` |
+| `small`, `medium` | One ACI container group per job (see Paid classes) |
 | `small` or `medium` with `docker` | Wait `class-off`: Docker needs a VM, which arrives with phase 3 |
 | `large`, alone or with `docker` | No backend until phase 3. `config.Load` refuses any mode but `off` |
 | Two size labels, `docker` alone, `[tiny, docker]` | Hold `label`. Forgejo ends the job after 24 h |
@@ -190,7 +189,7 @@ or quota refusal made nothing and costs nothing.
 | The burn, plus this launch, stays at or under the hourly cap | wait `class-full` |
 | The owner's used and reserved money this period, plus this reservation, stays within its limit | hold `owner-limit` |
 | The same for the global cap | hold `global-cap` |
-| Ready: a verified config, the ledger and the money read, Azure listed this step with no lock, prices under 7 days old, an egress pass in the last 5 min | wait `not-ready` |
+| Ready: a verified config, the ledger and the money read, Azure listed this step with no lock, prices under 7 days old, the sweeper's last succeeded run under 30 min old, an egress pass in the last 5 min. A group whose egress reads keep failing keeps its last good reading, which dates the pass, so it holds every paid class here until a read succeeds | wait `not-ready` |
 
 The burn, `ci_dispatch_burn_usd_per_hour`, adds the hourly price of every active paid launch, the
 price of every listed group that no launch claims (orphans, groups still deleting, a drill's), and
@@ -278,7 +277,7 @@ runner pods.
 | `defaults.tiny_concurrent`, `owners.<name>.tiny_concurrent` | `tiny` jobs at once for one owner | 3 |
 | `defaults.tiny_minutes_per_day`, `owners.<name>.tiny_minutes_per_day` | `tiny` minutes a UTC day | 1440 |
 | `global.tiny_concurrent` | `tiny` pods at once, all owners | 3 (the pod quota) |
-| `paid_usd_per_period`, `paid_concurrent` (defaults, owners), `global.paid_usd_per_period`, `global.paid_usd_per_hour` | Paid classes (Paid limits and the caps owner) | v0.3.0: $80 a period, 20 at once, $0.48 an hour. v0.2.0: $100 and $0.60 |
+| `paid_usd_per_period`, `paid_concurrent` (defaults, owners), `global.paid_usd_per_period`, `global.paid_usd_per_hour` | Paid classes (Paid limits and the caps owner) | $80 a period, 20 at once, $0.48 an hour |
 | `classes` | Turns a class off for everyone | none |
 | `owners.<name>: {id: N, …}`, `deny: [{name, id}]` | Overrides and denies | none |
 
@@ -391,16 +390,14 @@ gate: paid slots, the hourly cap, the owner's dollars, and readiness.
 
 ## Alerts
 
-The nine rules in `cluster/ci-dispatch/dispatcher/prometheusrule.yaml` are all `severity: warning`.
-`CIDispatchOrphanCompute` routes by name to `critical-alerts` (Discord, around the clock) since
-0db39a77; the rest go to `homelab-default` (Discord, weekdays).
-
-**From the v0.3.0 deploy** the file holds 18 rules: the group `ci-dispatch-paid` adds nine, and
-`CIDispatchOrphanCompute` turns `critical`. The 0db39a77 route sends
+`cluster/ci-dispatch/dispatcher/prometheusrule.yaml` holds 18 rules: phase 1's nine in the group
+`ci-dispatch`, and nine in `ci-dispatch-paid`. The money alerts are `critical`: `CIDispatchSpendHigh`,
+`CIDispatchLocked`, `CIDispatchOrphanCompute` and `CISweeperStale`. The 0db39a77 route sends
 `CIDispatch(SpendHigh|Locked|OrphanCompute|Drift|PaidNotReady)` and `CISweeperStale` to
-`critical-alerts` by name, whatever the severity, so `CIDispatchDrift` and `CIDispatchPaidNotReady`
-page around the clock although they're `warning`. `CIDispatchEgressCapHit` and
-`CIDispatchAzureFailing` go to `homelab-default`.
+`critical-alerts` (Discord, around the clock) by name, whatever the severity, so `CIDispatchDrift`
+and `CIDispatchPaidNotReady` page around the clock although they're `warning`. The rest,
+`CIDispatchEgressCapHit` and `CIDispatchAzureFailing` included, go to `homelab-default` (Discord,
+weekdays).
 
 | Alert | Means | Do |
 |---|---|---|
@@ -409,16 +406,16 @@ page around the clock although they're `warning`. `CIDispatchEgressCapHit` and
 | `CIDispatchLaunchFailing`, `reason: errors` | Launch steps fail for 15 min | The `launch failed` log lines name the step |
 | `CIDispatchConfigUntrusted` | The head of `realliance-ops/forge` `main` has not verified for 15 min, or Forgejo was unreachable at each reload | See "A head that fails" |
 | `CIDispatchStoredConfigRejected` | At start, the ledger's copy of `ci.yaml` failed its proof. The common cause: its signer left the keyring (a rotated or expired key) | Once `ci_dispatch_config_verified` is 1, `kubectl -n ci-dispatch delete pod ci-dispatch-0` clears it. With no key rotated or expired, treat it as tampering |
-| `CIDispatchConfigFindings` | For 30 min, an owner name in `ci.yaml` no longer matches its id, or looking up the names failed. From v0.3.0, also `paid-class-unlaunchable`: a paid class runs (`dry-run` or `on` in the ConfigMap, and on in the signed `ci.yaml`), but `global.paid_usd_per_hour` is unset or 0, or no owner has a `paid_concurrent` over 0 | Fix the name in `ci.yaml`. The limits still bind to the ids. For `paid-class-unlaunchable`, check those two keys |
+| `CIDispatchConfigFindings` | For 30 min, an owner name in `ci.yaml` no longer matches its id, or looking up the names failed. Or `paid-class-unlaunchable`: a paid class runs (`dry-run` or `on` in the ConfigMap, and on in the signed `ci.yaml`), but `global.paid_usd_per_hour` is unset or 0, or no owner has a `paid_concurrent` over 0 | Fix the name in `ci.yaml`. The limits still bind to the ids. For `paid-class-unlaunchable`, check those two keys: the `config finding` log line names the class and, in `detail`, the missing one |
 | `CIDispatchLaunchesUndone` | Over 7 undone launches an hour, for an hour | Jobs that Forgejo holds keep taking the slot: look for `held` rows in `jobs`. `for: 1h` is load-bearing, never shorten it |
-| `CIDispatchOrphanCompute` | For 15 min, a `ci-tiny` Job or runner with no launch, or an expired Job still there | `ci_dispatch_orphans` by `kind`. A `tiny` orphan pod dies at its own 20 min deadline; delete a Job that outlives it by hand (`kubectl -n ci-tiny get jobs`). A `runner refused` log line is a `ci-tiny-*` runner that failed the uuid or scope check: treat it as an incident. From v0.3.0, `kind="group"` is a container group in `rg-realliance-ci` that bills until it's gone: if the reaper hasn't removed it, delete it as the break-glass does |
+| `CIDispatchOrphanCompute` | For 15 min, a `ci-tiny` Job or runner with no launch, or an expired Job still there | `ci_dispatch_orphans` by `kind`. A `tiny` orphan pod dies at its own 20 min deadline; delete a Job that outlives it by hand (`kubectl -n ci-tiny get jobs`). A `runner refused` log line is a `ci-tiny-*` runner that failed the uuid or scope check: treat it as an incident. `kind="group"` is a container group in `rg-realliance-ci` that bills until it's gone: if the reaper hasn't removed it, delete it as the break-glass does |
 | `CITinyQuotaFull` | `ci-tiny` at its 3 pods for 30 min | `kubectl -n ci-tiny get pods`. With global `tiny_concurrent` 1, three pods means leftovers. A reaped pod may run out its 30 s grace while its replacement starts; the quota bounds that |
 | `CIDispatchSpendHigh`, `level` 80 or 95 | The period's used plus reserved money is at 80 % ($64) or 95 % ($76) of the $80 cap, for 5 min | Reading paid spend. The gate stops at the cap by itself; pause the paid classes if the spend looks wrong |
 | `CIDispatchLocked` | Azure answered with the sweeper's lock, for 2 min. A deny that refuses only PUTs, while reads still work, fires it too | After a trip |
 | `CISweeperStale`, `reason: stale` | The sweeper has no finished run in 30 min | Its runs (After a trip, step 1). With the sweeper turned off or hung, only the budget bounds Azure compute: pause `small` and `medium` until it runs again |
 | `CISweeperStale`, `reason: absent` | No sweeper timestamp for 30 min: the watcher can't read the run history, or the dispatcher isn't running | `CIDispatchStale` covers a missing dispatcher. Expect it during a break-glass longer than 30 min, or a node loss: silence it then |
 | `CIDispatchDrift` | The ledger and Azure differ by over 10 % for a closed day or period | The month-end drift check. The gauge holds the ratio, so the alert repeats every 30 min until the next one: silence it once read |
-| `CIDispatchPaidNotReady` | A paid class in `dry-run` or `on` not ready for 30 min (the `class` label), a deny that refuses only PUTs included | The log's `"api":"azure"` and `"api":"prices"` lines, `ci_dispatch_azure_locked`, `ci_dispatch_price_age_seconds`. In `dry-run` it's a rollback trigger |
+| `CIDispatchPaidNotReady` | A paid class in `dry-run` or `on` not ready for 30 min (the `class` label), a deny that refuses only PUTs included | The log's `"api":"azure"` and `"api":"prices"` lines, `ci_dispatch_azure_locked`, `ci_dispatch_price_age_seconds`, `ci_dispatch_sweeper_last_run_timestamp` (the last succeeded run). One group whose egress reads keep failing holds every paid class (Paid classes, the Ready check). In `dry-run` it's a rollback trigger |
 | `CIDispatchEgressCapHit` | The dispatcher deleted a group at the 10 GB egress cap in the last hour | The `reaped` line's `key` names the job. The owner paid the bytes; ask whether the job meant to send them |
 | `CIDispatchAzureFailing` | Azure calls keep failing for 30 min, with no lock | The common cause: an expired or rotated client secret, with an AADSTS code in the log. Rotate (The Azure credential), else wait out an Azure outage |
 
@@ -890,9 +887,8 @@ ledger forgets every reservation and charge, so each owner could spend their lim
 run meanwhile, at the cost of at most a day of its minutes.
 
 Each night from 03:00 UTC the dispatcher writes a whole, consistent copy,
-`/data/snapshots/ledger-<YYYYMMDD>T<HHMMSS>Z.db` (`VACUUM INTO`), and keeps the newest seven. From the
-v0.3.0 deploy on, `restic-ci-dispatch` copies that directory to restic host `ci-dispatch-ledger` at
-03:50.
+`/data/snapshots/ledger-<YYYYMMDD>T<HHMMSS>Z.db` (`VACUUM INTO`), and keeps the newest seven.
+`restic-ci-dispatch` copies that directory to restic host `ci-dispatch-ledger` at 03:50.
 
 1. STOP: ask Chris (S4: this scales a StatefulSet to 0). Pause the paid classes in git first if
    they're on.
