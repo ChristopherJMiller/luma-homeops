@@ -3,7 +3,7 @@
 `ci-dispatch` starts one fresh runner for each waiting Forgejo Actions job on `git.realliance.net`,
 within each owner's limits. Argo app `ci-dispatch` (`cluster/ci-dispatch/`) runs it in namespace
 `ci-dispatch`, and its runner Jobs in `ci-tiny`. Code: `git.realliance.net/realliance-ops/ci-dispatch`
-(v0.3.0). Spec: `docs/superpowers/specs/2026-11-04-runner-classes-design.md`. Plan and ledger:
+(v0.3.1). Spec: `docs/superpowers/specs/2026-11-04-runner-classes-design.md`. Plan and ledger:
 `docs/superpowers/plans/2026-11-04-runner-classes-phase-0-1.md` and `.ledger.md` beside it.
 
 Phase 2 adds the paid classes `small` and `medium` on Azure Container Instances (ACI): plan

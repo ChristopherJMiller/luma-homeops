@@ -62,12 +62,13 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ci-dispatch
-          # v0.3.0: tag v0.3.0 (signed) = main ebd3a92, built by ci-dispatch's CI as an OCI manifest,
-          # amd64 (phase 2 Task 16). config.yaml's azure and paid sections need it: v0.2.0 and v0.1.0
-          # refuse them and exit. It moves the ledger to schema v2 at start, which neither opens
+          # v0.3.1: tag v0.3.1 (signed) = main f415caa, built by ci-dispatch's CI as an OCI manifest,
+          # amd64: v0.3.0 (phase 2 Task 16) plus the egress-read fix (unit Bytes; no since-Created read
+          # under a minute; whole-minute spans). config.yaml's azure and paid sections need v0.3.x: v0.2.0
+          # and v0.1.0 refuse them and exit. v0.3.0 moved the ledger to schema v2, which neither opens
           # (docs/ci.md, Rollback). A new image never deploys itself: .renovaterc.json never automerges
           # this image, so its PR is the alarm. Re-pin by hand after review, with the test's RELEASE_IMAGE.
-          image: git.realliance.net/realliance-ops/ci-dispatch:sha-ebd3a92@sha256:6189618265c3274d2fd8edf30a389f9c299cc86da101152ac0852e504310623c
+          image: git.realliance.net/realliance-ops/ci-dispatch:sha-f415caa@sha256:4f3517443b8ca1fa2c0a9a6bba7977e504f45e233babbd3a9b8cdf216f214f9d
           args:
             - --config=/etc/ci-dispatch/config/config.yaml
           env:

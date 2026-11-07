@@ -66,14 +66,15 @@ V020_IMAGE = (
     "git.realliance.net/realliance-ops/ci-dispatch:sha-19b416f"
     "@sha256:b50069b0a8a976e15d0ea0fc75d408f7f19d20f347da995376165f9320affd57"
 )
-# v0.3.0, phase 2's paid release: tag v0.3.0 (signed) = main ebd3a92 (Task 16), pinned by Task 19.
+# v0.3.1: tag v0.3.1 (signed) = main f415caa, v0.3.0 (phase 2's paid release, ebd3a92, Task 16, pinned
+# by Task 19) plus the egress-read fix found in Task 21.
 # Before it the StatefulSet pinned PENDING_IMAGE, a digest no registry can serve (review M2), only on the
 # branch RELEASE_PENDING named. A new pin is a reviewed commit that changes RELEASE_IMAGE too.
 PENDING_IMAGE = f"{IMAGE}:sha-PENDING@sha256:{'0' * 64}"
 RELEASE_PENDING = REPO / "cluster/ci-dispatch/dispatcher/.release-pending"
 RELEASE_IMAGE = (
-    "git.realliance.net/realliance-ops/ci-dispatch:sha-ebd3a92"
-    "@sha256:6189618265c3274d2fd8edf30a389f9c299cc86da101152ac0852e504310623c"
+    "git.realliance.net/realliance-ops/ci-dispatch:sha-f415caa"
+    "@sha256:4f3517443b8ca1fa2c0a9a6bba7977e504f45e233babbd3a9b8cdf216f214f9d"
 )
 # ci-dispatch v0.1.0's shutdown (internal/loop, cmd/ci-dispatch): the step in flight, then the servers.
 SHUTDOWN_GRACE_SECONDS = 20
