@@ -409,16 +409,16 @@ page around the clock although they're `warning`. `CIDispatchEgressCapHit` and
 | `CIDispatchLaunchFailing`, `reason: errors` | Launch steps fail for 15 min | The `launch failed` log lines name the step |
 | `CIDispatchConfigUntrusted` | The head of `realliance-ops/forge` `main` has not verified for 15 min, or Forgejo was unreachable at each reload | See "A head that fails" |
 | `CIDispatchStoredConfigRejected` | At start, the ledger's copy of `ci.yaml` failed its proof. The common cause: its signer left the keyring (a rotated or expired key) | Once `ci_dispatch_config_verified` is 1, `kubectl -n ci-dispatch delete pod ci-dispatch-0` clears it. With no key rotated or expired, treat it as tampering |
-| `CIDispatchConfigFindings` | For 30 min, an owner name in `ci.yaml` no longer matches its id, or looking up the names failed. From v0.3.0, also `paid-class-unlaunchable`: a paid class is on, but `global.paid_usd_per_hour` is unset or 0, or no owner has a `paid_concurrent` over 0 | Fix the name in `ci.yaml`. The limits still bind to the ids. For `paid-class-unlaunchable`, check those two keys |
+| `CIDispatchConfigFindings` | For 30 min, an owner name in `ci.yaml` no longer matches its id, or looking up the names failed. From v0.3.0, also `paid-class-unlaunchable`: a paid class runs (`dry-run` or `on` in the ConfigMap, and on in the signed `ci.yaml`), but `global.paid_usd_per_hour` is unset or 0, or no owner has a `paid_concurrent` over 0 | Fix the name in `ci.yaml`. The limits still bind to the ids. For `paid-class-unlaunchable`, check those two keys |
 | `CIDispatchLaunchesUndone` | Over 7 undone launches an hour, for an hour | Jobs that Forgejo holds keep taking the slot: look for `held` rows in `jobs`. `for: 1h` is load-bearing, never shorten it |
 | `CIDispatchOrphanCompute` | For 15 min, a `ci-tiny` Job or runner with no launch, or an expired Job still there | `ci_dispatch_orphans` by `kind`. A `tiny` orphan pod dies at its own 20 min deadline; delete a Job that outlives it by hand (`kubectl -n ci-tiny get jobs`). A `runner refused` log line is a `ci-tiny-*` runner that failed the uuid or scope check: treat it as an incident. From v0.3.0, `kind="group"` is a container group in `rg-realliance-ci` that bills until it's gone: if the reaper hasn't removed it, delete it as the break-glass does |
 | `CITinyQuotaFull` | `ci-tiny` at its 3 pods for 30 min | `kubectl -n ci-tiny get pods`. With global `tiny_concurrent` 1, three pods means leftovers. A reaped pod may run out its 30 s grace while its replacement starts; the quota bounds that |
 | `CIDispatchSpendHigh`, `level` 80 or 95 | The period's used plus reserved money is at 80 % ($64) or 95 % ($76) of the $80 cap, for 5 min | Reading paid spend. The gate stops at the cap by itself; pause the paid classes if the spend looks wrong |
-| `CIDispatchLocked` | Azure answered with the sweeper's lock, for 2 min | After a trip |
+| `CIDispatchLocked` | Azure answered with the sweeper's lock, for 2 min. A deny that refuses only PUTs, while reads still work, fires it too | After a trip |
 | `CISweeperStale`, `reason: stale` | The sweeper has no finished run in 30 min | Its runs (After a trip, step 1). With the sweeper turned off or hung, only the budget bounds Azure compute: pause `small` and `medium` until it runs again |
 | `CISweeperStale`, `reason: absent` | No sweeper timestamp for 30 min: the watcher can't read the run history, or the dispatcher isn't running | `CIDispatchStale` covers a missing dispatcher. Expect it during a break-glass longer than 30 min, or a node loss: silence it then |
 | `CIDispatchDrift` | The ledger and Azure differ by over 10 % for a closed day or period | The month-end drift check. The gauge holds the ratio, so the alert repeats every 30 min until the next one: silence it once read |
-| `CIDispatchPaidNotReady` | A paid class in `dry-run` or `on` not ready for 30 min (the `class` label) | The log's `"api":"azure"` and `"api":"prices"` lines, `ci_dispatch_azure_locked`, `ci_dispatch_price_age_seconds`. In `dry-run` it's a rollback trigger |
+| `CIDispatchPaidNotReady` | A paid class in `dry-run` or `on` not ready for 30 min (the `class` label), a deny that refuses only PUTs included | The log's `"api":"azure"` and `"api":"prices"` lines, `ci_dispatch_azure_locked`, `ci_dispatch_price_age_seconds`. In `dry-run` it's a rollback trigger |
 | `CIDispatchEgressCapHit` | The dispatcher deleted a group at the 10 GB egress cap in the last hour | The `reaped` line's `key` names the job. The owner paid the bytes; ask whether the job meant to send them |
 | `CIDispatchAzureFailing` | Azure calls keep failing for 30 min, with no lock | The common cause: an expired or rotated client secret, with an AADSTS code in the log. Rotate (The Azure credential), else wait out an Azure outage |
 
@@ -466,9 +466,11 @@ paid jobs waiting `not-ready`, and the sweeper's emails. `tiny` carries on.
    apply destroys the old client secret, so in the same STOP run The Azure credential, steps 2 to 5.
    Anything else: stop.
 4. **Check.** The next sweep ends `Succeeded` and removes both `ci-sweeper-*` tags. If it ends
-   `Locked` with no cause, a sweep that read the old state raced the apply: apply again.
-   `ci_dispatch_azure_locked` clears within one poll (30 s) of the assignment taking effect, and
-   `ci_dispatch_paid_ready` returns to 1.
+   `Locked` with no cause, a sweep that read the old state raced the apply: apply again. With the
+   paid classes paused (step 2), `ci_dispatch_azure_locked` clears within one poll (30 s) of the
+   assignment taking effect. With a class left on, a PUT denied around the unlock keeps it at 1 until
+   the next back-off step (10 min at most) lets a PUT through and that PUT succeeds; with nothing
+   waiting to launch, it stays at 1 until a paid job arrives. `ci_dispatch_paid_ready` follows it.
 5. **Resume** `small` and `medium` as you paused them, a deploy with its own STOP.
 
 While locked, the dispatcher can't read the groups, so launches in flight keep their reservations
