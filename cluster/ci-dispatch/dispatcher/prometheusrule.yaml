@@ -5,7 +5,7 @@
 # CISweeperStale. Alertmanager routes them, with CIDispatchDrift and CIDispatchPaidNotReady, by name
 # to the 24/7 receiver (cluster/prometheus-stack/alertmanager-config.secret.yaml, phase 2 Task 9);
 # the rest go to the weekday default. Cases: alerts_test.yaml, run by
-# scripts/test-ci-dispatch-alerts.sh. Metric names are the ones internal/metrics of ci-dispatch v0.2.0
+# scripts/test-ci-dispatch-alerts.sh. Metric names are the ones internal/metrics of ci-dispatch v0.3.0
 # exports. `release: prometheus` selects this rule.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -68,10 +68,10 @@ spec:
         # Findings never change which limits apply; they ask an Owner to look. owner-name-stale: the
         # name now resolves to another account. owner-name-missing: no account has the name.
         # owner-names-unchecked: the lookups failed (Forgejo error), which clears at the next good
-        # reload; 30 min rides out a short outage. paid-class-unlaunchable (v0.2.0): a paid class is
+        # reload; 30 min rides out a short outage. paid-class-unlaunchable (v0.3.0): a paid class is
         # on in ci.yaml, but global.paid_usd_per_hour is unset or 0, or no owner has a paid_concurrent
-        # above 0, so its jobs would wait forever with no hold. Its log line carries only the kind:
-        # check those two settings in ci.yaml.
+        # above 0, so its jobs would wait forever with no hold. Its `config finding` log line names
+        # the class and, in `detail`, the missing setting.
         # stored-config-rejected has its own alert: CIDispatchStoredConfigRejected reads the same
         # event from its counter.
         - alert: CIDispatchConfigFindings
@@ -179,14 +179,17 @@ spec:
           annotations:
             summary: "ci-dispatch's paid charges and Azure's cost differ by over 10 % for a closed day or period (docs/ci.md)"
         # Per class, in dry-run too (F24): phase 2 Task 19 rolls back on it. Not ready means a lock, a
-        # failed Azure read, prices over price_max_age, or no egress pass in 5 min (E17).
+        # failed Azure read, prices over price_max_age, the sweeper's last Succeeded run over 30 min
+        # old (a sweeper failing every run is no backstop), or no fresh egress pass in 5 min (E17).
+        # A group whose egress reads keep failing keeps its last good reading, and its staleness
+        # dates the whole pass, so it holds paid not-ready until a read succeeds (fails closed).
         - alert: CIDispatchPaidNotReady
           expr: ci_dispatch_class_mode{class=~"small|medium"} >= 1 and on(class) ci_dispatch_paid_ready == 0
           for: 30m
           labels:
             severity: warning
           annotations:
-            summary: "A paid class in dry-run or on has not been ready for 30 minutes (the class label names it): Azure locked or failing, prices over 7 days old, or no egress pass in 5 minutes (docs/ci.md)"
+            summary: "A paid class in dry-run or on has not been ready for 30 minutes (the class label names it): Azure locked or failing, prices over 7 days old, no succeeded sweeper run in 30 minutes, or a container group whose egress reads keep failing (docs/ci.md)"
         # E17: the dispatcher deleted its own group at the 10 GB cap. Fires for the hour after.
         - alert: CIDispatchEgressCapHit
           expr: increase(ci_dispatch_reaped_total{reason="egress-cap"}[1h]) > 0
