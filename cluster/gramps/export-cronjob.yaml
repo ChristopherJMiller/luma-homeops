@@ -47,7 +47,7 @@ spec:
           # neither the curl nor the rclone image carries the other.
           initContainers:
             - name: export
-              image: docker.io/curlimages/curl:8.22.0@sha256:58adaa4e8dca9c988bae2aba4ab3434a0bb2da16bbe3f92dec39ec7785166777
+              image: docker.io/curlimages/curl:8.23.0@sha256:3fb7e13e5d179a845c97d78204f3f1064d1907037f26a3ebf91710571151fd93
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true
@@ -83,7 +83,7 @@ spec:
                   mountPath: /work
           containers:
             - name: upload
-              image: ghcr.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+              image: ghcr.io/rclone/rclone:1.76.0@sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true
