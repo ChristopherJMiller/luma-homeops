@@ -490,8 +490,9 @@ def _seconds(s: str) -> int:
 
 def test_config_values(dispatcher):
     cfg = dispatcher_config(dispatcher)
-    # Phase 2 (F9): the paid classes in dry-run, large with no backend, tiny as phase 1 Task 19 left it.
-    assert cfg["classes"] == {"tiny": "on", "small": "dry-run", "medium": "dry-run", "large": "off"}
+    # Phase 2 (F9): the paid classes on since Task 21 (dry-run from Task 19 until its probes passed),
+    # large with no backend, tiny as phase 1 Task 19 left it.
+    assert cfg["classes"] == {"tiny": "on", "small": "on", "medium": "on", "large": "off"}
     assert cfg["forgejo"]["url"] == "http://forgejo-http.forgejo.svc.cluster.local:3000"
     assert cfg["forgejo"]["public_url"] == "https://git.realliance.net"
     assert cfg["inventory"]["repo"] == "realliance-ops/forge"

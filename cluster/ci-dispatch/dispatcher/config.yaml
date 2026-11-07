@@ -29,10 +29,10 @@ inventory:
 classes:
   # tiny: dry-run from Task 18, on since Task 19. Quote every mode: YAML 1.1 reads a bare on or off as a bool.
   tiny: "on"
-  # small and medium: dry-run since phase 2 Task 19, until its probes pass, then on (Task 21;
-  # Chris, 2026-11-06: probes, not a 24 h dry-run).
-  small: "dry-run"
-  medium: "dry-run"
+  # small and medium: dry-run from phase 2 Task 19, on since Task 21 once its probes passed
+  # (Chris, 2026-11-06: probes, not a 24 h dry-run). Pause: "off" here (docs/ci.md).
+  small: "on"
+  medium: "on"
   large: "off"
 kube:
   namespace: ci-tiny
