@@ -822,7 +822,13 @@ git -C ~/Repos/ci-dispatch ls-tree --name-only "$REL" internal/aci/testdata/poli
   (30 s) plus the group's `Deleting` phase.
 - **Egress just before a delete is never charged.** The metric lags about 2 min, and a deleted
   group's metric answers not found, so the last 2 min or so of its egress reach neither the owner nor
-  the burn. The 10 GB cap bounds it.
+  the burn. The 10 GB cap bounds it. Wider: a job whose egress reads fail for its whole life is never
+  charged egress at all, up to the cap and its overshoot. While any group's reads fail, the paid
+  classes stay `not-ready` (they fail closed, ruling F1), and the sweeper still enforces the cap with
+  its own reads.
+- **The two sides price a group differently.** The dispatcher sums the requests of all its
+  containers, while the sweeper prices one container by shape and anything else at $1 an hour. The
+  fence allows only one container, so today they agree.
 - **A compromised dispatcher can outrun the egress backstops** (Chris accepted it, 2026-11-05, over a
   VNet and NAT gateway at about $32 a month). The sweeper's egress and rate rules never see groups
   that live shorter than one sweep, 10 min. Then only the $85 budget bounds them, 8 to 48 h late, and

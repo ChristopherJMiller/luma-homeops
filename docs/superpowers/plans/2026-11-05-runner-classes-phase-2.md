@@ -6,7 +6,7 @@
 
 **Architecture:**
 - `azure/ci/` (terraform, Chris applies) creates two resource groups in `westus3`. The **CI group** holds only job compute, behind an Azure Policy fence, and the dispatcher's service principal may write only there. The **guard group** holds the sweeper, a Logic App that runs every 10 min. It deletes anything older than 90 min. If burn stays over $0.60 an hour for two sweeps in a row, or a group passes the per-job egress cap, or the CI group's $85 budget is spent, it deletes all compute and removes the dispatcher's role assignment (the **lock**). Only Chris's apply restores it.
-- `ci-dispatch` v0.2.0 adds a backend seam to the loop: tiny's Kubernetes Jobs, unchanged, and a new ACI backend. A paid launch reserves its worst-case cost in the ledger, registers the same ephemeral instance runner, and PUTs one container group. The group gets the runner credential as a `secureValue` and runs `ci-class-entry`, which execs `timeout` and `forgejo-runner one-job --handle`. The ARM client is stdlib HTTP behind an allow-list guard, like `internal/kube`.
+- `ci-dispatch` v0.3.0 adds a backend seam to the loop: tiny's Kubernetes Jobs, unchanged, and a new ACI backend. A paid launch reserves its worst-case cost in the ledger, registers the same ephemeral instance runner, and PUTs one container group. The group gets the runner credential as a `secureValue` and runs `ci-class-entry`, which execs `timeout` and `forgejo-runner one-job --handle`. The ARM client is stdlib HTTP behind an allow-list guard, like `internal/kube`. (Amended 2026-11-06: another session released v0.2.0 that day, the `tiny`-only build of v0.1.0 plus blocked-job holds and the attempt on holds, so this plan's paid release is v0.3.0, and v0.2.0 is the pin before it.)
 - A watcher goroutine refreshes prices daily from Azure's public retail feed and reads the sweeper's run history every 5 min. Each day it also compares the ledger with Cost Management.
 - Paid numbers reach the usage API. The ledger's snapshots get a nightly restic backup.
 
@@ -99,7 +99,7 @@ From `.superpowers/sdd/2026-11-05-runner-classes-phase-2/preflight.md` § 6. F1 
 | Terraform | `terraform` from the flake; `hashicorp/azurerm ~> 4.0`, `hashicorp/azuread 3.9.0` (entra's lock), `Azure/azapi ~> 2.0`, `hashicorp/time ~> 0.12`; exact versions at least 2 weeks old, committed in `azure/ci/.terraform.lock.hcl` | backend: `azure/bootstrap`'s storage account, key `realliance-ci.tfstate` |
 | Class image bases | the five `FROM` lines of `images/forgejo-runner/Dockerfile`, byte for byte | runner 13.2.1, golang 1.26.9, node 24.21.0, ko v0.19.1, debian trixie slim |
 | Class image | `ghcr.io/christopherjmiller/forgejo-runner-class@sha256:<64>`, digest only (T2-N1). The `sha-<7>` tag names the build in the ledger and never appears in a pin | Task 1 |
-| Dispatcher | `git.realliance.net/realliance-ops/ci-dispatch:sha-<7>@sha256:<64>`, tag `v0.2.0` | Task 16 |
+| Dispatcher | `git.realliance.net/realliance-ops/ci-dispatch:sha-<7>@sha256:<64>`, tag `v0.3.0` | Task 16 |
 | restic | `ghcr.io/restic/restic:0.19.1@sha256:2f0373803493361f9304a57150d464677f69a9dad487afec202105aafb2592f2` | `cluster/music-streaming/restic-backup-cronjob.yaml` |
 
 ### Values fixed by the spec (verbatim)
@@ -220,8 +220,8 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
   - 429, 5xx and transport errors → `ErrUnavailable`. For a create: absence first, then an error undo with the error back-off and a try. For a read: retried at the next poll.
 - **E12. The watcher** is a separate goroutine (`internal/watch`), off the loop's step lock. It refreshes prices, reads the sweeper's runs, and computes drift. The loop reads prices from the ledger.
 - **E13. Rollback is split** (F10, F34):
-  - A **migration error** leaves the ledger at v1, because the step runs in one transaction. Revert the pin to v0.1.0.
-  - **After a good migration**, set the classes `off` and keep v0.2.0. v0.1.0 refuses schema v2 and would crash-loop.
+  - A **migration error** leaves the ledger at v1, because the step runs in one transaction. Revert the pin to v0.2.0, the build before.
+  - **After a good migration**, set the classes `off` and keep v0.3.0. v0.2.0, like v0.1.0, refuses schema v2 and would crash-loop.
   - A forced downgrade restores the nightly v1 snapshot, which Task 19 Step 1 checks exists, and loses at most that day's accounting (`docs/ci.md`).
 - **E14. Paid dry-run lasts 24 h, then `on`.** The paid gates are new, but the loop they run in has phase 1's dry-run, crash matrix and a week of `tiny` behind it.
 - **E15. The 24/7 route is shared.** If forge-bot Task 15 has not created `forge-urgent`, Task 9 creates it in forge-bot's exact shape, with both plans' alerts in its regex.
@@ -547,7 +547,7 @@ Paid `on` needs neither `tiny: on` nor NetworkPolicy B2. Paid jobs never touch `
 
 ### Task 5: The sweeper drill
 
-**Gate:** (a), after Task 4 and Task 7 Step 5 (`live_test.go` exists). v0.2.0 can't be running yet, since Task 19 needs this task.
+**Gate:** (a), after Task 4 and Task 7 Step 5 (`live_test.go` exists). v0.3.0 can't be running yet, since Task 19 needs this task.
 
 - [ ] **Step 1: STOP—ask Chris.** Pre-approve exactly what follows:
   - groups created as his identity in the CI group, for about 2.5 h and about $0.65;
@@ -813,7 +813,7 @@ Schema v2 (I1: v1 with `launches_key` is what phase 1 deployed, so `schema_v1.sq
 - tables `prices(class PRIMARY KEY, hourly_micro, fetched_at)` and `drift(day PRIMARY KEY, ledger_micro, azure_micro, at)`;
 - `UPDATE meta SET schema_version = 2` (an UPDATE, not an INSERT; F29).
 
-`migrate` runs v1 then v2 on an empty file, and v2 alone on a v1 ledger, each step in one `BEGIN IMMEDIATE`. v0.1.0 refuses v2 (E13).
+`migrate` runs v1 then v2 on an empty file, and v2 alone on a v1 ledger, each step in one `BEGIN IMMEDIATE`. v0.1.0 and v0.2.0 refuse v2 (E13).
 
 **Usage:**
 - `paid` comes from `PaidUse`. Usage rounds `used` and `reserved` half-up to cents first, then computes `remaining_usd = max(0, limit − used − reserved)` from those cents, so the three strings always add up to the limit (F21).
@@ -1149,7 +1149,7 @@ func (w *Watcher) Run(ctx context.Context)                             // Egress
   - **Sweeper:** set the timestamp to the newest run with an `End`.
   - **Day drift:** from 06:00 UTC, compute the ratio for D−2 once, from `DayCharged` and `DailyCost`. Skip it if `ledger.Drift` already holds that day (restart-safe, F25). The day ratio keeps its $0.50 floor, so at today's volume it rarely evaluates; that is accepted (F25).
   - **Period drift:** on day 3 of a month, compute the ratio for the previous month from `ledger.Drift(from, to)` sums, with **no** floor (F25).
-- **`EgressStep`** (E17): for each of `lp.EgressTargets()`, two `Egress` reads, since `Created` and over the last 5 min, handed to `lp.SetEgress`. A failed read for one group skips that group, and a failed pass hands nothing, so the loop's 5-min freshness rule then blocks paid launches.
+- **`EgressStep`** (E17): for each of `lp.EgressTargets()`, two `Egress` reads, since `Created` and over the last 5 min, handed to `lp.SetEgress`. (Amended, Task 15 review C1:) a failed read carries that group's last good reading forward, and the pass takes the date of its stalest group, a group never read dating it zero (ruling F1). While any group's reads keep failing, then, the loop's 5-min freshness rule blocks paid launches.
 - **`main`:** when `azure` is configured, it calls `LoadCredentials(cfg.Azure.Files)`, builds `azure.New` and `NewACIBackend`, runs `WithBackend([small, medium], …)`, and starts `watch.Run`. Without `azure`, the binary behaves as v0.1.0.
 
 - [ ] **Step 1: Write the failing tests.**
@@ -1174,8 +1174,8 @@ func (w *Watcher) Run(ctx context.Context)                             // Egress
   - the two phase 1 carries ledgered in Task 0 Step 2 (F36), put to Chris.
 
   Fix in one round, and ledger the rulings.
-- [ ] **Step 2: PR `v2` → `main`. Chris** merges fast-forward and signs tag `v0.2.0`. The `main` run builds the image. Ledger the digest, checking the manifest anonymously as phase 1 Task 14 Step 3 does.
-- [ ] **Step 3: STOP—ask Chris to review the release** (`git verify-tag v0.2.0`, `git log -p v0.1.0..v0.2.0`). Ledger his approval.
+- [ ] **Step 2: PR `v2` → `main`. Chris** merges fast-forward and signs tag `v0.3.0`. The `main` run builds the image. Ledger the digest, checking the manifest anonymously as phase 1 Task 14 Step 3 does.
+- [ ] **Step 3: STOP—ask Chris to review the release** (`git verify-tag v0.3.0`, `git log -p v0.2.0..v0.3.0`). Ledger his approval.
 
 ## Group (c): after phase 1 Task 18
 
@@ -1191,7 +1191,7 @@ func (w *Watcher) Run(ctx context.Context)                             // Egress
   - `realliance` (id 52) gains `paid_usd_per_period: 30` *(Chris, 2026-11-05)*.
   - Every other owner, `realliance-ops` included, stays on the defaults: $10 and 2.
   - `global.paid_usd_per_period` drops from 100 to **80** (Chris, 2026-11-05), and `paid_usd_per_hour` from 0.60 to **0.48** (Chris, 2026-11-06, I3).
-  - **Order matters:** v0.2.0's code ceilings are $80 and $0.48 an hour, so a head saying 100 or 0.60 fails its `Parse` with `ErrAboveCeiling`. This commit must therefore merge before Task 19 deploys v0.2.0. v0.1.0 accepts 80, since lowering a value is always allowed.
+  - **Order matters:** v0.3.0's code ceilings are $80 and $0.48 an hour, so a head saying 100 or 0.60 fails its `Parse` with `ErrAboveCeiling`. This commit must therefore merge before Task 19 deploys v0.3.0. v0.1.0 and v0.2.0 accept 80, since lowering a value is always allowed.
 - [ ] **Step 2: Check locally** with phase 1 Task 15 Step 2's scratch test (`limits.Parse`, then a read-only `Resolve`). Expected: PASS, no findings. **Step 3: Commit signed, PR. Chris** merges fast-forward.
 
 ### Task 18: The luma-homeops manifests (not deployed)
@@ -1253,25 +1253,25 @@ func (w *Watcher) Run(ctx context.Context)                             // Egress
 - [ ] **Step 4: Manifests** that pass Step 1. `config.yaml`'s comment names `docs/ci.md` for moving a paid class to `on`, and says the class image is re-pinned by hand (CLAUDE.md sharp edge 6).
 - [ ] **Step 5: Run everything:** the static tests, `scripts/test-ci-dispatch-alerts.sh`, `scripts/test_netpol_manifests.py` and `scripts/check-kustomizations.sh`. Expected: PASS. Commit on the branch; push the branch only.
 
-### Task 19: Deploy v0.2.0, paid classes in dry-run
+### Task 19: Deploy v0.3.0, paid classes in dry-run
 
 **Gate:** (c), and Tasks 4, 5, 9, 16, 17 and 18 done.
 
 - [ ] **Step 1: Preconditions.**
   - Phase 1 Task 18's dry-run is green.
-  - Task 17's `ci.yaml`, with `global.paid_usd_per_period: 80`, is the Owner-signed head. v0.2.0 would reject a head saying 100.
+  - Task 17's `ci.yaml`, with `global.paid_usd_per_period: 80`, is the Owner-signed head. v0.3.0 would reject a head saying 100.
   - The plan, in the grep form, reports `No changes.` (F14).
   - No other plan's Gate G window is open.
   - A v1 snapshot from today exists for E13: the dispatcher's log shows today's `snapshot` line (the image is distroless, so nothing can `exec` into it). Otherwise wait for 03:00 UTC.
-- [ ] **Step 2: Gate G, then STOP—ask Chris.** The change: v0.2.0, schema v2, Azure egress on 443, the Azure credential in the pod, paid classes in `dry-run`. Watch:
+- [ ] **Step 2: Gate G, then STOP—ask Chris.** The change: v0.3.0, schema v2, Azure egress on 443, the Azure credential in the pod, paid classes in `dry-run`. Watch:
   - Synced/Healthy and `ci-dispatch-0` Ready;
   - `ci_dispatch_azure_locked 0`, flat `ci_dispatch_errors_total{api=~"azure|prices"}`, price age under 1 h;
   - a fresh sweeper timestamp, burn 0, and an egress pass within 5 min (E17);
   - zero deny lines for `ci-dispatch/` and `restic-backup`.
 
   Rollback triggers: a crash loop, a migration error, any deny line on legitimate traffic, or `CIDispatchPaidNotReady`, which fires in dry-run (F24). Rollback, split by E13 and F10:
-  - a migration error, which leaves the ledger at v1, gets a revert of the pin to v0.1.0;
-  - anything after a good migration gets classes `off`, with v0.2.0 kept. Never downgrade over a v2 ledger; that takes the snapshot restore in `docs/ci.md`.
+  - a migration error, which leaves the ledger at v1, gets a revert of the pin to v0.2.0;
+  - anything after a good migration gets classes `off`, with v0.3.0 kept. Never downgrade over a v2 ledger; that takes the snapshot restore in `docs/ci.md`.
 - [ ] **Step 3: Push and `Monitor`** until Synced, Healthy and Ready (timeout 10 min).
 - [ ] **Step 4: Verify.**
   - `ci_dispatch_paid_ready{class}` is 1 for both classes. In a `forgejo-admin` scratch repo ($0.15), a `runs-on: small` probe logs one `launch` decision in mode `dry-run`. A `runs-on: medium` probe holds `owner-limit`, because its 0.2136 reservation exceeds 0.15; that proves the money gate on live data. `aci_group_names()` stays empty.
@@ -1293,7 +1293,7 @@ func (w *Watcher) Run(ctx context.Context)                             // Egress
   - reading an owner's spend (usage API) and the month's (`ci_dispatch_period_usd`);
   - **after a trip:** find out why (the sweeper's failed run, the dispatcher's log); only Chris unlocks, with `./azure/ci/tf.sh apply`; `ci_dispatch_azure_locked` clears within one poll;
   - rotating the Azure credential (F26). At 150 days `time_rotating` replaces the secret, and that apply **destroys the old one at once**: it doesn't wait for day 180. Rotation is one STOP run back to back: Chris's apply, the pipe into sso-secrets, reseal, and the deploy push. Paid classes are `not-ready` between the apply and the deploy. The due date is in the ledger;
-  - **downgrading the binary** (F10): v0.1.0 refuses schema v2. Restore the newest v1 snapshot from before the v0.2.0 deploy (restic host `ci-dispatch-ledger`), then pin v0.1.0. Paid classes stay `off`;
+  - **downgrading the binary** (F10): v0.1.0 and v0.2.0 refuse schema v2. Restore the newest v1 snapshot from before the v0.3.0 deploy (restic host `ci-dispatch-ledger-pre-v0.3.0`, as the review of Task 20 ruled), then pin v0.2.0. Paid classes stay `off`;
   - **the egress cap** (E17): 10 GB per job, priced at $0.087 a GB, charged to the owner. A job killed at the cap shows reap reason `egress-cap` and `CIDispatchEgressCapHit`. The value lives in `fence.json` (the sweeper) and `limits.EgressCapBytes` (the dispatcher), which must change together;
   - break-glass: scale to 0, then `az container list -g rg-realliance-ci --query "[?tags.\"forge-ci\"=='1'].name" -o tsv` and delete each;
   - re-running the sweeper drill (Task 5) after any change to `azure/ci/sweeper*`;
