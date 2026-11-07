@@ -62,13 +62,12 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ci-dispatch
-          # PENDING until phase 2 Task 16 releases v0.3.0: config.yaml's azure and paid sections need
-          # it. v0.2.0 (sha-19b416f, main's pin until this deploys) and v0.1.0 refuse them and exit. The all-zero digest is one no registry
-          # can serve. The real pin replaces this line in one commit with deleting .release-pending
-          # and setting RELEASE_IMAGE in scripts/test_ci_dispatch_manifests.py (.release-pending says
-          # how). A new image never deploys itself: .renovaterc.json never automerges this image, so
-          # its PR is the alarm. Re-pin by hand after review.
-          image: git.realliance.net/realliance-ops/ci-dispatch:sha-PENDING@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          # v0.3.0: tag v0.3.0 (signed) = main ebd3a92, built by ci-dispatch's CI as an OCI manifest,
+          # amd64 (phase 2 Task 16). config.yaml's azure and paid sections need it: v0.2.0 and v0.1.0
+          # refuse them and exit. It moves the ledger to schema v2 at start, which neither opens
+          # (docs/ci.md, Rollback). A new image never deploys itself: .renovaterc.json never automerges
+          # this image, so its PR is the alarm. Re-pin by hand after review, with the test's RELEASE_IMAGE.
+          image: git.realliance.net/realliance-ops/ci-dispatch:sha-ebd3a92@sha256:6189618265c3274d2fd8edf30a389f9c299cc86da101152ac0852e504310623c
           args:
             - --config=/etc/ci-dispatch/config/config.yaml
           env:

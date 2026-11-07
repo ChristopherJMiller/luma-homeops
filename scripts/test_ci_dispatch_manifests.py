@@ -19,14 +19,14 @@ listing.
 
 Phase 2 (Task 18) adds the paid classes `small` and `medium` in dry-run, the
 Azure credential, the dispatcher's internet egress on TCP 443, the money alerts
-and the ledger's restic backup. Its config needs v0.3.0, which phase 2 Task 16
-releases; main runs v0.2.0, tiny only. Until then the StatefulSet pins an unpullable placeholder
-(`sha-PENDING@sha256:` and 64 zeros), and the branch carries the marker
-cluster/ci-dispatch/dispatcher/.release-pending, which names the one branch the
-placeholder may be committed on. test_dispatcher_image_pending FAILS anywhere
-else, main included. Task 19's re-pin is one commit: delete the marker, set the
-image, set RELEASE_IMAGE. Without the marker the pin must equal RELEASE_IMAGE
-exactly, and v0.1.0 and v0.2.0 are refused outright.
+and the ledger's restic backup. Its config needs v0.3.0 (phase 2 Task 16), pinned
+by Task 19. Before that the branch pinned an unpullable placeholder
+(`sha-PENDING@sha256:` and 64 zeros) beside the marker
+cluster/ci-dispatch/dispatcher/.release-pending, which named the one branch the
+placeholder could be committed on; test_dispatcher_image_pending still FAILS a
+placeholder anywhere else. Task 19's re-pin was one commit: delete the marker,
+set the image, set RELEASE_IMAGE. Without the marker the pin must equal
+RELEASE_IMAGE exactly, and v0.1.0 and v0.2.0 are refused outright.
 """
 
 import fnmatch
@@ -66,13 +66,15 @@ V020_IMAGE = (
     "git.realliance.net/realliance-ops/ci-dispatch:sha-19b416f"
     "@sha256:b50069b0a8a976e15d0ea0fc75d408f7f19d20f347da995376165f9320affd57"
 )
-# v0.3.0, phase 2's paid release, is not out yet (Task 16). The StatefulSet pins PENDING_IMAGE until then: a
-# digest no registry can serve, so no push makes it pullable (review M2). RELEASE_PENDING marks the
-# branch it may live on. The commit that pins the release deletes RELEASE_PENDING and sets
-# RELEASE_IMAGE to v0.3.0's sha-<7>@sha256:<64>. A new pin is a reviewed commit that changes this line too.
+# v0.3.0, phase 2's paid release: tag v0.3.0 (signed) = main ebd3a92 (Task 16), pinned by Task 19.
+# Before it the StatefulSet pinned PENDING_IMAGE, a digest no registry can serve (review M2), only on the
+# branch RELEASE_PENDING named. A new pin is a reviewed commit that changes RELEASE_IMAGE too.
 PENDING_IMAGE = f"{IMAGE}:sha-PENDING@sha256:{'0' * 64}"
 RELEASE_PENDING = REPO / "cluster/ci-dispatch/dispatcher/.release-pending"
-RELEASE_IMAGE = None
+RELEASE_IMAGE = (
+    "git.realliance.net/realliance-ops/ci-dispatch:sha-ebd3a92"
+    "@sha256:6189618265c3274d2fd8edf30a389f9c299cc86da101152ac0852e504310623c"
+)
 # ci-dispatch v0.1.0's shutdown (internal/loop, cmd/ci-dispatch): the step in flight, then the servers.
 SHUTDOWN_GRACE_SECONDS = 20
 SERVER_SHUTDOWN_SECONDS = 5
