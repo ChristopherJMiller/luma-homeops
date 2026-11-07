@@ -451,7 +451,9 @@ paid jobs waiting `not-ready`, and the sweeper's emails. `tiny` carries on.
    the history of `ci_dispatch_burn_usd_per_hour`, `ci_dispatch_orphans{kind="group"}` and
    `ci_dispatch_reaped_total{reason="egress-cap"}`. A burn under $0.48 while the sweeper saw over
    $0.60 points at egress, or at groups the dispatcher never listed.
-2. **Fix the cause,** and pause the paid classes until it's fixed.
+2. **Fix the cause,** and pause the paid classes in the ConfigMap until it's fixed: `small: "off"`
+   and `medium: "off"` in `config.yaml` (Pausing `small` and `medium`), a deploy that restarts the
+   pod.
 3. **Only Chris unlocks.** In a luma-homeops checkout, with `SCRATCH` a directory only he can read:
 
    ```bash
@@ -466,12 +468,17 @@ paid jobs waiting `not-ready`, and the sweeper's emails. `tiny` carries on.
    apply destroys the old client secret, so in the same STOP run The Azure credential, steps 2 to 5.
    Anything else: stop.
 4. **Check.** The next sweep ends `Succeeded` and removes both `ci-sweeper-*` tags. If it ends
-   `Locked` with no cause, a sweep that read the old state raced the apply: apply again. With the
-   paid classes paused (step 2), `ci_dispatch_azure_locked` clears within one poll (30 s) of the
-   assignment taking effect. With a class left on, a PUT denied around the unlock keeps it at 1 until
-   the next back-off step (10 min at most) lets a PUT through and that PUT succeeds; with nothing
-   waiting to launch, it stays at 1 until a paid job arrives. `ci_dispatch_paid_ready` follows it.
-5. **Resume** `small` and `medium` as you paused them, a deploy with its own STOP.
+   `Locked` with no cause, a sweep that read the old state raced the apply: apply again. The restart
+   in step 2 forgets any PUT denial held in memory, so `ci_dispatch_azure_locked` clears within one
+   poll (30 s) of the assignment taking effect. A pause only in the signed `ci.yaml`
+   (`classes: {small: off, medium: off}`) doesn't restart the pod. A denial remembered from around
+   the trip then keeps `ci_dispatch_azure_locked`, `CIDispatchLocked` and `CIDispatchPaidNotReady`
+   up until a PUT succeeds once the classes run again, or until
+   `kubectl -n ci-dispatch delete pod ci-dispatch-0`.
+   With a class left on, a PUT denied around the unlock keeps it at 1 until the next back-off step
+   (10 min at most) lets a PUT through and that PUT succeeds; with nothing waiting to launch, it
+   stays at 1 until a paid job arrives. `ci_dispatch_paid_ready` follows it.
+5. **Resume** `small` and `medium` in the ConfigMap, a deploy with its own STOP.
 
 While locked, the dispatcher can't read the groups, so launches in flight keep their reservations
 until the first good list after the unlock settles them.
