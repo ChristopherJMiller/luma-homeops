@@ -36,7 +36,7 @@
 - **Changeover.** When the box first runs without web-flow trust on `sso-people`, it takes the current, already-applied head as last good, so the web-flow history before it is never walked. The host config records that commit as the anchor commit, which also anchors a rebuilt box.
 - **Content.** On a valid chain the box validates `ledger.yaml` at the head. A schema, immutability, removal or transition failure refuses the ledger: guests stay at the last good ledger, later ledger changes wait, and `people.yaml` still applies. A bad new guest refuses the entry; over a rate cap defers it. **A content problem in a validly signed, path-correct commit never freezes `people.yaml`.** The remedy for a refused ledger is a commit signed with an operator key.
 - **Quotas.** An active person in `/realliance`: 5 per rolling 7 days, a pending link or a redemption holding a slot for 7 days. Any other active person in `people.yaml`: 1 for life, a pending link or a redemption holding it for good. A revoked or expired link frees its slot; deactivating or promoting the guest doesn't. A guest or an inactive person: 0, and their pending links die at redemption. Everyone together: 10 redeemed links per rolling 24 h; one over the cap waits for a later run.
-- **Modes.** `ledger_mode` reads `check` or `apply`, and only an operator-signed `realliance/sso` head changes it. In `check` the box applies `people.yaml` as today, but from the newest first-parent commit that's last good or an operator key signed, so a service push at the head never blocks it. It hands the people layer no guests and only logs what the walk and the content checks would decide, a freeze included. `check` runs live for at least 3 days, a week if possible. Deliberately bad test commits go on a separate branch that the check reads and never applies.
+- **Modes.** `ledger_mode` reads `check` or `apply`, and only an operator-signed `realliance/sso` head changes it. In `check` the box applies `people.yaml` as today, but from `newest_trusted` (else last good), so a service push at the head never blocks it. It hands the people layer no guests and only logs what the walk and the content checks would decide, a freeze included. `check` runs live for at least 3 days, a week if possible. Deliberately bad test commits go on a separate branch that the check reads and never applies.
 - **Members first.** In `check`, no failure in the ledger path ever blocks the `people.yaml` apply. In `apply`, only an invalid commit stops it; a refused ledger or entry never does. The box never drops a guest already in the people layer's state, and never re-checks one.
 - **Statuses:** on each `sso-people` head it checks, the box sets `sso/apply` (failing on a freeze) and `sso/ledger` (failing when it refuses the ledger). In `check`, both report what `apply` would have done.
 - **Clock and state:** caps and expiry count from when the box first saw each link and redemption. First-seen times, refusals, the last good commit and the last good ledger live in `/var/lib/sso-config-apply`, with no backup. A rebuild restarts last good at the newest first-parent commit an operator key signed after the anchor commit, or at the anchor itself, and re-validates every entry not yet in state; it can let at most one extra day's cap through.
@@ -130,7 +130,7 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
 - **D2. Two commands, two failure rules.** `sso-ledger walk` reads only git objects and signatures and never parses YAML. `sso-ledger content` parses the ledger and decides the guests.
   - In `apply`, a `walk` crash or timeout fails closed: no `sso-people` apply this run, `sso/apply` failure `walk failed`, and the alert. An unverified chain is never applied, or a crafted ledger that crashed the parser could carry a `people.yaml` change past the path check. A walk that raises writes no state: the old last good and the old seen-heads list stay.
   - A `content` crash or timeout never blocks: the people layer applies at the walked head with the last handed guests, and `sso/ledger` reports failure `content failed`.
-  - In `check`, neither blocks: the people apply runs from the newest first-parent commit that's last good or an operator key signed. If `walk` died, bash finds that commit itself with `gnupg-people` and the operator fingerprints in `people-trust.json`, never with the pull keyring, which trusts web-flow.
+  - In `check`, neither blocks: the people apply runs from `newest_trusted`, else last good. If `walk` died, bash applies last good and never computes a newer commit.
 - **D3. A separate keyring for `sso-people`, without web-flow.** `/etc/realliance-sso/gnupg-people` holds the operators' and the ledger's public keys only, and `people-trust.json` reads `{"operators": [...], "ledger": [...]}`, primary fingerprints, uppercase. Web-flow's key isn't in it, so a web-flow signature reads as untrusted. The pull keyring `/etc/realliance-sso/gnupg` doesn't change: it keeps web-flow for `realliance/sso`, and it never holds the ledger key.
 - **D4. The path rule, exactly.** A ledger-key commit is valid only if it has one parent and `git diff-tree --raw --no-renames -r <parent> <sha>` prints exactly one line, `:100644 100644 <a> <b> M` for `ledger.yaml`. Codes:
   - `ledger-merge`: not exactly one parent;
@@ -146,7 +146,7 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
   - **Reasons, in order:** the newest `Reviewed-Range` attempt's problem, then `not-fast-forward`, then the oldest invalid commit; `recovery-misses@<sha7>` names the missed commit. Also `shallow-repository` (the walk refuses a shallow checkout and records the head) and `not-first-parent-descendant@<sha7>`.
   - **Git hygiene.** `_git` drops every inherited `GIT_*` and sets `LC_ALL=C`, `GIT_CONFIG_GLOBAL=/dev/null`, `GIT_CONFIG_NOSYSTEM=1`, `GIT_NO_REPLACE_OBJECTS=1`, `GIT_GRAFT_FILE=/dev/null` and `GIT_TERMINAL_PROMPT=0`; log calls pass `--no-show-signature`; each call is capped at 30 s. The box's checkout sets `fetch.fsckObjects=true` and stays a full clone.
   - `last_good` must exist in the local checkout, so after an erasure the box's checkout is re-cloned only once it has taken the new history.
-- **D6. The changeover anchor** *(spec: Changeover)*. `host/group_vars/sso.yml` gains `people_anchor_commit`: the `sso-people` head the box last applied with the old code, recorded by Chris in Task 4's box head. With no state (the first run, or a rebuild), `walk` sets last good to the newest first-parent commit after the anchor that an operator key signed, else the anchor itself, and the seen-heads list to `[]`. `ledger-drills` anchors at main's last good the first time the box sees it.
+- **D6. The changeover anchor** *(spec: Changeover)*. `host/group_vars/sso.yml` gains `people_anchor_commit`: the `sso-people` head the box last applied with the old code, recorded by Chris in Task 4's box head. With no state (the first run, or a rebuild), `walk` sets last good to the anchor itself and the seen-heads list to `[]`; it never picks a later operator commit on its own. After each recovery an operator bumps `people_anchor_commit` in the box head; a rebuild after a recovery whose anchor was never bumped needs one new recovery naming the anchor. `ledger-drills` anchors at main's last good the first time the box sees it.
 - **D7. Handing guests to the people layer.**
   - The box writes `/var/lib/sso-config-apply/ledger/guests.next.json` as `{"guests": {<username>: {active, mfa, bootstrap}}}` and runs `tofu apply -var-file=…`.
   - `guests.tf` declares `variable "guests"` (default `{}`) and `output "guests"` (sensitive).
@@ -159,7 +159,7 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
   - Chris force-pushes with `--force-with-lease=main:<old-tip>`, after `sso/apply` shows success on `<old-tip>`, and names `<old-tip>` as `<last-good>`. A service push before his makes the lease fail, and he redoes the rewrite.
   - The callback is `scripts/erase_ledger_guest.py` in `realliance/sso`, a `--file-info-callback` that drops one link id from `ledger.yaml` blobs and returns every other blob unchanged. The anchor predates every guest, so an erasure never rewrites it.
 - **D10. Check mode in detail.**
-  - The people apply runs from the newest first-parent commit that's last good or an operator key signed. `walk` reports it as `newest_trusted`.
+  - The people apply runs from `newest_trusted`: the newest first-parent commit on head's line that descends from last good, is operator-signed (or ledger-signed with valid paths) and whose `walk(C, last_good)` is valid; otherwise last good. Never None; an error returns last good. `walk` reports it as `newest_trusted`.
   - Last good and the seen-heads list advance in `check` exactly as `apply` would advance them, so the switch starts from a known anchor.
   - The box evaluates branch `ledger-drills` with `--dry` on every run in both modes, with its own state (last good, seen-heads list, ledger), and posts its statuses. It never applies anything from it.
 - **D11. Operator-signed `realliance/sso` heads** are Chris's PR merges (How changes land). `ledger_mode` and `people_anchor_commit` live in `host/group_vars/sso.yml`, so only such a merge changes them.
@@ -266,7 +266,7 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
 - `parse_reviewed_range(trailer_values: str) -> tuple[str, str] | None`: exactly what `git log -1 --format=%(trailers:key=Reviewed-Range,valueonly)` prints; a whole commit message returns `None`.
 - `WalkVerdict(head, last_good, valid, reason, chain, invalid, recovery, newest_trusted, seen_heads: list[str])`; `invalid` lists only commits that freeze; `recovery` is set only on a valid verdict; `last_good` is the head when valid, the input otherwise.
 - `walk(repo, head, last_good, keyring, trust, seen_heads: list[str] | None = None) -> WalkVerdict` (D5). `seen_heads` of `None` or `[]` asks nothing; a bare string, a short commit id or anything else that isn't 40 hex raises `ValueError`. The verdict's `seen_heads` is `[]` when valid, else the old list plus this head (the shallow refusal included). **Task 2b** removes its web-flow merge exemption.
-- `newest_trusted(...)` (**Task 2b:** last good or operator only).
+- `newest_trusted(...)` (**Task 2b:** the newest candidate that descends from last good and walks valid, else last good).
 - `_git(...)` with D5's hygiene, and `GitError`.
 - **Contracts handed on:** Task 8's writer quotes every string a YAML 1.1 or 1.2 reader would take as another type and omits absent optional fields (never `null`); `vectors/index.yaml` uses `pad_to` (pad with `#`, spaces and a newline to N bytes) so a 1 MiB file stays out of git. Task 4's box git must support `%GP` and `%(trailers:…,valueonly)`. Task 6's drill recoveries never name main's last good.
 
@@ -281,6 +281,8 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
 
 ### Task 2b: Drop web-flow trust on `sso-people`
 
+**Status:** built at `realliance-sso` `invites-ledger-core` `9d91375` (`0c0215cd`, `a1d23bc`, `e4abefe`, `9d91375` on base `6c2dc13`), signed and not yet pushed; one adversarial review, two fix rounds and a clean re-review.
+
 **Review:** its own, adversarial, on the most capable model (opus), not a sixth fix round of Task 2. The reviewer tries to land a `people.yaml` change past the walk with the service's deploy key and every GitHub web feature.
 
 **Files:**
@@ -294,8 +296,8 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
   - `commit_signer(...) -> Literal["operator", "ledger", "untrusted"]`: a web-flow signature is `untrusted`, since its key is absent from `gnupg-people`;
   - `check_commit`: an operator key may change any path; the ledger key keeps D4; `untrusted-signer` and `unsigned` stay invalid;
   - `walk`: no merge exemption: every commit in the range, on any parent, is checked by its own signer. The seen-heads rule and the strict pass under a recovery stay as defence in depth;
-  - `newest_trusted(repo, head, last_good, keyring, trust) -> str | None`: the newest first-parent commit that is `last_good` or that an operator key signed;
-  - `reanchor(repo, head, anchor, keyring, trust) -> str`: the newest first-parent commit on head's line after `anchor` that an operator key signed, else `anchor` (D6).
+  - `newest_trusted(repo, head, last_good, keyring, trust) -> str`: the newest first-parent commit on head's line that descends from `last_good`, is operator-signed (or ledger-signed and path-valid), and whose `walk(C, last_good)` is valid; otherwise `last_good`. Never None; any error returns `last_good`;
+  - no `reanchor`: a stateless box takes last good from the recorded anchor alone (D6).
 - The README rule (sso-people): merge PRs locally, signed with your own key, as a squash or a fast-forward of commits you signed, and push to `main`; never GitHub's merge, squash or rebase button; never "Update branch"; never a PR base other than `main`; pull with `--ff-only` or `--rebase`. Any web-flow commit freezes the box until a `Reviewed-Range`.
 
 - [ ] **Step 1: Write the failing tests** in `tests/ledger/test_walk.py`, with the stand-in web-flow key from `conftest.py` kept as an untrusted signer:
@@ -308,12 +310,11 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
   - `test_operator_local_squash_is_valid` and `test_operator_fast_forward_of_signed_commits_is_valid`;
   - `test_operator_local_merge_of_unsigned_work_freezes`: no exemption under any merge;
   - `test_trust_file_refuses_web_flow_class`;
-  - `test_newest_trusted_stops_at_last_good_or_operator`: the function skips web-flow and ledger commits nearer the head, and last good counts even when web-flow signed it (the anchor);
-  - `test_reanchor_rules`: an operator commit after the anchor wins; none gives the anchor; an anchor off head's line gives the anchor, and the walk then freezes `not-fast-forward`;
+  - `test_newest_trusted_stops_at_last_good_or_operator`: the function skips web-flow commits and anything that doesn't descend from last good or walk valid, and last good counts even when web-flow signed it (the anchor);
   - `test_changeover_history_never_walked`: web-flow history before the anchor, last good at the anchor, operator and ledger commits after: valid;
   - every Task 2 test that used web-flow as a trusted signer is rewritten with an operator signer and keeps its assertion.
 - [ ] **Step 2: Run; expect FAIL:** `taskset -c 0-3 nix develop ~/Repos/realliance-sso-invites --command pytest tests/ledger -q`.
-- [ ] **Step 3: Implement.** Drop `web-flow` from `Signer`, `Trust` and `_TRUSTED`; delete the web-flow merge exemption so the strict per-commit check always applies; add `last_good` to `newest_trusted` and add `reanchor`. Update `walk`'s docstring to say what holds now.
+- [ ] **Step 3: Implement.** Drop `web-flow` from `Signer`, `Trust` and `_TRUSTED`; delete the web-flow merge exemption so the strict per-commit check always applies; give `newest_trusted` a `last_good` and the descent and walk checks. Update `walk`'s docstring to say what holds now.
 - [ ] **Step 4: Run; expect PASS,** offline and under Python 3.12.14 with PyYAML 6.0.3. A mutation check: putting `web-flow` back into the trusted set makes at least the four button and editor tests fail.
 - [ ] **Step 5: Commit signed** on `invites-ledger-core`: `sso-ledger: no web-flow on sso-people; every commit carries its own signature; changeover anchor`.
 - [ ] **Step 6: The README rule.** Write it in sso-people's `README.md` on branch `merge-locally`, push, and open the PR. **Chris:** merges it locally as a signed squash, the first local merge (How changes land). The box still runs the old code, which accepts his signature.
@@ -326,7 +327,7 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
 - Create: `tests/ledger/test_content.py`, `tests/ledger/test_admission.py`, `tests/ledger/test_cli.py`.
 
 **Interfaces:**
-- Consumes Task 2's `parse_ledger`, `check_transition` and `WalkVerdict`, and Task 2b's `walk`, `newest_trusted` and `reanchor`.
+- Consumes Task 2's `parse_ledger`, `check_transition` and `WalkVerdict`, and Task 2b's `walk` and `newest_trusted`.
 - Produces:
   - `LedgerVerdict(effective: str, refused: bool, reason: str | None)` from `check_ledger(repo: Path, verdict: WalkVerdict, last_good_ledger: str | None) -> LedgerVerdict`. It parses `ledger.yaml` at the head, and checks each ledger-key commit in the range after `last_good_ledger` with `check_transition` against its parent. On any failure `effective` stays at `last_good_ledger` and `reason` reads `schema:<code>@<sha7>` or `transition:<code>@<sha7>`. A missing `ledger.yaml` is an empty ledger;
   - `People` with `tiers: dict[str, str]` (username to `realliance` | `member` | `guest` | `inactive`), `usernames: set[str]` and `emails: set[str]` (in lower case), from `load_people(repo: Path, sha: str) -> People`, which reads `people.yaml` at that commit;
@@ -336,7 +337,7 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
   - `Decision(admitted_now: list[str], would_admit: list[str], refused_now: dict[str, str], deferred: dict[str, str], guests: dict[str, dict])`;
   - `admit(ledger: Ledger, people: People, reserved, directory: Directory, state: BoxState, now: datetime, mode: str) -> Decision`;
   - `main(argv: list[str]) -> int` with commands `walk`, `content`, `settle`, `seed`, `forget` and `fallback` (flags in Step 8).
-- **What `walk` stores.** With no state, it seeds last good with `reanchor(head, --anchor)` and `seen_heads = []` (D6); `last_good_ledger` starts at the same commit. After a returned verdict it stores `verdict.last_good` and `verdict.seen_heads`: `[]` after a valid walk (stored as `[]`, the key never deleted), the walk's own list after a freeze. **When `walk()` raises** (`GitError`, `ValueError`) or times out, the command exits 2 and writes nothing, so the old list and the old last good stay; it never stores the raw head. `ledger-drills` (`--dry`, its own state directory) keeps its own last good, list and ledger.
+- **What `walk` stores.** With no state, it seeds last good with `--anchor` itself and `seen_heads = []` (D6); `last_good_ledger` starts at the same commit. After a returned verdict it stores `verdict.last_good` and `verdict.seen_heads`: `[]` after a valid walk (stored as `[]`, the key never deleted), the walk's own list after a freeze. **When `walk()` raises** (`GitError`, `ValueError`) or times out, the command exits 2 and writes nothing, so the old list and the old last good stay; it never stores the raw head. `ledger-drills` (`--dry`, its own state directory) keeps its own last good, list and ledger.
 - Constants: `REALLIANCE_QUOTA = 5`, `REALLIANCE_WINDOW = timedelta(days=7)`, `MEMBER_QUOTA = 1`, `GLOBAL_CAP = 10`, `CAP_WINDOW = timedelta(hours=24)`, `MAX_LIFETIME = timedelta(days=7)`, `EXPIRY_GRACE = timedelta(minutes=30)`. Built-in reserved names: `admin root www sso git api mail invites invite guests forgejo forgejo-admin forge-bot forge-ci ops-ci ci-dispatch realliance realliance-ops realliance-ci realmic ghost`. Built-in reserved prefixes: `test- ci- admin-`.
 - **Tier rules:** active with `/realliance` in groups is `realliance`. Active with `/guests` in groups is `guest`: an emergency-override entry. Any other active entry is `member`, an inactive one is `inactive`, and an absent username isn't a member.
 - **Slot rule (D22):** for inviting member `I` and link `L`, count `I`'s other links that the box saw before `L` and that hold a slot now. A link holds a slot while pending and unexpired by the box clock. An admitted redemption holds one too: within 7 days of `at` for `realliance`, for good for `member`. Admit `L` if the count is below the tier's quota.
@@ -378,7 +379,7 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
   - `test_seen_heads_stored_empty_after_valid_walk`: `state.json` holds `"seen_heads": []`.
   - `test_seen_heads_stored_from_the_verdict_after_a_freeze`: the stored list equals `verdict.seen_heads`, never a list the command built from the raw head.
   - `test_walk_exception_keeps_state`: a `walk` that raises `GitError`, or a timeout, exits 2 and leaves `state.json` byte for byte unchanged.
-  - `test_first_run_and_rebuild_reanchor_with_empty_list`: no state and `--anchor A` with an operator commit after `A` give last good at that commit and `seen_heads == []`; with none, last good is `A`.
+  - `test_first_run_and_rebuild_seed_from_anchor_with_empty_list`: no state and `--anchor A` give last good `A` and `seen_heads == []`, even with an operator commit after `A`.
   - `test_drills_state_separate`: `--dry` keeps its own last good, list and ledger, and never writes `guests.next.json` or `admitted`.
   - `test_status_prints_seen_list`: on a freeze the `sso/apply` description ends with `seen: <sha7>,<sha7> (+N)`, at most 140 characters, and `walk.json` holds the full list.
   - `test_content_writes_outputs`: `main(["content", …])` returns 0 and writes `guests.next.json`, `content.json` and `state.json`. `content.json` has the keys `mode`, `ledger`, `admitted`, `would_admit`, `refused_entries`, `deferred` and `statuses`. `statuses` holds `apply` and `ledger`, each `{state, description}`, prefixed `check:` in check mode.
@@ -416,7 +417,7 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
     - `/var/lib/sso-config-apply/ledger/` (main state) and `/var/lib/sso-config-apply/ledger-drills/` (drill state);
   - script overrides, all defaulting to today's paths (for the harness and Task 19): `SSO_DIR`, `PEOPLE_DIR`, `STATE_DIR`, `SSO_ETC`, `SSO_LOCK`, `SSO_LEDGER_BIN`, `SSO_LEDGER_TIMEOUT` (default 120) and `PEOPLE_REF`.
 - No new deploy key and no new checkout: the walk and the content check read the existing `/var/lib/sso-people`, which gains `fetch.fsckObjects=true` and must stay a full clone.
-- This box head is the changeover: from it on, `sso-people` heads are no longer checked against the pull keyring.
+- This box head is the changeover: from it on, `sso-people` heads are no longer checked against the pull keyring. It removes the web-flow-trusting `verify-commit` on `sso-people` at `sso-config-apply.sh:37`.
 
 - [ ] **Step 1: Write the failing harness tests** in `tests/ledger/test_apply_script.py`.
   - **The fixture root:** a temp tree with a signed `SSO_DIR` repo, a `PEOPLE_DIR` repo served from a bare remote with web-flow-signed history below an anchor, a keyring for each of Task 2's keys, and both modes as parameters.
@@ -426,18 +427,18 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
     - `test_merge_button_commit_freezes_apply_mode`: a web-flow merge after the anchor gives no people apply, exit 1, and `sso/apply` failure `frozen: invalid:untrusted-signer@…`.
     - `test_check_mode_applies_last_good_or_operator_below_a_web_flow_head`.
     - `test_check_mode_service_push_at_head_does_not_block`: a ledger-key head over an operator commit applies `people.yaml` at the operator commit, and posts `sso/apply` `check: would be applied…` on the head.
-    - `test_check_mode_logs_a_freeze_and_still_applies`: a ledger-key commit touching `people.yaml` at the head applies the newest last-good-or-operator commit, and posts `check: would be frozen: invalid:ledger-path@…`.
+    - `test_check_mode_logs_a_freeze_and_still_applies`: a ledger-key commit touching `people.yaml` at the head applies `newest_trusted` (here the operator commit below it), and posts `check: would be frozen: invalid:ledger-path@…`.
     - `test_content_crash_never_blocks[check|apply]`: a `SSO_LEDGER_BIN` whose `content` fails gives exit 0, a people apply with the last handed guests, and `sso/ledger` failure `content failed`.
     - `test_content_timeout_never_blocks[check|apply]`: a `content` that sleeps 10 s with `SSO_LEDGER_TIMEOUT=2` gives the same.
     - `test_walk_crash_fails_closed_in_apply_and_keeps_state`: no people apply, exit 1, `sso/apply` failure `walk failed`, and `state.json` unchanged.
-    - `test_walk_crash_does_not_block_check`: bash finds the newest last-good-or-operator commit itself, with `gnupg-people`, and applies it; a web-flow commit is never chosen.
+    - `test_walk_crash_does_not_block_check`: bash applies the stored last good; it never computes or picks a newer commit.
     - `test_apply_mode_freeze_applies_nothing`: an invalid commit under a valid head gives no people `tofu` call at all (last good included), exit 1, and `sso/apply` failure `frozen: invalid:…`.
     - `test_seen_head_freeze_is_sticky`: an Update-branch shape freezes with `not-first-parent-descendant@…`, the next run on a later valid push stays frozen, and the status prints the list.
     - `test_apply_mode_recovery_resumes`: a `Reviewed-Range` commit gives a people apply at the head, moves last good and stores `seen_heads == []`.
     - `test_apply_mode_refused_ledger_still_applies_people`: a ledger-key `groups` commit gives `sso/ledger` failure, `sso/apply` success, and a people apply with the last handed guests.
     - `test_apply_mode_hands_admitted_guest`.
     - `test_new_guest_apply_failure_retries_without_it`: `STUB_TOFU_FAIL_IF=bad-guest` gives two people applies (with the guest, then without), exit 0, and the state refuses it as `apply-failed`.
-    - `test_rebuild_reanchors_at_newest_operator_after_anchor`.
+    - `test_rebuild_seeds_from_recorded_anchor`.
     - `test_drill_ref_never_applied`: a valid `ledger-drills` head with a new guest leaves `guests.next.json` unchanged, posts both statuses on the drill head, and keeps its own seen-heads list.
     - `test_changed_mode_skips_realm_when_sso_unchanged`: a second run after only an `sso-people` change calls `tofu -chdir=<people>` and not `<sso>/realm`.
     - `test_statuses_posted_once_per_verdict`: two runs over one head make one POST per context, to `/repos/realliance/sso-people/statuses/<sha>`.
@@ -446,7 +447,7 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
 - [ ] **Step 3: Implement the script.** Order:
   1. take the lock;
   2. verify `realliance/sso` as now (the pull keyring, web-flow included), and fetch `sso-people` `main` (and `ledger-drills` if it exists) with the existing read-only key. The old check of the `sso-people` head against the pull keyring goes: the walk replaces it;
-  3. **the walk:** `timeout "$SSO_LEDGER_TIMEOUT" "$SSO_LEDGER_BIN" walk … --anchor "$PEOPLE_ANCHOR"` for `main`. In `apply`, a failure fails closed (D2). In `check`, a failure falls back to the newest first-parent commit that's the stored last good or carries an operator fingerprint from `people-trust.json`, found with `git log --first-parent --format='%H %G? %GP'` against `gnupg-people`;
+  3. **the walk:** `timeout "$SSO_LEDGER_TIMEOUT" "$SSO_LEDGER_BIN" walk … --anchor "$PEOPLE_ANCHOR"` for `main`. In `apply`, a failure fails closed (D2). In `check`, a failure applies the stored last good and never computes a newer commit;
   4. **the content check:** `content …` with the same timeout. On failure, log `ledger: content failed; people apply continues with the last handed guests`, run `sso-ledger fallback` (or write `{"guests": {}}` if that fails too), and post `sso/ledger` failure;
   5. **the drill ref:** `walk --dry --anchor <main's last good>` and `content --dry` for `ledger-drills`, any failure only logged;
   6. **changed mode** exits early only if the `sso` commit, the `sso-people` head and `sha256(guests.next.json)` all equal the stored ones;
@@ -529,6 +530,7 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
   - `merge_button(ref, head_branch, method) -> sha` through `gh api` on a PR whose base is `ledger-drills`, never `main`;
   - `wait_status(sha, context, timeout=300) -> (state, description)`;
   - `box_result(ref="main" | "drills")`, which reads that ref's `walk.json` and `content.json` over SSH.
+- Alerts and drill assertions key on `invalid`, never on the reason text.
 - Drill usernames start with `chk-` and use `delivered+chk-<hex>@resend.dev`. The inviting member is `chris`. A taken username or email comes from a `user_factory` user, never a real person. Bad commits go only on `ledger-drills`, which starts from `main`; a drill recovery never names main's last good.
 
 - [ ] **Step 1: STOP—ask Chris.** Approve, for the length of the window:
@@ -1044,7 +1046,8 @@ Recorded in Task 0 and the SDD ledger; no question remains open.
   - **a member leaving**, the orphan alert, and its promoted-guest caveat (D18);
   - **promotion,** with `quota.sh member <name>` on path 1;
   - **erasure:** Task 20's procedure, where the rewrite and the force-push are Chris's;
-  - **a box rebuild:** the re-anchor after the anchor commit, the seed, the empty seen-heads list, and the clock reset;
+  - **a box rebuild:** the seed from the recorded anchor, the empty seen-heads list, and the clock reset; after each recovery bump `people_anchor_commit` in `host/group_vars/sso.yml`, and a rebuild after a recovery whose anchor was never bumped needs one new recovery naming the anchor;
+  - operators keep WIP on `sso-people` branches unsigned and sign only the reviewed squash; `main` changes only by a local signed squash, never a fast-forward to a PR branch;
   - **rotating** the ledger key (overlap two fingerprints in `ledger_signing_fingerprints`), the service's deploy key and both status tokens, with the ledgered dates;
   - each alert's response.
 - [ ] **Step 2: Vale every changed doc**; expected no errors. Commit each repo signed. luma-homeops docs are routine; **Chris:** merges the sso PR, and the sso-people PR locally as a signed squash.

@@ -236,7 +236,10 @@ own signature. The box keeps no exemption for GitHub merges there.
 - **Changeover** *(Chris decided, 2026-11-08)*. When the box first runs without web-flow trust on
   `sso-people`, it takes the current, already-applied head as last good, so the web-flow history
   before it never gets walked. The host config records that commit as the anchor commit, which
-  also anchors a rebuilt box *(Claude's call)*.
+  also seeds a rebuilt box *(Claude's call)*: with no state, last good is the anchor itself and the
+  seen-heads list is empty, never an automatic pick of a later operator commit. After each
+  recovery an operator bumps the anchor in the box head; a rebuild after a recovery whose anchor
+  was never bumped needs one new recovery naming the anchor.
 - **Recovery.** An operator reverts the bad change, and with an operator key, never web-flow or the
   ledger key, signs a commit whose message carries the trailer
   `Reviewed-Range: <last-good>..<tip>`, both full shas. The box accepts it only if `<last-good>` is
@@ -451,6 +454,13 @@ If that proves too weak, encrypting `bootstrap.email` to a key on the box costs 
 - **Web-flow stays trusted on `realliance/sso`** *(accepted risk, unchanged there)*. Any owner of the
   `realliance` GitHub org can land a trusted commit on that repo, and through the box's code reach
   anything. The box closes that path on `sso-people` by never trusting web-flow there (2026-11-08).
+- **The write deploy key can fast-forward `main` to an operator's own signed branch
+  commit.** The impact is early use of operator-signed, not yet reviewed content only. The rule that
+  operators keep WIP on `sso-people` branches unsigned mitigates it.
+- **Check mode ignores the seen-heads list.** An operator merge over a sibling the box froze on
+  applies in check mode while apply mode freezes. All the content is operator-signed.
+- **The candidate search grows with the square of a frozen range.** A holder of the write key
+  could slow the box; signature checks dominate below about 10k commits.
 - **The service's key reaches every path in `sso-people`** *(Chris decided)*: write to the whole
   repo, limited only by the box's path check, and read of `people.yaml`, members' emails and
   hidden-project group names included.
