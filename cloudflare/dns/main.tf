@@ -25,3 +25,26 @@ terraform {
 # Auth via CLOUDFLARE_API_TOKEN — exported by ./tf.sh from the git-crypt
 # secret the cluster already uses (cluster/dns/cloudflare-api-token.secret.yaml).
 provider "cloudflare" {}
+
+# Workers resources only (workers.tf), with a second token the cluster never
+# gets: Workers Editor on the account, Workers Routes write on realliance.net.
+# ./tf.sh sets TF_VAR_workers_api_token from the git-crypt file
+# workers-api-token.secret.conf (one `api-token=<value>` line). DNS records
+# stay on the default provider: this token has no DNS write.
+provider "cloudflare" {
+  alias     = "workers"
+  api_token = var.workers_api_token
+}
+
+variable "workers_api_token" {
+  description = "Cloudflare token for the workers provider alias; ./tf.sh sets it."
+  type        = string
+  sensitive   = true
+
+  # An empty api_token could let the provider fall back to CLOUDFLARE_API_TOKEN,
+  # the cluster's DNS token, without a word.
+  validation {
+    condition     = length(trimspace(var.workers_api_token)) > 0
+    error_message = "workers_api_token is empty: run terraform through ./tf.sh."
+  }
+}
