@@ -9,6 +9,16 @@
 > Intent, Goals, Anti-goals, Constraints, Decided, Shape, The ledger, Rules on the box, The invite
 > service, Promotion and offboarding, Personal data and erasure, Known limits, Operator steps,
 > Success looks like, Left to the builder, Open points.
+>
+> **Amendment 2 (2026-11-08, Chris decided, after a Critical finding).** GitHub's web-flow key
+> signs every web-editor commit, for anyone, in any repo. A compromised service could copy
+> `sso-people`'s history into its own GitHub repo, edit `people.yaml` there in the web editor, and
+> push that web-flow-signed commit with its deploy key, and the box would apply it. Now
+> `sso-people` trusts operator keys and the path-limited ledger key only. The box never trusts
+> web-flow there, while `realliance/sso` keeps it. Operators merge `sso-people` PRs locally as
+> signed commits, never with the GitHub merge button. This also closes the org-owner path onto
+> `sso-people`. It changes Constraints, Decided, Shape, The ledger, Rules on the box, Promotion and
+> offboarding, Known limits, Operator steps, the build order, and Success looks like.
 
 - **Date:** 2026-11-07, amended 2026-11-08.
 - **Status:** draft for Chris's review. Nothing built.
@@ -81,8 +91,8 @@ Each of these makes the design a failure, even if it works:
 ## Constraints
 
 - **The box.** Keycloak 26.8.x in the 3 GB CrownCloud container. Every 5 min `sso-config-apply`
-  takes one `flock`, checks each repo's head against one GnuPG home that trusts the operators and
-  GitHub's web-flow key, and runs `tofu apply` for `realm/` and `sso-people`, with state on the
+  takes one `flock`, today checks each repo's head against one GnuPG home that trusts the operators
+  and GitHub's web-flow key, and runs `tofu apply` for `realm/` and `sso-people`, with state on the
   Realliance B2 account. It already pulls `sso-people` with a read-only deploy key and records the
   last `sso-people` commit it applied. The `enrol` workflow (`user_created` → `invite-user`) mails a
   72 h link to verify the email and set a password. No staging SSO box exists: the production box is
@@ -94,13 +104,13 @@ Each of these makes the design a failure, even if it works:
 - **GitHub Free.** A private repo gets no branch protection, so anyone with write access can push
   anything to `main`, force-pushes included, and GitHub can't limit a deploy key to one path. Every
   rule must hold on the apply side.
-- **Accepted risks, unchanged** *(Chris decided)*. The box trusts web-flow, so any owner of the
-  `realliance` GitHub org can land a trusted commit on `sso-people`, and every org member can read
-  its private repos. With the ledger in `sso-people` it inherits both: a web-flow commit that edits
-  `ledger.yaml` counts as an operator edit, and every org member can read invitee data. One limit
-  remains: the box's code, ledger checks included, comes from `realliance/sso`, whose head the box
-  also accepts web-flow-signed. Whoever can change that repo can already grant themselves anything,
-  so the ledger's guarantees are only as strong as that code.
+- **Accepted risks** *(Chris decided)*. The box trusts web-flow on `realliance/sso`, so any owner of
+  the `realliance` GitHub org can land a trusted commit there, and every org member can read the
+  org's private repos, `sso-people` included. On `sso-people` the box never trusts web-flow
+  (2026-11-08), which closes the org-owner path onto `people.yaml` and the ledger. The ledger still
+  inherits the read risk: every org member can read invitee data. One limit remains: the box's
+  code, ledger checks included, comes from `realliance/sso`. Whoever can change that repo can
+  already grant themselves anything, so the ledger's guarantees are only as strong as that code.
 - **Mail.** The Resend free tier, 100 mails a day, shared by enrolment, password resets and the
   forge.
 - **Galaxy.** Argo GitOps, SealedSecrets, one Ingress with a host (the wildcard DNS and certificate
@@ -116,6 +126,12 @@ Each of these makes the design a failure, even if it works:
   `invite-user` sends the set-up mail. No reconciler, no Keycloak-first writes, Organizations off.
 - **Ledger location** (2026-11-08, replacing the 2026-11-07 "new Owners-only GitHub org"):
   `ledger.yaml` at the root of `realliance/sso-people`, with the costs in the amendment note.
+- **No web-flow on `sso-people`** (2026-11-08, after a Critical finding): `sso-people` trusts
+  operator keys and the path-limited ledger key only, while `realliance/sso` keeps web-flow as
+  today. Operators merge `sso-people` PRs locally as signed squash or fast-forward commits, never
+  with the GitHub merge button. A web-flow commit on `sso-people` is invalid and freezes the box
+  until an operator's `Reviewed-Range`. At the changeover the box takes the current,
+  already-applied head as last good, so the web-flow history before it doesn't freeze.
 - **Guest scope** (2026-11-08): an SSO account plus a normal, unrestricted forge account
   (`/apps/forgejo`). Guests can create repos, run CI and publish Pages sites, with no `/realliance`
   membership and no other app. Promotion stays a PR to `sso-people`.
@@ -152,7 +168,7 @@ invitee ─(4) username, email, first name, [last name], MFA choice─▶ servic
                                    ▼
 SSO box, sso-config-apply, one flock:
   walk every first-parent commit since last good:
-      ledger key → ledger.yaml only; operator key or web-flow → any path; else invalid
+      ledger key → ledger.yaml only; operator key → any path; web-flow, unsigned, other → invalid
   → any invalid commit or a non-fast-forward: apply nothing for sso-people, alert
   → check ledger.yaml: schema, transitions, inviter active in people.yaml, quotas, caps, collisions
   → admitted guest set → tofu apply sso-people (people.yaml ∪ guests)
@@ -184,7 +200,7 @@ any level.
 
 Revoked and expired links stay as history; only an operator's erasure rewrite removes anything.
 
-| Change to `ledger.yaml` | Ledger key may sign | Operator key or web-flow may sign |
+| Change to `ledger.yaml` | Ledger key may sign | Operator key may sign |
 |---|---|---|
 | Add a `pending` link | yes | yes |
 | `pending` to `revoked`, or to `redeemed` with a `guest` block | yes | yes |
@@ -200,21 +216,27 @@ A new step in `sso-config-apply`, operator-owned and tested code in public `real
 before the people apply. It checks commits first, then the ledger's content *(Claude's call)*.
 
 **Commits.** The box walks the first-parent chain from its last good commit to the head and checks
-the signer of each commit against the paths it changes. A merge counts as one change against its
-first parent, so commits inside a merged PR need no signature of their own, as today.
+the signer of each commit against the paths it changes. Operators land `sso-people` PRs locally as
+squash or fast-forward commits signed with their own key, so every commit on the chain carries its
+own signature. The box keeps no exemption for GitHub merges there.
 
 | Signer | May change |
 |---|---|
 | The ledger key | `ledger.yaml` alone, in a commit with one parent. Any other path, a rename, a mode change or a submodule makes the commit invalid |
-| An operator key, or GitHub's web-flow key | any path, as today. Its `ledger.yaml` changes count as operator edits: hand entries, overrides, erasure |
-| No signature, or any other key | nothing: the commit is invalid |
+| An operator key | any path. Its `ledger.yaml` changes count as operator edits: hand entries, overrides, erasure |
+| GitHub's web-flow key, no signature, or any other key | nothing: the commit is invalid. That includes a GitHub merge-button merge and a web-editor commit made in any repo |
 
 - **A valid chain** applies `people.yaml` and the admitted guests at the head, as today.
-- **A freeze.** An invalid commit anywhere since last good, or a head that doesn't fast-forward from
-  it, freezes `sso-people`. The box then runs no `sso-people` apply at all, last good included, so it
-  never applies a `people.yaml` that sits on an invalid commit. It sets a failure status, and the
-  service alerts. A compromised service, or anyone holding its deploy key, can freeze member applies
-  this way until an operator acts *(Chris decided, 2026-11-08: the accepted cost)*.
+- **A freeze.** An invalid commit anywhere since last good, a web-flow commit included, or a head
+  that doesn't fast-forward from it, freezes `sso-people`. The box then runs no `sso-people` apply
+  at all, last good included, so it never applies a `people.yaml` that sits on an invalid commit.
+  It sets a failure status, and the service alerts. A compromised service, anyone holding its
+  deploy key, or any org owner with write access can freeze member applies this way until an
+  operator acts *(Chris decided, 2026-11-08: the accepted cost)*. None of them can land a change.
+- **Changeover** *(Chris decided, 2026-11-08)*. When the box first runs without web-flow trust on
+  `sso-people`, it takes the current, already-applied head as last good, so the web-flow history
+  before it never gets walked. The host config records that commit as the anchor commit, which
+  also anchors a rebuilt box *(Claude's call)*.
 - **Recovery.** An operator reverts the bad change, and with an operator key, never web-flow or the
   ledger key, signs a commit whose message carries the trailer
   `Reviewed-Range: <last-good>..<tip>`, both full shas. The box accepts it only if `<last-good>` is
@@ -237,12 +259,12 @@ A content problem in a validly signed, path-correct commit never freezes `people
 
 - **Modes** *(Claude's call)*. A host setting, `ledger_mode`, reads `check` or `apply`, and only an
   operator-signed `realliance/sso` head changes it. In `check` the box applies `people.yaml` as
-  today, but from the newest first-parent commit an operator key or web-flow signed, so a service
-  push at the head never blocks it. It hands the people layer no guests, and only logs what the walk
-  and the content checks would decide, a freeze included. With no staging box, the check ships in
-  `check` and runs live there for at least 3 days, a week if possible, before an operator switches it
-  to `apply`. Deliberately bad test commits go on a separate branch that the check reads and never
-  applies.
+  today, but from the newest first-parent commit that's last good or an operator key signed, so a
+  service push at the head never blocks it. It hands the people layer no guests, and only logs what
+  the walk and the content checks would decide, a freeze included. With no staging box, the check
+  ships in `check` and runs live there for at least 3 days, a week if possible, before an operator
+  switches it to `apply`. Deliberately bad test commits go on a separate branch that the check
+  reads and never applies.
 - **Members first.** In `check`, no failure in the ledger path ever blocks the `people.yaml` apply:
   a crash, a timeout or a failed read logs and moves on. In `apply`, only an invalid commit stops it;
   a refused ledger or entry never does. The box never drops a guest already in the people layer's
@@ -253,16 +275,17 @@ A content problem in a validly signed, path-correct commit never freezes `people
   `apply` would have done.
 - **A refused ledger freezes later ledger changes.** Everything pushed to `ledger.yaml` after it
   waits, including any guest deactivation, while `people.yaml` keeps applying. The remedy is a
-  commit, from an operator key or web-flow, that fixes or reverts `ledger.yaml`. The service alerts
+  commit, signed with an operator key, that fixes or reverts `ledger.yaml`. The service alerts
   after 1 h, and a guest who must go at once gets the emergency override (Promotion and offboarding).
 - **Clock and state** *(Claude's call)*. The box counts caps and expiry from when it first saw each
   link and redemption, never from the service's timestamps, with a short expiry grace for apply
   latency. First-seen times, refusals, the last good commit and the last good ledger live in
   `/var/lib/sso-config-apply`, with no backup. The last `sso-people` commit the box applied before
   this ships seeds last good. A rebuild loses the state: the cap and expiry clocks restart, last
-  good restarts at the newest first-parent commit an operator key or web-flow signed, and the box
-  re-validates every entry not yet in state. That means a rebuild can let at most one extra day's
-  cap through. Otherwise a refusal stays until an operator clears it with a ledger change.
+  good restarts at the newest first-parent commit an operator key signed after the anchor commit,
+  or at the anchor itself, and the box re-validates every entry not yet in state. That means a
+  rebuild can let at most one extra day's cap through. Otherwise a refusal stays until an operator
+  clears it with a ledger change.
 
 **Quotas** *(Claude's call)*. The box takes each member's tier from `people.yaml`; the service shows
 the same tier from token roles.
@@ -371,19 +394,22 @@ before `guests.tf` grants `/apps/forgejo`:
 
 ### Promotion and offboarding
 
-- **Promotion.** An operator PR to `sso-people` adds `username`, `active` and `groups` with no
-  `bootstrap`, and the code takes the bootstrap from the ledger. People and guests share one
-  `keycloak_user.person` map with `people.yaml` winning, so the Keycloak user stays and only the
-  groups change; from then on `people.yaml` alone decides. The ledger entry stays as the record of
-  who invited them. A promoted guest gets their new tier's quota; the member who invited them gets
-  no slot back.
+- **Merging** *(Chris decided, 2026-11-08)*. Operators land every `sso-people` PR locally, as a
+  squash or fast-forward commit signed with their own key, and push it to `main`. The GitHub merge
+  button makes a web-flow commit, which freezes the box until an operator's `Reviewed-Range`.
+- **Promotion.** An operator PR to `sso-people`, merged locally, adds `username`, `active` and
+  `groups` with no `bootstrap`, and the code takes the bootstrap from the ledger. People and guests
+  share one `keycloak_user.person` map with `people.yaml` winning, so the Keycloak user stays and
+  only the groups change; from then on `people.yaml` alone decides. The ledger entry stays as the
+  record of who invited them. A promoted guest gets their new tier's quota; the member who invited
+  them gets no slot back.
 - **Guest offboarding.** The inviting member or an operator sets `guest.active: false` through the
-  service, or an operator commits the change, and Keycloak disables the account. On the forge,
-  forge-bot's `access` job prohibits login once it runs in `apply`; until then, Prohibit login by
-  hand (`docs/forgejo.md`). More than 3 at once trips forge-bot's breaker: set `allow_bulk_until`.
-  Then the Pages takedown (guardrail 2) and the `deny:` entry (guardrail 4).
+  service, or an operator commits the change with their key, and Keycloak disables the account. On
+  the forge, forge-bot's `access` job prohibits login once it runs in `apply`; until then, Prohibit
+  login by hand (`docs/forgejo.md`). More than 3 at once trips forge-bot's breaker: set
+  `allow_bulk_until`. Then the Pages takedown (guardrail 2) and the `deny:` entry (guardrail 4).
 - **Emergency override.** An operator can deactivate a guest whatever the ledger says. Behind a
-  refused ledger, they merge a `people.yaml` entry for the guest with `active: false`,
+  refused ledger, they push a signed `people.yaml` entry for the guest with `active: false`,
   `groups: [/guests]` and no `bootstrap`, the shape of a promotion. `people.yaml` wins over the
   ledger and still applies, so the account stays off from the next apply on. For effect within
   seconds, a master-realm break-glass account also disables the user in the Keycloak console, and
@@ -418,9 +444,13 @@ If that proves too weak, encrypting `bootstrap.email` to a key on the box costs 
 
 ## Known limits (accepted)
 
-- **A compromised service can freeze member applies** *(Chris decided, 2026-11-08)*. Its deploy key
-  can push any commit to `sso-people`. The box refuses to apply past an invalid one, so members wait
-  until an operator signs a `Reviewed-Range` commit. The 1 h alert covers it.
+- **Anyone who can push to `sso-people` can freeze member applies** *(Chris decided, 2026-11-08)*:
+  the service's deploy key, an org owner, or an operator who presses the merge button by mistake.
+  The box refuses to apply past an invalid commit, a web-flow one included, so members wait until an
+  operator signs a `Reviewed-Range` commit. The 1 h alert covers it. None of them can land a change.
+- **Web-flow stays trusted on `realliance/sso`** *(accepted risk, unchanged there)*. Any owner of the
+  `realliance` GitHub org can land a trusted commit on that repo, and through the box's code reach
+  anything. The box closes that path on `sso-people` by never trusting web-flow there (2026-11-08).
 - **The service's key reaches every path in `sso-people`** *(Chris decided)*: write to the whole
   repo, limited only by the box's path check, and read of `people.yaml`, members' emails and
   hidden-project group names included.
@@ -455,10 +485,19 @@ If that proves too weak, encrypting `bootstrap.email` to a key on the box costs 
 4. **Chris** signs the `realliance/sso` heads that carry the host-role changes, which roll out the
    existing way through `ansible-pull`, and after the check-only run, the head that sets
    `ledger_mode: apply`.
-5. Answers to the open points.
+5. **The changeover seed.** In the signed `realliance/sso` head that drops web-flow from the
+   `sso-people` keyring, **Chris** records the current, already-applied `sso-people` head as the
+   anchor commit in the host config. The box takes it as last good, so the existing web-flow
+   history never freezes it.
+6. `sso-people`'s README says: merge locally, signed, as a squash or fast-forward commit, and never
+   with the merge button, which freezes the box.
+7. Answers to the open points.
 
 **Build order.** First `/guests` in `realm/`, `guests.tf` and an empty `ledger.yaml` in
-`sso-people`, and the box's commit and content checks with their tests, shipped in `check` mode. It
+`sso-people`, and the box's commit and content checks with their tests, shipped in `check` mode.
+Before that box head (the plan's Task 4), a Task 2b drops web-flow trust on `sso-people`: the
+`sso-people` keyring loses web-flow, the anchor commit seeds last good, the README changes, and
+operators start merging locally. `realliance/sso` keeps web-flow. The check-only run then
 runs live for at least 3 days, a week if possible: operator hand entries on `main`, bad commits on
 the test branch, the expected verdicts in its log, and no change to `people.yaml` applies. Only then
 does an operator switch it to `apply`, and an operator-signed hand entry proves a guest end to end.
@@ -477,8 +516,11 @@ storage cap, or its fallback, and only after it `/apps/forgejo` in `guests.tf`. 
    quota: the box refuses each at the ledger or the entry, while a `people.yaml` change in the same
    window applies.
 4. A ledger-key commit that changes any other path, a rename, a mode change or a submodule
-   included, an unsigned commit, or a force-push each freeze every `sso-people` apply and raise the
-   alert. An operator's `Reviewed-Range` commit resumes them, and a replayed old one doesn't.
+   included, an unsigned commit, a web-flow commit or a force-push each freeze every `sso-people`
+   apply and raise the alert. The web-flow cases include a merge-button merge and a `people.yaml`
+   edit made in another repo's web editor and pushed with the service's key. An operator's
+   `Reviewed-Range` commit resumes them, a replayed old one doesn't, and the web-flow history before
+   the anchor commit never freezes the box.
 5. In `check` mode, a ledger check that crashes, times out or fails a read, or a service push at the
    head, leaves the `people.yaml` apply unchanged. An explicit test proves it, and another proves
    `apply` mode keeps applying `people.yaml` behind a refused ledger.
