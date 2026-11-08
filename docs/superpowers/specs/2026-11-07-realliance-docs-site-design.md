@@ -3,7 +3,8 @@
 > **Amendment (2026-11-08, builder check).** Chris moved the deploy and its token to an Owners-only
 > repository, `realliance-ops/docs-deploy`, and made the recovery page a status page. Claude's rulings
 > on the builder's questions fixed the versions, the account id, repository creation, the brand
-> script, the wildcard fallback, the first-release content, and dropped the token's IP filter. The text
+> script, the wildcard fallback, the first-release content, and dropped the token's IP filter. A later
+> ruling made the deploy check hourly, since `tiny` runs one pod at a time across the forge. The text
 > below follows them.
 
 - **Date:** 2026-11-07, amended 2026-11-08.
@@ -27,7 +28,7 @@
 | Brand | Palette, fonts, logo and favicon from `realliance/brand` at a signed tag *(Chris decided)*; no Google Fonts, checked in CI; Catppuccin code themes *(Claude's call)* | both |
 | Source | `realliance/docs` *(Claude's call)*, public; outsiders open fork PRs, a member approves each run. It builds and lints, and holds no secret | *(Chris decided)* |
 | Gate | The shared Vale action from the first PR: errors block, warnings print | *(Chris decided)* |
-| Deploy | `realliance-ops/docs-deploy`, Owners-only, holds the token. Every 10 minutes, or on dispatch, it builds `realliance/docs` `main` if it changed and deploys it | *(Chris decided)* |
+| Deploy | `realliance-ops/docs-deploy`, Owners-only, holds the token and builds `realliance/docs` `main` when it changed, then deploys it *(Chris decided)*. It checks hourly, or at once on dispatch *(Claude's call)* | both |
 | Name | `docs.realliance.net`, a Workers Custom Domain owned by `cloudflare/dns/` | *(Claude's call)* |
 | CI | Every job on `tiny` | *(Claude's call)* |
 | Repositories | Both created, and their `main` protected, through OpenTofu in `realliance-ops/forge` | *(Claude's call)* |
@@ -53,7 +54,8 @@ forge and the SSO, and the Vale gate holds it to the standard Chris applies to h
 
 1. A member finds how to do a forge task in under a minute, by navigation or search.
 2. `docs.realliance.net` serves while the forge, galaxy or the home uplink is down.
-3. A reviewed merge to `main` goes live within 15 minutes with no manual step, or at once by dispatch.
+3. A reviewed merge to `main` goes live within about an hour with no manual step, or at once when an
+   Owner dispatches the deploy.
 4. The site matches the forge and the SSO: same palette in both themes, same fonts, logo and favicon,
    from one brand tag.
 5. Nothing merges with a Vale error, and Vale sees every sentence a reader sees.
@@ -85,7 +87,7 @@ Any of these makes the design a failure, even if the site looks right:
 | Fact | The design |
 |---|---|
 | `tiny` (`docs/ci.md`): 1 CPU, 2 GiB, 15 min; `/work` a 1 GiB memory volume inside the 2 GiB; egress on 80 and 443; `node` 24.21.0 and no `npm` | short jobs; a pinned, checksummed `npm` |
-| `tiny` limits (`ci.yaml`): 120 minutes a UTC day per owner by default, one pod at a time across the forge. A check every 10 minutes is 144 launches a day | `realliance-ops` gets a higher daily limit; a tick with no change launches one pod |
+| `tiny` limits (`ci.yaml`): 120 minutes a UTC day per owner by default, and one pod at a time across the forge. A check every 10 minutes would hold that one slot for about 2 hours a day | an hourly check, 24 launches a day, inside the default limit; no `ci.yaml` change; a tick with no change launches one pod |
 | Measured 2026-11-07 on the spike's sources: `npm ci --ignore-scripts` works, with 418 MB of `node_modules` and a 157 MB cache; the build takes 6 s and writes 89 files, 2.2 MB | install scripts off; the cache goes before the build, so `/work` peaks under 0.6 GiB |
 | Spike at 1 CPU and 2 GiB: the Next export peaks at 2.0 GiB; React Router and `Vite` at 0.58 GiB | React Router and `Vite` *(Chris decided)*; phase 1 measures again |
 | The `Fumadocs` theme toggle sets a `dark` class, default `system`; the brand's `realliance-palette.css` keys on `prefers-color-scheme` | `--color-fd-*` generated from `palette.json`, per class |
@@ -150,7 +152,7 @@ and every job checks out anonymously, as `image.yml` does. No `actions/checkout`
 
 ```yaml
 on:
-  schedule: [{cron: "*/10 * * * *"}]
+  schedule: [{cron: "17 * * * *"}]
   workflow_dispatch: {}
 concurrency: {group: docs-deploy, cancel-in-progress: false}
 ```
@@ -176,6 +178,10 @@ concurrency: {group: docs-deploy, cancel-in-progress: false}
 Each deployment's tag is its `main` commit, and `build.json` serves the same commit, so `check` needs
 no secret and no install. A tick with no change launches one short pod; the concurrency group keeps
 ticks from overlapping.
+
+**Hourly, by design** *(Claude's call)*. The trade-off: a merged docs change goes live within about an
+hour, or at once when an Owner dispatches `deploy.yml` after the merge. A faster schedule would take
+the forge's one `tiny` slot from every other owner's jobs for little gain on a docs site.
 
 **Checks.** In `realliance/docs`, `check-content.sh` fails on a `description=` prop, and on front matter
 `description` over 160 characters, which Vale skips. `check-build.sh` and `docs-deploy`'s
@@ -248,7 +254,7 @@ the next tick redeploys `main`.
 | `realliance/docs` `main` | no pushes, PR merges only; one approval, stale approvals dismissed, blocked on a rejected review; status checks `vale` and `build` |
 | `realliance/docs` tags | `*` for Owners and maintainers, set by an Owner through the API |
 | `realliance-ops/docs-deploy` `main` | as for `forge-bot`: PRs only, signed commits, Owners approve and merge, fast-forward only |
-| Detection | the SSO repository's `tests/forge/`: assertions for both `main` rules and the docs tag rule; `docs-deploy` joins `OPS_REPOS`; `test_inventory_declares_no_realliance_repo` widens to the `realliance` repositories the inventory now declares |
+| Detection | the SSO repository's `tests/forge/`: assertions for both `main` rules and the docs tag rule; `docs-deploy` joins `OPS_REPOS`; `docs` joins `forgejo_upstream` in the set of `realliance` repositories that `test_inventory_declares_no_realliance_repo` allows (that test's own fix is `realliance/sso` PR #66, separate work) |
 
 The pipeline thus deploys `main` alone, and `main` changes only through a reviewed PR that passed Vale
 and the build.
@@ -360,11 +366,11 @@ titles and tab labels stay short props.
 |---|---|---|
 | 0 | the shared-actions spec's phase 1: `vale` at `v1.1.0` | its own done line |
 | 1 | first, the build measured again under a 1 CPU, 2 GiB `cgroup` and in a real `tiny` run. Then both repositories and their `main` rules in `repos.tf`, the docs tag rule, the SSO test changes, the skeleton site, brand sync, the `vale` and `build` jobs | the build peaks under 1.5 GiB, or the work stops and reports; an error blocks a merge; a fork PR waits for approval; `site` uploads |
-| 2 | the Worker, `workers.tf`, the tokens, `docs-deploy`'s jobs, the `ci.yaml` limit, lines in `docs/forgejo.md` and `CLAUDE.md` | a merge goes live by the schedule and by dispatch; `plan` is empty |
+| 2 | the Worker, `workers.tf`, the tokens, `docs-deploy`'s jobs, lines in `docs/forgejo.md` and `CLAUDE.md` | a merge goes live by the schedule and by dispatch; `plan` is empty |
 | 3 | the 11 first-release pages, real content, reviewed by Chris | the acceptance checks pass |
 | later | the other pages; Renovate pins once the forge's bot runs | |
 
-Phase 2 runs in this order; steps 1 to 4 are Chris's:
+Phase 2 runs in this order; steps 1 to 3 are Chris's:
 
 1. From a laptop, `wrangler login`, then `wrangler deploy` of a local build from `docs-deploy`. This
    creates the Worker and doubles as the first fallback drill.
@@ -372,9 +378,7 @@ Phase 2 runs in this order; steps 1 to 4 are Chris's:
    empty.
 3. Create the deploy token from the Credential table; add the secret and the variable to
    `realliance-ops/docs-deploy`.
-4. Raise `realliance-ops`'s `tiny_minutes_per_day` in `ci.yaml` with an Owner-signed commit, to cover
-   144 checks a day and the builds, about 300.
-5. Enable `deploy.yml`, merge a docs PR, and watch the next tick put it live.
+4. Enable `deploy.yml`, merge a docs PR, dispatch a deploy, and watch the next tick find nothing to do.
 
 ## Acceptance
 
@@ -386,8 +390,8 @@ Phase 2 runs in this order; steps 1 to 4 are Chris's:
 4. Search finds a word that appears only in a page's body.
 5. A Vale error blocks a merge; warnings alone don't. A fork PR's run waits for a member's approval.
    `realliance/docs` has no Actions secret, and a member can't push to `realliance-ops/docs-deploy`.
-6. A merge to `main` is live within 15 minutes, and a dispatch deploys at once. `build.json` and the
-   deployment's tag both show the commit. A tick with no change launches `check` alone.
+6. A merge to `main` is live within about an hour, and a dispatch deploys at once. `build.json` and
+   the deployment's tag both show the commit. A tick with no change launches `check` alone.
 7. The deploy token can't add a route or a custom domain: a `wrangler deploy` that names one fails.
    This holds with the custom domain or with the fallback route, since Terraform owns both.
 8. Each `build` and `deploy` finishes within 5 minutes on `tiny`, with `/work` under 0.8 GiB; a `check`
@@ -404,7 +408,7 @@ Phase 2 runs in this order; steps 1 to 4 are Chris's:
   files and the search index with types the client accepts (else rename the index `/search.json`);
   removing the image renderer; keeping `llms.txt` or not; the pinned version's `--color-fd-*` set.
 - **Contrast:** if Latte's stock comment and yellow code tokens fall under 4.5:1, override those two.
-- **`tiny`:** the `tool.lock` format, later `fetch-tool`; `realliance-ops`'s owner id for `ci.yaml`.
+- **`tiny`:** the `tool.lock` format, later `fetch-tool`.
 - **Wrangler:** that a deploy without `routes` leaves the custom domain alone; that `--tag` takes a full
   commit id (else a prefix, with the full id in `--message`); that `--ignore-scripts` installs a working
   `wrangler`; that the Editor token can keep `workers_dev` off.
