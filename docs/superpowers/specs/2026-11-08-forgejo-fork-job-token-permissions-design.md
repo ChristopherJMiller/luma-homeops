@@ -1,7 +1,19 @@
 # Forgejo fork: job token permissions and secret scoping: design
 
+> **Amendment (2026-11-08, builder check).** Five rulings changed this doc, and the text below
+> follows them:
+>
+> - ci-dispatch reads `/admin/orgs` and `/repositories/<id>` through two new GET-only guard shapes.
+>   It keeps the last good org list for 1 h, and fails closed when the list is older or the owner id
+>   is doubtful;
+> - forge-bot requires `owner_orgs`, which changes all four consumers; it deploys before the file
+>   gains the key;
+> - the probe stopped without a verdict, so all three static tokens rotate after A unless retired;
+> - `permissions:` blocks land before the fork image (Rollout step 1);
+> - patch C never refuses silently: a 403 names the rule, and a warning goes to the log.
+
 - **Date:** 2026-11-08.
-- **Status:** draft for Chris's review. Nothing built.
+- **Status:** draft for Chris's review, amended after the builder check. Nothing built.
 - **Research:** Claude's token-permissions report of 2026-11-08 (session scratchpad, not kept). It
   read the fork's source, upstream `forgejo` (head `14d5d663e`), Codeberg, Gitea and runner v13.2.1.
   Constraints and Facts restate what this design rests on.
@@ -105,7 +117,9 @@ The design fails if any of these happen, even when everything else works:
   (`act/jobparser/model.go:15-22, 124-139`), so `WorkflowPayload` lacks it at both levels. The run
   records the file and commit, though: `WorkflowDirectory`/`WorkflowID` (`models/actions/run.go:50-51`)
   and `GetWorkflowSourceCommit()` (`run.go:292-297`). From v17, runner v13's job parser keeps
-  `permissions` in the payload (`act/jobparser/model.go:29, 166`).
+  `permissions` in the payload (`act/jobparser/model.go:29, 166`). Neither Forgejo 15 nor runner
+  v13.2.1 reads any key of the block, `id-token` included: OIDC follows `enable-openid-connect:`.
+  A block can land in a workflow before the fork image does, and changes nothing until then.
 - **Realliance today.** All six relevant repos and both orgs are public. Release tags are already
   protected: forgejo, brand and actions `v*`, realliance.net `[0-9]*`, forge-bot and ci-dispatch
   `v*` (`realliance-ops/forge` `repos.tf:103-122, 193-196`). Each repo also protects `main`.
@@ -115,8 +129,9 @@ The design fails if any of these happen, even when everything else works:
   runner with its uid.
   - On galaxy, Claude read `ptrace_scope=1`, `CapEff=0` and uid 1000 from a runner pod, so job code
     can't read runner memory there.
-  - On the paid ACI classes, the job runs as root in the runner's container, and that question is
-    open (Rollout step 2).
+  - On the paid ACI classes, the job runs as root in the runner's container. Chris stopped a probe
+    before it gave a verdict, so this design assumes job code there **can** read runner memory
+    (Rollout step 3).
 
 ## Decided
 
@@ -128,11 +143,12 @@ The design fails if any of these happen, even when everything else works:
   override exist from the first release. Realliance's workflows get blocks: `pages-publish` callers
   `contents: write`, `build` jobs `{}`. A later step flips the instance default to `restricted`.
 - **C:** `packages: write`, shipped now.
-- A separate paid-class probe runs now. If job code on ACI can read the runner's memory,
-  `REGISTRY_TOKEN` rotates after A lands.
 
 *(Claude's call)*:
 
+- The cancelled probe counts as proof that job code on ACI can read runner memory. After A is live,
+  each of the three static registry tokens rotates, unless its consumer has moved on, and then Chris
+  revokes it instead (Rollout step 3). Chris may override this.
 - `packages: write` requires a protected ref, and each publishing repo keeps a protected-tag rule.
   Most exist already.
 - The rest of the rules in Design:
@@ -252,6 +268,13 @@ inline copies of "own repo write, fork read":
 **Read rule.** The task owner's packages are readable whenever `packages` resolves to `read` or
 better, even for a private owner. Other owners keep today's rule (`services/packages/perm.go:18-72`).
 
+**No silent refusals** *(Claude's call)*. When a job holding `packages: write` fails a rule, it gets
+a 403 whose message names the rule, and Forgejo logs a warning that names the task, the repo, the
+package type and name, and the rule. For a type other than container or generic, the message reads:
+the job token's `packages: write` covers only container and generic packages named after the
+repository. Container routes carry the message in the OCI error body. Other types keep today's
+refusal text for every other caller.
+
 **Why these rules** *(Claude's call)*:
 - The name rule matches the convention Forgejo already uses to link images to repos
   (`services/packages/container/manifest.go:660-676`) and needs no stored state.
@@ -276,7 +299,7 @@ better, even for a private owner. Other owners keep today's rule (`services/pack
 
 | Path | Change |
 |---|---|
-| `reqPackageAccess`, `routers/api/packages/api.go:45-91` | For an Actions task, apply the write and read rules with the route's name parameter (`image` or `packagename`). Every other type keeps today's rule |
+| `reqPackageAccess`, `routers/api/packages/api.go:45-91` | For an Actions task, apply the write and read rules with the route's name parameter (`image` or `packagename`). A write to any other type gets the logged 403 described earlier |
 | Container manual routes, `api.go:889-950` | Move `SetParams("image")` ahead of the access check in the three write branches |
 | Generic routes, `api.go:493-505` | Covered by `reqPackageAccess` |
 | Auto-link, `container/manifest.go:418-435` and `services/packages/package_update.go:19-39` | A −2 creator links the image to the repo once the name rule held, so the package shows on the repo page |
@@ -294,7 +317,7 @@ to its code.
 |---|---|
 | A | Repo and org secrets `S1`, `S2` and `S3`. A job naming `S1` in `env` and `S2` in `if` receives exactly those plus the five always-sent names. `toJSON(secrets)` receives all. A `secrets: inherit` inner job naming `S3` receives `S3`. A fork PR receives none |
 | B | One case per row of a matrix over instance default × repo override × workflow block × job block × fork PR. Each case tries: issue comment, release create, git push, wiki push, workflow dispatch, LFS upload. Also: a job block replacing the workflow block, `{}` still uploading an artifact, and the reusable inner-job cap. Declarative cases go in `routers/api/v1/permissions/tests/repo_access.go`, whose fixture already models tasks |
-| C | In the `api_packages_container_test.go` style (`/v2/token` with basic auth, `:104-178`):<br>• a protected-tag job pushes `<owner>/<repo>` and `<owner>/<repo>/sub`;<br>• Forgejo refuses `<owner>/<other>`;<br>• it also refuses a `pull_request` task, an unprotected branch, a job without `packages: write`, and a delete;<br>• it refuses a JWT after its task ends;<br>• a generic upload works under `<repo>` and fails under another name;<br>• auto-link sets the repo. Tests create protected tags as `api_repo_tags_test.go:179` does |
+| C | In the `api_packages_container_test.go` style (`/v2/token` with basic auth, `:104-178`):<br>• a protected-tag job pushes `<owner>/<repo>` and `<owner>/<repo>/sub`;<br>• Forgejo refuses `<owner>/<other>`;<br>• it also refuses a `pull_request` task, an unprotected branch, a job without `packages: write`, and a delete;<br>• it refuses a JWT after its task ends;<br>• a generic upload works under `<repo>` and fails under another name;<br>• an npm publish under `packages: write` gets a 403 that names the rule, plus a warning in the log;<br>• auto-link sets the repo. Tests create protected tags as `api_repo_tags_test.go:179` does |
 
 Every case runs with `DEFAULT_TOKEN_PERMISSIONS` both `permissive` and `restricted`, so the tests
 cover the flip before it ships.
@@ -303,31 +326,43 @@ cover the flip before it ships.
 
 Each step waits for the one before it. Every forge change follows `docs/forgejo.md` and S1–S9.
 
-1. **Fork release.**
+1. **Workflow blocks**, each a PR in its repo, *before* the fork image *(Claude's call)*. Forgejo 15
+   ignores the blocks (Constraints), so they change nothing yet. Landing them first lets step 3
+   check the new image against real blocks.
+   - `image.yml`: `build` gets `permissions: {}`, and `publish` gets `{}` while it still uses the
+     static token.
+   - realliance.net: split `ci.yaml` into `build` (`{}`) and a push-only `publish` job that
+     receives the OCI layout as an artifact, as `image.yml` does. Pull-request runs then carry no
+     secret reference, so patch A sends them none.
+   - forge-bot and ci-dispatch: `test` and `image` get `{}`.
+   - `realliance/actions`: the `pages-publish` README tells callers to set `contents: write` on the
+     publishing job. Announce it to members.
+2. **Fork release.**
    - A, B and C merge into `realliance/forgejo` `main` by PR, signed. `make check` and the fork's
      `check-patches.sh` pass.
    - An Owner tags `v15.0.11-realliance.N`. `image.yml` builds it. This build still publishes with
      `REGISTRY_TOKEN`.
-2. **Forgejo rollout.**
+3. **Forgejo rollout.**
    - luma-homeops pins the reviewed digest in `cluster/applications/forgejo-release.yaml` and sets
-     the default explicitly under `gitea.config.actions`.
+     `DEFAULT_TOKEN_PERMISSIONS: permissive` explicitly under `gitea.config.actions`.
    - Run the runner drill (`docs/ci.md`, "Runner drill at every Forgejo upgrade") and one run of
-     each Realliance workflow. Expected: nothing changes, because the default is `permissive`.
+     each Realliance workflow.
+     - Expected: every workflow still passes.
+     - The blocks now bite: a `{}` job's token gets 403 on a push and on a dispatch.
+     - A job that names no secret gets none.
    - The same values change opens org creation, once its prerequisites are live (Open org creation
      for users).
-   - **Probe hook.** If the paid-class probe found that job code can read the runner's memory
-     (Yama `ptrace_scope` 0 or absent, or `CAP_SYS_PTRACE` present), rotate `REGISTRY_TOKEN` now,
-     after A is live. Use "Rotating `realliance-ci`'s tokens" in `docs/forgejo.md`; it's a STOP for
-     Chris. If the probe found it can't, record that and skip the rotation.
-3. **Workflow blocks**, each a PR in its repo:
-   - `image.yml`: `build` gets `permissions: {}`, and `publish` gets `{}` while it still uses the
-     static token. The accepted push-and-dispatch risk in the fork README closes; update that text.
-   - realliance.net: split `ci.yaml` into `build` (`{}`) and a push-only `publish` job that
-     receives the OCI layout as an artifact, as `image.yml` does. Pull-request runs then get no
-     secret at all.
-   - forge-bot and ci-dispatch: `test` and `image` get `{}`.
-   - `realliance/actions`: the `pages-publish` README tells callers to set `contents: write` on the
-     publishing job. Announce it to members.
+   - **Rotations.** The probe gave no verdict, so assume that job code on ACI could read every
+     secret a runner held before A *(Claude's call; Chris may override)*. Once A is live, handle
+     each of the three tokens as follows; each is a STOP for Chris:
+     - if its consumer still needs it, rotate it at once;
+     - if its consumer has already moved to `packages: write`, step 5 revokes it and no new value is
+       minted.
+
+     | Token | How |
+     |---|---|
+     | `REGISTRY_TOKEN` (realliance/forgejo) and `SITE_REGISTRY_TOKEN` | "Rotating `realliance-ci`'s tokens" in `docs/forgejo.md` |
+     | realliance-ops `REGISTRY_TOKEN` (`ops-ci`) | The same guarded delete and mint, with `ACCT=ops-ci`. It has no runbook yet; the builder writes one beside `realliance-ci`'s |
 4. **Static tokens to `packages: write`**, one repo at a time *(Claude's call: the fork first,
    because its build runs on paid ACI; realliance.net last, because Renovate deploys its pushes)*.
    Order: realliance/forgejo, forge-bot, ci-dispatch, realliance.net.
@@ -358,9 +393,11 @@ Each step waits for the one before it. Every forge change follows `docs/forgejo.
      moved.
    - realliance.net `SITE_REGISTRY_TOKEN`: revoke `realliance-net-registry` and drop
      `REALLIANCE_NET_REGISTRY_TOKEN`.
-   - With each one, update the realliance/sso tests (`test_realliance_ci_tokens`,
-     `test_site_registry_token_scope`), the token tables, offboarding step 3 and the accepted-risk
-     notes in `docs/forgejo.md`, and the realliance.net and forge-bot workflow comments.
+   - With each one, update:
+     - the realliance/sso tests (`test_realliance_ci_tokens`, `test_site_registry_token_scope`);
+     - in `docs/forgejo.md`: the token tables, offboarding step 3 and the accepted-risk notes;
+     - the fork README's accepted push-and-dispatch risk, which closed in step 3;
+     - the realliance.net and forge-bot workflow comments.
    - Once `realliance-ci` holds no token, Chris decides whether the account stays.
 6. **Flip to `restricted`.**
    - Before: every Realliance workflow carries a block, and the members who call `pages-publish`
@@ -378,17 +415,97 @@ A companion change that ships in the same rollout. *(Chris decided)*:
   `small` or `medium` gets an `owners:` entry by PR.
 - **Order:**
   1. the forge-bot fix;
-  2. the Forgejo config change, riding Rollout step 2;
+  2. the Forgejo config change, riding Rollout step 3;
   3. tests and docs.
 - The ci-dispatch change ships with the forge-bot fix, because both have to be live before the flip
   *(Claude's call)*.
 
+### forge-bot: Owners of Realliance's orgs only
+
+**Today.** `Owners()` (`forge-bot internal/forgejo/client.go:332-356`) reads the Owners team of
+every org in `/admin/orgs`. Four plans spare anyone in that set and log a finding instead:
+
+- `access` never prohibits login (`internal/plan/access.go:38`);
+- `admin` never removes the site administrator flag (`admin.go:27`);
+- `teams` never removes from a mapped team (`teams.go:76`);
+- `avatar` never applies its loss change for a user without SSO access (`avatar.go:54`).
+
+With open org creation, every org creator would escape all four.
+
+**Fix** *(Chris decided; the details are Claude's calls)*:
+- `forge-bot.yaml` gains a **required** field, `owner_orgs: [realliance, realliance-ops]`, which
+  forge-bot reads only at the Owner-signed head, like the rest of that file.
+- The field is an explicit list rather than `teams.yaml` keys, because `realliance-ops` has no mapped
+  team.
+- `Owners()` reads only the listed orgs. If the field is absent, or a listed org is missing or has
+  no Owners team, the read fails with `ErrIncomplete`. The whole Forgejo read then fails
+  (`internal/cycle/read.go:190-194`), so no loss job runs without the list.
+- **All four consumers change.** forge-bot now treats an Owner of a user org like anyone else: it prohibits login,
+  removes the site administrator flag, and removes them from `realliance` teams, as intended.
+- `owners_unknown` (`FindingOwnersUnknown`, `internal/plan/plan.go:64, 101`; `avatar.go:67`) and
+  `owner_needs_action` (`plan.go:165-166`, `internal/metrics/metrics.go:34`) now concern
+  Realliance's Owners only. The forge-bot README's Owners row (`README.md:61`) and `docs/forgejo.md`
+  say so.
+- **Size:** about 50 lines, plus tests:
+  - an Owner of a user org loses access, the site administrator flag and `realliance` team membership;
+  - an absent `owner_orgs`, or a listed org without an Owners team, fails the read.
+
+**Deploy order.** Today's forge-bot decodes `forge-bot.yaml` strictly: `KnownFields(true)` in
+`internal/inventory/parse.go:60-62`, used by `BulkUntil` at `:116-120`. An unknown key makes it
+reject the file (`read.go:112-115`). So:
+
+1. deploy the new forge-bot, which accepts the key and requires it;
+2. merge `owner_orgs` into the inventory.
+
+Between the two, the new forge-bot's Forgejo read fails and nothing runs, which is safe; keep the gap
+short. The builder confirms what today's forge-bot does with a rejected file before relying on this
+order.
+
+### Budgets for orgs in ci-dispatch
+
+**Today.**
+- It budgets by the job's `owner_id`, and gives every unlisted owner `defaults`, $10 of paid
+  included (`ci-dispatch internal/limits/limits.go:155-165`, `internal/gate/gate.go:274-279`). It
+  can't tell an org from a user.
+- The token already holds `read:admin` and `read:repository` (`docs/ci.md:520`), but the transport
+  guard allows only the `/admin/actions/runners` routes, `/users/<n>` and some `/repos/…` shapes
+  (`internal/forgejo/guard.go:49-58`).
+
+**Change** *(Chris decided the rule; the shape is Claude's call)*:
+- **Config.** `ci.yaml` gains `org_defaults:` (paid 0, `tiny` as in `defaults`).
+- **Guard.** Two GET-only shapes, each with a guard test in `TestGuardAllowList`
+  (`internal/forgejo/writes_test.go:151`):
+  - `/admin/orgs` with `page` and `limit`;
+  - `/repositories/<id>`, for the owner check that follows.
+
+  Writes stay runner register and delete only, and the README's bullet on reads and writes
+  (`README.md:37-38`) names both reads.
+- **Classification**, by the same `owner_id` that budgets the job:
+  - an `owners:` entry always wins, and a stale or missing org list never affects it;
+  - else, an id in the org list gets `org_defaults`;
+  - else, `defaults`, but only when the dispatcher can match the id with confidence.
+- **Confidence.** The job's `owner_id` must equal the current owner of its `repo_id`
+  (`/repositories/<id>`, cached 10 min). A run from before a repo transfer keeps the old owner id
+  (`internal/forgejo/client.go:239-242`). A mismatch, or a failed repo read, counts as an org, which
+  fails closed.
+- **Freshness.** The dispatcher refreshes the org list with each limits load and every 10 min.
+  After a failed read it keeps the last good list. If that list is over 1 h old, or none exists
+  (a cold start), every unlisted owner gets `org_defaults`. A gauge for the list's age drives a new
+  alert, `CIDispatchOrgListStale`, in `cluster/ci-dispatch/dispatcher/prometheusrule.yaml`, with a
+  case in `alerts_test.yaml`.
+- A paid job that lands on `org_defaults` holds `no-budget`, as it does today.
+- **Size:** about 200 lines, plus about 250 lines of tests (config parse, classification including
+  the stale owner and cold start, gate, guard) and about 25 lines of alert YAML.
+- `realliance-ops`, unlisted, drops to `tiny` only. That is harmless, because its CI runs on
+  `galaxy`.
+- Guests stay on user `defaults` *(Chris decided)*.
+
+### The rest
+
 | Piece | Change | Marker |
 |---|---|---|
-| forge-bot Owners (the blocker) | **Today:** `Owners()` (`forge-bot internal/forgejo/client.go:332-356`) reads the Owners team of every org in `/admin/orgs`. The `access`, `admin`, `teams` and `avatar` plans (`internal/plan/access.go:38`, `admin.go:27`, `teams.go:76`, `avatar.go:54`) never take access from anyone in that set; they log a finding instead. Every org creator would then escape automatic removal.<br>**Fix:** `forge-bot.yaml` gains `owner_orgs: [realliance, realliance-ops]`, read only at an Owner-signed head, like the rest of that file. `Owners()` reads only those orgs. A missing or empty list fails the read, so the jobs that take access away skip, as a missing Owners team does today (`ErrIncomplete`).<br>**Size:** about 40 lines, plus a test that forge-bot takes access from an Owner of a user org like anyone else. Release and deploy it before the flip | Chris decided (the fix). Claude's call: an explicit list rather than `teams.yaml` keys, because `realliance-ops` has no mapped team |
-| Forgejo config | In `cluster/applications/forgejo-release.yaml`: `service.DEFAULT_ALLOW_CREATE_ORGANIZATION: true` (`:236`) and `admin.DISABLE_REGULAR_ORG_CREATION: false` (`:244`). This goes in the values change of Rollout step 2 | Chris decided |
+| Forgejo config | In `cluster/applications/forgejo-release.yaml`: `service.DEFAULT_ALLOW_CREATE_ORGANIZATION: true` (`:236`) and `admin.DISABLE_REGULAR_ORG_CREATION: false` (`:244`). This goes in the values change of Rollout step 3 | Chris decided |
 | Existing accounts | `DEFAULT_ALLOW_CREATE_ORGANIZATION` only sets new accounts. A one-time, guarded loop over `/api/v1/admin/users` patches `allow_create_organization: true`, with `login_name` and `source_id` as the removal step sends them. Chris runs it (a STOP).<br>**Why not a forge-bot job:** after the flip, no new account needs it, and a reconciler would undo a site administrator who turns the flag off for one person after abuse | Claude's call |
-| ci-dispatch | **Today:** it budgets by the job's `owner_id`, and gives every unlisted owner `defaults`, $10 of paid included (`ci-dispatch internal/limits/limits.go:155-165`, `internal/gate/gate.go:274-279`). It can't tell an org from a user.<br>**Change:** `ci.yaml` gains `org_defaults:` (paid 0, `tiny` as in `defaults`). The dispatcher reads org ids from `/admin/orgs` with each limits load and every 10 min. Lookup order: an `owners:` entry, then `org_defaults` for an org, then `defaults`. If the dispatcher can't read the org list, unlisted owners get `org_defaults`, so money fails closed and a paid job holds `no-budget`, as it does today.<br>**Size:** about 100 lines plus tests.<br>`realliance-ops`, unlisted, drops to `tiny` only, which is harmless because its CI runs on `galaxy`. Guests stay on user `defaults` | Chris decided (the rule, and guests). Claude's call (the shape, failing closed) |
 | Pages | No change. The relay maps any public owner to `<owner>.realliance.page` (`images/pages-relay/relay.go:172-245`), so a public user org gets `<org>.realliance.page`, with `<org>/pages` as its root site. Takedown stays Owner-only. No reserved-name list: `realliance.page` is its own domain, and user sites carry the same exposure today | Claude's call |
 | Team sync | Both group-to-team paths name only `realliance` teams: the login source's group-team map (`forgejo-release.yaml:193-194`) and forge-bot's `teams.yaml`, whose plan touches listed teams only (`teams.go:15, 42-44`). Neither reaches a user org | Fact; no change |
 | Leavers | The `docs/forgejo.md` section Removing someone gets a step: list the orgs where the person is the only Owner. Leave each org untouched, so its repos keep serving, and add it to `ci.yaml` `deny` if it still runs CI. Take its Pages sites down only on request or abuse. Hand the org to a remaining member only when that member asks and Chris agrees | Claude's call |
@@ -397,14 +514,13 @@ A companion change that ships in the same rollout. *(Chris decided)*:
 **Flips.**
 - **Tests:**
   - realliance/sso `tests/forge/test_forge_signin.py::test_member_cannot_create_org` (`:49-53`) becomes `test_member_can_create_org`: a 201, after which the test deletes the org;
-  - a ci-dispatch gate test that an unlisted org's paid job holds `no-budget`;
-  - the forge-bot test in the table.
+  - the ci-dispatch and forge-bot tests in the two subsections.
 - **Docs:**
-  - `docs/forgejo.md`: the Owners paragraph and the org-creation rule (`:74-77`), plus the new removal step;
+  - `docs/forgejo.md`: the Owners paragraph and the org-creation rule (`:74-77`), the new removal step, and what `owner_needs_action` covers now;
   - the "orgs are code" comment in `forgejo-release.yaml`;
-  - `docs/ci.md` (unlisted orgs run on `tiny` only);
+  - `docs/ci.md`: unlisted orgs run on `tiny` only, and the new alert's row;
   - the `realliance-forge` `ci.yaml` comments and README;
-  - forge-bot's README Owners rows;
+  - the README of forge-bot and the README of ci-dispatch;
   - the SSO invites spec, "What a guest gets" (`2026-11-07-sso-member-invites-design.md:262`, which says guests can't create orgs).
 
 ## Carry to the 19 LTS
@@ -438,6 +554,9 @@ Anchors that upstream hasn't changed so far: `repo_permission.go`, `repo_access.
 - Whether a schedule run's `CommitSHA` is the commit that registered its schedule. The git read
   relies on it.
 - Whether a failed git read shows a run warning as well as the log line.
+- What today's forge-bot does with a rejected `forge-bot.yaml`, before the forge-bot deploy order
+  relies on it.
+- The `ops-ci` rotation runbook, and the threshold for `CIDispatchOrgListStale`.
 - Patch subjects, commit messages, `Upstream:` trailers, and the fork's README and WISHLIST rows.
 - The luma-homeops doc changes the Rollout lists, and a `docs/forgejo.md` section on job token
   permissions.
