@@ -52,7 +52,7 @@ The job that runs it needs `permissions: {contents: write}`: once the forge's de
 
 ### Fallback: the same push by hand (Forgejo Actions)
 
-The automatic token can push `pages` when the job holds `contents: write`, as below. The Task 10 drill proved it. Pass it through `GIT_CONFIG_*` env so it never appears in argv.
+The automatic token pushes `pages` today. With `contents: write` on the job, it keeps working after the flip to `restricted`. Pass it through `GIT_CONFIG_*` env so it never appears in argv.
 
 ```yaml
 name: pages

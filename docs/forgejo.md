@@ -319,6 +319,7 @@ This forge builds and publishes the Realliance website. Renovate re-pins galaxy 
 
 - Source: `git.realliance.net/realliance/realliance.net`, one of the five shared repos. GitHub holds an archived copy with a pointer.
 - Workflow: `.forgejo/workflows/ci.yaml`, run on the `general` runner. It builds with Deno and crane, with no Docker, and pushes as `realliance-ci`.
+- CI is two jobs. `build` runs on PRs and pushes; `publish` runs only on a push or tag, and only that job holds `SITE_REGISTRY_TOKEN`.
 - Image: `git.realliance.net/realliance/realliance.net`, tags `X.Y.Z` and `sha-<7>`. CI never moves a tag.
 - Pin: `cluster/realliance.net/home.yaml`, as `X.Y.Z@sha256:…`. `scripts/test_realliance_net_pin.py` guards the rest of the Deployment.
 - Argo app `realliance-net` (`cluster/realliance.net/`), serving `realliance.net` and `www`.
