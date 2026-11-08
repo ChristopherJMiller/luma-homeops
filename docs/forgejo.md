@@ -80,7 +80,7 @@ Realliance SSO decides everything; never grant access in Forgejo by hand.
   the SSO, they also change it in Forgejo (Settings → Account → Emails; no confirmation mail needed).
 - People without a last name are fine (SSO last name is optional).
 
-### Removing someone (two steps, plus a third for `realliance` members)
+### Removing someone (two steps, plus a third for `realliance` members and a fourth for Owners)
 
 forge-sync (periodic reconciliation) is deferred, so the SSO change alone is **not** enough: a
 person who can no longer sign in never triggers the sign-in sync, and their SSH keys and access
@@ -93,7 +93,9 @@ tokens keep working.
 
 3. If the person was a `realliance` member, rotate both `realliance-ci` tokens (see Rotating `realliance-ci`'s tokens under realliance.net). Any member can read them through a branch-push workflow, and a registry push with the site token deploys to galaxy.
 
-Reversing steps 1 and 2 restores everything (step 3 is not reversible). Until step 2 is done, access lingers — that is the known gap.
+4. If the person was an Owner, rotate the docs deploy token (see Docs site).
+
+Reversing steps 1 and 2 restores everything (steps 3 and 4 are not reversible). Until step 2 is done, access lingers — that is the known gap.
 `tests/forge/test_forge_access.py::test_offboarding_blocks_web_token_and_ssh_and_is_reversible`
 proves the procedure.
 
@@ -381,6 +383,17 @@ The registry copy of `2.3` has the same digest as Quay's. Quay no longer serves 
 5. Run the sso token tests (`tests/forge/test_forge_ci.py -k 'realliance_ci_tokens or site_registry_token_scope'`), then re-run that repo's latest CI job from the forge UI and check that it publishes.
 
 **Dependencies.** New pods cannot pull while Forgejo is down. A WAN-IP change breaks node pulls until the router's reflection rules follow (the inherited hairpin limit).
+
+## Docs site (docs.realliance.net)
+
+Off galaxy, on Cloudflare Workers static assets, so it serves while the forge is down. Source is `realliance/docs` (public; its checks `site / vale` and `site / build` must pass). Deploy is `realliance-ops/docs-deploy` (Owners only).
+
+- **Pipeline:** `deploy.yml` runs hourly at `:17`, or on **Run workflow**. It runs check, build, deploy. It deploys only when docs `main` differs from what `https://docs.realliance.net/build.json` serves, or on a dispatch.
+- **Worker:** `realliance-docs`, assets only, no route. The name is `cloudflare_workers_custom_domain.docs` in `cloudflare/dns/workers.tf`, applied through `cloudflare/dns/tf.sh` with the workers token.
+- **Laptop fallback and rollback hold:** the `docs-deploy` README, sections Laptop fallback and Holding a rollback. Turn off `deploy.yml` first.
+- **Token:** repo secret `CLOUDFLARE_DEPLOY_TOKEN` on `docs-deploy`; the account id is the variable `CLOUDFLARE_ACCOUNT_ID`. Rotate it at expiry and when an Owner changes (step 4 of Removing someone).
+- **F1:** Forgejo 15 sends every repo and org secret to every job, so a step that runs docs code could read the token. Accepted until the fork narrows it.
+- **Merging to `docs-deploy` `main`:** it requires signed commits with pushes off, and Forgejo signs a merge only for a merger whose forge account has a GPG key. An Owner with a key clicks merge; `forgejo-admin` has none and can't merge there through the API.
 
 ## Fork image
 

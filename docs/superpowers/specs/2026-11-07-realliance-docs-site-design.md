@@ -419,3 +419,7 @@ Phase 2 runs in this order; steps 1 to 3 are Chris's:
   whether repository administrators bypass `main` protection, and the setting that stops them; check
   names and protected file patterns, per the shared-actions spec.
 - **The CSP** that hydration and the theme script need.
+
+## Known limits (accepted)
+
+- The CI deploy token is broader than the deploy needs (Chris, 2026-11-08: broad on purpose for future use, accepted). Acceptance 7, proving it cannot attach routes or custom domains, was not run, so a compromised `docs-deploy` run may be able to attach a Worker to host names on the account's zones. Narrowing it to Workers Editor on `realliance-docs` with no zone permissions closes this.

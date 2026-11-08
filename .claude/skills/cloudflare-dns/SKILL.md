@@ -35,7 +35,7 @@ nix-shell shell.nix                 # terraform + az (pinned nixpkgs — the hos
 ./cloudflare/dns/tf.sh plan         # must be empty afterwards
 ```
 
-`tf.sh` exports `CLOUDFLARE_API_TOKEN` from `cluster/dns/cloudflare-api-token.secret.yaml` (git-crypt; the same token cloudflareddns and cert-manager use). It never prints the token. Don't echo it either (S9).
+`tf.sh` exports two tokens: the cluster DNS token from `cluster/dns/cloudflare-api-token.secret.yaml` (git-crypt; the same one cloudflareddns and cert-manager use) for the default provider, and the workers token from `cloudflare/dns/workers-api-token.secret.conf` for the `cloudflare.workers` alias. It refuses to run without the workers token file. It never prints either token. Don't echo it either (S9).
 
 **State backend auth** — if `init`/`plan` fails with `retrieving Storage Account … AADSTS…` the az session is stale:
 
