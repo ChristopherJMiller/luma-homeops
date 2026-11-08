@@ -70,7 +70,7 @@ repos:
         language: system
         entry: scripts/test-forge-bot-alerts.sh
         pass_filenames: false
-        files: ^(cluster/forge-bot/(prometheusrule|alerts_test|statefulset)\.yaml|scripts/(test|sync)-forge-bot-alerts\.sh)$
+        files: ^(cluster/forge-bot/(prometheusrule|prometheusrule-site|alerts_test|alerts_site_test|statefulset)\.yaml|scripts/(test|sync)-forge-bot-alerts\.sh)$
       # forge-bot holds the Forgejo site-admin token and the SSO manage-users secret,
       # and the repo extends :automergeDigest. No packageRule that could match its
       # image may automerge; the dedicated rule says why (Task 16 review C1).

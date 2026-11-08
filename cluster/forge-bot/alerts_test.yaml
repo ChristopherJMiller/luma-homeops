@@ -251,10 +251,42 @@ tests:
         exp_alerts:
           - exp_labels: {severity: warning, check: teams}
             exp_annotations:
-              summary: "The inventory's teams is invalid; the teams job or the override is skipped (docs/forgejo.md#forge-bot)"
+              summary: "The inventory's teams is invalid: for teams the teams job is skipped; for bot_config forge-bot drops the override, and without a valid owner_orgs every job stops (docs/forgejo.md#forge-bot)"
       - eval_time: 11m
         alertname: ForgeBotInventoryUntrusted
         exp_alerts: []
+  # forge-bot.yaml without a valid owner_orgs: every job stops
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_inventory_ok{check="bot_config"}'
+        values: '0x20'
+      - series: 'forge_bot_inventory_ok{check="signature"}'
+        values: '1x20'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: ForgeBotInventoryInvalid
+        exp_alerts: []
+      - eval_time: 11m
+        alertname: ForgeBotInventoryInvalid
+        exp_alerts:
+          - exp_labels: {severity: warning, check: bot_config}
+            exp_annotations:
+              summary: "The inventory's bot_config is invalid: for teams the teams job is skipped; for bot_config forge-bot drops the override, and without a valid owner_orgs every job stops (docs/forgejo.md#forge-bot)"
+  # an untrusted head: no owner_orgs, every job stops
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_inventory_ok{check="signature"}'
+        values: '0x20'
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: ForgeBotInventoryUntrusted
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: ForgeBotInventoryUntrusted
+        exp_alerts:
+          - exp_labels: {severity: warning, check: signature}
+            exp_annotations:
+              summary: "The inventory head is not signed by an Owner, so forge-bot can't read owner_orgs and every job stops (docs/forgejo.md#forge-bot)"
   # final review M3: account-level skips persisting three cycles alert
   - interval: 1m
     input_series:

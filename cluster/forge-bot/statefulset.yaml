@@ -56,7 +56,7 @@ spec:
           # manifest, amd64. A new image never deploys itself: .renovaterc.json never automerges
           # this image (a moved sha- tag is a rebuild or a tamper; its PR is the alarm). Re-pin by
           # hand after review, and re-run scripts/sync-forge-bot-alerts.sh for the same commit.
-          image: git.realliance.net/realliance-ops/forge-bot:sha-9be4857@sha256:6b42aa63fc579f46e79df488a29846ef9b1c7defcd0f425fa40d5e6745218827
+          image: git.realliance.net/realliance-ops/forge-bot:sha-47bc8f3@sha256:c5404740f723e0f04f5fbf030c314292145a21238c12936e50481d9c9064eabe
           args:
             - --config=/etc/forge-bot/config/config.yaml
           env:

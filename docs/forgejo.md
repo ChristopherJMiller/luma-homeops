@@ -126,6 +126,7 @@ forge-bot reconciles Forgejo with the SSO every 5 min ± 30 s: login (`access`),
   `nix develop --command scripts/sync-forge-bot-alerts.sh` (the PrometheusRule is a copy of the
   release's `internal/metrics/alerts.yaml`); the `forge-bot-alerts` pre-commit hook runs promtool
   lint and forge-bot's own alert tests and fails until the copy matches the pinned commit.
+- **Rollback floor (v0.2.0):** once org creation is open, never roll forge-bot below v0.2.0 (v0.1.0 reads every org's Owners); close org creation first. v0.2.0 takes Owners only from `owner_orgs` in `forge-bot.yaml`, so any failed read of it stops every job: `ForgeBotForgejoUnreadable` (site-owned, `cluster/forge-bot/prometheusrule-site.yaml`) pages after 20 min, while `ForgeBotInventoryInvalid` stays a warning.
 - **Logs:** stdout is the audit trail, with old and new emails and names. It goes only to the
   private sinks (router syslog, Azure Log Analytics). Read it in a terminal; don't paste it.
 - **Network:** default-deny both ways. In: Prometheus's namespace on :8080. Out: DNS, the Forgejo

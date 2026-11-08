@@ -76,3 +76,23 @@ echo "in sync with forge-bot $full"
 cp "$dir/alerts_test.yaml" "$tmp/alerts_test.yaml"
 "${promtool[@]}" check rules --lint=all --lint-fatal "$tmp/alerts.yaml"
 (cd "$tmp" && "${promtool[@]}" test rules alerts_test.yaml)
+
+# The site-owned rules (prometheusrule-site.yaml) have no upstream copy: lint and test them alone.
+python3 - "$dir" "$tmp" <<'PY'
+import sys
+from pathlib import Path
+
+import yaml
+
+d, tmp = Path(sys.argv[1]), Path(sys.argv[2])
+docs = [x for x in yaml.safe_load_all((d / "prometheusrule-site.yaml").read_text()) if x is not None]
+if len(docs) != 1 or docs[0].get("kind") != "PrometheusRule":
+    sys.exit("FAIL: prometheusrule-site.yaml must hold exactly one PrometheusRule")
+labels = docs[0]["metadata"].get("labels", {})
+if labels.get("release") != "prometheus":
+    sys.exit("FAIL: prometheusrule-site.yaml lacks release=prometheus")
+(tmp / "alerts_site.yaml").write_text(yaml.safe_dump(docs[0]["spec"], sort_keys=False))
+PY
+cp "$dir/alerts_site_test.yaml" "$tmp/alerts_site_test.yaml"
+"${promtool[@]}" check rules --lint=all --lint-fatal "$tmp/alerts_site.yaml"
+(cd "$tmp" && "${promtool[@]}" test rules alerts_site_test.yaml)

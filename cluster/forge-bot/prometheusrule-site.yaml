@@ -1,0 +1,27 @@
+---
+# Site-owned forge-bot alerts. prometheusrule.yaml is a generated copy of the pinned release's
+# rules; this file is not, so the hook's equality check never sees it. Tested by
+# alerts_site_test.yaml (scripts/test-forge-bot-alerts.sh).
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: forge-bot-alerts-site
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+    release: prometheus
+spec:
+  groups:
+    - name: forge-bot-site
+      interval: 60s
+      rules:
+        # forge-bot v0.2.0 reads Owners only from the orgs in owner_orgs. A failed read of any
+        # kind (untrusted head, bad or missing owner_orgs, a listed org without an Owners team)
+        # stops every job, so this is the one alert that covers all of them.
+        - alert: ForgeBotForgejoUnreadable
+          expr: forge_bot_read_ok{source="forgejo"} == 0
+          for: 20m
+          labels:
+            severity: critical
+          annotations:
+            summary: "forge-bot cannot read Forgejo and the inventory completely; no job runs (docs/forgejo.md#forge-bot)"

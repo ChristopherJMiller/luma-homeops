@@ -1,0 +1,29 @@
+---
+rule_files:
+  - alerts_site.yaml
+evaluation_interval: 1m
+tests:
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_read_ok{source="forgejo"}'
+        values: '0x30'
+      - series: 'forge_bot_read_ok{source="sso"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 19m
+        alertname: ForgeBotForgejoUnreadable
+        exp_alerts: []
+      - eval_time: 21m
+        alertname: ForgeBotForgejoUnreadable
+        exp_alerts:
+          - exp_labels: {severity: critical, source: forgejo}
+            exp_annotations:
+              summary: "forge-bot cannot read Forgejo and the inventory completely; no job runs (docs/forgejo.md#forge-bot)"
+  - interval: 1m
+    input_series:
+      - series: 'forge_bot_read_ok{source="forgejo"}'
+        values: '1x10 0x5 1x20'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: ForgeBotForgejoUnreadable
+        exp_alerts: []
