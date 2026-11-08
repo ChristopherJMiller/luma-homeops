@@ -30,6 +30,8 @@ spec:
             severity: warning
           annotations:
             summary: "ci-dispatch has not completed a loop with every read succeeding for 5 minutes (docs/ci.md)"
+            description: "The dispatcher has not finished a clean loop in over 5 minutes. Check that pod ci-dispatch-0 runs, read its log, and look at ci_dispatch_errors_total by api."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
         # Two rules, one name; the reason label tells them apart (promtool --lint-fatal needs it).
         - alert: CIDispatchLaunchFailing
           expr: max(ci_dispatch_holds{reason="launch-failing"}) > 0
@@ -38,6 +40,8 @@ spec:
             reason: held
           annotations:
             summary: "ci-dispatch holds a job as launch-failing: three launches did not produce a runner (docs/ci.md)"
+            description: "A job is held as launch-failing after three launches produced no runner. Check events in ci-tiny and the netpol-gate log, then have the member rerun the job."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
         - alert: CIDispatchLaunchFailing
           expr: sum(increase(ci_dispatch_launches_total{outcome="error"}[15m])) > 0
           for: 15m
@@ -46,6 +50,8 @@ spec:
             reason: errors
           annotations:
             summary: "ci-dispatch launches keep failing with errors (docs/ci.md)"
+            description: "Launch steps have failed for 15 minutes. The launch failed lines in the ci-dispatch log name the failing step."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
         - alert: CIDispatchConfigUntrusted
           expr: ci_dispatch_config_verified == 0
           for: 15m
@@ -53,6 +59,8 @@ spec:
             severity: warning
           annotations:
             summary: "ci-dispatch cannot verify the Owner-signed limits (ci.yaml): it runs on the last verified copy or the code defaults (docs/ci.md)"
+            description: "The Owner-signed ci.yaml has not verified for 15 minutes, so the dispatcher runs on the last verified copy or code defaults. Check the head of realliance-ops/forge main and its signature."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
         # The ledger keeps a copy of the last verified ci.yaml, proven again at every start. The usual
         # cause of a failed proof is honest: its signer is no longer in the keyring (a rotated key) or
         # the key expired. The rare one is a corrupt or tampered copy. The counter only grows within a
@@ -65,6 +73,7 @@ spec:
             severity: warning
           annotations:
             summary: "ci-dispatch stored config rejected: the copy of ci.yaml in its ledger failed its proof at start: usually a signer no longer in the keyring (a rotated or expired key), rarely corruption or tampering (docs/ci.md)"
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#owner-signing-keys"
             description: "The counter stays above zero until the pod restarts. Once ci_dispatch_config_verified is 1, delete pod ci-dispatch-0 to clear it. With no key rotated or expired, treat it as tampering (docs/ci.md)."
         # Findings never change which limits apply; they ask an Owner to look. owner-name-stale: the
         # name now resolves to another account. owner-name-missing: no account has the name.
@@ -82,6 +91,8 @@ spec:
             severity: warning
           annotations:
             summary: "ci-dispatch config findings (the kind label names it): an owner name in ci.yaml no longer matches its id, the name lookups failed, or a paid class is on but no hourly cap or paid concurrency lets it launch (docs/ci.md)"
+            description: "A config finding of kind {{ $labels.kind }} has stood for 30 minutes. Read the config finding log line, which names the owner or class and, in detail, what is missing."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
         # undone counts launches rolled back before they ran: a job Forgejo held (its runner sat idle
         # at the 3 min pickup timeout) and crash leftovers at start. One held job's back-off (1, 2, 5,
         # 10 and 10 min, then 60 min after the sixth undo) allows at most 6 undos in any hour, which
@@ -97,6 +108,8 @@ spec:
             severity: warning
           annotations:
             summary: "ci-dispatch undid more than 7 tiny launches an hour for an hour: jobs Forgejo holds, or crash leftovers, keep taking the launch slot (docs/ci.md)"
+            description: "More than 7 tiny launches an hour were undone, for an hour. Look for held rows in the jobs table: Forgejo is holding jobs and they keep taking the launch slot."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
         # Phase 1's expression; `critical` since phase 2, when kind="group" is an Azure container group
         # that bills until it is gone. A `tiny` orphan pod still dies at its own deadline.
         - alert: CIDispatchOrphanCompute
@@ -106,6 +119,8 @@ spec:
             severity: critical
           annotations:
             summary: "ci-dispatch sees compute it has no launch for, for 15 minutes: a ci-tiny Job or runner, or a container group in rg-realliance-ci; the reaper should have removed it (docs/ci.md)"
+            description: "Compute of kind {{ $labels.kind }} exists with no launch behind it. Check ci_dispatch_orphans and the ci-tiny jobs, or the container groups in rg-realliance-ci, which bill until deleted."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
         - alert: CITinyQuotaFull
           expr: kube_resourcequota{namespace="ci-tiny",resource="pods",type="used"} >= ignoring(type) kube_resourcequota{namespace="ci-tiny",resource="pods",type="hard"}
           for: 30m
@@ -113,6 +128,8 @@ spec:
             severity: warning
           annotations:
             summary: "ci-tiny has used all 3 pods of its quota for 30 minutes; jobs are waiting for a free slot (docs/ci.md)"
+            description: "The ci-tiny namespace has used its whole pod quota for 30 minutes, so jobs wait for a slot. Run kubectl -n ci-tiny get pods and look for leftovers."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
         # v0.4.0 (org_defaults). Two rules, one name; `reason` tells them apart. The dispatcher
         # rereads the org list with each limits load and every 10 min, so the age reads under about
         # 660 s. A failed read keeps the last good list; past an hour old, or with none, every owner
@@ -127,6 +144,8 @@ spec:
             reason: stale
           annotations:
             summary: "ci-dispatch's organisation list is over an hour old, so every owner without an owners: entry gets org_defaults, with no paid classes (docs/ci.md)"
+            description: "The organisation list is over an hour old, so owners without an owners entry get org_defaults and no paid classes. Check ci_dispatch_errors_total for api forgejo and that the token has read:admin."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
         - alert: CIDispatchOrgListStale
           expr: absent(ci_dispatch_org_list_age_seconds)
           for: 30m
@@ -135,6 +154,8 @@ spec:
             reason: absent
           annotations:
             summary: "ci-dispatch has no organisation list, so every owner without an owners: entry gets org_defaults (docs/ci.md)"
+            description: "The dispatcher has had no organisation list for 30 minutes. Check the log for op orgs lines and the Forgejo token scope."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
     # Phase 2: the paid classes small and medium on Azure Container Instances
     # (docs/superpowers/plans/2026-11-05-runner-classes-phase-2.md, Task 18).
     - name: ci-dispatch-paid
@@ -152,6 +173,8 @@ spec:
             level: "80"
           annotations:
             summary: "ci-dispatch's paid spend this period, used plus reserved, is at 80 % of the $80 global cap ($64) (docs/ci.md)"
+            description: "Paid spend, used plus reserved, is at 80 % of the $80 global cap. Check the period's spend and whether it looks right; the gate stops launches at the cap by itself."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#reading-paid-spend"
         - alert: CIDispatchSpendHigh
           expr: sum(ci_dispatch_period_usd{kind=~"used|reserved"}) / max(ci_dispatch_period_usd{kind="cap"} > 0) >= 0.95
           for: 5m
@@ -160,6 +183,8 @@ spec:
             level: "95"
           annotations:
             summary: "ci-dispatch's paid spend this period, used plus reserved, is at 95 % of the $80 global cap ($76): new paid launches stop at the cap (docs/ci.md)"
+            description: "Paid spend, used plus reserved, is at 95 % of the $80 global cap, so new paid launches stop soon. Check the period's spend and pause the paid classes if it looks wrong."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#reading-paid-spend"
         # The gauge comes only from a single-group GET or a PUT answered 403 (and the list's lock
         # probe, itself a single-group GET), never from an empty list: under the lock ACI lists 200
         # with no groups. Only Chris's terraform apply restores the role assignment.
@@ -170,6 +195,8 @@ spec:
             severity: critical
           annotations:
             summary: "Azure has locked ci-dispatch out: the sweeper or the budget removed its role assignment, so paid classes wait not-ready until Chris restores it with a terraform apply (docs/ci.md)"
+            description: "Azure has locked ci-dispatch out, so paid classes wait not-ready. Only a terraform apply by Chris restores the role assignment; start with the sweeper and budget trip steps."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#after-a-trip-the-azure-lock"
         # Two rules, one name; `reason` tells them apart. The timestamp is the end of the sweeper's newest
         # finished run (a run still going never moves it), read by the dispatcher's watcher every 5 min.
         # The sweeper runs every 10 min, so 30 min is three missed runs.
@@ -181,6 +208,8 @@ spec:
             reason: stale
           annotations:
             summary: "The Azure sweeper ci-sweeper has no finished run in 30 minutes: it is disabled or hung, so nothing but the budget bounds Azure compute (docs/ci.md)"
+            description: "The Azure sweeper has no finished run in 30 minutes. Check its workflow runs: with it off or hung, only the budget bounds Azure compute, so consider pausing small and medium."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#after-a-trip-the-azure-lock"
         # The watcher cannot read the run history, or has not yet, or the dispatcher is gone (a failed
         # scrape marks the series stale at once). 30 min rides out a pod move or an RBD detach (6 min)
         # shorter than that; CIDispatchStale covers a missing dispatcher. A longer gap pages 24/7, the
@@ -193,6 +222,8 @@ spec:
             reason: absent
           annotations:
             summary: "ci-dispatch has not reported the Azure sweeper's last run for 30 minutes: the dispatcher cannot read the sweeper's run history, so nobody watches the sweeper (docs/ci.md)"
+            description: "The dispatcher cannot read the sweeper's run history, or has stopped. Check CIDispatchStale first; expect this during a break-glass or node loss."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#after-a-trip-the-azure-lock"
         # The day ratio (D-2, from 06:00 UTC, only when Azure's day is $0.50 or more) and the period
         # ratio (day 3 of the next month) are set once and held, so no `for`.
         - alert: CIDispatchDrift
@@ -201,6 +232,8 @@ spec:
             severity: warning
           annotations:
             summary: "ci-dispatch's paid charges and Azure's cost differ by over 10 % for a closed day or period (docs/ci.md)"
+            description: "Ledger charges and Azure cost differ by over 10 % for a closed day or period. Run the month-end drift check and silence the alert once read."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#the-month-end-drift-check"
         # Per class, in dry-run too (F24): phase 2 Task 19 rolls back on it. Not ready means a lock, a
         # failed Azure read, prices over price_max_age, the sweeper's last Succeeded run over 30 min
         # old (a sweeper failing every run is no backstop), or no fresh egress pass in 5 min (E17).
@@ -213,6 +246,8 @@ spec:
             severity: warning
           annotations:
             summary: "A paid class in dry-run or on has not been ready for 30 minutes (the class label names it): Azure locked or failing, prices over 7 days old, no succeeded sweeper run in 30 minutes, or a container group whose egress reads keep failing (docs/ci.md)"
+            description: "Paid class {{ $labels.class }} has not been ready for 30 minutes. Check the azure and prices log lines, ci_dispatch_azure_locked, price age, and the last sweeper run."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
         # E17: the dispatcher deleted its own group at the 10 GB cap. Fires for the hour after.
         - alert: CIDispatchEgressCapHit
           expr: increase(ci_dispatch_reaped_total{reason="egress-cap"}[1h]) > 0
@@ -220,6 +255,8 @@ spec:
             severity: warning
           annotations:
             summary: "ci-dispatch deleted a container group that sent 10 GB to the internet, the per-job egress cap, in the last hour; its owner is charged the bytes (docs/ci.md)"
+            description: "The dispatcher deleted a container group at the 10 GB per-job egress cap in the last hour. The reaped log line's key names the job; ask whether it meant to send that much."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#the-egress-cap"
         # The token-failure alert (phase 2 Task 7 review). An expired or rotated client secret answers
         # AADSTS (7000222 when expired), which the client reads as ErrRejected, never ErrLocked, so
         # CIDispatchLocked stays quiet while every Azure call fails. A lock fails them too, and is
@@ -231,3 +268,5 @@ spec:
             severity: warning
           annotations:
             summary: "ci-dispatch's Azure calls keep failing with no lock: usually an expired or rotated client secret (an AADSTS code in the log; rotate per docs/ci.md), else an Azure outage; paid classes wait not-ready (docs/ci.md)"
+            description: "Azure calls have failed for 30 minutes with no lock. Look for an AADSTS code in the log, which means an expired or rotated client secret; otherwise wait out an Azure outage."
+            runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#the-azure-credential-ci_dispatch_azure_"
