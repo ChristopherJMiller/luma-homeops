@@ -68,7 +68,8 @@ Each of these makes the design a failure, even if it works:
   takes one `flock`, checks each repo's head against one GnuPG home that trusts the operators and
   GitHub's web-flow key, and runs `tofu apply` for `realm/` and `sso-people`, with state on the
   Realliance B2 account. The `enrol` workflow (`user_created` → `invite-user`) mails a 72 h link to
-  verify the email and set a password.
+  verify the email and set a password. No staging SSO box exists: the production box is the only
+  place the ledger path can run.
 - **The `sso-people` schema.** An entry has `username` (permanent: lowercase letters, digits,
   dashes), `active`, `groups`, optional `mfa` (`webauthn` or `totp`), and `bootstrap` (`email`,
   `first_name`, optional `last_name`), read only at creation. Users carry `prevent_destroy`,
@@ -107,7 +108,9 @@ Each of these makes the design a failure, even if it works:
 invitee emails in private git history, with an erasure procedure; a small Go service on galaxy,
 separate from forge-bot, so nobody can create or redeem a link while galaxy is down; a leaver's
 pending links die at redemption while their guests stay, flagged; and operator-owned code on the
-box enforces every rule.
+box enforces every rule. After the builder check: every guest must pick an MFA method, the box
+check ships check-only first, its state has no backup, a refused head freezes the ledger, and the
+storage cap has a fallback.
 
 ## Design
 
@@ -153,7 +156,8 @@ any level.
 | `links[].token_sha256` | service. The token never reaches git, and a hash can't redeem | no |
 | `links[].state` | `pending`, then `redeemed` or `revoked`. A pending link past `expires` counts as expired; nothing writes that | by transition |
 | `links[].redeemed`, `links[].revoked` | service, with the transition | no |
-| `links[].guest`: `username`, `mfa`, `bootstrap{email, first_name, last_name?}` | invitee, at redemption | no |
+| `links[].guest`: `username`, `bootstrap{email, first_name, last_name?}` | invitee, at redemption | no |
+| `links[].guest.mfa` | invitee, at redemption. Required: `webauthn` (the form's default) or `totp`, never empty or `none`, matching members' first sign-in *(Claude's call)* | no |
 | `links[].guest.active` | `true` at redemption | by transition |
 
 Revoked and expired links stay as history; only an operator's erasure rewrite removes anything.
@@ -181,14 +185,29 @@ and the operators' keys, so web-flow can't sign for the ledger.
 | A new guest: `inviter` is an `active` person in `people.yaml` (never a guest) with quota left, and the link was pending and unexpired by the box's clock | refuse the entry |
 | A new guest over a rate cap, counted by the box's clock | defer the entry to a later run |
 
-- **Last good.** A refused head never blocks members: the box applies `people.yaml` with the last
-  good ledger, sets a failure status and logs why. A fresh box waits for its first valid ledger
-  before its first people apply, since an empty guest set would trip `prevent_destroy`.
-- **Existing guests** already in the people layer's state are never re-checked, so a rebuilt box
-  neither defers nor refuses them.
-- **Clock.** The box counts caps and expiry from when it first saw each link and redemption, never
-  from the service's timestamps, with a short expiry grace for apply latency. Refusals stay in the
-  box's state until an operator clears one with a signed ledger change.
+- **Modes** *(Claude's call)*. A host setting, `ledger_mode`, reads `check` or `apply`, and only an
+  operator-signed `realliance/sso` head changes it. In `check` the box fetches, verifies and
+  validates the ledger and logs what it would apply, ids only, but hands the people layer no
+  guests. With no staging box, the check ships in `check` and runs live there for at least 3 days,
+  a week if possible, before an operator switches it to `apply`.
+- **Members first.** No failure in the ledger path ever blocks the `people.yaml` apply. In `check`, a
+  crash, a timeout or a failed fetch logs and moves on. In `apply`, a refused head falls back to
+  the last good ledger. The box never drops a guest already in the people layer's state from the
+  set it hands that layer, so nothing trips `prevent_destroy`, and the box never re-checks such a
+  guest. Tests prove both modes.
+- **Statuses.** The box sets `sso/apply` on each ledger head it checks: success when it applied the
+  head, or in `check` would have, and failure with the reason when it refused it.
+- **A refused head freezes the ledger.** Everything pushed after it waits, including any guest
+  deactivation. That's intended: the remedy is an operator-signed head that fixes or reverts the bad
+  commit. The service alerts after 1 h, and a guest who must go at once gets the emergency override
+  (Promotion and offboarding).
+- **Clock and state** *(Claude's call)*. The box counts caps and expiry from when it first saw each
+  link and redemption, never from the service's timestamps, with a short expiry grace for apply
+  latency. First-seen times, refusals and the last good commit live in `/var/lib/sso-config-apply`,
+  with no backup. A rebuild loses them: the cap and expiry clocks restart, and the box re-validates
+  every entry not yet in state from the ledger, taking the newest commit whose history passes as
+  last good. That means a rebuild can let at most one extra day's cap through. Otherwise a refusal
+  stays until an operator clears it with a signed ledger change.
 
 **Quotas** *(Claude's call)*. The box takes each member's tier from `people.yaml`; the service shows
 the same tier from token roles.
@@ -215,10 +234,11 @@ only, metrics. It keeps no database: the ledger is its state.
   scope. Guests hold neither role, so the client's default-deny flow refuses them. Members find the
   service under "Applications" in their account console.
 - **Pages.** A member's page creates, lists and revokes links, and deactivates their guests. The link
-  page holds the form. A status page reads Keycloak, and after 20 min with no account it tells the
-  invitee to contact the member who invited them.
+  page holds the form, whose MFA choice offers `webauthn`, preselected, or `totp`, and nothing
+  else. A status page reads Keycloak, and after 20 min with no account it tells the invitee to
+  contact the member who invited them.
 - **Writes.** Git over SSH only: fetch, commit signed with the ledger key, push fast-forward, retry
-  on a race. No GitHub API token.
+  on a race. Its only GitHub API access is a token that reads commit statuses on `sso-invites`.
 - **Reads.** A master-realm service account `invites` with `view-users` and `query-users` on
   `realliance`, nothing else: username and email availability, and whether the `inviter` account is
   still enabled. That credential can read every profile, as forge-bot's can, so the transport guard
@@ -226,8 +246,10 @@ only, metrics. It keeps no database: the ledger is its state.
 - **Abuse.** Tokens are 256-bit and single use. A per-IP rate limit at Traefik guards the form. A
   leaked link yields one guest, and each redemption sends one Keycloak mail.
 - **Alerts.** The box has no metrics exporter, so the service watches the outcome end to end: a
-  redemption with no Keycloak user after 20 min, failing ledger pushes, each guest deactivation (the
-  forge and Pages steps follow by hand), and guests whose `inviter` is no longer active (orphans).
+  ledger head that the box refused, or that still lacks a success status, more than 1 h after its
+  push; a redemption with no Keycloak user after 20 min; failing ledger pushes; each guest
+  deactivation (the forge and Pages steps follow by hand); and guests whose `inviter` is no longer
+  active (orphans).
 
 ### What a guest gets
 
@@ -275,7 +297,10 @@ grants `/apps/forgejo`:
    running. One Owner-signed `ci.yaml` line then turns all guest CI off. Side effect: forge users
    outside `/realliance` drop to the guest tier unless `owners:` lists them.
 2. **A storage cap:** a Forgejo quota for guests across git, LFS and packages, about 2 GiB in all.
-   Check on Forgejo 15 that it can apply from account creation; if not, report back before building.
+   Best, Forgejo 15 applies it from account creation. If it can't, forge-bot puts each new guest in
+   a guest quota group through Forgejo's `/api/v1/admin` API right after their first sign-in, as
+   one more guarded write. If Forgejo 15 can't do that either, guests ship without a quota, with an
+   alert on the size of guest-owned repos and a runbook step, and the gap goes under Known limits.
 3. **Pages at deactivation:** deactivating a guest also deletes and freezes
    `<guest>.realliance.page` (`docs/pages.md`, Takedown), by hand for now, prompted by the
    deactivation alert.
@@ -295,6 +320,13 @@ grants `/apps/forgejo`:
   forge-bot's `access` job prohibits login once it runs in `apply`; until then, Prohibit login by
   hand (`docs/forgejo.md`). More than 3 at once trips forge-bot's breaker: set `allow_bulk_until`.
   Then guardrail 3 for Pages.
+- **Emergency override.** An operator can deactivate a guest whatever the ledger says, even behind
+  a refused head. They merge a `people.yaml` entry for the guest with `active: false`,
+  `groups: [/guests]` and no `bootstrap`, the shape of a promotion. `people.yaml` wins over the
+  ledger and always applies, so the account stays off from the next apply on. For effect
+  within seconds, a master-realm break-glass account also disables the user in the Keycloak
+  console, and the merged entry keeps the account off. The forge and Pages steps follow as for any
+  guest.
 - **A member leaves.** `active: false` in `people.yaml`. The service and the box both check the
   `inviter`, so that member's pending links die at redemption. Their guests stay, and the orphan
   alert lists them for an operator to keep or deactivate.
@@ -314,6 +346,15 @@ a link token, and that includes Traefik's access log. Erasure on request:
 
 If that proves too weak, encrypting `bootstrap.email` to a key on the box costs about a day.
 
+## Known limits (accepted)
+
+- **A rebuild resets the box's clocks.** With no backup of `/var/lib/sso-config-apply`, a rebuilt
+  box can let at most one extra day's cap through, and open links' expiry clocks restart.
+- **A refused head freezes the ledger,** each deactivation included, until an operator signs a new
+  head. The 1 h alert and the emergency override cover it.
+- **No guest storage quota,** but only if Forgejo 15 allows neither path in guardrail 2. The size
+  alert and the runbook step then stand in.
+
 ## Operator steps
 
 1. **Chris** creates the Owners-only GitHub org and the private repo `sso-invites`, set up as in "The
@@ -322,14 +363,21 @@ If that proves too weak, encrypting `bootstrap.email` to a key on the box costs 
    `sso-secrets`; a SealedSecret in `cluster/sso-invites/` carries the service's.
 3. The ledger signing key: OpenPGP, no passphrase, with an expiry. The public half joins the box's
    ledger keyring in `realliance/sso`; the private half goes to `sso-secrets` and a SealedSecret.
-4. Optionally, a fine-grained token limited to commit statuses on `sso-invites`, for the box.
-5. The Owner-signed `ci.yaml` change for the guest tier, and answers to the open points.
+4. Two fine-grained tokens on `sso-invites`, limited to commit statuses: write for the box, read for
+   the service.
+5. **Chris** signs the `realliance/sso` heads that carry the host-role changes, which roll out the
+   existing way through `ansible-pull`, and after the check-only run, the head that sets
+   `ledger_mode: apply`.
+6. The Owner-signed `ci.yaml` change for the guest tier, and answers to the open points.
 
 **Build order.** First `/guests` in `realm/`, `guests.tf` in `sso-people`, and the ledger check with
-its tests, proven by an operator-signed hand entry that makes a guest end to end. Then the `invites`
-client and service account, then the service on galaxy. Then the guest CI tier and storage cap, and
-only after them `/apps/forgejo` in `guests.tf`. Acceptance tests (`realliance/sso` `tests/invites/`)
-and runbooks come last.
+its tests, shipped in `check` mode. It runs live for at least 3 days, a week if possible, on
+operator-signed test entries, good and bad, with the expected verdicts in its log and no change to
+`people.yaml` applies. Only then does an operator switch it to `apply`, and an operator-signed hand
+entry proves a guest end to end. The `invites` client, service account and service can take shape
+during that window. Then the guest CI tier and storage cap, or the cap's fallback, and only after
+them `/apps/forgejo` in `guests.tf`. Acceptance tests (`realliance/sso` `tests/invites/`) and
+runbooks come last.
 
 ## Success looks like
 
@@ -338,14 +386,19 @@ and runbooks come last.
    included.
 2. A one-for-life member can't make a second link until they revoke the first; a member's sixth link
    in 7 days fails; an eleventh redemption in 24 h waits for the next day.
-3. Holding the ledger key, a commit that adds `groups`, a commit over quota, a web-flow commit and a
-   force-push each fail at the box, while a `people.yaml` change in the same window applies.
-4. A deactivated member's pending link fails at redemption, and the orphan alert names their guests.
-5. A promotion PR without `bootstrap` keeps the Keycloak user id and changes only the groups.
-6. A guest's `small` job holds `no-budget`, `tiny` stops at the guest limit, and a deactivated
+3. Holding the ledger key, a commit that adds `groups`, a redemption without `mfa`, a commit over
+   quota, a web-flow commit and a force-push each fail at the box, while a `people.yaml` change in
+   the same window applies.
+4. In `check` mode, a ledger check that crashes, times out or can't fetch leaves the `people.yaml`
+   apply unchanged, and the same holds in `apply` mode. An explicit test proves each.
+5. A head refused for over 1 h raises the alert, and the emergency override disables a guest while
+   that head stays refused.
+6. A deactivated member's pending link fails at redemption, and the orphan alert names their guests.
+7. A promotion PR without `bootstrap` keeps the Keycloak user id and changes only the groups.
+8. A guest's `small` job holds `no-budget`, `tiny` stops at the guest limit, and a deactivated
    guest's scheduled job never launches.
-7. With galaxy off, sign-in works, and an operator-signed hand entry still creates a guest.
-8. The erasure procedure runs on a throwaway guest.
+9. With galaxy off, sign-in works, and an operator-signed hand entry still creates a guest.
+10. The erasure procedure runs on a throwaway guest.
 
 ## Left to the builder
 
@@ -358,7 +411,8 @@ and runbooks come last.
   link.
 - The reserved-name list (bots, Forgejo orgs, `www`, hidden orgs), kept in private `sso-people`.
 - Username length, the expiry grace, and a size limit on the ledger.
-- The mechanisms behind the guest CI tier and the storage cap.
+- The mechanism behind the guest CI tier, and which storage-cap path Forgejo 15 allows.
+- Where `ledger_mode` sits in the host config, and the test entries for the check-only run.
 - Where the service's code lives. `realliance-ops/sso-invites` on the forge matches forge-bot.
 - Updates to `WISHLIST.md`, `docs/forgejo.md` and the SSO runbook.
 
