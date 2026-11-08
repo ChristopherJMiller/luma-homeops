@@ -1,8 +1,8 @@
 ---
 # promtool tests for prometheusrule.yaml, run by scripts/test-ci-dispatch-alerts.sh. Not a manifest,
 # so kustomization.yaml does not list it. One firing and one quiet case per alert (phase 1's eight,
-# phase 2's seven); the summaries are copied from the rules, so a reworded alert fails here until
-# this file follows.
+# v0.4.0's CIDispatchOrgListStale, phase 2's seven); the summaries are copied from the rules, so a
+# reworded alert fails here until this file follows.
 rule_files: [rules.yaml]
 evaluation_interval: 1m
 tests:
@@ -277,6 +277,50 @@ tests:
         values: '3x70'
     alert_rule_test:
       - {eval_time: 40m, alertname: CITinyQuotaFull, exp_alerts: []}
+  # ---- v0.4.0: the org list (org_defaults)
+  - name: CIDispatchOrgListStale fires on an org list held over an hour old for 15 minutes (stale)
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_org_list_age_seconds{namespace="ci-dispatch",job="ci-dispatch"}'
+        values: '3700x40'
+    alert_rule_test:
+      - {eval_time: 14m, alertname: CIDispatchOrgListStale, exp_alerts: []}
+      - eval_time: 16m
+        alertname: CIDispatchOrgListStale
+        exp_alerts:
+          - exp_labels: {severity: warning, reason: stale, namespace: ci-dispatch, job: ci-dispatch}
+            exp_annotations:
+              summary: "ci-dispatch's organisation list is over an hour old, so every owner without an owners: entry gets org_defaults, with no paid classes (docs/ci.md)"
+  - name: CIDispatchOrgListStale fires when the age is absent for 30 minutes (absent)
+    interval: 1m
+    input_series:
+      - series: 'up{namespace="ci-dispatch",job="ci-dispatch"}'
+        values: '1x40'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: CIDispatchOrgListStale, exp_alerts: []}
+      - eval_time: 35m
+        alertname: CIDispatchOrgListStale
+        exp_alerts:
+          - exp_labels: {severity: warning, reason: absent}
+            exp_annotations:
+              summary: "ci-dispatch has no organisation list, so every owner without an owners: entry gets org_defaults (docs/ci.md)"
+  - name: CIDispatchOrgListStale is quiet at 600 s (the 10-minute refresh)
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_org_list_age_seconds{namespace="ci-dispatch",job="ci-dispatch"}'
+        values: '600x80'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: CIDispatchOrgListStale, exp_alerts: []}
+      - {eval_time: 75m, alertname: CIDispatchOrgListStale, exp_alerts: []}
+  - name: CIDispatchOrgListStale is quiet through a 10-minute absence (a restart)
+    interval: 1m
+    input_series:
+      # Fresh until 10 min, ten stale markers, then a new process reads a new list from 21 min.
+      - series: 'ci_dispatch_org_list_age_seconds{namespace="ci-dispatch",job="ci-dispatch"}'
+        values: '0+60x10 stale stale stale stale stale stale stale stale stale stale 0+60x40'
+    alert_rule_test:
+      - {eval_time: 20m, alertname: CIDispatchOrgListStale, exp_alerts: []}
+      - {eval_time: 45m, alertname: CIDispatchOrgListStale, exp_alerts: []}
   # ---- phase 2: the paid classes (docs/superpowers/plans/2026-11-05-runner-classes-phase-2.md, Task 18)
   - name: CIDispatchSpendHigh fires at 80 % of the cap ($65 of $80, used plus reserved)
     interval: 1m

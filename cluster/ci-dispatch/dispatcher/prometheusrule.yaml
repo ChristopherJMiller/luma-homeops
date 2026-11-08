@@ -1,11 +1,12 @@
 ---
-# Phase 1's eight alerts (nine rules), weekday (D7), and phase 2's seven (nine rules) for the paid
-# classes. The money alerts are `critical`: CIDispatchSpendHigh, CIDispatchLocked,
+# Phase 1's eight alerts (nine rules), weekday (D7), v0.4.0's CIDispatchOrgListStale (two rules,
+# weekday) in the same group, and phase 2's seven (nine rules) for the paid classes: 16 alerts, 20
+# rules. The money alerts are `critical`: CIDispatchSpendHigh, CIDispatchLocked,
 # CIDispatchOrphanCompute (since phase 2, when an orphan is a container group that bills) and
 # CISweeperStale. Alertmanager routes them, with CIDispatchDrift and CIDispatchPaidNotReady, by name
 # to the 24/7 receiver (cluster/prometheus-stack/alertmanager-config.secret.yaml, phase 2 Task 9);
 # the rest go to the weekday default. Cases: alerts_test.yaml, run by
-# scripts/test-ci-dispatch-alerts.sh. Metric names are the ones internal/metrics of ci-dispatch v0.3.0
+# scripts/test-ci-dispatch-alerts.sh. Metric names are the ones internal/metrics of ci-dispatch v0.4.0
 # exports. `release: prometheus` selects this rule.
 apiVersion: monitoring.coreos.com/v1
 kind: PrometheusRule
@@ -112,6 +113,28 @@ spec:
             severity: warning
           annotations:
             summary: "ci-tiny has used all 3 pods of its quota for 30 minutes; jobs are waiting for a free slot (docs/ci.md)"
+        # v0.4.0 (org_defaults). Two rules, one name; `reason` tells them apart. The dispatcher
+        # rereads the org list with each limits load and every 10 min, so the age reads under about
+        # 660 s. A failed read keeps the last good list; past an hour old, or with none, every owner
+        # without an owners: entry gets org_defaults (paid 0), users included. The age is absent
+        # until the first good list after a start; 30 min rides out a restart, and CIDispatchStale
+        # covers a missing dispatcher.
+        - alert: CIDispatchOrgListStale
+          expr: ci_dispatch_org_list_age_seconds > 3600
+          for: 15m
+          labels:
+            severity: warning
+            reason: stale
+          annotations:
+            summary: "ci-dispatch's organisation list is over an hour old, so every owner without an owners: entry gets org_defaults, with no paid classes (docs/ci.md)"
+        - alert: CIDispatchOrgListStale
+          expr: absent(ci_dispatch_org_list_age_seconds)
+          for: 30m
+          labels:
+            severity: warning
+            reason: absent
+          annotations:
+            summary: "ci-dispatch has no organisation list, so every owner without an owners: entry gets org_defaults (docs/ci.md)"
     # Phase 2: the paid classes small and medium on Azure Container Instances
     # (docs/superpowers/plans/2026-11-05-runner-classes-phase-2.md, Task 18).
     - name: ci-dispatch-paid

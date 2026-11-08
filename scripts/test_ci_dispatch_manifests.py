@@ -66,15 +66,17 @@ V020_IMAGE = (
     "git.realliance.net/realliance-ops/ci-dispatch:sha-19b416f"
     "@sha256:b50069b0a8a976e15d0ea0fc75d408f7f19d20f347da995376165f9320affd57"
 )
-# v0.3.1: tag v0.3.1 (signed) = main f415caa, v0.3.0 (phase 2's paid release, ebd3a92, Task 16, pinned
-# by Task 19) plus the egress-read fix found in Task 21.
-# Before it the StatefulSet pinned PENDING_IMAGE, a digest no registry can serve (review M2), only on the
-# branch RELEASE_PENDING named. A new pin is a reviewed commit that changes RELEASE_IMAGE too.
+# v0.4.0: tag v0.4.0 (signed) = main 19a65ae, v0.3.1 plus org_defaults (the job-token plan, Tasks 6
+# and 7). v0.3.1 (tag v0.3.1 = main f415caa: v0.3.0, phase 2's paid release, plus the egress-read fix
+# found in Task 21) is the rollback, sha-f415caa@sha256:4f3517443b8c…, until ci.yaml carries
+# org_defaults, which v0.3.1 refuses.
+# Before v0.3.0 the StatefulSet pinned PENDING_IMAGE, a digest no registry can serve (review M2), only on
+# the branch RELEASE_PENDING named. A new pin is a reviewed commit that changes RELEASE_IMAGE too.
 PENDING_IMAGE = f"{IMAGE}:sha-PENDING@sha256:{'0' * 64}"
 RELEASE_PENDING = REPO / "cluster/ci-dispatch/dispatcher/.release-pending"
 RELEASE_IMAGE = (
-    "git.realliance.net/realliance-ops/ci-dispatch:sha-f415caa"
-    "@sha256:4f3517443b8ca1fa2c0a9a6bba7977e504f45e233babbd3a9b8cdf216f214f9d"
+    "git.realliance.net/realliance-ops/ci-dispatch:sha-19a65ae"
+    "@sha256:38196d7527696cc43afe14725bc625ee556ed568a26f73416696c8a2d09acee9"
 )
 # ci-dispatch v0.1.0's shutdown (internal/loop, cmd/ci-dispatch): the step in flight, then the servers.
 SHUTDOWN_GRACE_SECONDS = 20
@@ -114,12 +116,20 @@ ALERTS = {
     "CIDispatchPaidNotReady": "warning",
     "CIDispatchEgressCapHit": "warning",
     "CIDispatchAzureFailing": "warning",
+    "CIDispatchOrgListStale": "warning",
 }
 # The alerts with two rules, and the label that tells their rules apart (promtool --lint-fatal).
 TWO_RULES = {
     "CIDispatchLaunchFailing": ("reason", ["errors", "held"]),
     "CIDispatchSpendHigh": ("level", ["80", "95"]),
     "CISweeperStale": ("reason", ["absent", "stale"]),
+    "CIDispatchOrgListStale": ("reason", ["absent", "stale"]),
+}
+# v0.4.0's org list rules, exactly (the job-token plan, Task 7): the list refreshes every 10 min, and
+# past an hour old, or with none, every owner without an owners: entry gets org_defaults.
+ORG_LIST_RULES = {
+    ("CIDispatchOrgListStale", "stale"): ("ci_dispatch_org_list_age_seconds > 3600", "15m"),
+    ("CIDispatchOrgListStale", "absent"): ("absent(ci_dispatch_org_list_age_seconds)", "30m"),
 }
 # Phase 2's rules, exactly (Task 18 Step 2), keyed by name and, for a pair, the telling label.
 # SpendHigh's denominator drops a zero cap (review M1): the built-in limits carry a 0 cap, and
@@ -838,7 +848,7 @@ def test_monitoring(dispatcher):
     for name, (label, values) in TWO_RULES.items():
         pair = [r for r in rules if r["alert"] == name]
         assert sorted(r["labels"][label] for r in pair) == values, name
-    for (name, tell), (expr, for_) in PHASE2_RULES.items():
+    for (name, tell), (expr, for_) in {**PHASE2_RULES, **ORG_LIST_RULES}.items():
         label = TWO_RULES[name][0] if name in TWO_RULES else None
         (r,) = [r for r in rules if r["alert"] == name and (label is None or r["labels"][label] == tell)]
         assert r["expr"].strip() == expr, (name, tell)

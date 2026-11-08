@@ -3,8 +3,12 @@
 `ci-dispatch` starts one fresh runner for each waiting Forgejo Actions job on `git.realliance.net`,
 within each owner's limits. Argo app `ci-dispatch` (`cluster/ci-dispatch/`) runs it in namespace
 `ci-dispatch`, and its runner Jobs in `ci-tiny`. Code: `git.realliance.net/realliance-ops/ci-dispatch`
-(v0.3.1). Spec: `docs/superpowers/specs/2026-11-04-runner-classes-design.md`. Plan and ledger:
+(v0.4.0). Spec: `docs/superpowers/specs/2026-11-04-runner-classes-design.md`. Plan and ledger:
 `docs/superpowers/plans/2026-11-04-runner-classes-phase-0-1.md` and `.ledger.md` beside it.
+
+v0.4.0 is v0.3.1 plus `org_defaults`, the limits of an org (Changing a limit), with the same ledger
+schema and `config.yaml`: plan `docs/superpowers/plans/2026-11-08-forgejo-fork-job-token-permissions.md`,
+Tasks 6 to 8. v0.3.1 refuses a `ci.yaml` that carries `org_defaults`.
 
 Phase 2 adds the paid classes `small` and `medium` on Azure Container Instances (ACI): plan
 `docs/superpowers/plans/2026-11-05-runner-classes-phase-2.md` and its ledger, and the Azure side in
@@ -278,13 +282,24 @@ runner pods.
 | `defaults.tiny_minutes_per_day`, `owners.<name>.tiny_minutes_per_day` | `tiny` minutes a UTC day | 1440 |
 | `global.tiny_concurrent` | `tiny` pods at once, all owners | 3 (the pod quota) |
 | `paid_usd_per_period`, `paid_concurrent` (defaults, owners), `global.paid_usd_per_period`, `global.paid_usd_per_hour` | Paid classes (Paid limits and the caps owner) | $80 a period, 20 at once, $0.48 an hour |
+| `org_defaults`, with the per-owner keys of `defaults` | The limits of an owner with no `owners:` entry that isn't a user running a job on its own repo: an org, or an owner the dispatcher can't place. A key it leaves out reads paid 0 or the `tiny` value of `defaults` (v0.4.0) | as for `defaults` |
 | `classes` | Turns a class off for everyone | none |
 | `owners.<name>: {id: N, …}`, `deny: [{name, id}]` | Overrides and denies | none |
 
 - Limits and denies bind to the numeric `id`. The name is a label: one that no longer matches its id
   raises `CIDispatchConfigFindings`, never a load failure.
-- Each user and each org is an owner with its own defaults, so a member with five orgs gets five times
-  the per-owner limits. The global caps bound the total. Against abuse, deny the extra ids.
+- An `owners:` entry always wins. Without one, a user running a job on a repo it owns gets
+  `defaults`, and an org runs on `tiny` only, under `org_defaults`. An org gets paid classes only
+  through its own `owners:` entry, added by PR. The usage API shows the same split, and
+  `limit_source` reads `org-default` for an org.
+- Two reads separate an org from a user, both GET only in the dispatcher's guard and both covered by
+  the token's scopes: the org list (`/admin/orgs`, with `page` and `limit`), read again with each
+  limits load and every 10 min, and a repo's current owner (`/repositories/<id>`), cached 10 min. A
+  failed read keeps the last good list. A list over an hour old, or none, places nobody, so every owner
+  without an entry gets `org_defaults` (`CIDispatchOrgListStale`). A user's paid job waits for a list
+  read made after it first appears, so after a restart it waits for one read.
+- Each org gets `org_defaults`' `tiny` limits of its own, so a member with five orgs gets five times
+  those. The global caps bound the total. Against abuse, deny the extra ids.
 - `global.tiny_concurrent` is 1. Raise it to 2 after a clean day of `tiny`, with an Owner-signed
   commit. Each `tiny` pod adds 512Mi of requests, about 1.7 points of one node
   (`NodeMemoryRequestsHigh`).
@@ -382,7 +397,7 @@ active) and an `outcome` (such as `finished`, `pickup-timeout`, `held` or `error
 | `label`, `denied`, `owner-limit` | hold | A label combination no class takes; a denied owner; out of `tiny` minutes for the day |
 | `invalid` | hold | The job's id, attempt or owner id is zero or less |
 | `launch-failing` | hold | Three tries made no runner, and the key stays held. Fix the cause; the member's rerun gets a new key |
-| `concurrency` | hold | Forgejo lists the job `blocked`: its concurrency group holds it behind an earlier run. Nothing launches until it waits again, and a launch already made for it is undone as held at once. Needs a forge with realliance/forgejo#14; on stock Forgejo the job shows `waiting` and the pickup timeout catches it as `backoff` |
+| `concurrency` | hold | Forgejo lists the job `blocked`: its concurrency group holds it behind an earlier run. Nothing launches until it waits again, and a launch already made for the job is undone as held at once. Needs a forge with realliance/forgejo#14; on stock Forgejo the job shows `waiting` and the pickup timeout catches it as `backoff` |
 | `no-budget`, `global-cap` | hold | Paid only: the owner's or the global paid limit is 0; the global money this period can't cover the reservation |
 
 For a paid job, `owner-busy`, `class-full`, `owner-limit` and `not-ready` read as in Paid classes'
@@ -390,9 +405,10 @@ gate: paid slots, the hourly cap, the owner's dollars, and readiness.
 
 ## Alerts
 
-`cluster/ci-dispatch/dispatcher/prometheusrule.yaml` holds 18 rules: phase 1's nine in the group
-`ci-dispatch`, and nine in `ci-dispatch-paid`. The money alerts are `critical`: `CIDispatchSpendHigh`,
-`CIDispatchLocked`, `CIDispatchOrphanCompute` and `CISweeperStale`. The 0db39a77 route sends
+`cluster/ci-dispatch/dispatcher/prometheusrule.yaml` holds 20 rules: 11 in the group `ci-dispatch`,
+phase 1's nine and the two of v0.4.0's `CIDispatchOrgListStale`, and nine in `ci-dispatch-paid`.
+The money alerts are `critical`: `CIDispatchSpendHigh`, `CIDispatchLocked`,
+`CIDispatchOrphanCompute` and `CISweeperStale`. The 0db39a77 route sends
 `CIDispatch(SpendHigh|Locked|OrphanCompute|Drift|PaidNotReady)` and `CISweeperStale` to
 `critical-alerts` (Discord, around the clock) by name, whatever the severity, so `CIDispatchDrift`
 and `CIDispatchPaidNotReady` page around the clock although they're `warning`. The rest,
@@ -410,6 +426,8 @@ weekdays).
 | `CIDispatchLaunchesUndone` | Over 7 undone launches an hour, for an hour | Jobs that Forgejo holds keep taking the slot: look for `held` rows in `jobs`. `for: 1h` is load-bearing, never shorten it |
 | `CIDispatchOrphanCompute` | For 15 min, a `ci-tiny` Job or runner with no launch, or an expired Job still there | `ci_dispatch_orphans` by `kind`. A `tiny` orphan pod dies at its own 20 min deadline; delete a Job that outlives it by hand (`kubectl -n ci-tiny get jobs`). A `runner refused` log line is a `ci-tiny-*` runner that failed the uuid or scope check: treat it as an incident. `kind="group"` is a container group in `rg-realliance-ci` that bills until it's gone: if the reaper hasn't removed it, delete it as the break-glass does |
 | `CITinyQuotaFull` | `ci-tiny` at its 3 pods for 30 min | `kubectl -n ci-tiny get pods`. With global `tiny_concurrent` 1, three pods means leftovers. A reaped pod may run out its 30 s grace while its replacement starts; the quota bounds that |
+| `CIDispatchOrgListStale`, `reason: stale` | The org list has been over an hour old for 15 min: reads of `/admin/orgs` keep failing | Every owner without an `owners:` entry, users included, gets `org_defaults`, so users' paid jobs hold `no-budget`. Look at `ci_dispatch_errors_total{api="forgejo"}` and the log's `"op":"orgs"` lines. The token needs `read:admin` |
+| `CIDispatchOrgListStale`, `reason: absent` | No org list for 30 min: no good read since the dispatcher started | The same. `CIDispatchStale` covers a missing dispatcher |
 | `CIDispatchSpendHigh`, `level` 80 or 95 | The period's used plus reserved money is at 80 % ($64) or 95 % ($76) of the $80 cap, for 5 min | Reading paid spend. The gate stops at the cap by itself; pause the paid classes if the spend looks wrong |
 | `CIDispatchLocked` | Azure answered with the sweeper's lock, for 2 min. A deny that refuses only PUTs, while reads still work, fires it too | After a trip |
 | `CISweeperStale`, `reason: stale` | The sweeper has no finished run in 30 min | Its runs (After a trip, step 1). With the sweeper turned off or hung, only the budget bounds Azure compute: pause `small` and `medium` until it runs again |
@@ -872,6 +890,10 @@ git -C ~/Repos/ci-dispatch ls-tree --name-only "$REL" internal/aci/testdata/poli
   signed commit. For the paid classes, pause `small` and `medium` the same way.
 - **A bad config or image:** revert the commit and push, which is a deploy. If the rollout stalled on
   a pod that never got `Ready`, delete `ci-dispatch-0` by hand once the revert has synced.
+- **Below v0.4.0.** v0.3.1 (`sha-f415caa`) opens the same ledger and `config.yaml`, so its pin is a
+  clean rollback while `ci.yaml` has no `org_defaults`. Once it does, v0.3.1 rejects both the head and
+  the stored copy, and runs on the built-in limits, `tiny` only, until an Owner signs a `ci.yaml`
+  without the key.
 - **v0.3.0 itself** (E13). It moves the ledger to schema v2 at start, in one transaction, and every
   earlier release (v0.1.0, v0.2.0) refuses a v2 ledger and crash-loops. The pod's
   `kubectl -n ci-dispatch logs ci-dispatch-0 --previous` tells which case applies. The process opens
