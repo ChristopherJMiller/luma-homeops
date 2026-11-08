@@ -149,16 +149,6 @@ spec:
             mountPath: /data/gitea/templates/custom/header.tmpl
             subPath: custom-header.tmpl
             readOnly: true
-        # A subPath mount inside /data leaves its mount point on the volume: the old user settings
-        # menu override (dropped 2026-11-07, the fork image carries the link) left an empty
-        # templates/user/settings/navbar.tmpl, and Forgejo would load it as an empty menu. Runs in
-        # init-directories (uid 1000; the directory is group 1000 writable through fsGroup). A failed
-        # rm only logs: an empty menu is better than a forge that won't start.
-        initPreScript: |
-          stub=/data/gitea/templates/user/settings/navbar.tmpl
-          if [ -f "$stub" ] && [ ! -s "$stub" ]; then
-            if rm -f "$stub"; then echo "removed the empty $stub"; else echo "could not remove the empty $stub"; fi
-          fi
 
         # Forgejo's own GPG key "Realliance Forge <git@realliance.net>" (ID 50ACEA5F43099C00). Without
         # it Forgejo refuses every merge into a branch that requires signed commits ("won't sign: nokey").

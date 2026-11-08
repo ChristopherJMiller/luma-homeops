@@ -396,7 +396,6 @@ The forge's own image is `realliance/forgejo`'s patch queue on top of upstream 1
 
 - `[realliance] ACCOUNT_URL`: the "Realliance account ↗" link at the top of the user settings menu. Empty hides it.
 - `[realliance.ci_usage]`: the Usage tab under Settings, Actions, and the held note on a queued job. `URL` is ci-dispatch's usage API on its ClusterIP Service, port 8081, which ci-dispatch's NetworkPolicy opens to Forgejo's pods only. `TOKEN` comes from Secret `forgejo-ci-usage` through `additionalConfigSources`; rotate it with ci-dispatch's copy (`docs/ci.md`, "The usage token"). An empty `URL` turns the feature off.
-- `initPreScript` deletes the empty `templates/user/settings/navbar.tmpl` that the old menu override's `subPath` mount left on `/data`. Forgejo would load that file as an empty menu.
 
 **The keep-warm DaemonSet.** `forgejo-keepwarm` (namespace `forgejo`, Argo sync wave -1, from the chart's `extraDeploy`) runs `{{ include "gitea.image" . }}`, the Deployment's own image with the fallback included, as `/app/gitea/gitea --version && exec sleep 2147483647` on every node.
 
@@ -462,7 +461,8 @@ Forgejo has no plugin API. A UI change is a patch in the fork image (Fork image)
 user settings menu copy would have hidden the fork's Usage tab. Its "Realliance account ↗" link moved
 into the patch queue on 2026-11-07. `tests/forge/test_forge_signin.py::test_settings_link_to_realliance_account`
 in realliance-sso catches a lost link. Removing a `subPath` mount leaves its empty mount point on `/data`,
-which Forgejo then loads as an empty template: delete it in `initPreScript`, as for `navbar.tmpl`.
+which Forgejo then loads as an empty template: delete it with a guarded `initPreScript` until a restart
+has run it. `navbar.tmpl` needed one in November 2026; the git history of `forgejo-release.yaml` has it.
 Forgejo reads templates at start, so after an edit bump `realliance/templates-rev`.
 
 ## Typography (fonts)
