@@ -8,8 +8,8 @@
 - **Related:** SSO spec `2026-10-31-realliance-sso-design.md` and its 2026-11-02 amendment;
   forge-bot spec `2026-11-02-forge-bot-and-ci-design.md`; runner classes spec
   `2026-11-04-runner-classes-design.md`; `docs/ci.md`, `docs/pages.md`, `docs/forgejo.md`.
-- **Markers:** *(Chris decided)* marks a decision Chris made on 2026-11-07. *(Claude's call)* marks
-  a default this doc chose, open to override.
+- **Markers:** *(Chris decided)* marks a decision Chris made on 2026-11-07 or 2026-11-08.
+  *(Claude's call)* marks a default this doc chose, open to override.
 
 ## Intent
 
@@ -45,6 +45,8 @@ Keycloak-first shape Chris rejected for Gramps. Organizations stay off, as decid
   rather than a trust change.
 - Mail from the service, and invites while galaxy is down. Sign-in never depends on the service.
 - Fixing the accepted GitHub risks (Constraints).
+- A guest CI tier or any `ci-dispatch` change: guests run CI as any unlisted owner does *(Chris
+  decided)*.
 
 ## Anti-goals
 
@@ -60,7 +62,6 @@ Each of these makes the design a failure, even if it works:
   status, the public `realliance/sso` repo, or the Azure log table.
 - **Hidden-project names reaching the service** through its tokens.
 - **A mail outage:** invites that spend the shared Resend budget and break password resets.
-- **Guests spending Realliance money** on paid CI *(Claude's call)*.
 
 ## Constraints
 
@@ -91,7 +92,7 @@ Each of these makes the design a failure, even if it works:
 
 ## Decided
 
-*(Chris decided)*, 2026-11-07:
+*(Chris decided)*, 2026-11-07 unless dated:
 
 - The git-native flow: a link, a form, a signed ledger commit that the box applies, then Keycloak's
   `invite-user` sends the set-up mail. No reconciler, no Keycloak-first writes, Organizations off.
@@ -99,10 +100,12 @@ Each of these makes the design a failure, even if it works:
   the org and the repo.
 - For the ledger the box trusts only the ledger's own signing key and the operators' keys, never
   web-flow.
-- A guest gets "full forge and SSO access." This doc reads that as an SSO account plus a normal,
-  unrestricted forge account (`/apps/forgejo`): guests can create repos, run `tiny` CI and publish
-  Pages sites, with no `/realliance` membership and no other app. **Open point 1 asks Chris to
-  confirm this reading.**
+- **Guest scope** (2026-11-08): an SSO account plus a normal, unrestricted forge account
+  (`/apps/forgejo`). Guests can create repos, run CI and publish Pages sites, with no `/realliance`
+  membership and no other app. Promotion stays a PR to `sso-people`.
+- **Guest CI** (2026-11-08): the same as today's default for an unlisted owner, bounded only by the
+  global caps. No guest tier and no `ci-dispatch` change; the exposure is an accepted risk (Known
+  limits).
 
 *(Claude's call)*: links apply automatically within the quotas; the quotas in "Rules on the box";
 invitee emails in private git history, with an erasure procedure; a small Go service on galaxy,
@@ -253,13 +256,14 @@ only, metrics. It keeps no database: the ledger is its state.
 
 ### What a guest gets
 
-**The reading of Chris's answer** (open point 1): an SSO account in `/guests` and `/apps/forgejo`
+*(Chris decided, 2026-11-08)*: an SSO account in `/guests` and `/apps/forgejo`
 only, fixed in a new `guests.tf` in the people layer, and a normal, unrestricted Forgejo account. A
 guest can create repos, push packages, run Actions, publish Pages sites, and open issues and PRs. A
 guest can't create orgs (`DISABLE_REGULAR_ORG_CREATION`), joins no `realliance` team, can't read
 private `realliance` repos, and meets default-deny at every other app.
 
-**What that exposes**, from `ci.yaml`, `docs/ci.md` and `docs/pages.md` as of 2026-11-07:
+**What that exposes**, from `ci.yaml`, `docs/ci.md` and `docs/pages.md` as of 2026-11-07. Chris
+accepted the CI and kernel-escape parts (Known limits).
 
 - **CI limits.** A guest can't make an org, so each guest is one CI owner, and with no `owners:`
   entry the `defaults` apply: `tiny` 1 job at once and 120 min a day, each launch reserving 20. Both
@@ -287,25 +291,26 @@ repos; the hidden users page; `ACCOUNT_LINKING=disabled`; forge notification mai
 bound to numeric ids, with ceilings in code, the `deny` list and the class switches; `tiny`'s pod
 hardening; Pages' size cap, GET-only edge and header allowlist; the invite quotas and caps.
 
-**Extra guardrails** *(Claude's call)*. Each is small, and the first two ship before `guests.tf`
-grants `/apps/forgejo`:
+**Extra guardrails** *(Claude's call)*. Each is small, and the storage cap, or its fallback, ships
+before `guests.tf` grants `/apps/forgejo`:
 
-1. **A guest CI tier:** paid CI $0, and `tiny` 60 min a day, 1 at once, with no operator step per
-   guest. This narrows Chris's 2026-11-04 "paid open to everyone" for guests alone. Two rules bind
-   the mechanism. An owner that `ci-dispatch` can't prove is a member gets the guest tier. An owner
-   with `prohibit_login` gets nothing, or scheduled workflows in a deactivated guest's repos keep
-   running. One Owner-signed `ci.yaml` line then turns all guest CI off. Side effect: forge users
-   outside `/realliance` drop to the guest tier unless `owners:` lists them.
-2. **A storage cap:** a Forgejo quota for guests across git, LFS and packages, about 2 GiB in all.
+1. **A storage cap:** a Forgejo quota for guests across git, LFS and packages, about 2 GiB in all.
    Best, Forgejo 15 applies it from account creation. If it can't, forge-bot puts each new guest in
    a guest quota group through Forgejo's `/api/v1/admin` API right after their first sign-in, as
    one more guarded write. If Forgejo 15 can't do that either, guests ship without a quota, with an
    alert on the size of guest-owned repos and a runbook step, and the gap goes under Known limits.
-3. **Pages at deactivation:** deactivating a guest also deletes and freezes
+2. **Pages at deactivation:** deactivating a guest also deletes and freezes
    `<guest>.realliance.page` (`docs/pages.md`, Takedown), by hand for now, prompted by the
    deactivation alert.
-4. **One switch for all guests:** dropping `/apps/forgejo` from `guests.tf` blocks every guest's next
+3. **One switch for all guests:** dropping `/apps/forgejo` from `guests.tf` blocks every guest's next
    sign-in, and forge-bot's `access` job, once it runs in `apply`, prohibits them within about 10 min.
+4. **CI levers that need no code.** To cut one guest off, an Owner adds the guest's numeric id to
+   `deny:` in `ci.yaml`: from the next sweep, about 5 min after the merge, every class holds that
+   owner's jobs as `denied`, `tiny` included, with no deploy. For the paid budget,
+   `CIDispatchSpendHigh` already pages around the clock at 80 and 95 percent of the period's cap
+   ($64 and $76), and the usage API then shows which owners spent it (`docs/ci.md`, Reading paid
+   spend). Guest offboarding adds the same `deny:` entry, since a prohibited account's scheduled
+   workflows may keep queuing jobs (check on Forgejo 15).
 
 ### Promotion and offboarding
 
@@ -319,14 +324,14 @@ grants `/apps/forgejo`:
   service, or an operator signs the commit, and Keycloak disables the account. On the forge,
   forge-bot's `access` job prohibits login once it runs in `apply`; until then, Prohibit login by
   hand (`docs/forgejo.md`). More than 3 at once trips forge-bot's breaker: set `allow_bulk_until`.
-  Then guardrail 3 for Pages.
+  Then the Pages takedown (guardrail 2) and the `deny:` entry (guardrail 4).
 - **Emergency override.** An operator can deactivate a guest whatever the ledger says, even behind
   a refused head. They merge a `people.yaml` entry for the guest with `active: false`,
   `groups: [/guests]` and no `bootstrap`, the shape of a promotion. `people.yaml` wins over the
   ledger and always applies, so the account stays off from the next apply on. For effect
   within seconds, a master-realm break-glass account also disables the user in the Keycloak
-  console, and the merged entry keeps the account off. The forge and Pages steps follow as for any
-  guest.
+  console, and the merged entry keeps the account off. The forge, Pages and `deny:` steps follow as
+  for any guest.
 - **A member leaves.** `active: false` in `people.yaml`. The service and the box both check the
   `inviter`, so that member's pending links die at redemption. Their guests stay, and the orphan
   alert lists them for an operator to keep or deactivate.
@@ -352,8 +357,15 @@ If that proves too weak, encrypting `bootstrap.email` to a key on the box costs 
   box can let at most one extra day's cap through, and open links' expiry clocks restart.
 - **A refused head freezes the ledger,** each deactivation included, until an operator signs a new
   head. The 1 h alert and the emergency override cover it.
-- **No guest storage quota,** but only if Forgejo 15 allows neither path in guardrail 2. The size
+- **No guest storage quota,** but only if Forgejo 15 allows neither path in guardrail 1. The size
   alert and the runbook step then stand in.
+- **Guest CI is open, as for any unlisted owner** *(Chris decided)*. Each guest gets `tiny` 1 job at
+  once and 120 min a day, and paid `small` and `medium` at $10 a period, 2 at once, bounded only by
+  the global caps: $80 a period, $0.48 an hour, and the shared `tiny` concurrency. Roughly eight
+  active guests could use up a period's paid budget, and members' paid CI would then hold too.
+  Guardrail 4's levers are the response.
+- **`tiny` carries the kernel-escape exposure for guests** *(Chris decided)*. An escape from a
+  guest's job gives root on a galaxy node that runs etcd and Ceph.
 
 ## Operator steps
 
@@ -368,16 +380,15 @@ If that proves too weak, encrypting `bootstrap.email` to a key on the box costs 
 5. **Chris** signs the `realliance/sso` heads that carry the host-role changes, which roll out the
    existing way through `ansible-pull`, and after the check-only run, the head that sets
    `ledger_mode: apply`.
-6. The Owner-signed `ci.yaml` change for the guest tier, and answers to the open points.
+6. Answers to the open points.
 
 **Build order.** First `/guests` in `realm/`, `guests.tf` in `sso-people`, and the ledger check with
 its tests, shipped in `check` mode. It runs live for at least 3 days, a week if possible, on
 operator-signed test entries, good and bad, with the expected verdicts in its log and no change to
 `people.yaml` applies. Only then does an operator switch it to `apply`, and an operator-signed hand
 entry proves a guest end to end. The `invites` client, service account and service can take shape
-during that window. Then the guest CI tier and storage cap, or the cap's fallback, and only after
-them `/apps/forgejo` in `guests.tf`. Acceptance tests (`realliance/sso` `tests/invites/`) and
-runbooks come last.
+during that window. Then the storage cap, or its fallback, and only after it `/apps/forgejo` in
+`guests.tf`. Acceptance tests (`realliance/sso` `tests/invites/`) and runbooks come last.
 
 ## Success looks like
 
@@ -395,8 +406,8 @@ runbooks come last.
    that head stays refused.
 6. A deactivated member's pending link fails at redemption, and the orphan alert names their guests.
 7. A promotion PR without `bootstrap` keeps the Keycloak user id and changes only the groups.
-8. A guest's `small` job holds `no-budget`, `tiny` stops at the guest limit, and a deactivated
-   guest's scheduled job never launches.
+8. A guest's CI runs under `defaults` like any unlisted owner's, and a `deny:` entry for the guest's
+   id holds each of their jobs as `denied` within one sweep.
 9. With galaxy off, sign-in works, and an operator-signed hand entry still creates a guest.
 10. The erasure procedure runs on a throwaway guest.
 
@@ -411,20 +422,14 @@ runbooks come last.
   link.
 - The reserved-name list (bots, Forgejo orgs, `www`, hidden orgs), kept in private `sso-people`.
 - Username length, the expiry grace, and a size limit on the ledger.
-- The mechanism behind the guest CI tier, and which storage-cap path Forgejo 15 allows.
+- Which storage-cap path Forgejo 15 allows.
 - Where `ledger_mode` sits in the host config, and the test entries for the check-only run.
 - Where the service's code lives. `realliance-ops/sso-invites` on the forge matches forge-bot.
 - Updates to `WISHLIST.md`, `docs/forgejo.md` and the SSO runbook.
 
 ## Open points for Chris
 
-1. **Guest scope.** Did "full forge and SSO access" mean an SSO account plus an unrestricted forge
-   account, with no `/realliance` and no other app? That reading extends the `tiny` kernel-escape
-   risk to people no operator vetted. Claude accepts it only with the guest CI tier and the
-   all-guests switch in place. Setting the guest tier's `tiny` minutes to 0 keeps repos and Pages and
-   closes the escape path.
-2. **Guest CI numbers**, and the side effect on forge users outside `/realliance`.
-3. **Pages at deactivation:** take a deactivated guest's sites down, or keep them?
-4. **The org:** a new dedicated one, or the planned `realliance-ops` GitHub mirror org, if its only
+1. **Pages at deactivation:** take a deactivated guest's sites down, or keep them?
+2. **The org:** a new dedicated one, or the planned `realliance-ops` GitHub mirror org, if its only
    members are the two operators and no mirror credential reaches `sso-invites`.
-5. **Link lifetime** of 7 days, and whether a promoted guest should get invites at all.
+3. **Link lifetime** of 7 days, and whether a promoted guest should get invites at all.
