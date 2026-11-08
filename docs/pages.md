@@ -48,11 +48,11 @@ branch, get a site. Namespace `pages`, Argo app `pages`, config in
           dir: public
 ```
 
-Pin by commit `sha` instead of `@v1` for anything sensitive. Members change it by pull request, and Owners tag releases (`v*` is Owners-only). Its `test/run.sh` publishes a throwaway site and takes it down.
+The job that runs it needs `permissions: {contents: write}`: once the forge's default token permissions turn `restricted`, a job without it can't push `pages`. Add the block now; it changes nothing until then. Pin by commit `sha` instead of `@v1` for anything sensitive. Members change it by pull request, and Owners tag releases (`v*` is Owners-only). Its `test/run.sh` publishes a throwaway site and takes it down.
 
 ### Fallback: the same push by hand (Forgejo Actions)
 
-The automatic token can push `pages`. The Task 10 drill proved it. Pass it through `GIT_CONFIG_*` env so it never appears in argv.
+The automatic token can push `pages` when the job holds `contents: write`, as below. The Task 10 drill proved it. Pass it through `GIT_CONFIG_*` env so it never appears in argv.
 
 ```yaml
 name: pages
@@ -62,6 +62,8 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - name: Build
