@@ -233,7 +233,8 @@ jobs:
           git init -q . && git fetch -q --depth=1 --no-tags "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "$GITHUB_SHA"
           git checkout -q --detach FETCH_HEAD
       - uses: https://git.realliance.net/realliance/actions/vale@<40-hex commit> # v1.1.0
-        with: { paths: <content directory> }
+        with:
+          paths: <content directory>
 ```
 
 No `actions/checkout`, which writes the token into `.git/config`, and never `pull_request_target`.

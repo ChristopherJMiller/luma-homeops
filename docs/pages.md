@@ -43,12 +43,12 @@ branch, get a site. Namespace `pages`, Argo app `pages`, config in
 `realliance/actions` (public, MIT) holds a composite action that does the push below, plus a size check against the 128 MB cap and the site URL as output. The forge's default action host is GitHub, so use the full URL:
 
 ```yaml
-      - uses: https://git.realliance.net/realliance/actions/pages-publish@v1
+      - uses: https://git.realliance.net/realliance/actions/pages-publish@b459e88a511a9002bcc092b6f3ef5f1f9cc20afb # v1.1.0
         with:
           dir: public
 ```
 
-The job that runs it needs `permissions: {contents: write}`: once the forge's default token permissions turn `restricted`, a job without it can't push `pages`. Add the block now; it changes nothing until then. Pin by commit `sha` instead of `@v1` for anything sensitive. Members change it by pull request, and Owners tag releases (`v*` is Owners-only). Its `test/run.sh` publishes a throwaway site and takes it down.
+The job that runs it needs `permissions: {contents: write}`: once the forge's default token permissions turn `restricted`, a job without it can't push `pages`. Add the block now; it changes nothing until then. Pin the commit of an Owner-signed `v*` tag, never a branch or a moving tag; the actions README lists the check. Owners and maintainers may push `v*` tags, and consumers pin only an Owner-signed one. Members change the action by pull request. Its `test/run.sh` publishes a throwaway site and takes it down.
 
 ### Fallback: the same push by hand (Forgejo Actions)
 
