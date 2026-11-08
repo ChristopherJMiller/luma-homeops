@@ -40,6 +40,13 @@ See also `docs/pages.md` (Realliance Pages: the system webhook, the relay, `*.re
 `MINIO_CHECKSUM_ALGORITHM=md5`. The objects key cannot delete versions: Forgejo deletes by hiding,
 and B2 purges hidden versions after 30 days.
 
+**The B2 download cap.** Registry blobs and manifests, LFS, Pages and the inventory's tofu state all
+come from Realliance's B2, so when the account hits its daily download (Class B) cap, they all break
+at once. On 2026-11-07 at 20:52Z the registry answered 500 for manifests and no pod could pull from
+`git.realliance.net`; Forgejo itself kept running on the keep-warm cache. Raise the cap in the B2
+console, or wait for the daily reset. Until then, don't push a re-pin that pulls from the forge (the
+fork image, realliance.net, the bots).
+
 **Network:** HTTPS via Traefik (`*.realliance.net` wildcard cert, DNS-only so no Cloudflare 100 MiB
 limit). SSH on MetalLB `192.168.0.6:22`; the router forwards WAN TCP 22 there (NAT 400) and
 reflects LAN connections to the WAN IP (NAT 410), OUTSIDE-IN rule 30 accepts it. The router's own
