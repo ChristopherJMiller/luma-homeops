@@ -226,6 +226,7 @@ asking for it. `write-all` in a workflow does include `packages: write`, as on G
 |---|---|
 | Fork PRs (`IsForkPullRequest`, which includes fork `pull_request_target`, `services/actions/trust.go:150`) | Read at most on every key, whatever the workflow says. Same as today |
 | Reusable inner jobs | At most the caller job's result, lowered by the called workflow's own block when local |
+| Own repo, the R1 floor | A token never holds less than the `forgejo-actions` user has on its own repo for **code, releases and wiki**, so `{}` can clone and download from a public repo (Task 11 ruling). Issues and pull requests are not in the floor: on Forgejo, issues read lets a token open issues and comment, so a floor there would give `{}` a write |
 | Other repos | Unchanged: the `forgejo-actions` user's own rights. Read on public repos, none on private (`repo_permission.go:167`); 404 in the API (`repo_access.go:24-27`) |
 
 **Source.**
@@ -259,9 +260,11 @@ inline copies of "own repo write, fork read":
    `<repo>/`, or the type is **generic** and the package name is `<repo>`;
 4. the run is not a fork PR, and its `TriggerEvent` is `push`, `workflow_dispatch`, `schedule` or
    `release`;
-5. the run's `Ref` is a branch with a protection rule (`GetFirstMatchProtectedBranchRule`,
-   `models/git/protected_branch_list.go:80`), or a tag that a protected-tag rule matches
-   (`models/git/protected_tag.go:52, 95`);
+5. the run's `Ref` is a protected ref (Task 12 ruling). A branch counts only when its rule
+   (`GetFirstMatchProtectedBranchRule`, `models/git/protected_branch_list.go:80`, as pre-receive
+   reads it) restricts push (no direct push, or a push whitelist), restricts merge (a merge whitelist,
+   or at least one required approval with stale approvals dismissed), and has no unprotected file
+   patterns. A tag counts when any protected-tag rule matches it (`models/git/protected_tag.go:52, 95`);
 6. the request is not a delete. C never lets the job token delete container blobs or manifests,
    or generic packages or files.
 
@@ -544,6 +547,41 @@ Anchors that upstream hasn't changed so far: `repo_permission.go`, `repo_access.
   on `tiny`). It works for one task only.
 - A step in a job that holds `packages: write` holds it for the whole job. That includes third-party
   action steps such as `download-artifact`, which also hold the static token today.
+
+### Forgejo differences
+
+- Reader-can-comment: on Forgejo, a token with issues or pull-requests read can open issues and
+  comment on unlocked ones, unlike GitHub. A job that declares `issues: read` can comment. A
+  candidate later patch: Actions tokens need issues or pull-requests write to create issues or
+  comments.
+- AGit push-to-open-PR (`refs/for/`): the code level gates it, and it fails today (proc-receive
+  fails for the Actions user). A pin test refuses it; an upstream fix breaks the test and reopens
+  the decision.
+- API pull request creation uses the `forgejo-actions` user's own rights.
+- Git over http on another repo still uses that user's own rights, including write on a wiki open
+  to every signed-in user (see "Other repos: Unchanged").
+- Remote reusable workflows are not read; they take the caller's result, so one gets the caller's
+  `packages: write`.
+- A private repo under `{}` needs `contents: read` to clone.
+
+### Packages
+
+- Under `permissive`, package reads are owner-wide for private packages. The orgs are public today; it
+  matters for hidden orgs, team-scoped members and private users with collaborators.
+- Forgejo judges protection at publish time. Tags that predate a rule, pull-mirror and migration tags
+  (which skip pre-receive), release events that re-run an Owner-chosen commit with writer metadata,
+  and site admins all get past it.
+- Image tags are not bound to the git ref.
+- `/v2/_catalog` and the API v1 package reads keep the user's own rights. Conan with a task JWT
+  returns 500.
+- A write to another private owner gets 401 at the group read gate and no rule-owner warning. That
+  doesn't reveal the owner exists.
+- `task.OwnerID` goes stale across a repo transfer.
+- Each package request reloads the task, which costs extra queries.
+
+### Test coverage
+
+- The permissions matrix runs on SQLite only; the declarative cases run on every database.
 
 ## Left to the builder
 

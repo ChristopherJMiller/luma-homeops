@@ -124,7 +124,7 @@ Chris may override any of these.
 
 | # | Ruling | Why |
 |---|---|---|
-| R1 | On its own repo the token never holds less than the `forgejo-actions` user has there: read access on a public repo, which lets `{}` clone a public repo | Rollout step 3 expects every workflow to pass, and three of them check out with the token. GitHub lets any token read a public repo |
+| R1 | On its own repo the token never holds less than the `forgejo-actions` user has there for code, releases and wiki (Task 11 narrowed it): read access on a public repo, which lets `{}` clone a public repo. Issues and pull requests stay at the block's level, because issues read lets a Forgejo token comment | Rollout step 3 expects every workflow to pass, and three of them check out with the token. GitHub lets any token read a public repo |
 | R2 | Package reads keep today's rule for every owner; `packages` read or better adds the task owner's private packages | The read rule adds rights and never takes away what anonymous has |
 | R3 | The eight ignored GitHub keys drop silently; only unknown keys and bad levels log | `id-token: write` would otherwise log on every task |
 | R4 | On its own repo the token's `Permission` holds `AccessMode: read` and one `UnitsMode` entry for each unit | `HasAccess()` stays true, so no 404, and nothing treats the token as a repo administrator |
@@ -506,7 +506,7 @@ func RepoPermission(ctx context.Context, repo *repo_model.Repository, task *acti
     9. Caller set, inner without blocks: the caller's result;
     10. Instance `permissive`: `Packages` read;
   - `TestResolveFixtureTaskUnread` (Review Focus 3): fixture task 47, whose workflow file no commit holds, resolves to `Permissive()` and then, under `restricted`, to `Restricted()`. Two calls for one task log one warning;
-  - `TestRepoPermissionFloor`: with a `{}` result seeded in the cache, a public repo gives code and issues read (the floor), `HasAccess()` and not `IsAdmin()`; a private repo gives every unit none, with `HasAccess()` still true;
+  - `TestRepoPermissionFloor`: with a `{}` result seeded in the cache, a public repo gives code, releases and wiki read (the floor), and issues, pull requests and actions none, `HasAccess()` and not `IsAdmin()`; a private repo gives every unit none, with `HasAccess()` still true;
   - `TestLoadActionsDefaultTokenPermissions`: absent gives `permissive`, `restricted` gives `restricted`, `bogus` gives the error text;
   - `TestActionsConfigTokenPermissionsRoundTrip`: `ToDB` leaves the field out when empty and keeps `DisabledWorkflows`, and `FromDB` of today's form, `{"DisabledWorkflows":["a.yml"]}`, leaves it empty.
 
@@ -527,6 +527,7 @@ func RepoPermission(ctx context.Context, repo *repo_model.Repository, task *acti
 - `lfs/server.go`: another repo stays refused; its own repo answers `RepoPermission(…).CanAccess(accessMode, unit.TypeCode)`.
 - The settings page, in `routers/web/repo/setting/actions_token.go`:
   - `func ActionsTokenPermissions(ctx *context.Context)` for GET, and `func ActionsTokenPermissionsPost(ctx *context.Context)` for POST with the form field `token_permissions`: `""`, `permissive` or `restricted`. Any other value flashes an error and writes nothing;
+  - saving Settings, Units (and the API `has_actions: true` edit) carries the existing Actions unit's whole config into the rebuilt unit, so the override and `DisabledWorkflows` survive (Task 11 fix);
   - the route `m.Combo("/token").Get(repo_setting.ActionsTokenPermissions).Post(repo_setting.ActionsTokenPermissionsPost)` sits inside the repo settings `/actions` group, behind `reqRepoAdmin`, with `PageType` `token`;
   - it writes `ActionsConfig.TokenPermissions` with `repo_model.UpdateRepoUnit`, as `disableOrEnableWorkflowFile` does;
   - locale keys under `actions.token_permissions.`: `title`, `desc`, `follow_instance`, `permissive`, `restricted`, `update_success` and `invalid`. The page names the instance default when the repo follows it.
@@ -730,6 +731,7 @@ func RepoPermission(ctx context.Context, repo *repo_model.Repository, task *acti
 
 **Files (fork, branch `publish-job-token`):** `.forgejo/workflows/image.yml`, `scripts/publish-image.sh`, `scripts/test-ci.sh`, `README.md`
 
+- [ ] **Step 0: Prerequisite, merge rule on `main`.** Patch C counts a branch as protected only when it restricts push, restricts merge (an Owners merge whitelist, or at least one approval with stale approvals dismissed) and has no unprotected file patterns. `realliance/forgejo` `main` doesn't meet that today, so Forgejo would refuse `publish`. Add the merge whitelist or approval rule as IaC in `realliance-ops/forge`; the tofu apply is a **STOP—Chris runs**. forge-bot and ci-dispatch already meet the rule. Task 18 doesn't switch until it applies.
 - [ ] **Step 1: Failing tests.** Read the `v*` tag protection and the `main` protection again (S1). The `workflow` case now requires no `secrets.` line at all, and exactly one `github.token`, as `REGISTRY_TOKEN: ${{ github.token }}` in the env of `publish`'s last step. `build` keeps `permissions: {}`, and `publish` holds `permissions:` with `packages: write`. The `refuse-to-move` case checks that the login user is `forgejo-actions`. Run `bash scripts/test-ci.sh workflow refuse-to-move`. Expected: fail.
 - [ ] **Step 2: Change** `image.yml` and `publish-image.sh`, which logs in with `-u forgejo-actions` and still reads the token from `REGISTRY_TOKEN` on stdin.
   - The header and the README's "Accepted risk": build code no longer reaches a registry token, and the blocks closed the push-and-dispatch risk.
