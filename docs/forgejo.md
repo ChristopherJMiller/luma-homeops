@@ -75,12 +75,14 @@ Realliance SSO decides everything; never grant access in Forgejo by hand.
   `local.ops_owners`) and are never in the group→team map (Forgejo refuses to remove a last owner,
   and the sign-in would fail).
 - Members and maintainers **cannot delete or transfer** repos; only Owners can. Org creation is
-  admin-only (orgs are code).
+  admin-only today (orgs are code). Coming: anyone may create an org, and only the Owners of
+  `realliance` and `realliance-ops` stay code. forge-bot then spares only those (`owner_orgs`), and
+  `owner_needs_action` concerns only them.
 - **Email:** Forgejo keeps its own copy from the first sign-in. If someone changes their email in
   the SSO, they also change it in Forgejo (Settings → Account → Emails; no confirmation mail needed).
 - People without a last name are fine (SSO last name is optional).
 
-### Removing someone (two steps, plus a third for `realliance` members and a fourth for Owners)
+### Removing someone (two steps, plus a third for `realliance` members, a fourth for Owners and a fifth for sole-Owner orgs)
 
 forge-sync (periodic reconciliation) is deferred, so the SSO change alone is **not** enough: a
 person who can no longer sign in never triggers the sign-in sync, and their SSH keys and access
@@ -94,6 +96,8 @@ tokens keep working.
 3. If the person was a `realliance` member, rotate both `realliance-ci` tokens (see Rotating `realliance-ci`'s tokens under realliance.net). Any member can read them through a branch-push workflow, and a registry push with the site token deploys to galaxy.
 
 4. If the person was an Owner, rotate the docs deploy token (see Docs site).
+
+5. List the orgs where the person is the only Owner. Leave each untouched so its repos keep serving, and add it to `ci.yaml` `deny` if it still runs CI. Take its Pages sites down only on request or abuse, and hand it to a remaining member only when that member asks and Chris agrees.
 
 Reversing steps 1 and 2 restores everything (steps 3 and 4 are not reversible). Until step 2 is done, access lingers — that is the known gap.
 `tests/forge/test_forge_access.py::test_offboarding_blocks_web_token_and_ssh_and_is_reversible`
@@ -468,6 +472,23 @@ export KUBECONFIG=/tmp/galaxy-kubeconfig
 
 **Before a drain of Forgejo's node** (a Talos hop, a rebuild): check that the other nodes hold the image. The `talos-upgrade` skill carries the check.
 
+## Job token permissions
+
+The fork gives each Actions job a token with GitHub-style scopes (spec: `docs/superpowers/specs/2026-11-08-forgejo-fork-job-token-permissions-design.md`). Upstream ignores every part of it.
+
+- **Default.** `[actions] DEFAULT_TOKEN_PERMISSIONS` in `forgejo-release.yaml`: `permissive` (every repo unit write, packages read, as Forgejo 15 does) or `restricted` (contents and packages read, the rest none). Flip it in a signed commit. `restricted` breaks any workflow that writes issues or releases without a `permissions:` block.
+- **Per repo.** Repo admins: Settings, Actions, Job token. Resolution order: the job's `permissions:` block, the workflow's, the repo override, the instance default. Fork PRs get read at most.
+- **Keys.** Only GitHub's: `contents`, `issues`, `pull-requests`, `actions`, `repository-projects`, `packages`, each `read`, `write` or `none`; also `read-all`, `write-all` and `{}`. The fork ignores `id-token`, `statuses`, `checks` and the rest, and logs once per task. A missing key means `none`. A job block replaces the workflow's. A private repo under `{}` needs `contents: read` to clone.
+- **`packages: write`.** Six rules, and every one must hold: the job asks for it; the package owner is the repo's owner; the type is container (image `<repo>` or `<repo>/...`) or generic (name `<repo>`); the run is not a fork PR and the event is `push`, `workflow_dispatch`, `schedule` or `release`; the ref is a protected branch or tag; the request is not a delete. A refusal is a 403 that names the rule, and Forgejo logs a warning.
+- **Secrets by reference.** A job gets only the secrets its workflow names as `secrets.NAME` or `secrets['NAME']`, plus the three token names and the two debug flags. `toJSON(secrets)` or `secrets[matrix.x]` sends every one.
+- **Fallback.** On the upstream image every job gets every secret again and the job token can't publish, so after Task 21 a fallback stops all four publishers.
+
+Known limits, accepted:
+
+- On `galaxy` and `general`, a process a step leaves running can read a later step's environment, secrets included. Ephemeral classes can't.
+- The one-job runner credential is readable by job code. It works for one task only.
+- A step in a job that holds `packages: write` holds it for the whole job, third-party action steps included.
+
 ## Template overrides (custom/)
 
 Forgejo has no plugin API. A UI change is a patch in the fork image (Fork image), or a file under
@@ -524,3 +545,6 @@ For the hop:
 - The administrator API can create true system hooks with `config.is_system_webhook`.
 - Add a Renovate custom manager for `image.tag`/`image.digest`: no manager sees them inside `valuesObject`.
 - `INTERNAL_TOKEN` no longer exists in 18 and later.
+- Fork patch A: rebase onto `secret.go`'s `CanAccessSecrets` and job namespaces; open a Codeberg issue before sending it upstream.
+- Fork patch B: read `permissions` from the payload (runner v13 keeps it); stop `WarningCodePermissions` from upstream; map `ActionsConfig.TokenPermissions` onto #13183's switch if it has shipped, and re-express the resolver as a reducer if #14026 has landed.
+- Fork patch C: rebase the `TaskID` claim onto v16's split auth methods and `maxExpiry`; then Chris chooses between keeping C and Authorized Integrations owned by `realliance-ci`.

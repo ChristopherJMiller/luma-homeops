@@ -115,6 +115,13 @@ repos:
         entry: python -m pytest -q -p no:cacheprovider scripts/test_forgejo_signin_redirect.py
         pass_filenames: false
         files: ^(cluster/forgejo/(signin-redirect|kustomization)\.yaml|scripts/test_forgejo_signin_redirect\.py|\.pre-commit-config\.yaml)$
+      # The forge's app.ini values (job token default, org keys) and the account-flag script.
+      - id: forgejo-config
+        name: Forgejo config and allow-create-org static tests
+        language: system
+        entry: python -m pytest -q -p no:cacheprovider scripts/test_forgejo_config.py scripts/test_forgejo_allow_create_org.py
+        pass_filenames: false
+        files: ^(cluster/applications/forgejo-release\.yaml|scripts/(test_forgejo_config|forgejo-allow-create-org|test_forgejo_allow_create_org)\.py|\.pre-commit-config\.yaml)$
       # Renovate must never automerge the forgejo-helm chart (a bump restarts Forgejo).
       - id: forgejo-renovate
         name: Forgejo chart Renovate guard
