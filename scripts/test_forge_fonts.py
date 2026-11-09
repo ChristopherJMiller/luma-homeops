@@ -139,6 +139,20 @@ def test_preload_targets_a_shipped_body_font(configmaps):
     assert shipped_css_name() in cm_files(configmaps["forgejo-font-css"])
 
 
+def test_docs_link_templates_are_mounted():
+    values = yaml.safe_load(RELEASE.read_text())["spec"]["source"]["helm"]["valuesObject"]
+    kust = yaml.safe_load((REPO / "cluster/forgejo/kustomization.yaml").read_text())
+    gen = {g["name"]: g for g in kust["configMapGenerator"]}
+    for sub, path, src in [
+        ("custom-extra-links.tmpl", "/data/gitea/templates/custom/extra_links.tmpl", "extra_links.tmpl"),
+        ("custom-extra-links-footer.tmpl", "/data/gitea/templates/custom/extra_links_footer.tmpl", "extra_links_footer.tmpl"),
+    ]:
+        mount = [m for m in values["extraContainerVolumeMounts"] if m.get("subPath") == sub]
+        assert [m["mountPath"] for m in mount] == [path]
+        assert f"{sub}=custom/templates/custom/{src}" in gen["forgejo-custom-templates"]["files"]
+        assert "https://docs.realliance.net/" in (REPO / "cluster/forgejo/custom/templates/custom" / src).read_text()
+
+
 def test_header_template_is_mounted():
     values = yaml.safe_load(RELEASE.read_text())["spec"]["source"]["helm"]["valuesObject"]
     mount = [m for m in values["extraContainerVolumeMounts"] if m.get("subPath") == "custom-header.tmpl"]

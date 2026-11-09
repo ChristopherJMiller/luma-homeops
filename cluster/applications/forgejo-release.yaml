@@ -149,6 +149,15 @@ spec:
             mountPath: /data/gitea/templates/custom/header.tmpl
             subPath: custom-header.tmpl
             readOnly: true
+          # Navbar and footer hooks: a Docs link to docs.realliance.net
+          - name: custom-templates
+            mountPath: /data/gitea/templates/custom/extra_links.tmpl
+            subPath: custom-extra-links.tmpl
+            readOnly: true
+          - name: custom-templates
+            mountPath: /data/gitea/templates/custom/extra_links_footer.tmpl
+            subPath: custom-extra-links-footer.tmpl
+            readOnly: true
 
         # Forgejo's own GPG key "Realliance Forge <git@realliance.net>" (ID 50ACEA5F43099C00). Without
         # it Forgejo refuses every merge into a branch that requires signed commits ("won't sign: nokey").
@@ -177,7 +186,7 @@ spec:
 
         gitea:
           podAnnotations:
-            realliance/templates-rev: "5" # bump when anything under cluster/forgejo/custom/ changes
+            realliance/templates-rev: "6" # bump when anything under cluster/forgejo/custom/ changes
           admin:
             # Break-glass only: the internal sign-in form is off, so this account is used through
             # `forgejo admin user …` on the pod. Password: sso-secrets forge/secrets.env.

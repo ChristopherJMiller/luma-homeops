@@ -26,6 +26,8 @@ configMapGenerator:
   - name: forgejo-custom-templates
     files:
       - custom-header.tmpl=custom/templates/custom/header.tmpl # loads realliance-fonts.css on every page
+      - custom-extra-links.tmpl=custom/templates/custom/extra_links.tmpl # Docs link in the navbar
+      - custom-extra-links-footer.tmpl=custom/templates/custom/extra_links_footer.tmpl # Docs link in the footer
     options:
       disableNameSuffixHash: true # referenced by name from the other Application
   # Catppuccin themes (custom/public/CATPPUCCIN.md): two maps because one ConfigMap is capped at 1 MiB.

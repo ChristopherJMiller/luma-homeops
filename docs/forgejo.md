@@ -498,6 +498,7 @@ Forgejo has no plugin API. A UI change is a patch in the fork image (Fork image)
 | Override | Upstream file | Change |
 |---|---|---|
 | `custom-header.tmpl` | `templates/custom/header.tmpl`, an empty `<head>` hook | loads `realliance-fonts.css` (Typography, below) |
+| `custom-extra-links.tmpl`, `custom-extra-links-footer.tmpl` | `templates/custom/extra_links.tmpl` and `extra_links_footer.tmpl`, the navbar and footer hooks | a Docs link to `docs.realliance.net` |
 
 **Never copy a whole upstream template here.** A copy shadows every patch to that file: the old
 user settings menu copy would have hidden the fork's Usage tab. Its "Realliance account ↗" link moved
