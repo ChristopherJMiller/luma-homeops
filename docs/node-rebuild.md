@@ -17,9 +17,11 @@ Tools: `bmcctl` (tools/bmcctl/README.md), `talosctl`, `kubectl`, and `ceph` via
 
 Facts this relies on, checked 2026-10-27:
 
-- **One machine config serves all three nodes.** `nodes/controlplane.yaml` matched
-  the live config on all three, apart from YAML quoting. Hostnames come from the
-  router's DHCP reservations by MAC, so they survive a disk swap.
+- **One base machine config serves all three nodes.** Apply
+  `nodes/hostname-NODE.patch.yaml` with `nodes/controlplane.yaml` for the selected
+  node. The hostname must be explicit: during the 2026-11-13 switch interruption,
+  DHCP-derived names fell back to generated names and kubelet registered duplicate
+  nodes with different pod CIDRs. Restoring DHCP did not restore the original names.
   `install.disk: /dev/nvme0n1` is the only M.2 slot and cannot match a Ceph disk.
 - **The kubelet caps every pod at 4096 tasks** (2026-11-05, `machine.kubelet.extraConfig.podPidsLimit`),
   so one runaway pod cannot fork-bomb a node and starve etcd. The peak seen was 210 (Plex).
@@ -98,7 +100,9 @@ T110=~/.cache/luma-homeops/talosctl-v1.10.9     # 1.14 gets "API is not implemen
 bmcctl mount NODE && bmcctl boot NODE cd && bmcctl power NODE restart --force
 $T110 -n IP -e IP get disks --insecure                 # maintenance mode: new NVMe is nvme0n1
 talosctl -n PEER -e PEER etcd remove-member MEMBER_ID  # PEER = a healthy node
-$T110 apply-config --insecure -n IP -e IP --file nodes/controlplane.yaml
+# Set NODE to top, middle, or bottom, matching IP before applying.
+$T110 apply-config --insecure -n IP -e IP --file nodes/controlplane.yaml \
+  --config-patch @nodes/hostname-${NODE}.patch.yaml
 bmcctl eject NODE                                      # the ISO runs from RAM; the override was one-shot
 ```
 
@@ -120,6 +124,8 @@ Watch it install, reboot from the NVMe and join: `talosctl -n IP -e IP dmesg -f`
 2. **Verify:**
    - `talosctl -n IP version` is v1.10.9, and `get extensions` lists amdgpu and amd-ucode.
    - etcd 3/3 healthy, mon back in quorum, every OSD up, PGs `active+clean`.
+   - The original node name is Ready, with its original pod CIDR; no generated
+     `talos-*` duplicate node has appeared. `talosctl -n IP get hostname` agrees.
    - The node has no Pending or crash-looping pods.
 3. **UEFI check:** `talosctl -n IP ls /sys/firmware/efi` exists, and dmesg shows
    amdgpu initializing `0000:30:00.0` (the iGPU), plus `0000:10:00.0` (the RX 580)
