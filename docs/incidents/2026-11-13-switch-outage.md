@@ -3,7 +3,8 @@
 Top remains offline with no Ethernet carrier. Middle and bottom serve the
 cluster while physical access to the rack is unavailable for about two weeks.
 The service priorities are Forgejo, Immich, family services and Home Assistant.
-Plex remains available; media acquisition and its automation are paused.
+Plex and CI workers remain available; media acquisition, its automation and
+Trivy vulnerability scanning are paused.
 
 ## Current evidence
 
@@ -71,6 +72,28 @@ Assistant, authentication and their dependencies retain normal reconciliation.
 Argo's displayed status for the paused media Application is stale by design;
 use `kubectl -n media get deployments,pods,pvc` to inspect its actual state.
 
+## Vulnerability scanning pause
+
+The `trivy-operator` Application also has `skip-reconcile: "true"`. Its
+`trivy-operator` Deployment and `trivy-server` StatefulSet are scaled to zero,
+releasing another 1600 MiB and 300 millicores of requests on bottom. The server
+StatefulSet's PVC retention policy is `Retain` for both scale-down and deletion;
+its existing 10 GiB cache claim and all scan reports remain in place.
+
+```sh
+kubectl -n trivy-system scale deployment trivy-operator --replicas=0
+# Wait for active scan Jobs to finish before stopping their cache server.
+kubectl -n trivy-system scale statefulset trivy-server --replicas=0
+```
+
+The pause stops cluster scanning and its report refresh; it does not change
+Forgejo, either CI runner Deployment, or their build workflows. Use
+`kubectl -n trivy-system get deployments,statefulsets,jobs,pods,pvc` to check
+the actual paused state. Inspect outstanding scan Jobs before scaling the
+server down; none were active at preparation time.
+
+## Storage and backups
+
 Ceph remains available with six OSDs across two hosts and reduced redundancy.
 An etcd snapshot was preserved before recovery. All placement groups were
 active at the last check. Pausing media does not restore the missing third
@@ -88,11 +111,13 @@ nodes while top is unavailable.
 3. Check current Ceph health, pod CIDRs, database primaries and backups before
    resuming acquisition. Inspect the media Application's current chart/version
    diff, since reconciliation has been paused.
-4. Remove only the `skip-reconcile` annotation and its temporary comment through
-   a normal GitOps change. Argo restores the chart's one-replica Deployments and
-   configuration hooks. Keep this incident record for context.
-5. Verify all eight Deployments become Ready, Plex remains available, PVC UIDs
-   are unchanged, and resource requests fit before downloads resume.
+4. Remove the `skip-reconcile` annotation and its temporary comment from the
+   two paused Applications through a normal GitOps change. Argo restores the
+   charts' one-replica workloads and media configuration hooks. Keep this
+   incident record for context.
+5. Verify all eight media Deployments and both Trivy workloads become Ready,
+   Plex and CI remain available, PVC UIDs are unchanged, and resource requests
+   fit before downloads and scanning resume.
 
 The pause has no automatic expiry: resume after repair and verification,
 rather than assuming physical access or networking recovers on a calendar date.
