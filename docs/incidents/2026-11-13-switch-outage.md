@@ -92,12 +92,28 @@ Forgejo, either CI runner Deployment, or their build workflows. Use
 the actual paused state. Inspect outstanding scan Jobs before scaling the
 server down; none were active at preparation time.
 
+Grafana's UI and two configuration sidecars are also paused with
+`grafana.replicas: 0` in the monitoring Application's chart values. This
+releases 1216 MiB of memory requests on bottom while retaining the Deployment,
+Services and provisioned dashboard configuration. Prometheus, Alertmanager
+and exporters remain enabled and reconciliation stays active. Grafana uses
+`emptyDir` rather than a PVC; a private copy of its current SQLite database
+passed an integrity check before scale-down. Restore its default one replica
+by removing the temporary override after capacity recovery.
+
+Top is explicitly cordoned (`NotReady,SchedulingDisabled`), in addition to
+its unreachable taints. Keep the cordon until its identity, network and
+storage paths have been checked after the physical link returns.
+
 ## Storage and backups
 
 Backup CronJobs remain enabled. Post-recovery checks also ran fresh Forgejo
 logical database and repository/config backups, plus a Home Assistant restic
 snapshot, successfully writing offsite. The fresh Forgejo archive was about
 350 MB; the restic snapshot was `bc48142f` at 2026-11-13 19:39:57 UTC.
+The manual restic restore canary also passed, restoring selected Home
+Assistant, Plex and gonic files into disposable storage and confirming
+satellite and CI-ledger snapshots exist.
 
 Prometheus and Alertmanager initially remained blocked by their original
 terminating pod records on top. Those pre-reboot processes were fenced by
@@ -105,9 +121,10 @@ top's confirmed power cycles and independent live-OS boot. Recovery removes
 only the stale pod API records so their StatefulSets can reuse the original
 PVCs on healthy nodes. Prometheus temporarily requests 3 GiB instead of 4 GiB
 to fit the available reservations; its 4 GiB memory limit remains in place.
-Restore the request after capacity recovery. Backup alert coverage must be
-verified from live Prometheus rules and Alertmanager readiness, rather than
-assuming a healthy Grafana Deployment means the monitoring backend is up.
+Restore the request after capacity recovery. Both monitoring StatefulSets
+recovered on middle using normal CSI detach/reattach. Prometheus and
+Alertmanager readiness passed; all three backup alert rules evaluated with
+health `ok`, and Prometheus discovered an active Alertmanager.
 
 Ceph remains available with six OSDs across two hosts and reduced redundancy.
 An etcd snapshot was preserved before recovery. All placement groups were
@@ -124,14 +141,15 @@ nodes while top is unavailable.
    OSDs return. Top's HDD OSD activation paths may need the same serial/OSD-UUID
    verification and stable by-id correction used on middle and bottom.
 3. Check current Ceph health, pod CIDRs, database primaries and backups before
-   resuming acquisition. Inspect the media Application's current chart/version
-   diff, since reconciliation has been paused.
+   uncordoning top or resuming acquisition. Inspect the media Application's
+   current chart/version diff, since reconciliation has been paused.
 4. Remove the `skip-reconcile` annotation and its temporary comment from the
    two paused Applications through a normal GitOps change. Argo restores the
    charts' one-replica workloads and media configuration hooks. Keep this
    incident record for context.
 5. Restore the Prometheus request to 4 GiB once capacity permits. Verify
    Prometheus and Alertmanager remain Ready and backup alert rules are loaded.
+   Remove `grafana.replicas: 0` to restore the Grafana UI and its sidecars.
 6. Verify all eight media Deployments and both Trivy workloads become Ready,
    Plex and CI remain available, PVC UIDs are unchanged, and resource requests
    fit before downloads and scanning resume.
