@@ -182,6 +182,9 @@ spec:
                     requests:
                       storage: 200Gi
         grafana:
+          # Temporary two-node capacity mode: pause the UI and its sidecars.
+          # Keep Prometheus/Alertmanager running; remove after recovery.
+          replicas: 0
           # Real requests (Luma 0b), requests only: both were BestEffort.
           resources:
             requests:
