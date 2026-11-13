@@ -94,6 +94,21 @@ server down; none were active at preparation time.
 
 ## Storage and backups
 
+Backup CronJobs remain enabled. Post-recovery checks also ran fresh Forgejo
+logical database and repository/config backups, plus a Home Assistant restic
+snapshot, successfully writing offsite. The fresh Forgejo archive was about
+350 MB; the restic snapshot was `bc48142f` at 2026-11-13 19:39:57 UTC.
+
+Prometheus and Alertmanager initially remained blocked by their original
+terminating pod records on top. Those pre-reboot processes were fenced by
+top's confirmed power cycles and independent live-OS boot. Recovery removes
+only the stale pod API records so their StatefulSets can reuse the original
+PVCs on healthy nodes. Prometheus temporarily requests 3 GiB instead of 4 GiB
+to fit the available reservations; its 4 GiB memory limit remains in place.
+Restore the request after capacity recovery. Backup alert coverage must be
+verified from live Prometheus rules and Alertmanager readiness, rather than
+assuming a healthy Grafana Deployment means the monitoring backend is up.
+
 Ceph remains available with six OSDs across two hosts and reduced redundancy.
 An etcd snapshot was preserved before recovery. All placement groups were
 active at the last check. Pausing media does not restore the missing third
@@ -115,7 +130,9 @@ nodes while top is unavailable.
    two paused Applications through a normal GitOps change. Argo restores the
    charts' one-replica workloads and media configuration hooks. Keep this
    incident record for context.
-5. Verify all eight media Deployments and both Trivy workloads become Ready,
+5. Restore the Prometheus request to 4 GiB once capacity permits. Verify
+   Prometheus and Alertmanager remain Ready and backup alert rules are loaded.
+6. Verify all eight media Deployments and both Trivy workloads become Ready,
    Plex and CI remain available, PVC UIDs are unchanged, and resource requests
    fit before downloads and scanning resume.
 

@@ -85,7 +85,10 @@ spec:
             resources:
               requests:
                 cpu: 200m
-                memory: 4Gi
+                # Temporary two-node recovery: fit on middle after the media
+                # pause while retaining the 4Gi ceiling for TSDB replay.
+                # Restore the 4Gi request after top rejoins; see incident log.
+                memory: 3Gi
               limits:
                 memory: 4Gi
             # Convention: every PrometheusRule for this Prometheus carries
