@@ -4,6 +4,11 @@ kind: Application
 metadata:
   name: mega-media-release
   namespace: argo-cd
+  annotations:
+    # Temporary two-node operation while top has no network link. Keep the
+    # eight non-Plex Deployments scaled to zero without pruning their PVCs.
+    # Resume procedure: docs/incidents/2026-11-13-switch-outage.md.
+    argocd.argoproj.io/skip-reconcile: "true"
 spec:
   project: default
   source:
