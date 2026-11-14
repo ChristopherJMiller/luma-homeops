@@ -31,7 +31,7 @@
 # /postgres-operator, and only swaps the binary.
 FROM registry.opensource.zalan.do/acid/postgres-operator:v1.11.0@sha256:20ba5dbb3f2d3566eddb4cd0616379cc73e55bacce398301e577d4f6353ad4e9 AS runtime-base
 
-FROM golang:1.26.8-bookworm@sha256:dc9ad6c05acc7a88e5b71bde60a5fe3bd4b9f0db209011711b464107438a8107 AS build
+FROM golang:1.27.4-bookworm@sha256:4fa7c968ba93f1635670522dbb01a2c78150443e1385746924566079f36570ea AS build
 
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=
 WORKDIR /src
