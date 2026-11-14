@@ -11,25 +11,25 @@
 # Chris applies, always: ./azure/ci/tf.sh apply <plan>. An agent stops at plan.
 
 terraform {
-  required_version = ">= 1.5"
+  required_version = "1.17.2"
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 4.0"
+      version = "4.81.0"
     }
     azuread = {
       source  = "hashicorp/azuread"
-      version = "3.9.0"
+      version = "3.10.0"
     }
     time = {
       source  = "hashicorp/time"
-      version = "~> 0.12"
+      version = "0.14.2"
     }
     # The sweeper's Logic App (sweeper.tf). azurerm has no resource that takes a raw workflow
     # definition with a managed identity, so azapi creates that one resource and nothing else.
     azapi = {
       source  = "Azure/azapi"
-      version = "~> 2.0"
+      version = "2.13.0"
     }
   }
 
