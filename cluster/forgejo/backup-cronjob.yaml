@@ -45,7 +45,7 @@ spec:
               emptyDir: {}
           initContainers:
             - name: rclone
-              image: ghcr.io/rclone/rclone:1.75.1@sha256:45401ad7410db1d67ffdb58e19059ad20b0d8e0285a60e38bbec55cc1019c7a5
+              image: ghcr.io/rclone/rclone:1.76.0@sha256:7cbeec24a44f206067597c0368be4de90ae19a64d5113c7d1938bd737a81e466
               command: ["cp", "/usr/local/bin/rclone", "/tools/rclone"]
               securityContext:
                 allowPrivilegeEscalation: false
@@ -55,7 +55,7 @@ spec:
                 - {name: tools, mountPath: /tools}
           containers:
             - name: dump
-              image: alpine/k8s:1.33.13@sha256:e521cee1f1cb8699bc6e906b4ce6fe50e84addae97f52d5dcf05d3974002ac26
+              image: alpine/k8s:1.37.2@sha256:7a82aeefea3d554a43a8676b137f2b88bae6c1fe11c13862b191b3a086cc28c0
               securityContext:
                 allowPrivilegeEscalation: false
                 capabilities:

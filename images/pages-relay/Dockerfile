@@ -3,7 +3,7 @@
 # Builder: golang:1.26.9-alpine, tag pushed 2026-10-10 (past the 2-week rule;
 # 1.26.10 is too new). Digest is the multi-arch index, read from the registry.
 # Runtime: distroless static nonroot, same pin as forge-bot.
-FROM golang:1.26.9-alpine@sha256:3082400e369fa24d5fc60bca20edab3f6d604e0c5a690ec66b295eff4dd87ade AS build
+FROM golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS build
 WORKDIR /src
 COPY go.mod ./
 COPY relay.go hold.go main.go ./
