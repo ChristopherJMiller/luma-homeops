@@ -420,6 +420,7 @@ The forge's own image is `realliance/forgejo`'s patch queue on top of upstream 1
 **Fork config.** The patches read two app.ini sections that upstream ignores, so the fallback boots with them in place.
 
 - `[realliance] ACCOUNT_URL`: the "Realliance account ↗" link at the top of the user settings menu. Empty hides it.
+- `[realliance] INVITE_URL` (from `v15.0.11-realliance.4`): the "Invite someone" item in the avatar menu, shown to signed-in users. http/https only. Unset until the invite service (invite.realliance.net) opens; empty hides it.
 - `[realliance.ci_usage]`: the Usage tab under Settings, Actions, and the held note on a queued job. `URL` is ci-dispatch's usage API on its ClusterIP Service, port 8081, which ci-dispatch's NetworkPolicy opens to Forgejo's pods only. `TOKEN` comes from Secret `forgejo-ci-usage` through `additionalConfigSources`; rotate it with ci-dispatch's copy (`docs/ci.md`, "The usage token"). An empty `URL` turns the feature off.
 
 **The keep-warm DaemonSet.** `forgejo-keepwarm` (namespace `forgejo`, Argo sync wave -1, from the chart's `extraDeploy`) runs `{{ include "gitea.image" . }}`, the Deployment's own image with the fallback included, as `/app/gitea/gitea --version && exec sleep 2147483647` on every node.
