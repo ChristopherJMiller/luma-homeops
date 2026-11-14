@@ -52,8 +52,8 @@ spec:
         # every node one Argo wave before Forgejo. Recreate stops the old pod before the new one
         # pulls, and the fork image comes from the forge's own registry, so each node must hold it
         # while the old forge still serves it. `--version` runs first: a binary that won't start
-        # crash-loops here, and the sync waits at wave -1 with the old forge still up. With a node
-        # NotReady every sync of this app waits here too; the runbook has the selective sync.
+        # crash-loops here, and the sync waits at wave -1 with the old forge still up. No tolerations
+        # of its own, as Forgejo: a NotReady node (tainted NoSchedule) leaves the gate's count.
         extraDeploy:
           - apiVersion: apps/v1
             kind: DaemonSet
@@ -82,8 +82,6 @@ spec:
                 spec:
                   automountServiceAccountToken: false
                   terminationGracePeriodSeconds: 1 # `sleep` as PID 1 ignores SIGTERM
-                  tolerations:
-                    - operator: Exists # every node, whatever taint it gains
                   securityContext:
                     runAsNonRoot: true
                     runAsUser: 1000

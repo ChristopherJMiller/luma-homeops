@@ -415,7 +415,7 @@ The forge's own image is `realliance/forgejo`'s patch queue on top of upstream 1
 
 1. `ci-dispatch` first: the live dispatcher must carry #3 (blocked jobs) before the forge runs an image with the `blocked` patch.
 2. No Actions job may run: every runner reads Idle or Offline under Site administration, Actions, Runners. A runner mid-job loses the forge, and a paid one keeps billing.
-3. Push the pin. Argo syncs wave -1 first, the keep-warm DaemonSet, on all three nodes. Only once it reads 3/3 Ready does Forgejo's Recreate start: 1 to 3 minutes of downtime. Watch with `Monitor` (the safe-rollout skill), and watch each keep-warm pod's state, not only the 3/3 count.
+3. Push the pin. Argo syncs wave -1 first, the keep-warm DaemonSet, on every node Forgejo can land on (all three when they're Ready). Only once it reads all of them Ready does Forgejo's Recreate start: 1 to 3 minutes of downtime. Watch with `Monitor` (the safe-rollout skill), and watch each keep-warm pod's state, not only the 3/3 count.
 
 **Fork config.** The patches read two app.ini sections that upstream ignores, so the fallback boots with them in place.
 
@@ -429,6 +429,7 @@ The forge's own image is `realliance/forgejo`'s patch queue on top of upstream 1
 - The DaemonSet pulls the image while the old forge still serves it, and it keeps the image in use, so image garbage collection leaves it alone. The cached copies outlive a drain and a deleted package version. A rebuilt node starts empty and pulls again from the running forge.
 - It doubles as a start check: a binary that fails `--version` crash-loops in wave -1, the sync waits, and the old forge stays up. `kubectl -n forgejo logs <pod> --previous` shows the error of a crash-looping pod.
 - Each pod requests 1m CPU and 8Mi, with a 128Mi limit. `--version` needs about 40Mi of its own, and the page cache it reads counts too: under a 64Mi limit, one pod reached it.
+- No tolerations of its own, the same as Forgejo's pod, so the gate covers exactly the nodes Forgejo can land on (see A node goes `NotReady` below).
 
 **When the sync waits at wave -1.** Argo touches Forgejo only after the DaemonSet turns healthy. This Argo has no sync timeout, and it never reads a DaemonSet as Degraded, so the operation stays Running with `waiting for healthy state of apps/DaemonSet/forgejo-keepwarm`, and nothing alerts. While it runs, Argo skips auto-sync, so a new commit waits too. First read the keep-warm pods with `kubectl -n forgejo get pods -l app.kubernetes.io/name=forgejo-keepwarm -o wide`. The cause decides the fix.
 
@@ -448,7 +449,9 @@ export KUBECONFIG=/tmp/galaxy-kubeconfig
 
 Auto-sync then takes the revert: wave -1 goes back to the old image, and Forgejo doesn't restart.
 
-**A node is `NotReady`**, and on every `Ready` node the keep-warm pod reads `Running` and 1/1 on the new image, with no recent restarts. The image is fine; the sync waits only for the down node, and it carries on once the node returns. To roll Forgejo before that, end the operation and sync Forgejo's Deployment together with the chart's three Secrets, which skips the wave. Forgejo reads its config from those Secrets when it starts, and only a change to the Deployment restarts it, so a Deployment synced alone would run on the old config with nothing to restart it later.
+**A node goes `NotReady`.** This doesn't hold the sync. The node controller taints it `node.kubernetes.io/unreachable` (or `not-ready`) `NoSchedule` within about 40 s. The keep-warm DaemonSet carries no tolerations of its own, the same as Forgejo, so the node drops out of its desired count and the gate waits only on the nodes Forgejo can land on. The built-in DaemonSet tolerations keep the old pod on the down node (it may read `Terminating` until the node returns). They also cover a cordoned node: once the node is back, even while still cordoned, it gets a keep-warm pod and pulls the image from the running forge. Until 2026-11-14 the pods tolerated every taint (`operator: Exists`), and a down node held every sync of this app until it returned.
+
+**The node case.** The sync waits on one node that the gate still counts, and on every other node the keep-warm pod reads `Running` and 1/1 on the new image, with no recent restarts. The image is fine; the sync waits only for that node. To roll Forgejo before it recovers, end the operation and sync Forgejo's Deployment together with the chart's three Secrets, which skips the wave. Forgejo reads its config from those Secrets when it starts, and only a change to the Deployment restarts it, so a Deployment synced alone would run on the old config with nothing to restart it later.
 
 ```bash
 cp /tmp/galaxy-kubeconfig /tmp/galaxy-kubeconfig-argo
@@ -461,8 +464,8 @@ export KUBECONFIG=/tmp/galaxy-kubeconfig
 ```
 
 - `terminate-op` only asks for the stop. `app wait --operation` returns once the operation has ended, so the sync doesn't fail on an operation still in progress.
-- After the selective sync, self-heal starts a sync of the rest, and it waits at wave -1 again until the node returns. That wait is normal.
-- Once the node is back, `forgejo-release` must read Synced. If it doesn't, `argocd --core app get forgejo-release`, run with the kubeconfig from above, lists what differs.
+- After the selective sync, self-heal starts a sync of the rest, and it waits at wave -1 again until that node's keep-warm pod is Ready. That wait is normal.
+- Once the node is fixed, `forgejo-release` must read Synced. If it doesn't, `argocd --core app get forgejo-release`, run with the kubeconfig from above, lists what differs.
 
 **Fallback to upstream.** Trigger: Forgejo's pod is in `ErrImagePull`, `ImagePullBackOff` or `CrashLoopBackOff` on the fork image.
 

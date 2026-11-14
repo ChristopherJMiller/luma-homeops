@@ -173,8 +173,12 @@ def test_keepwarm_minimal(docs: list[dict]) -> None:
     assert csc.get("allowPrivilegeEscalation") is False
     assert csc.get("capabilities") == {"drop": ["ALL"]}
     assert pod.get("automountServiceAccountToken") is False
-    # All three nodes are control planes; today none is tainted, and a future taint must not drop one.
-    assert {"operator": "Exists"} in pod.get("tolerations", []), pod.get("tolerations")
+    # Forgejo's own tolerations (none), so the gate covers exactly the nodes Forgejo can land on. The
+    # DaemonSet controller's built-ins still cover a cordoned node. A blanket `operator: Exists` kept a
+    # NotReady node (tainted unreachable:NoSchedule) in the desired count, so wave -1 waited for it.
+    tolerations = pod.get("tolerations", [])
+    assert tolerations == one(docs, "Deployment", "forgejo")["spec"]["template"]["spec"].get("tolerations", [])
+    assert not any(t.get("operator") == "Exists" and not t.get("key") for t in tolerations), tolerations
     assert "nodeSelector" not in pod and "affinity" not in pod
     # Nothing to serve or store: no ports, no volumes, no host namespaces.
     assert "ports" not in warm and "volumeMounts" not in warm and "volumes" not in pod
