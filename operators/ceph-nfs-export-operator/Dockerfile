@@ -4,7 +4,7 @@
 # because python3-cephfs is built only for the system interpreter — kopf
 # is therefore pinned to <1.39 (the last py3.9-compatible series) until
 # the ceph base image moves to a newer Stream / Python.
-FROM quay.io/ceph/ceph:v19.2.6@sha256:ff836bb28e7d0be0ec4dd22e79407174452a96e11ee62e9cdd1fa47f4bcc3bdc
+FROM quay.io/ceph/ceph:v21.2.0@sha256:c9e6ed4ac3fcf67b28f38358bb9619dee4d1dfb96ddd4b9b583eee316a15f04d
 
 RUN dnf install -y python3-pip \
  && dnf clean all \
