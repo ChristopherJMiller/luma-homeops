@@ -256,6 +256,14 @@ Gotchas already hit:
   v1.11.0 in the values — keep them in lockstep.
 - A dump of a 31 MB database took ~11 minutes: cold catalog reads on the
   spinners. Fine for a nightly, don't panic at the duration.
+- The backup script dumps from any pod labelled `spilo-role=replica`, and only
+  falls back to the master if none exists. A Spilo pod stuck on a dead node keeps
+  its last role label, so the job times out against its pod IP:
+  `connection to server at "10.244.x.y" … timed out`. That happened every night
+  from 2026-11-14 to 11-16 while top was offline. Fix: `kubectl label pod <stale
+  pod> spilo-role-`, then
+  `kubectl create job --from=cronjob/logical-backup-<cluster> <name>`. Patroni
+  relabels a pod that runs again.
 - Once the Patroni plan's Tasks 5–8 have opted it in (check the CR's `spec.env`), every `acid-*` CR references Secret `patroni-restapi` in its own namespace
   (Patroni REST API auth; non-optional, D7 of
   `docs/superpowers/plans/2026-10-19-patroni-rest-auth.md`), so a Spilo pod

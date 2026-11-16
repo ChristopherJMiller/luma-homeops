@@ -127,6 +127,13 @@ Watch it install, reboot from the NVMe and join: `talosctl -n IP -e IP dmesg -f`
    - The original node name is Ready, with its original pod CIDR; no generated
      `talos-*` duplicate node has appeared. `talosctl -n IP get hostname` agrees.
    - The node has no Pending or crash-looping pods.
+   - No admission storm on middle. If Plex is scheduled before the AMD device
+     plugin re-registers with the new kubelet, the kubelet rejects it with
+     `UnexpectedAdmissionError` (or `OutOfmemory` while it settles), and the
+     ReplicaSet replaces it at once: 2,745 Failed pods in 6 minutes on
+     2026-11-13. Pod GC ignores them until 12,500. They are terminal records,
+     so delete them: `kubectl -n media get pods --field-selector=status.phase=Failed`,
+     then delete the `mm-plex-*` pods with those reasons.
 3. **UEFI check:** `talosctl -n IP ls /sys/firmware/efi` exists, and dmesg shows
    amdgpu initializing `0000:30:00.0` (the iGPU), plus `0000:10:00.0` (the RX 580)
    on middle.

@@ -132,6 +132,25 @@ active at the last check. Pausing media does not restore the missing third
 storage replica. Preserve backups and avoid maintenance on the surviving
 nodes while top is unavailable.
 
+## Follow-ups on 2026-11-15
+
+- **Postgres logical backups.** The nightly dumps for `acid-immich`,
+  `acid-media` and `acid-royaltracker` failed from 2026-11-14 to 11-16. The
+  backup script prefers a `spilo-role=replica` pod, and each cluster's replica
+  was a stale pod record on top. Removing the `spilo-role` label from the five
+  stale Spilo pods on top fixed the selection; `acid-gramps-1` and
+  `acid-chrismillerxyz-1` were still labelled `master`. Manual runs then
+  uploaded all three dumps to B2. The gotcha is in `docs/backups.md`.
+- **Plex admission storm.** While middle rejoined on 2026-11-13, the Plex
+  ReplicaSet created 2,668 `UnexpectedAdmissionError` pods and 77
+  `OutOfmemory` pods in six minutes, before the AMD device plugin
+  re-registered. Those records were deleted; a check is now in
+  `docs/node-rebuild.md`.
+- **Plex transcode volume.** A live-watched game filled the 20Gi
+  `mm-plex-transcode` with its timeshift buffer and paged
+  `KubePersistentVolumeFillingUp`. The volume was raised to 50Gi in git and
+  expanded live to match, because this Application is not reconciling.
+
 ## Restore
 
 1. Restore top's physical link. The next direct tests are a controlled switch
@@ -140,6 +159,9 @@ nodes while top is unavailable.
 2. Verify all original nodes are Ready, etcd membership is healthy and all nine
    OSDs return. Top's HDD OSD activation paths may need the same serial/OSD-UUID
    verification and stable by-id correction used on middle and bottom.
+   The five stale Spilo pods on top are already marked for deletion, so they
+   are recreated once top's kubelet returns. Then confirm that every two-member
+   `acid-*` cluster has one `master` and one `replica` again.
 3. Check current Ceph health, pod CIDRs, database primaries and backups before
    uncordoning top or resuming acquisition. Inspect the media Application's
    current chart/version diff, since reconciliation has been paused.
