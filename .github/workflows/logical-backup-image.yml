@@ -1,0 +1,104 @@
+---
+name: logical-backup image
+
+# logical-backup v1.11.0 + galaxy's dump.sh, which dumps only from a Ready,
+# non-terminating pod (images/logical-backup). Tags :sha-<short> (immutable,
+# what logical_backup_docker_image in cluster/applications/postgres-operator.yaml
+# pins by digest) and :latest.
+#
+# The Docker build is the test gate: it checks the base still carries
+# upstream's exact dump.sh, then runs test/run.sh, the real script against a
+# stubbed API, Postgres and S3. Merging here deploys nothing: the pin in the
+# Argo app is a second, manual commit (CLAUDE.md sharp edge #6).
+#
+# Actions are pinned by commit SHA: this image reads every database's
+# superuser credentials and the B2 backup key.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - images/logical-backup/**
+      - .github/workflows/logical-backup-image.yml
+  pull_request:
+    paths:
+      - images/logical-backup/**
+      - .github/workflows/logical-backup-image.yml
+  workflow_dispatch:
+
+concurrency:
+  group: logical-backup-image-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository_owner }}/logical-backup
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: images/logical-backup
+          # amd64 only: every galaxy node is x86_64, and the upstream v1.11.0
+          # logical-backup base is a single-arch amd64 image.
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Proves the pushed digest (what the pin names, not a tag that could move)
+      # carries the galaxy dump.sh, not upstream's. ${IMAGE,,}: the owner in IMAGE is
+      # mixed case and image references must be lowercase.
+      - name: Verify the galaxy build is in the pushed image
+        if: github.event_name != 'pull_request'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -eux
+          test -n "$DIGEST"
+          docker run --rm --entrypoint /bin/sh "${IMAGE,,}@${DIGEST}" -c 'grep -c "^# galaxy: only pods that can serve the dump" /dump.sh'
+          tag="$(printf '%s\n' "$TAGS" | grep ':sha-')"
+          echo "Pin: \`${tag##*:}@${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # Backup CronJobs pull without an imagePullSecret, so the package must be
+      # public. An empty DOCKER_CONFIG means no credentials: this fails while
+      # the GHCR package is private (flip it in the package settings).
+      - name: Anonymous pull works
+        if: github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -eux
+          DOCKER_CONFIG="$(mktemp -d)" docker manifest inspect "${IMAGE,,}@${DIGEST}"
