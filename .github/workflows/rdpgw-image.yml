@@ -1,0 +1,132 @@
+---
+name: rdpgw image
+
+# rdpgw for kvm-rdp (images/rdpgw), built from one pinned upstream commit with
+# our reviewed go.sum. Tags :sha-<short> (immutable, what the rdpgw-mac
+# Deployment in cluster/kvm pins by digest) and :latest. Spec:
+# docs/superpowers/specs/2026-10-07-kvm-rdp-deployment-design.md §4.6.
+#
+# The Docker build is the source gate: it checks the fetched commit, every
+# module against go.sum, and that the binary records the pinned commit with a
+# clean tree. Merging here deploys nothing: the pin in the Deployment is a
+# second, manual commit (CLAUDE.md sharp edge #6), and a new rdpgw commit also
+# re-runs the stage-3 checks.
+#
+# Actions are pinned by commit SHA: this image is the internet-facing gateway
+# in front of the KVM bridge.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - images/rdpgw/**
+      - .github/workflows/rdpgw-image.yml
+  pull_request:
+    paths:
+      - images/rdpgw/**
+      - .github/workflows/rdpgw-image.yml
+  workflow_dispatch:
+
+concurrency:
+  group: rdpgw-image-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE: ghcr.io/${{ github.repository_owner }}/rdpgw
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Image metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: images/rdpgw
+          # amd64 only: every galaxy node is x86_64.
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Proves the pushed digest (what the pin names, not a tag that could move)
+      # carries rdpgw built from RDPGW_COMMIT in the Dockerfile. The Go build info
+      # is plain text in the binary, and distroless has no shell, so the binary
+      # is copied out and grepped. ${IMAGE,,}: the owner in IMAGE is mixed case
+      # and image references must be lowercase.
+      - name: Verify the pinned commit is in the pushed image
+        if: github.event_name != 'pull_request'
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -eux
+          test -n "$DIGEST"
+          commit="$(sed -n 's/^ENV RDPGW_COMMIT=\([0-9a-f]\{40\}\) .*$/\1/p' images/rdpgw/Dockerfile)"
+          test "${#commit}" -eq 40
+          cid="$(docker create "${IMAGE,,}@${DIGEST}")"
+          docker cp "$cid:/rdpgw" "$RUNNER_TEMP/rdpgw"
+          docker rm "$cid"
+          grep -qaF "vcs.revision=${commit}" "$RUNNER_TEMP/rdpgw"
+          grep -qaF "vcs.modified=false" "$RUNNER_TEMP/rdpgw"
+          tag="$(printf '%s\n' "$TAGS" | grep ':sha-')"
+          echo "rdpgw \`${commit}\`. Pin: \`${tag##*:}@${DIGEST}\`" >> "$GITHUB_STEP_SUMMARY"
+
+      # Fails closed: header auth with no trusted proxies must refuse to start,
+      # since any client could then send the user header itself. This is the
+      # mode rdpgw-mac runs in. The host is a placeholder: rdpgw refuses to
+      # start with none, before it reaches the header check. `timeout`: if the
+      # check ever stops failing, rdpgw serves forever instead of exiting.
+      - name: Verify header auth refuses to start without trusted proxies
+        if: github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -eux
+          out="$(timeout 60 docker run --rm \
+            -e RDPGW_SERVER__TLS=disable \
+            -e RDPGW_SERVER__HOSTS=bridge.invalid:3389 \
+            -e RDPGW_SERVER__AUTHENTICATION=header \
+            -e RDPGW_HEADER__USER_HEADER=X-Forwarded-User \
+            "${IMAGE,,}@${DIGEST}" 2>&1 || true)"
+          echo "$out"
+          echo "$out" | grep -qF 'header.trustedproxies` is empty; refusing to start'
+
+      # The Deployment pulls without an imagePullSecret, so the package must be
+      # public. An empty DOCKER_CONFIG means no credentials: this fails while
+      # the GHCR package is private (flip it in the package settings).
+      - name: Anonymous pull works
+        if: github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -eux
+          DOCKER_CONFIG="$(mktemp -d)" docker manifest inspect "${IMAGE,,}@${DIGEST}"
