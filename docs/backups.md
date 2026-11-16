@@ -392,9 +392,12 @@ forgejo-dump and every operator `logical-backup-*`. Adding a backup CronJob mean
 three regexes and to `scripts/test-backup-alerts.sh` (promtool unit test:
 `nix shell nixpkgs#prometheus.cli nixpkgs#yq-go --command scripts/test-backup-alerts.sh`).
 
-Severity `warning` → Discord `homelab-default`, weekdays 09:00–22:00. A
-backup that breaks on Saturday night shows up Monday morning; that is the
-intended trade.
+`BackupCronJobNeverSucceeded` and `BackupJobFailed` are `warning`: Discord
+`homelab-default`, weekdays 09:00–22:00. `BackupCronJobStale` is `critical`
+and pages `@everyone` at any hour, about 13 h after a failed nightly that
+nobody re-ran (05:30 PT for the 00:30 UTC Postgres dumps). The weekday-only
+window cost three nights of Postgres dumps over the 2026-11-13 outage weekend
+without a page.
 
 ## Drill log
 

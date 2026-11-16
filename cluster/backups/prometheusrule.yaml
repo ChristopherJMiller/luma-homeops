@@ -22,12 +22,16 @@ spec:
       interval: 60s
       rules:
         - alert: BackupCronJobStale
-          # No successful run in 36h for a nightly job.
+          # No successful run in 36h for a nightly job: a nightly failed ~13h
+          # ago and nobody has re-run it. Critical, so it pages at any hour:
+          # warnings deliver only on weekdays, and three nights of Postgres
+          # dumps were lost over the 2026-11-13 outage weekend without a page.
+          # The failure itself is BackupJobFailed, a warning.
           expr: |
             (time() - kube_cronjob_status_last_successful_time{cronjob=~"restic-(home-assistant|plex|gonic|satellites|ci-dispatch)|family-backup|archive-backup|immich-backup|forgejo-dump|logical-backup-.*"}) > 36 * 3600
           for: 1h
           labels:
-            severity: warning
+            severity: critical
           annotations:
             summary: "Backup {{ $labels.namespace }}/{{ $labels.cronjob }} has not succeeded in >36h"
             description: "Last success was {{ $value | humanizeDuration }} ago. See docs/backups.md."

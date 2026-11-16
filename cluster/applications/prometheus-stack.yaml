@@ -101,6 +101,15 @@ spec:
               matchLabels:
                 release: prometheus
             ruleNamespaceSelector: {}
+            # A full mm-plex-transcode is not a page: Plex prunes its own
+            # segments at ~100 MB free and playback continues, losing only
+            # rewind (2026-11-15). Only the critical (<3% free) variant is
+            # downgraded; the volume is sized for one full live game.
+            additionalAlertRelabelConfigs:
+              - source_labels: [alertname, persistentvolumeclaim, severity]
+                regex: KubePersistentVolumeFillingUp;mm-plex-transcode;critical
+                target_label: severity
+                replacement: warning
             additionalScrapeConfigs:
               - job_name: kubernetes-pods
                 kubernetes_sd_configs:

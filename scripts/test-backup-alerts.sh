@@ -38,7 +38,7 @@ cronjobs="logical-backup-acid-forgejo:forgejo forgejo-dump:forgejo immich-backup
       - eval_time: 40h
         alertname: BackupCronJobStale
         exp_alerts:
-          - exp_labels: {severity: warning, namespace: $ns, cronjob: $name}
+          - exp_labels: {severity: critical, namespace: $ns, cronjob: $name}
             exp_annotations:
               summary: "Backup $ns/$name has not succeeded in >36h"
               description: "Last success was 1d 16h 0m 0s ago. See docs/backups.md."
