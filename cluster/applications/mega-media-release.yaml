@@ -144,10 +144,13 @@ spec:
             size: 30Gi
           transcode:
             # Transcoder scratch (TranscoderTempDirectory=/transcode). ssd: segments are
-            # written and read back immediately; 20Gi holds a few concurrent 4K sessions.
-            # Plex removes a session's files when it ends.
+            # written and read back immediately. Plex removes a session's files when it
+            # ends, but a Live TV session keeps its whole timeshift buffer until then:
+            # one 4h game at OTA bitrate (13-19 Mbps) is 22-35 GB. 20Gi filled on
+            # 2026-11-15 (Plex pruned old segments at ~100 MB free; the PVC alert paged).
+            # DVR recordings write to /data/tvshows/.grab, not here.
             storageClassName: rook-ceph-block-ssd # #2665
-            size: 20Gi
+            size: 50Gi
           # The family archive (cluster/family/) as a second library source.
           # Read-only on purpose: Plex writes sidecars next to media by default,
           # and this volume is the curated, B2-mirrored source of truth — its
