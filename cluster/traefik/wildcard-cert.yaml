@@ -11,6 +11,8 @@
 # no per-app Certificate, same as the other two.
 # realliance.page joined 2026-11-04 for Realliance Pages (<owner>.realliance.page;
 # spec + amendment, docs/superpowers/specs). Still one certificate.
+# *.mac.luma.chrismiller.xyz joined 2026-11-16 for kvm.mac.luma (kvm-rdp's
+# gateway; docs/superpowers/specs/2026-10-07-kvm-rdp-deployment-design.md).
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -26,6 +28,7 @@ spec:
     - chrismiller.xyz
     - '*.chrismiller.xyz'
     - '*.music.chrismiller.xyz'
+    - '*.mac.luma.chrismiller.xyz'
     - realliance.net
     - '*.realliance.net'
     - werethemille.rs

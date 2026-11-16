@@ -801,6 +801,7 @@ def test_cloudflareddns_tracks_realliance_page():
 
 WILDCARD_SANS = [
     "chrismiller.xyz", "*.chrismiller.xyz", "*.music.chrismiller.xyz",
+    "*.mac.luma.chrismiller.xyz",  # kvm-rdp gateway, 2026-11-16
     "realliance.net", "*.realliance.net", "werethemille.rs", "*.werethemille.rs",
     "buttert.art", "*.buttert.art", "realliance.page", "*.realliance.page",
 ]
