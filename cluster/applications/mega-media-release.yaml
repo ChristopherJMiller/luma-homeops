@@ -87,9 +87,12 @@ spec:
             mediaManagement:
               importExtraFiles: true
               extraFileExtensions: srt,ass,ssa,sub,idx
+            # Temporary two-node operation: 256Mi (30-day peak 233Mi) so manual
+            # movie grabs fit on middle. Restore 300Mi after top rejoins; see
+            # docs/incidents/2026-11-13-switch-outage.md.
             resources:
               requests:
-                memory: 300Mi
+                memory: 256Mi
               limits:
                 memory: 1Gi
           lidarr:

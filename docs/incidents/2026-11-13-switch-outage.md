@@ -82,6 +82,12 @@ Middle's other large reservations are Ceph daemons. Do not resize those
 while two hosts hold every PG: a restart blocks I/O on its PGs, and
 restarting mon-v loses quorum.
 
+On 2026-11-16 Radarr came back at one replica for a manual movie grab, so
+finished movie downloads import into Plex again. Its memory request dropped
+from 300Mi to 256Mi, in git and live, so its pod (288Mi with exportarr) fits
+the roughly 305Mi left on middle. Its 30-day peak was 233Mi; the 1Gi limit
+stays. Five Deployments stay paused.
+
 ## Vulnerability scanning pause
 
 The `trivy-operator` Application also has `skip-reconcile: "true"`. Its
@@ -182,7 +188,8 @@ nodes while top is unavailable.
 5. Restore the Prometheus request to 4 GiB once capacity permits. Verify
    Prometheus and Alertmanager remain Ready and backup alert rules are loaded.
    Remove `grafana.replicas: 0` to restore the Grafana UI and its sidecars.
-   Restore SABnzbd's 1Gi memory request in `mega-media-release.yaml`.
+   Restore SABnzbd's 1Gi and Radarr's 300Mi memory requests in
+   `mega-media-release.yaml`.
    While top is down, every `kube-prometheus-stack` sync waits indefinitely
    for top's node-exporter pod before its PostSync hook, so a new commit to it
    never applies. End that operation (`argocd --core app terminate-op`, with
