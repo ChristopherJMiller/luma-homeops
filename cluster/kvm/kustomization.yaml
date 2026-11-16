@@ -1,8 +1,7 @@
 ---
 # kvm-rdp: remote access to the work Mac through the ES3 KVM.
 # Design: docs/superpowers/specs/2026-10-07-kvm-rdp-deployment-design.md.
-# Gateway (rdpgw + relay + Ingresses for kvm.mac.luma.chrismiller.xyz) joins
-# in stage 3.
+# Gateway: rdpgw + relay + Ingresses for kvm.mac.luma.chrismiller.xyz.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: kvm
@@ -11,12 +10,23 @@ resources:
   - kvm-rdp-mac.yaml # SealedSecret, from kvm-rdp-mac.secret.yaml via ./sign.sh
   - bridge-mac-cert.yaml
   - bridge-mac.yaml
+  - rdpgw-mac.yaml
+  - middlewares.yaml
+  - ingress-mac.yaml
   - servicemonitor.yaml
   - prometheusrule.yaml
 
-# The key must be config.toml: the container runs --config
-# /etc/kvm-rdp/config.toml. The hash suffix rolls the pod on every retune.
+# Generated ConfigMaps: the hash suffix rolls the pod on every change.
 configMapGenerator:
+  # The key must be config.toml: the container runs --config
+  # /etc/kvm-rdp/config.toml.
   - name: kvm-rdp-mac-config
     files:
       - config.toml=config/bridge-mac.toml
+  - name: rdpgw-mac-config
+    files:
+      - rdpgw.yaml=config/rdpgw-mac.yaml
+      - defaults.rdp=config/defaults.rdp
+  - name: rdpgw-mac-relay
+    files:
+      - default.conf=config/relay.conf

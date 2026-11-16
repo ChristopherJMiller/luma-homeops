@@ -1,0 +1,56 @@
+---
+# kvm.mac.luma.chrismiller.xyz: two Exact paths, nothing else. Every other
+# path has no router, so Traefik answers 404 (and Traefik v3 sanitises
+# /remoteDesktopGateway/../connect to /connect, which is gated).
+# Two Ingresses because the middleware annotation applies per Ingress.
+#
+# /connect: the admin pair (errors first), then strip-set-cookie LAST so it
+# wraps only rdpgw's response, never the sign-in redirect whose CSRF cookie
+# must survive. The relay re-checks the session (relay.conf).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mac-connect
+  namespace: kvm
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      oauth2-proxy-oauth2-admin-errors@kubernetescrd,oauth2-proxy-oauth2-admin-auth@kubernetescrd,kvm-strip-set-cookie@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: kvm.mac.luma.chrismiller.xyz
+      http:
+        paths:
+          - path: /connect
+            pathType: Exact
+            backend:
+              service:
+                name: rdpgw-mac
+                port:
+                  number: 80
+---
+# /remoteDesktopGateway/: deliberately NOT gated at the edge. Windows App
+# carries no browser cookie; rdpgw checks the PAA token (pinned to the
+# fetching client address) and the bridge then requires NLA. The only path
+# exempt from forward-auth (kvm-rdp §9.4).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mac-tunnel
+  namespace: kvm
+  annotations:
+    traefik.ingress.kubernetes.io/router.middlewares: >-
+      kvm-strip-set-cookie@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: kvm.mac.luma.chrismiller.xyz
+      http:
+        paths:
+          - path: /remoteDesktopGateway/
+            pathType: Exact
+            backend:
+              service:
+                name: rdpgw-mac
+                port:
+                  number: 80

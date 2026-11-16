@@ -1,0 +1,46 @@
+---
+# rdpgw for the work Mac. Every line is load-bearing; deployment spec §4.3.
+# Keys checked against rdpgw 80612a9 (cmd/rdpgw/config/configuration.go).
+Server:
+  # TLS ends at Traefik; relay -> rdpgw is loopback inside the pod.
+  Tls: disable
+  # A URL, not a bare name: rdpgw url.Parse()s it and writes .Host into the
+  # .rdp's gatewayhostname. A bare name parses as a path with an empty host.
+  GatewayAddress: https://kvm.mac.luma.chrismiller.xyz
+  # Nothing outside the pod can reach rdpgw; the relay is the only way in.
+  BindAddress: 127.0.0.1
+  Port: 8081
+  Authentication:
+    - header
+  # One curated host. Never `any` (kvm-rdp §9.4).
+  HostSelection: roundrobin
+  # The bridge's certificate name; hostAliases maps it to 10.96.0.50.
+  Hosts:
+    - mac-bridge.kvm.chrismiller.xyz:3389
+  # Client IP = leftmost X-Forwarded-For, honoured only from the relay.
+  TrustedProxies:
+    - 127.0.0.1/32
+  # SessionKey/SessionEncryptionKey unset: random per process.
+  SessionStore: cookie
+Header:
+  UserHeader: X-Forwarded-User
+  # Only the relay may stamp the user.
+  TrustedProxies:
+    - 127.0.0.1/32
+Security:
+  # PAA tokens are pinned to the address that fetched /connect. Real client
+  # addresses reach Traefik since externalTrafficPolicy Local (e7eb8eb2).
+  # PAATokenSigningKey/EncryptionKey unset: random per process, so a restart
+  # voids every outstanding token.
+  VerifyClientIp: true
+Caps:
+  TokenAuth: true
+  # Paste-as-typing (kvm-rdp §8); rdpgw's default disables CLIPRDR.
+  EnableClipboard: true
+  # The bridge owns session liveness (kvm-rdp §6.9).
+  IdleTimeout: 0
+Client:
+  Defaults: /etc/rdpgw/defaults.rdp
+  # Keep username:s:kvm from defaults.rdp; don't overwrite it with the admin
+  # identity. No RdpOverridableKeys: /connect?... can never rewrite the .rdp.
+  NoUsername: true

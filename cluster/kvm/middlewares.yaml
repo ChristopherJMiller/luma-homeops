@@ -1,0 +1,12 @@
+---
+# The edge half of the RDPGWSESSION strip (kvm-rdp §9.4); the relay's
+# proxy_hide_header is the pod half. The edge snapshot greps for it.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: strip-set-cookie
+  namespace: kvm
+spec:
+  headers:
+    customResponseHeaders:
+      Set-Cookie: ""

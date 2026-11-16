@@ -7,18 +7,22 @@
 #        diff <(sed "s/ cert=.*//" before.txt) <(sed "s/ cert=.*//" after.txt)
 # Add new public hosts to the list below when you add them.
 set -u
-hosts="$(printf '%s\n' chrismiller.xyz www.chrismiller.xyz ci attic auth-admin auth-family dex galaxy photos home lidarr plex prowlarr radarr sabnzbd share sonarr requests mediadav music dav.music lagrange dashboard rccl-tracker wordarena realliance.net www.realliance.net legacy.realliance.net git.realliance.net realliance.page www.realliance.page realliance.realliance.page family.werethemille.rs mcp)"
+hosts="$(printf '%s\n' chrismiller.xyz www.chrismiller.xyz ci attic auth-admin auth-family dex galaxy photos home lidarr plex prowlarr radarr sabnzbd share sonarr requests mediadav music dav.music lagrange dashboard rccl-tracker wordarena realliance.net www.realliance.net legacy.realliance.net git.realliance.net realliance.page www.realliance.page realliance.realliance.page family.werethemille.rs mcp kvm.mac.luma)"
 for h in $hosts; do
   # Fully-qualified if it carries one of our zone suffixes; bare names are
   # assumed to be chrismiller.xyz, which is where most hosts live.
   case $h in *.net|*.xyz|*.rs|*.art|*.page) fq=$h;; *) fq=$h.chrismiller.xyz;; esac
-  for path in / /share/; do
-    [ "$path" = /share/ ] && [ "$fq" != share.chrismiller.xyz ] && continue
+  for path in / /share/ /connect /remoteDesktopGateway/ /metrics; do
+    case $path in
+      /share/) [ "$fq" != share.chrismiller.xyz ] && continue ;;
+      # kvm-rdp gateway: only two Exact paths are routed; / and /metrics must 404.
+      /connect|/remoteDesktopGateway/|/metrics) [ "$fq" != kvm.mac.luma.chrismiller.xyz ] && continue ;;
+    esac
     # One line per row whatever happens: a curl failure collapses to "000 err=<exit>".
     raw=$(curl -sS -o /dev/null --max-time 15 --resolve "$fq:443:192.168.0.7" \
       -w '%{http_code} loc=%{redirect_url} ct=%{content_type}' "https://$fq$path" 2>/dev/null); rc=$?
     if [ "$rc" -ne 0 ]; then out="000 err=$rc"; else out=$(printf '%s' "$raw" | sed 's/[?&]state=[^ &]*//; s/rd=[^ &]*/rd=…/'); fi
-    hdr=$(curl -sSI --max-time 15 --resolve "$fq:443:192.168.0.7" "https://$fq$path" 2>/dev/null | grep -iE '^(www-authenticate|content-security-policy|access-control-allow-origin|set-cookie: word-arena)' | cut -c1-60 | sort | tr '\n' '|')
+    hdr=$(curl -sSI --max-time 15 --resolve "$fq:443:192.168.0.7" "https://$fq$path" 2>/dev/null | grep -iE '^(www-authenticate|content-security-policy|access-control-allow-origin|set-cookie: word-arena|set-cookie: rdpgwsession)' | cut -c1-60 | sort | tr '\n' '|')
     cn=$(echo | openssl s_client -connect 192.168.0.7:443 -servername "$fq" 2>/dev/null | openssl x509 -noout -subject 2>/dev/null | sed 's/.*CN=//')
     printf '%-28s %-8s %s hdr=[%s] cert=%s\n' "$fq$path" "" "$out" "$hdr" "$cn"
   done

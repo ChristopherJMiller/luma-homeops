@@ -1,0 +1,146 @@
+---
+# rdpgw for the work Mac at kvm.mac.luma.chrismiller.xyz: an nginx relay
+# (Traefik's backend, re-checks the admin session on /connect) in front of
+# rdpgw on loopback. One replica, Recreate: rdpgw's keys are random per
+# process, so a /connect and its tunnel must land on the same process, and a
+# restart voids every outstanding token (the kill switch: replicas 0, in git).
+# Deployment spec §4.3.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rdpgw-mac
+  namespace: kvm
+  labels:
+    app.kubernetes.io/name: rdpgw-mac
+    app.kubernetes.io/part-of: kvm
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rdpgw-mac
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: rdpgw-mac
+        app.kubernetes.io/part-of: kvm
+    spec:
+      automountServiceAccountToken: false
+      enableServiceLinks: false
+      # rdpgw dials exactly the name it writes into the .rdp's full address;
+      # cluster DNS would resolve it to the WAN IP. Go reads /etc/hosts first.
+      hostAliases:
+        - ip: 10.96.0.50
+          hostnames:
+            - mac-bridge.kvm.chrismiller.xyz
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: relay
+          image: public.ecr.aws/docker/library/nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+          securityContext:
+            runAsUser: 101 # nginx
+            runAsGroup: 101
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: metrics
+              containerPort: 9090
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              memory: 64Mi
+          volumeMounts:
+            - name: relay-conf
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+            # nginx needs writable scratch space; the root filesystem is not.
+            - name: cache
+              mountPath: /var/cache/nginx
+            - name: run
+              mountPath: /run # nginx.conf: pid /run/nginx.pid (/var/run is a symlink to it)
+        - name: rdpgw
+          # images/rdpgw (upstream 80612a9). A new upstream commit re-runs the
+          # stage-3 gateway checks before it is pinned here.
+          image: ghcr.io/christopherjmiller/rdpgw:sha-313e8f7@sha256:f60d6c81c89d5fd6d33ee152606bc3ab982b7c8060ed300e216b25b63095390b
+          args: [--conf, /etc/rdpgw/rdpgw.yaml]
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          # rdpgw listens on 127.0.0.1 only, so kubelet probes it through the
+          # relay's :9090/metrics. A failure restarts this container.
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 9090
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 20m
+              memory: 32Mi
+            limits:
+              memory: 128Mi
+          volumeMounts:
+            - name: rdpgw-config
+              mountPath: /etc/rdpgw
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: relay-conf
+          configMap:
+            name: rdpgw-mac-relay
+        - name: rdpgw-config
+          configMap:
+            name: rdpgw-mac-config
+        - name: cache
+          emptyDir: {}
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+# No sticky annotations: one replica, and websocket transport is one TCP
+# stream through whichever Traefik pod accepted it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rdpgw-mac
+  namespace: kvm
+  labels:
+    app.kubernetes.io/name: rdpgw-mac
+    app.kubernetes.io/part-of: kvm
+spec:
+  selector:
+    app.kubernetes.io/name: rdpgw-mac
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+    - name: metrics
+      port: 9090
+      targetPort: metrics
