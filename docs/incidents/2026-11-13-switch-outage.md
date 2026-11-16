@@ -72,6 +72,16 @@ Assistant, authentication and their dependencies retain normal reconciliation.
 Argo's displayed status for the paused media Application is stale by design;
 use `kubectl -n media get deployments,pods,pvc` to inspect its actual state.
 
+On 2026-11-15 Prowlarr and SABnzbd were scaled back to one replica for manual
+searches and downloads; the other six stay paused. Without Sonarr and Radarr
+nothing imports, so finished downloads stay in SABnzbd's complete folder.
+SABnzbd's memory request was lowered from 1Gi to 256Mi, in git and on the live
+Deployment, to fit middle. Its 30-day peak was 219Mi, and the 2Gi limit is
+unchanged. `immich-machine-learning` was restarted onto bottom to make room.
+Middle's other large reservations are Ceph daemons. Do not resize those
+while two hosts hold every PG: a restart blocks I/O on its PGs, and
+restarting mon-v loses quorum.
+
 ## Vulnerability scanning pause
 
 The `trivy-operator` Application also has `skip-reconcile: "true"`. Its
@@ -172,6 +182,13 @@ nodes while top is unavailable.
 5. Restore the Prometheus request to 4 GiB once capacity permits. Verify
    Prometheus and Alertmanager remain Ready and backup alert rules are loaded.
    Remove `grafana.replicas: 0` to restore the Grafana UI and its sidecars.
+   Restore SABnzbd's 1Gi memory request in `mega-media-release.yaml`.
+   While top is down, every `kube-prometheus-stack` sync waits indefinitely
+   for top's node-exporter pod before its PostSync hook, so a new commit to it
+   never applies. End that operation (`argocd --core app terminate-op`, with
+   the kubeconfig setup in `docs/forgejo.md`). Self-heal then starts a new
+   sync that applies the change, then waits again. That happened on
+   2026-11-15, after the operation had been stuck since 11-13 19:45 UTC.
 6. Verify all eight media Deployments and both Trivy workloads become Ready,
    Plex and CI remain available, PVC UIDs are unchanged, and resource requests
    fit before downloads and scanning resume.

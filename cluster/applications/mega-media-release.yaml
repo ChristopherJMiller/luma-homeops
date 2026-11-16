@@ -205,8 +205,11 @@ spec:
             # Decoupled request/limit for the same reason as Plex (see above):
             # SABnzbd idles ~80Mi and only grows toward its 1G article cache +
             # par2 repair under load. Request 1Gi to schedule, keep 2Gi ceiling.
+            # Temporary two-node operation: 256Mi (30-day peak 219Mi) so manual
+            # downloads fit on middle while acquisition stays paused. Restore
+            # 1Gi after top rejoins; see docs/incidents/2026-11-13-switch-outage.md.
             requests:
-              memory: 1Gi
+              memory: 256Mi
               cpu: 1
             limits:
               memory: 2Gi
