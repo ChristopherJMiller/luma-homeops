@@ -19,15 +19,25 @@ spec:
         podDisruptionBudget:
           enabled: true
           minAvailable: 1
+        # One pod per node, required: with externalTrafficPolicy Local (below)
+        # MetalLB announces .7 only from a node with a ready Traefik pod, so
+        # two pods on one node would make that node a single point of failure.
         affinity:
           podAntiAffinity:
-            preferredDuringSchedulingIgnoredDuringExecution:
-              - weight: 100
-                podAffinityTerm:
-                  labelSelector:
-                    matchLabels:
-                      app.kubernetes.io/name: traefik
-                  topologyKey: kubernetes.io/hostname
+            requiredDuringSchedulingIgnoredDuringExecution:
+              - labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: traefik
+                topologyKey: kubernetes.io/hostname
+        # Replace in place, one pod at a time. The chart default (surge 1,
+        # unavailable 0) needs a third free node for the surge pod, which
+        # required anti-affinity forbids whenever a node is out (top,
+        # 2026-11), and the rollout would stall.
+        updateStrategy:
+          type: RollingUpdate
+          rollingUpdate:
+            maxSurge: 0
+            maxUnavailable: 1
         resources:
           requests:
             cpu: 100m
@@ -56,6 +66,13 @@ spec:
           annotations:
             metallb.universe.tf/address-pool: pool
             metallb.universe.tf/loadBalancerIPs: 192.168.0.7
+          # Local keeps the real client address (no kube-proxy SNAT), so
+          # Traefik's X-Forwarded-For is the client, not a 10.244.x node
+          # address. rdpgw pins each kvm-rdp token to it (VerifyClientIp;
+          # kvm-rdp deployment spec §5.3). LAN clients that hairpin through
+          # the router still arrive as 192.168.0.1.
+          spec:
+            externalTrafficPolicy: Local
         ports:
           web:
             http:
