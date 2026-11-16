@@ -1,0 +1,25 @@
+---
+# kvm-rdp (ns kvm): the bridge to the work Mac through the ES3 KVM, and (stage 3)
+# its rdpgw gateway at kvm.mac.luma.chrismiller.xyz. Runbook: docs/kvm.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: kvm
+  namespace: argo-cd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ChristopherJMiller/luma-homeops.git
+    path: cluster/kvm
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: kvm
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true

@@ -131,6 +131,12 @@
       "description": "Our own Forgejo -> git-pages relay (images/pages-relay). It decides which host a push publishes to and which repos are public enough to publish, so a new image is a change to who can publish where. :automergeDigest would otherwise deploy a re-pushed sha- tag unseen. Read the diff and the workflow's test run, then bump the sha- tag by hand."
     },
     {
+      "matchManagers": ["kubernetes"],
+      "matchPackageNames": ["ghcr.io/christopherjmiller/kvm-rdp", "ghcr.io/christopherjmiller/rdpgw"],
+      "automerge": false,
+      "description": "kvm-rdp bridge and its rdpgw gateway (cluster/kvm): the internet-facing path to the work Mac's keyboard. :automergeDigest would otherwise deploy a re-pushed sha- tag unseen. Bump by hand: kvm-rdp after cosign + gh attestation verify (docs/kvm.md), rdpgw after re-running the stage-3 gateway checks."
+    },
+    {
       "matchManagers": ["gomod", "dockerfile"],
       "matchFileNames": ["images/mcp-jwt-auth/**"],
       "groupName": "mcp-jwt-auth deps",

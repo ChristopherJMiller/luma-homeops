@@ -1,0 +1,23 @@
+---
+# The bridge's own RDP identity. Only Windows App sees it, inside the rdpgw
+# tunnel; Traefik never serves this name. A dedicated LE cert because kvm-rdp
+# §9.1 forbids the edge wildcard (a compromised bridge must not hold the key
+# for every public host) and a self-signed one would prompt in Windows App.
+# The bridge restarts on renewal, but only once no client is connected.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: kvm-rdp-mac-tls
+  namespace: kvm
+spec:
+  secretName: kvm-rdp-mac-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  commonName: mac-bridge.kvm.chrismiller.xyz
+  dnsNames:
+    - mac-bridge.kvm.chrismiller.xyz
+  privateKey:
+    algorithm: RSA
+    size: 2048
+    rotationPolicy: Always

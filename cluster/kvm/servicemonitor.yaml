@@ -1,0 +1,24 @@
+---
+# Scrapes every Service in ns kvm labelled part-of: kvm on its `metrics` port:
+# the bridge's admin listener (:9464) now, and rdpgw's /metrics through the
+# relay (:9090) once the gateway lands. Without `release: prometheus` the
+# monitor exists and collects nothing, silently.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: kvm
+  namespace: kvm
+  labels:
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/part-of: kvm
+  namespaceSelector:
+    matchNames: [kvm]
+  targetLabels:
+    - app.kubernetes.io/name
+  endpoints:
+    - port: metrics
+      scheme: http
+      interval: 30s

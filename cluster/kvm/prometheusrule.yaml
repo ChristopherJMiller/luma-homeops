@@ -1,0 +1,37 @@
+---
+# kvm-rdp alerts. Selected by `release: prometheus` (any namespace). Names
+# avoid Volume/Storage/Ceph/Disk so they route to homelab-default.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kvm-alerts
+  namespace: kvm
+  labels:
+    release: prometheus
+spec:
+  groups:
+    - name: kvm
+      rules:
+        - alert: KvmBridgeDown
+          # absent() also catches a bridge that is gone entirely (no target).
+          expr: |
+            absent(up{namespace="kvm", service="kvm-rdp-mac"} == 1)
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "kvm-rdp bridge (kvm/kvm-rdp-mac) has been down for 10 minutes"
+            description: "Prometheus can't scrape the bridge's admin port. See docs/kvm.md."
+        - alert: KvmBridgeUpstreamFatal
+          # Bridge-initiated disconnects caused by the KVM or its stream:
+          # kvm_unreachable, kvm_auth_failed, kvm_cert_mismatch, stream_corrupt,
+          # stream_incompatible. kvm_unreachable counts only when a session
+          # starts while the KVM can't be reached. kvm_cert_mismatch after a
+          # KVM factory reset means the SPKI pin in config/bridge-mac.toml is stale.
+          expr: |
+            increase(kvm_rdp_disconnects_total{namespace="kvm", cause=~"kvm_.+|stream_.+"}[15m]) > 0
+          labels:
+            severity: warning
+          annotations:
+            summary: "kvm-rdp: fatal upstream disconnect ({{ $labels.cause }})"
+            description: "The bridge dropped a session because of the KVM side. See docs/kvm.md."

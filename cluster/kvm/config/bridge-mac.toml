@@ -1,0 +1,28 @@
+# kvm-rdp bridge for the work Mac Studio, behind the ES3 KVM at 192.168.0.2.
+# Key reference: kvm-rdp spec §4.4 (~/Repos/kvm-rdp/docs/superpowers/specs/
+# 2026-10-05-kvm-rdp-design.md). Unknown keys and any [test] table are refused
+# (exit 2). Durations are strings ("1.6s"). Keep *_file paths absolute.
+#
+# Acceptance-tuned keys (video.first_ack_grace, input.key_repeat_timeout,
+# input.mac_remap) and Leg D's (paste.pace, input.reassert_after) stay at their
+# defaults until Chris's runs retune them here, through git.
+
+[rdp]
+listen = "0.0.0.0:3389"
+username = "kvm"
+nla_password_file = "/run/secrets/kvm-rdp/nla-password"
+tls_cert_file = "/run/secrets/kvm-rdp-tls/tls.crt"
+tls_key_file = "/run/secrets/kvm-rdp-tls/tls.key"
+
+[admin]
+listen = "0.0.0.0:9464"
+
+[kvm]
+host = "192.168.0.2"
+# SPKI SHA-256 from `kvm-probe fingerprint` (2026-11-16, equal to the October
+# census value; the factory reset is deferred, and a reset may change it) on
+# ports 443, 8881 and 8889 (all three must agree). A wrong pin fails every
+# session with kvm_cert_mismatch before any login is sent.
+spki_sha256 = "f94841875ec7fa56220d48ffadaa5c0f2d84ffbbd1beeb060245ded1419b614f"
+scheme = "https"
+password_file = "/run/secrets/kvm-rdp/kvm-password"
