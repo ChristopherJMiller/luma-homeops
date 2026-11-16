@@ -95,3 +95,16 @@ resource "cloudflare_dns_record" "wildcard" {
 # Also removed from this zone on 2026-09-24: `watch` and `a-watch` TXT, both
 # external-dns registry orphans naming ingress/media/cm-acme-http-solver-2xdgj.
 # The records they tracked were already gone — debris from the 2026-09-18 wipe.
+
+# ------------------------------- chrismiller.xyz: keep `luma` record-less
+#
+# luma.chrismiller.xyz had a hand-made `A 152.44.247.77` (created 2026-07-12,
+# a stale former WAN lease, not ours). Owning a record stopped the wildcard
+# from answering anything below it, so kvm.mac.luma (kvm-rdp gateway) and the
+# planned share.luma were NXDOMAIN. Imported and deleted 2026-11-16. Never put
+# a record AT luma.chrismiller.xyz (or mac.luma, or kvm.chrismiller.xyz): the
+# names below it stop resolving. Luma itself is served by the wildcard.
+#
+# Still undeclared, same vintage, wants a decision:
+#   vpn.luma  A 152.44.247.29   the same stale lease as werethemille.rs `cams`
+#                               (id 2f127d29b33ea347e9bd56555e842df1)
