@@ -39,7 +39,7 @@ spec:
           # Built and signed by kvm-rdp's CI. On every bump, re-run both verify
           # commands (cosign + gh attestation) from docs/kvm.md; there are no
           # semver tags, so Renovate can't follow it.
-          image: ghcr.io/christopherjmiller/kvm-rdp:sha-f0f18b6@sha256:6fbb81196525706889f281bfda2489b1fae39eec2892b0e38032c89e9a72c5b2
+          image: ghcr.io/christopherjmiller/kvm-rdp:sha-a58a10d@sha256:97c6734518dc0e39a577ab3b3b535a84842d0a75abbb7a9b00f6fd0a653fa2a9
           args: [--config, /etc/kvm-rdp/config.toml]
           # No env: the image sets MALLOC_ARENA_MAX=2 (the memory figures were
           # measured under it) and the bridge reads nothing but KVM_RDP_CONFIG.

@@ -46,7 +46,7 @@ kvm-rdp §9.3 asks for a factory reset, because the ES3 has a pre-auth RCE on
 3. Retake the pin. The output on all three ports must match:
 
    ```sh
-   IMG=ghcr.io/christopherjmiller/kvm-rdp:sha-f0f18b6@sha256:6fbb81196525706889f281bfda2489b1fae39eec2892b0e38032c89e9a72c5b2
+   IMG=ghcr.io/christopherjmiller/kvm-rdp:sha-a58a10d@sha256:97c6734518dc0e39a577ab3b3b535a84842d0a75abbb7a9b00f6fd0a653fa2a9
    for p in 443 8881 8889; do
      docker run --rm --entrypoint /usr/local/bin/kvm-probe "$IMG" fingerprint --host 192.168.0.2 --port "$p"
    done
