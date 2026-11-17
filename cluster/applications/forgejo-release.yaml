@@ -39,7 +39,7 @@ spec:
           rootless: true
           # The Realliance fork (docs/forgejo.md, "Fork image"): hand-reviewed, no Renovate manager.
           # Delete this line to fall back to the upstream digest below ("Fallback to upstream").
-          fullOverride: git.realliance.net/realliance/forgejo:v15.0.11-realliance.5@sha256:e90e960f763d3f195574cdf10998912babc1c8891f64ac19e298e7a6c2fe930d
+          fullOverride: git.realliance.net/realliance/forgejo:v15.0.11-realliance.6@sha256:86c91dc7581115f11cacfeef9ba33731011a2731d02c233e8d536e56d22cdb65
           # 15.0.11-rootless, pinned by digest (the chart derives the tag from appVersion; bump both together)
           digest: sha256:3cd6bc2b74c87cbde0a0fd527c9665cb416f5a0540dee54fe5afb3fa2df9f40c
         resources:
