@@ -86,7 +86,15 @@ On 2026-11-16 Radarr came back at one replica for a manual movie grab, so
 finished movie downloads import into Plex again. Its memory request dropped
 from 300Mi to 256Mi, in git and live, so its pod (288Mi with exportarr) fits
 the roughly 305Mi left on middle. Its 30-day peak was 233Mi; the 1Gi limit
-stays. Five Deployments stay paused.
+stays. It went back to zero on 2026-11-17 after the import, so six
+Deployments stay paused.
+
+That left middle about 17Mi, which broke three nightly backups. The
+`restic-home-assistant`, `restic-plex` and `restic-gonic` pods each request
+128Mi and follow their app onto middle by podAffinity (01:00, 01:20 and 01:40
+UTC). All three sat unschedulable until their deadline on 2026-11-17. Manual
+runs passed once Radarr stopped. Anything added to middle during the outage
+must leave at least 128Mi free for them.
 
 ## Vulnerability scanning pause
 
