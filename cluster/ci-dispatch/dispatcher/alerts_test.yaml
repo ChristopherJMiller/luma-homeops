@@ -77,7 +77,41 @@ tests:
           - exp_labels: {severity: warning, class: small}
             exp_annotations:
               summary: "CI jobs in small have waited over 30 minutes with no launch"
-              description: "The oldest waiting job in this class has waited over 30 minutes for a reason of launch-failing, backoff, not-ready, owner-busy or class-full, and the class has launched nothing in that time. A queue that keeps launching stays quiet. Budget holds are CIDispatchSpendHigh's."
+              description: "The oldest waiting job in this class has waited over 30 minutes for a reason of launch-failing, backoff or not-ready, and the class has launched nothing in that time. The rule reads the maximum over 15 minutes, so a probe tick does not reset it. A queue that keeps launching stays quiet, as does one waiting behind owner or class limits. Budget holds are CIDispatchSpendHigh's."
+              runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
+  - name: CIDispatchJobWaiting keeps firing when the probe tick drops the gauge to 0 every 10 minutes
+    interval: 1m
+    input_series:
+      # The wait grows 100 s a minute but reads 0 for one sample every 10 minutes (the probe job
+      # leaves the gauge for a tick). The 15 minute maximum rides over it. Launches stay flat.
+      - series: 'ci_dispatch_oldest_waiting_seconds{namespace="ci-dispatch",class="small",reason="not-ready"}'
+        values: '0 100 200 300 400 500 600 700 800 900 0 1100 1200 1300 1400 1500 1600 1700 1800 1900 0 2100 2200 2300 2400 2500 2600 2700 2800 2900 0 3100 3200 3300 3400 3500 3600 3700 3800 3900 0'
+      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="small",backend="aci",outcome="launched"}'
+        values: '5x40'
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: CIDispatchJobWaiting
+        exp_alerts:
+          - exp_labels: {severity: warning, class: small}
+            exp_annotations:
+              summary: "CI jobs in small have waited over 30 minutes with no launch"
+              description: "The oldest waiting job in this class has waited over 30 minutes for a reason of launch-failing, backoff or not-ready, and the class has launched nothing in that time. The rule reads the maximum over 15 minutes, so a probe tick does not reset it. A queue that keeps launching stays quiet, as does one waiting behind owner or class limits. Budget holds are CIDispatchSpendHigh's."
+              runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
+      - eval_time: 30m
+        alertname: CIDispatchJobWaiting
+        exp_alerts:
+          - exp_labels: {severity: warning, class: small}
+            exp_annotations:
+              summary: "CI jobs in small have waited over 30 minutes with no launch"
+              description: "The oldest waiting job in this class has waited over 30 minutes for a reason of launch-failing, backoff or not-ready, and the class has launched nothing in that time. The rule reads the maximum over 15 minutes, so a probe tick does not reset it. A queue that keeps launching stays quiet, as does one waiting behind owner or class limits. Budget holds are CIDispatchSpendHigh's."
+              runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
+      - eval_time: 35m
+        alertname: CIDispatchJobWaiting
+        exp_alerts:
+          - exp_labels: {severity: warning, class: small}
+            exp_annotations:
+              summary: "CI jobs in small have waited over 30 minutes with no launch"
+              description: "The oldest waiting job in this class has waited over 30 minutes for a reason of launch-failing, backoff or not-ready, and the class has launched nothing in that time. The rule reads the maximum over 15 minutes, so a probe tick does not reset it. A queue that keeps launching stays quiet, as does one waiting behind owner or class limits. Budget holds are CIDispatchSpendHigh's."
               runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
   - name: CIDispatchJobWaiting is quiet while the class keeps launching
     interval: 1m
@@ -94,6 +128,16 @@ tests:
     interval: 1m
     input_series:
       - series: 'ci_dispatch_oldest_waiting_seconds{namespace="ci-dispatch",class="small",reason="no-budget"}'
+        values: '0+100x40'
+      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="small",backend="aci",outcome="launched"}'
+        values: '5x40'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: CIDispatchJobWaiting, exp_alerts: []}
+      - {eval_time: 38m, alertname: CIDispatchJobWaiting, exp_alerts: []}
+  - name: CIDispatchJobWaiting is quiet for a queue waiting behind owner limits
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_oldest_waiting_seconds{namespace="ci-dispatch",class="small",reason="owner-busy"}'
         values: '0+100x40'
       - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="small",backend="aci",outcome="launched"}'
         values: '5x40'

@@ -137,7 +137,7 @@ ORG_LIST_RULES = {
 V050_RULES = {
     ("CIDispatchLaunchFailing", "held"): ('max(ci_dispatch_holds{reason="launch-failing"}) > 0', "5m"),
     ("CIDispatchJobWaiting", None): (
-        'max by (class) (ci_dispatch_oldest_waiting_seconds{reason=~"launch-failing|backoff|not-ready|owner-busy|class-full"}) > 1800'
+        'max by (class) (max_over_time(ci_dispatch_oldest_waiting_seconds{reason=~"launch-failing|backoff|not-ready"}[15m])) > 1800'
         ' unless on (class) sum by (class) (increase(ci_dispatch_launches_total{outcome="launched"}[30m])) > 0',
         "5m",
     ),

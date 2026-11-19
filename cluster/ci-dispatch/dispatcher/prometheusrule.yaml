@@ -160,15 +160,17 @@ spec:
             runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
         # A class whose oldest waiting job has waited over 30 minutes for a stall reason and has
         # launched nothing in that time. A busy queue that keeps launching stays quiet; no-budget
-        # and the like are budget holds, which CIDispatchSpendHigh covers.
+        # and the like are budget holds, which CIDispatchSpendHigh covers, and owner-busy and
+        # class-full are queueing behind limits, not a stall. The 15 minute maximum keeps the
+        # probe tick (the job leaves the gauge for a tick) from resetting `for`.
         - alert: CIDispatchJobWaiting
-          expr: max by (class) (ci_dispatch_oldest_waiting_seconds{reason=~"launch-failing|backoff|not-ready|owner-busy|class-full"}) > 1800 unless on (class) sum by (class) (increase(ci_dispatch_launches_total{outcome="launched"}[30m])) > 0
+          expr: max by (class) (max_over_time(ci_dispatch_oldest_waiting_seconds{reason=~"launch-failing|backoff|not-ready"}[15m])) > 1800 unless on (class) sum by (class) (increase(ci_dispatch_launches_total{outcome="launched"}[30m])) > 0
           for: 5m
           labels:
             severity: warning
           annotations:
             summary: "CI jobs in {{ $labels.class }} have waited over 30 minutes with no launch"
-            description: "The oldest waiting job in this class has waited over 30 minutes for a reason of launch-failing, backoff, not-ready, owner-busy or class-full, and the class has launched nothing in that time. A queue that keeps launching stays quiet. Budget holds are CIDispatchSpendHigh's."
+            description: "The oldest waiting job in this class has waited over 30 minutes for a reason of launch-failing, backoff or not-ready, and the class has launched nothing in that time. The rule reads the maximum over 15 minutes, so a probe tick does not reset it. A queue that keeps launching stays quiet, as does one waiting behind owner or class limits. Budget holds are CIDispatchSpendHigh's."
             runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
     # Phase 2: the paid classes small and medium on Azure Container Instances
     # (docs/superpowers/plans/2026-11-05-runner-classes-phase-2.md, Task 18).
