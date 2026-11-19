@@ -11,10 +11,11 @@ failure (5xx, 429, a timeout, a transport or token failure, an unclear answer) s
 `unavailable`, and a launch that a restart left settles as `restart`. Neither is a try, up to 20 per
 key; after that each counts. Deterministic refusals (a 400-class answer) stay tries. After an
 `unavailable` failure a breaker holds every paid class `not-ready` for 1, 2, 5, then 10 min, then
-sends one probe launch. A create runs in the background (60 s limit, at most 2 at once). A held job can be
-released: today the operator does it through the control route by port-forward
-(Releasing a held job), and members get a `/retry` comment and a Retry button with fork release
-v15.0.11-realliance.7. The dispatcher also releases a stuck paid one itself after an hour. Spec:
+sends one probe launch. A create runs in the background (60 s limit, at most 2 at once).
+Today the operator releases a held job through the control route by port-forward (Releasing a held
+job).
+Members get a `/retry` comment and a Retry button with fork release v15.0.11-realliance.7. The
+dispatcher also releases a stuck paid one itself after an hour. Spec:
 `docs/superpowers/specs/2026-11-17-ci-stale-jobs-design.md`.
 
 v0.4.0 is v0.3.1 plus `org_defaults`, the limits of an org (Changing a limit), with the same ledger
