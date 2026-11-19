@@ -11,8 +11,10 @@ failure (5xx, 429, a timeout, a transport or token failure, an unclear answer) s
 `unavailable`, and a launch that a restart left settles as `restart`. Neither is a try, up to 20 per
 key; after that each counts. Deterministic refusals (a 400-class answer) stay tries. After an
 `unavailable` failure a breaker holds every paid class `not-ready` for 1, 2, 5, then 10 min, then
-sends one probe launch. A create runs in the background (60 s limit, at most 2 at once). A member can release a held job through the control route (Releasing a held
-job), and the dispatcher releases a stuck one itself after an hour. Spec:
+sends one probe launch. A create runs in the background (60 s limit, at most 2 at once). A held job can be
+released: today the operator does it through the control route by port-forward
+(Releasing a held job), and members get a `/retry` comment and a Retry button with fork release
+v15.0.11-realliance.7. The dispatcher also releases a stuck paid one itself after an hour. Spec:
 `docs/superpowers/specs/2026-11-17-ci-stale-jobs-design.md`.
 
 v0.4.0 is v0.3.1 plus `org_defaults`, the limits of an org (Changing a limit), with the same ledger
@@ -405,7 +407,7 @@ active) and an `outcome` (such as `finished`, `pickup-timeout`, `held` or `error
 | `backoff` | wait | A recent launch was undone: Forgejo held the job (a concurrency group or `needs:`; no try, no charge), or a launch step failed (a try). Waits 1, 2, 5, then 10 min; from the sixth launch that Forgejo held, 60 min. A pickup timeout backs off the same way, timed from the reap, for `tiny` too. A release resets it |
 | `label`, `denied`, `owner-limit` | hold | A label combination no class takes; a denied owner; out of `tiny` minutes for the day |
 | `invalid` | hold | The job's id, attempt or owner id is zero or less |
-| `launch-failing` | hold | Three tries made no runner. The dispatcher releases a paid one once after 60 min (`via: auto`); a member can release it sooner (`/retry`, the Retry button or the API; Releasing a held job). A `tiny` one stays held: fix the cause, and the member's rerun gets a new key |
+| `launch-failing` | hold | Three tries made no runner. The dispatcher releases a paid one once after 60 min (`via: auto`); the operator can release it sooner by port-forward (Releasing a held job), and members can from v15.0.11-realliance.7 (`/retry`, the Retry button, the API). A `tiny` hold gets no automatic release but releases by hand like any other; a rerun still gets a new key |
 | `concurrency` | hold | Forgejo lists the job `blocked`: its concurrency group holds it behind an earlier run. Nothing launches until it waits again, and a launch already made for the job is undone as held at once. Needs a forge with realliance/forgejo#14; on stock Forgejo the job shows `waiting` and the pickup timeout catches it as `backoff` |
 | `no-budget`, `global-cap` | hold | Paid only: the owner's or the global paid limit is 0; the global money this period can't cover the reservation |
 
@@ -996,7 +998,7 @@ git -C ~/Repos/ci-dispatch ls-tree --name-only "$REL" internal/aci/testdata/poli
   a pod that never got `Ready`, delete `ci-dispatch-0` by hand once the revert has synced.
 - **Below v0.5.0.** v0.5.0 moves the ledger to schema v3, and v0.4.0 refuses it as newer. Either
   pause the paid classes and keep v0.5.0, or restore the pre-upgrade nightly snapshot
-  (`/data/snapshots/ledger-*.db`) by Restoring the ledger, and lose every launch since.
+  (`/data/snapshots/ledger-*.db`) following Restoring the ledger, and lose every launch since.
 - **Below v0.4.0.** v0.3.1 (`sha-f415caa`) opens the same ledger and `config.yaml`, so its pin is a
   clean rollback while `ci.yaml` has no `org_defaults`. Once it does, v0.3.1 rejects both the head and
   the stored copy, and runs on the built-in limits, `tiny` only, until an Owner signs a `ci.yaml`
