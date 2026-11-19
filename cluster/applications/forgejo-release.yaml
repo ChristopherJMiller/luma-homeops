@@ -39,7 +39,7 @@ spec:
           rootless: true
           # The Realliance fork (docs/forgejo.md, "Fork image"): hand-reviewed, no Renovate manager.
           # Delete this line to fall back to the upstream digest below ("Fallback to upstream").
-          fullOverride: git.realliance.net/realliance/forgejo:v15.0.11-realliance.6@sha256:86c91dc7581115f11cacfeef9ba33731011a2731d02c233e8d536e56d22cdb65
+          fullOverride: git.realliance.net/realliance/forgejo:v15.0.11-realliance.7@sha256:b385a17378a1ef8f2431dccd16c332ee1f8a638428e1fa45736e123862b8a147
           # 15.0.11-rootless, pinned by digest (the chart derives the tag from appVersion; bump both together)
           digest: sha256:3cd6bc2b74c87cbde0a0fd527c9665cb416f5a0540dee54fe5afb3fa2df9f40c
         resources:
@@ -205,7 +205,7 @@ spec:
             - secret:
                 secretName: forgejo-app-ini
             - secret:
-                secretName: forgejo-ci-usage # [realliance.ci_usage] TOKEN (cluster/forgejo/ci-usage.secret.yaml)
+                secretName: forgejo-ci-usage # [realliance.ci_usage] TOKEN and CONTROL_TOKEN (cluster/forgejo/ci-usage.secret.yaml)
           additionalConfigFromEnvs:
             - name: FORGEJO__DATABASE__PASSWD
               valueFrom:
@@ -322,6 +322,11 @@ spec:
               # TOKEN comes from Secret forgejo-ci-usage; TIMEOUT stays at its 3 s default. An empty
               # URL turns the feature off.
               URL: http://ci-dispatch.ci-dispatch.svc.cluster.local:8081
+              # Releasing a held job (the API route, the Retry button, /retry on a PR; fork .7+)
+              # calls ci-dispatch's control route on 8082. CONTROL_TOKEN comes from the same Secret;
+              # BOT_USER stays at its default, ci-dispatch, which posts the /retry replies. An empty
+              # CONTROL_URL turns releasing off.
+              CONTROL_URL: http://ci-dispatch.ci-dispatch.svc.cluster.local:8082
   destination:
     server: https://kubernetes.default.svc
     namespace: forgejo

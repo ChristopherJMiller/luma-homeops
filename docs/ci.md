@@ -443,9 +443,20 @@ A release resets the key's tries and back-off, so the dispatcher launches the jo
 The dispatcher also releases a paid `launch-failing` hold at 60 min old, once per key, as
 `via: auto` with actor `ci-dispatch`. `ci_dispatch_releases_total{via}` counts releases.
 
-The `/retry` comment, the Retry button and `fj actions retry` arrive with fork release
-v15.0.11-realliance.7. Until then, call the control route through a port-forward. It listens on
-port 8082, and NetworkPolicy opens it only to Forgejo's pods. The bearer is
+From fork release v15.0.11-realliance.7, anyone with write on a repo's Actions releases a run's held
+jobs in three ways. Each is a manual release and counts against the cap below.
+
+- `/retry` as the first line of a pull request comment releases the held jobs of the runs on the
+  PR's head commit. `ci-dispatch` replies in one line: the count it released, no held job,
+  no write access, or the cap.
+- The Retry button on the held note of a queued job releases that run's held jobs.
+- `POST /api/v1/repos/{owner}/{repo}/actions/runs/{run_id}/release` with a token, which
+  `fj actions retry <run number>` calls. It answers 200 `{"jobs":[...]}` (an empty list when
+  nothing waits), 403 without Actions write, 429 with `Retry-After` at the cap, and 503 when the
+  dispatcher is unreachable or `CONTROL_URL` is empty.
+
+An operator can also call the control route through a port-forward. It listens on port 8082, and
+NetworkPolicy opens it only to Forgejo's pods. The bearer is
 `CI_DISPATCH_CONTROL_TOKEN` in sso-secrets `forge/secrets.env`. The body names the actor
 (`actor_id`, `actor_name`) and `via` (`api`, `button` or `comment`).
 
@@ -485,7 +496,7 @@ weekdays).
 | Alert | Means | Do |
 |---|---|---|
 | `CIDispatchStale` | No loop with every read OK for 5 min, or no metric | `kubectl -n ci-dispatch get pod ci-dispatch-0`, its log, `ci_dispatch_errors_total` by `api`. A Forgejo or API outage never restarts the pod. See Known limits for node loss and the job listing |
-| `CIDispatchLaunchFailing`, `reason: held` | A job holds as `launch-failing`, for 5 min | `kubectl -n ci-tiny get events`, the pod's `netpol-gate` log. A paid hold gets one automatic release at 60 min; release it sooner once the cause is fixed (Releasing a held job). A `tiny` one: the member reruns the job |
+| `CIDispatchLaunchFailing`, `reason: held` | A job holds as `launch-failing`, for 5 min | `kubectl -n ci-tiny get events`, the pod's `netpol-gate` log. A paid hold gets one automatic release at 60 min; release it sooner once the cause is fixed (Releasing a held job). A `tiny` one gets no automatic release: once someone fixes the cause, the member sends `/retry` or presses Retry |
 | `CIDispatchLaunchFailing`, `reason: errors` | Launch steps fail for 15 min | The `launch failed` log lines name the step |
 | `CIDispatchConfigUntrusted` | The head of `realliance-ops/forge` `main` has not verified for 15 min, or Forgejo was unreachable at each reload | See "A head that fails" |
 | `CIDispatchStoredConfigRejected` | At start, the ledger's copy of `ci.yaml` failed its proof. The common cause: its signer left the keyring (a rotated or expired key) | Once `ci_dispatch_config_verified` is 1, `kubectl -n ci-dispatch delete pod ci-dispatch-0` clears it. With no key rotated or expired, treat it as tampering |

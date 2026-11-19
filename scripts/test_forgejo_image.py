@@ -228,16 +228,20 @@ def test_fork_pin(repo_values: dict) -> None:
 ACCOUNT_URL = "https://sso.realliance.net/realms/realliance/account/"
 USAGE_URL = "http://ci-dispatch.ci-dispatch.svc.cluster.local:8081"
 USAGE_SECRET = "forgejo-ci-usage"
+CONTROL_URL = "http://ci-dispatch.ci-dispatch.svc.cluster.local:8082"
 
 
 def test_fork_config(docs: list[dict], repo_values: dict) -> None:
-    """The fork's own app.ini sections (realliance/forgejo#16): the account link and the usage API's
-    URL inline; the usage TOKEN only from a SealedSecret, never in this public file; the ci-dispatch
-    Service really serves the usage port at that URL; and no user settings menu override, since the
-    fork's patch carries the link and an override would hide the Usage tab."""
+    """The fork's own app.ini sections (realliance/forgejo#16): the account link, and the usage API's
+    and the control route's URLs inline; TOKEN and CONTROL_TOKEN only from a SealedSecret, never in
+    this public file; the ci-dispatch Service really serves the usage and control ports at those URLs;
+    and no user settings menu override, since the fork's patch carries the link and an override would
+    hide the Usage tab."""
     gitea = repo_values["gitea"]
     assert gitea["config"]["realliance"] == {"ACCOUNT_URL": ACCOUNT_URL}
-    assert gitea["config"]["realliance.ci_usage"] == {"URL": USAGE_URL}, "TOKEN never inline"
+    assert gitea["config"]["realliance.ci_usage"] == {"URL": USAGE_URL, "CONTROL_URL": CONTROL_URL}, (
+        "TOKEN and CONTROL_TOKEN never inline"
+    )
     assert {"secret": {"secretName": USAGE_SECRET}} in gitea["additionalConfigSources"]
 
     sealed = yaml.safe_load((REPO / "cluster/forgejo/ci-usage.yaml").read_text())
@@ -248,8 +252,9 @@ def test_fork_config(docs: list[dict], repo_values: dict) -> None:
 
     svc = yaml.safe_load((REPO / "cluster/ci-dispatch/dispatcher/service.yaml").read_text())
     host = f"{svc['metadata']['name']}.ci-dispatch.svc.cluster.local"
-    usage_port = {p["name"]: p["port"] for p in svc["spec"]["ports"]}["usage"]
-    assert USAGE_URL == f"http://{host}:{usage_port}"
+    ports = {p["name"]: p["port"] for p in svc["spec"]["ports"]}
+    assert USAGE_URL == f"http://{host}:{ports['usage']}"
+    assert CONTROL_URL == f"http://{host}:{ports['control']}"
 
     (gen,) = [g for g in kust["configMapGenerator"] if g["name"] == "forgejo-custom-templates"]
     assert not [f for f in gen["files"] if "navbar" in f], gen["files"]
