@@ -186,12 +186,13 @@ record that the per-owner reads skip.
 
 - A gauge for the oldest waiting job per class: the age of the oldest job Forgejo lists as waiting
   with no active launch, with the hold or wait reason as a label.
-- A new alert, `CIDispatchJobWaiting`: a class's oldest waiting job is over 30 min old and the
-  class has launched nothing in the last 30 min, for 5 min. A busy queue (`owner-busy`,
-  `class-full`) that keeps launching stays quiet; a stalled one fires. It ignores reasons a person
-  chose or a budget explains (`label`, `denied`, `invalid`, `concurrency`, `class-off`,
-  `no-budget`, `owner-limit`, `global-cap`; `CIDispatchSpendHigh` covers budgets). *(Builder
-  check; Claude's call.)* It routes to `critical-alerts` around the clock, next to the CI money
+- A new alert, `CIDispatchJobWaiting`: a class's oldest job waiting for `launch-failing`,
+  `backoff` or `not-ready` is over 30 min old (the maximum over 15 min, so a probe tick that
+  briefly drops the job doesn't reset it) and the class has launched nothing in the last 30 min,
+  for 5 min. Queueing behind limits (`owner-busy`, `class-full`) doesn't count: paid jobs run 40–55
+  min, so a legitimate queue can wait that long. Reasons a person chose or a budget explains don't
+  count either (`CIDispatchSpendHigh` covers budgets). *(Builder check and the final v0.5.0
+  review, 2026-11-18; Claude's call.)* It routes to `critical-alerts` around the clock, next to the CI money
   alerts (Chris, 2026-11-17): add it to the 0db39a77 matcher and to
   `scripts/test-alertmanager-routes.sh`.
 - `CIDispatchLaunchFailing{reason="held"}` gets `for: 5m`.

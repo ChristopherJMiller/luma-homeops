@@ -17,7 +17,7 @@
 - Commits signed through pre-commit: `nix develop -c git commit -S`. Never `--no-verify`. Direct pushes to luma-homeops `main` are allowed.
 - The control token is 32 random bytes hex (`openssl rand -hex 32`), stored once as `CI_DISPATCH_CONTROL_TOKEN` in `forge/secrets.env`; plan 3 seals the same value into Forgejo.
 - Control port: name `control`, 8082, reachable only from Forgejo's pods (the existing Forgejo ingress rule), no Ingress.
-- `CIDispatchJobWaiting`: `max by (class) (ci_dispatch_oldest_waiting_seconds{reason=~"launch-failing|backoff|not-ready|owner-busy|class-full"}) > 1800 unless on (class) sum by (class) (increase(ci_dispatch_launches_total{outcome="launched"}[30m])) > 0`, `for: 5m`, `severity: warning`, routed by name to `critical-alerts`.
+- `CIDispatchJobWaiting`: `max by (class) (max_over_time(ci_dispatch_oldest_waiting_seconds{reason=~"launch-failing|backoff|not-ready"}[15m])) > 1800 unless on (class) sum by (class) (increase(ci_dispatch_launches_total{outcome="launched"}[30m])) > 0`, `for: 5m`, `severity: warning`, routed by name to `critical-alerts`.
 - `CIDispatchLaunchFailing{reason="held"}` gets `for: 5m`.
 - v0.5.0 migrates the ledger to schema v3; v0.4.0 then refuses it. Rollback below v0.5.0 means restoring a pre-upgrade ledger snapshot.
 
@@ -108,7 +108,7 @@ Run `nix shell nixpkgs#go nixpkgs#gcc -c env CGO_ENABLED=1 GOMAXPROCS=4 taskset 
 
 - [ ] **Step 1: Pre-checks (S1).** `kubectl -n ci-dispatch get pod ci-dispatch-0 -o wide` Ready; Argo app `ci-dispatch` Synced/Healthy; the newest `/data/snapshots/ledger-*.db` is from last night's 03:00 UTC run (`kubectl -n ci-dispatch exec ci-dispatch-0 -- ls -l /data/snapshots`), recorded in the ledger as the rollback point; no paid launch active (`ci_dispatch_jobs{state="running"}` for small/medium 0, or accept Review Focus 5).
 - [ ] **Step 2: Push** Tasks 2–4 together to `origin/main`.
-- [ ] **Step 3: Watch** with Monitor until Argo has synced and `ci-dispatch-0` runs the new image and is Ready (expect one restart; launches pause about a minute). On a crash loop: revert the three commits, push, delete `ci-dispatch-0` after sync (`docs/ci.md` Rollback).
+- [ ] **Step 3: Watch** with Monitor until Argo has synced and `ci-dispatch-0` runs the new image and is Ready (expect one restart; launches pause about a minute). On a crash loop: fix forward if the cause is clear; to go back to v0.4.0, first downgrade the ledger to v2 (`docs/ci.md` Rollback, Below v0.5.0: v0.4.0 refuses a v3 ledger), then revert, push, and delete `ci-dispatch-0` after sync.
 - [ ] **Step 4: Verify.**
   - The log shows the ledger at version 3 and no `read failed` / `write failed` after start.
   - `/metrics` (port-forward 18080) has `ci_dispatch_oldest_waiting_seconds`, `ci_dispatch_azure_unavailable 0`, `ci_dispatch_releases_total`.
