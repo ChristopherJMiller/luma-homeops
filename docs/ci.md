@@ -1003,12 +1003,24 @@ git -C ~/Repos/ci-dispatch ls-tree --name-only "$REL" internal/aci/testdata/poli
   `DROP TABLE releases; DROP TABLE absorbed; UPDATE meta SET schema_version = 2;`. Schema v3 only
   added those two tables, so this loses release history and booked late-group cents, nothing else.
   Stop the dispatcher as Restoring the ledger does (steps 1 and 2: STOP for Chris, pause both Argo
-  apps, scale to 0, wait for the pod to go). Run the SQL on `ledger.db` in the `data` volume, the
-  volume the `ledger-restore` pod mounts at `/data`, and delete any `ledger.db-wal` and
-  `ledger.db-shm` the stopped pod left only after the SQL ran clean. Then revert the pin and
-  `ci.yaml` together in git, every commit of the v0.5.0 deploy, and patch `applications` back as
-  step 5 does. The fallback is the pre-upgrade nightly snapshot (`/data/snapshots/ledger-*.db`),
-  restored by the whole of Restoring the ledger, which loses every launch since.
+  apps, scale to 0, wait for the pod to go). Then edit `ledger.db` through a pod that mounts the
+  `ci-dispatch-ledger` volume at `/data`, as `ledger-restore` does:
+  1. Check the pod has `tar`, which `kubectl cp` needs: `kubectl -n ci-dispatch exec ledger-restore --
+     tar --version`. The script's pod exits when it finishes, so this needs a pod that's still
+     running. With no `tar` or no running pod, use the snapshot restore below instead.
+  2. `kubectl -n ci-dispatch cp ledger-restore:/data/ledger.db ./ledger.db`, and the same for
+     `ledger.db-wal` and `ledger.db-shm` when `kubectl -n ci-dispatch exec ledger-restore -- ls /data`
+     lists them.
+  3. On the laptop: `nix shell nixpkgs#sqlite -c sqlite3 ./ledger.db 'DROP TABLE releases; DROP TABLE
+     absorbed; UPDATE meta SET schema_version = 2; PRAGMA integrity_check;'`. Opening it folds the WAL
+     into `ledger.db`. It must print `ok`, and `SELECT schema_version FROM meta;` must print 2.
+  4. `kubectl -n ci-dispatch cp ./ledger.db ledger-restore:/data/ledger.db`, then remove any
+     `ledger.db-wal` and `ledger.db-shm` left on the volume.
+  5. Delete the pod, revert the pin and `ci.yaml` together in git, every commit of the v0.5.0 deploy,
+     and patch `applications` back as Restoring the ledger's step 5 does, which starts the dispatcher.
+
+  The fallback is the pre-upgrade nightly snapshot (`/data/snapshots/ledger-*.db`), restored by the
+  whole of Restoring the ledger, which loses every launch since.
 - **Below v0.4.0.** v0.3.1 (`sha-f415caa`) opens the same ledger and `config.yaml`, so its pin is a
   clean rollback while `ci.yaml` has no `org_defaults`. Once it does, v0.3.1 rejects both the head and
   the stored copy, and runs on the built-in limits, `tiny` only, until an Owner signs a `ci.yaml`
