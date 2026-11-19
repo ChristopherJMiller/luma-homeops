@@ -3,8 +3,17 @@
 `ci-dispatch` starts one fresh runner for each waiting Forgejo Actions job on `git.realliance.net`,
 within each owner's limits. Argo app `ci-dispatch` (`cluster/ci-dispatch/`) runs it in namespace
 `ci-dispatch`, and its runner Jobs in `ci-tiny`. Code: `git.realliance.net/realliance-ops/ci-dispatch`
-(v0.4.0). Spec: `docs/superpowers/specs/2026-11-04-runner-classes-design.md`. Plan and ledger:
+(v0.5.0). Spec: `docs/superpowers/specs/2026-11-04-runner-classes-design.md`. Plan and ledger:
 `docs/superpowers/plans/2026-11-04-runner-classes-phase-0-1.md` and `.ledger.md` beside it.
+
+v0.5.0 changes what happens when Azure is down, and adds a control route. An Azure-side create
+failure (5xx, 429, a timeout, a transport or token failure, an unclear answer) settles as outcome
+`unavailable`, and a launch that a restart left settles as `restart`. Neither is a try, up to 20 per
+key; after that each counts. Deterministic refusals (a 400-class answer) stay tries. After an
+`unavailable` failure a breaker holds every paid class `not-ready` for 1, 2, 5, then 10 min, then
+sends one probe launch. A create runs in the background (60 s limit, at most 2 at once). A member can release a held job through the control route (Releasing a held
+job), and the dispatcher releases a stuck one itself after an hour. Spec:
+`docs/superpowers/specs/2026-11-17-ci-stale-jobs-design.md`.
 
 v0.4.0 is v0.3.1 plus `org_defaults`, the limits of an org (Changing a limit), with the same ledger
 schema and `config.yaml`: plan `docs/superpowers/plans/2026-11-08-forgejo-fork-job-token-permissions.md`,
@@ -24,7 +33,7 @@ holds and the attempt on holds), runs `tiny` only (to go back to it, see Downgra
 | Owner keyring | `cluster/ci-dispatch/dispatcher/keyring/` |
 | Ledger | PVC `ci-dispatch-ledger` (1Gi SSD, `Prune=false,Delete=false`): `/data/ledger.db`, and a nightly copy from 03:00 UTC in `/data/snapshots` (newest 7) |
 | `tiny` Jobs | `ci-tiny` (`cluster/ci-dispatch/tiny/`): Pod Security `restricted`, a quota of 3 pods, egress `egress-internet-web` |
-| Ports | 8080: `/metrics`, `/healthz`. 8081: the usage API, with no ingress (`kubectl port-forward` only) |
+| Ports | 8080: `/metrics`, `/healthz`. 8081: the usage API, with no ingress (`kubectl port-forward` only). 8082: the control route, Forgejo's pods only |
 | Logs | JSON on stdout, ids only, never a name or a credential. Shipped to the Azure table `luma_homelab_logs_CL` (31 days) |
 | Tests | `scripts/test_ci_dispatch_manifests.py` (pre-commit), `scripts/test-ci-dispatch-alerts.sh`; realliance/sso `tests/forge/test_forge_ci_dispatch.py` and `test_forge_ci_tiny.py` (`CI_TINY_ACCEPTANCE=1`) |
 | Image | Pinned by digest. Renovate never automerges it, so its PR is the alarm. Re-pin by hand after review |
@@ -393,32 +402,87 @@ active) and an `outcome` (such as `finished`, `pickup-timeout`, `held` or `error
 | Reason | Kind | Means |
 |---|---|---|
 | `class-off`, `owner-busy`, `class-full`, `not-ready` | wait | The class is off in `config.yaml` or `ci.yaml`; the owner's or the class's `tiny` slots are in use; the dispatcher hasn't read its stored config yet |
-| `backoff` | wait | A recent launch was undone: Forgejo held the job (a concurrency group or `needs:`; no try, no charge), or a launch step failed (a try). Waits 1, 2, 5, then 10 min; from the sixth launch that Forgejo held, 60 min |
+| `backoff` | wait | A recent launch was undone: Forgejo held the job (a concurrency group or `needs:`; no try, no charge), or a launch step failed (a try). Waits 1, 2, 5, then 10 min; from the sixth launch that Forgejo held, 60 min. A pickup timeout backs off the same way, timed from the reap, for `tiny` too. A release resets it |
 | `label`, `denied`, `owner-limit` | hold | A label combination no class takes; a denied owner; out of `tiny` minutes for the day |
 | `invalid` | hold | The job's id, attempt or owner id is zero or less |
-| `launch-failing` | hold | Three tries made no runner, and the key stays held. Fix the cause; the member's rerun gets a new key |
+| `launch-failing` | hold | Three tries made no runner. The dispatcher releases a paid one once after 60 min (`via: auto`); a member can release it sooner (`/retry`, the Retry button or the API; Releasing a held job). A `tiny` one stays held: fix the cause, and the member's rerun gets a new key |
 | `concurrency` | hold | Forgejo lists the job `blocked`: its concurrency group holds it behind an earlier run. Nothing launches until it waits again, and a launch already made for the job is undone as held at once. Needs a forge with realliance/forgejo#14; on stock Forgejo the job shows `waiting` and the pickup timeout catches it as `backoff` |
 | `no-budget`, `global-cap` | hold | Paid only: the owner's or the global paid limit is 0; the global money this period can't cover the reservation |
 
 For a paid job, `owner-busy`, `class-full`, `owner-limit` and `not-ready` read as in Paid classes'
 gate: paid slots, the hourly cap, the owner's dollars, and readiness.
 
+**Outcomes that are no try.** `unavailable` (an Azure-side create failure) and `restart` (a launch
+a dispatcher restart left) don't count toward the three tries, up to 20 per key; after that each
+counts. A 400-class refusal (`rejected`, `policy`, `refused`, `not-found`, `exists`) is a try. A
+`Broken` group (Azure failed to provision it) is undone at once as `error: start`: a try, with no
+compute charged. The reaper treats a group that stopped before its runner took the job as `error: start`: a
+try, with its compute charged.
+
+**The breaker.** After an `unavailable` failure every paid class waits `not-ready` for 1, 2, 5, then
+10 min, then the first paid job in the gate's fair-share order launches as a probe. A successful
+create closes the breaker. Any other probe answer re-arms the wait, and an Azure-side one also
+lengthens it. `ci_dispatch_azure_unavailable` reads 1 while it stays open, and
+`ci_dispatch_azure_breaker_transitions_total{to="open|closed"}` counts its changes.
+`CIDispatchLocked` doesn't fire for an outage.
+
+A create runs in the background, with a 60 s limit, and at most 2 at once. The charge and the pickup
+timer start when the PUT returns. The dispatcher deletes an unclear create with its runner and never
+adopts it. If Azure creates the group after the dispatcher gave up, its compute goes to the global
+spend only (`absorbed`), never to an owner's budget. It counts in `global-cap` and in drift.
+
+## Releasing a held job
+
+A release resets the key's tries and back-off, so the dispatcher launches the job again. Only
+`launch-failing` and `backoff` holds release. `no-budget`, `owner-limit`, `global-cap`, `label`,
+`denied`, `invalid` and `concurrency` don't: they have a cause a retry can't fix.
+
+The dispatcher also releases a paid `launch-failing` hold at 60 min old, once per key, as
+`via: auto` with actor `ci-dispatch`. `ci_dispatch_releases_total{via}` counts releases.
+
+The `/retry` comment, the Retry button and `fj actions retry` arrive with fork release
+v15.0.11-realliance.7. Until then, call the control route through a port-forward. It listens on
+port 8082, and NetworkPolicy opens it only to Forgejo's pods. The bearer is
+`CI_DISPATCH_CONTROL_TOKEN` in sso-secrets `forge/secrets.env`. The body names the actor
+(`actor_id`, `actor_name`) and `via` (`api`, `button` or `comment`).
+
+```bash
+kubectl -n ci-dispatch port-forward svc/ci-dispatch 18082:8082 >/dev/null &
+until curl -so /dev/null 127.0.0.1:18082/; do sleep 1; done
+C=$(grep '^CI_DISPATCH_CONTROL_TOKEN=' ~/Repos/realliance-sso-secrets/forge/secrets.env | cut -d= -f2-)
+printf 'Authorization: Bearer %s\n' "$C" | curl -fsS -X POST -H @- -H 'Content-Type: application/json' \
+  -d '{"actor_id":1,"actor_name":"chris","via":"api"}' \
+  "http://127.0.0.1:18082/v1/holds/203/1/release" | jq .
+kill %%
+```
+
+The path is `/v1/holds/{job_id}/{attempt}/release`. It answers 200 with a `state`:
+
+- `released`: the hold lifts and the job launches again.
+- `not-held`: the key has no hold, so it may already be running.
+- `not-releasable`: with a `reason`: one of the holds that do not release.
+
+After 3 manual releases of a key in a rolling 24 h it answers 429 `{"error":"release cap reached"}`
+with a `Retry-After` header. The `usage` response of the usage API lists every release under `releases`
+(`job_id`, `attempt`, `repo_id`, `at`, `actor_id`, `actor_name`, `via`).
+
 ## Alerts
 
-`cluster/ci-dispatch/dispatcher/prometheusrule.yaml` holds 20 rules: 11 in the group `ci-dispatch`,
-phase 1's nine and the two of v0.4.0's `CIDispatchOrgListStale`, and nine in `ci-dispatch-paid`.
+`cluster/ci-dispatch/dispatcher/prometheusrule.yaml` holds 21 rules: 11 in the group `ci-dispatch`,
+phase 1's nine and the two of v0.4.0's `CIDispatchOrgListStale`, and ten in `ci-dispatch-paid`, with
+v0.5.0's `CIDispatchJobWaiting`.
 The money alerts are `critical`: `CIDispatchSpendHigh`, `CIDispatchLocked`,
 `CIDispatchOrphanCompute` and `CISweeperStale`. The 0db39a77 route sends
-`CIDispatch(SpendHigh|Locked|OrphanCompute|Drift|PaidNotReady)` and `CISweeperStale` to
-`critical-alerts` (Discord, around the clock) by name, whatever the severity, so `CIDispatchDrift`
-and `CIDispatchPaidNotReady` page around the clock although they're `warning`. The rest,
+`CIDispatch(SpendHigh|Locked|OrphanCompute|Drift|PaidNotReady|JobWaiting)` and `CISweeperStale` to
+`critical-alerts` (Discord, around the clock) by name, whatever the severity, so `CIDispatchDrift`,
+`CIDispatchPaidNotReady` and `CIDispatchJobWaiting` page around the clock although they're `warning`. The rest,
 `CIDispatchEgressCapHit` and `CIDispatchAzureFailing` included, go to `homelab-default` (Discord,
 weekdays).
 
 | Alert | Means | Do |
 |---|---|---|
 | `CIDispatchStale` | No loop with every read OK for 5 min, or no metric | `kubectl -n ci-dispatch get pod ci-dispatch-0`, its log, `ci_dispatch_errors_total` by `api`. A Forgejo or API outage never restarts the pod. See Known limits for node loss and the job listing |
-| `CIDispatchLaunchFailing`, `reason: held` | A job holds as `launch-failing` | `kubectl -n ci-tiny get events`, the pod's `netpol-gate` log. Then the member reruns the job |
+| `CIDispatchLaunchFailing`, `reason: held` | A job holds as `launch-failing`, for 5 min | `kubectl -n ci-tiny get events`, the pod's `netpol-gate` log. A paid hold gets one automatic release at 60 min; release it sooner once the cause is fixed (Releasing a held job). A `tiny` one: the member reruns the job |
 | `CIDispatchLaunchFailing`, `reason: errors` | Launch steps fail for 15 min | The `launch failed` log lines name the step |
 | `CIDispatchConfigUntrusted` | The head of `realliance-ops/forge` `main` has not verified for 15 min, or Forgejo was unreachable at each reload | See "A head that fails" |
 | `CIDispatchStoredConfigRejected` | At start, the ledger's copy of `ci.yaml` failed its proof. The common cause: its signer left the keyring (a rotated or expired key) | Once `ci_dispatch_config_verified` is 1, `kubectl -n ci-dispatch delete pod ci-dispatch-0` clears it. With no key rotated or expired, treat it as tampering |
@@ -434,6 +498,7 @@ weekdays).
 | `CISweeperStale`, `reason: absent` | No sweeper timestamp for 30 min: the watcher can't read the run history, or the dispatcher isn't running | `CIDispatchStale` covers a missing dispatcher. Expect it during a break-glass longer than 30 min, or a node loss: silence it then |
 | `CIDispatchDrift` | The ledger and Azure differ by over 10 % for a closed day or period | The month-end drift check. The gauge holds the ratio, so the alert repeats every 30 min until the next one: silence it once read |
 | `CIDispatchPaidNotReady` | A paid class in `dry-run` or `on` not ready for 30 min (the `class` label), a deny that refuses only PUTs included | The log's `"api":"azure"` and `"api":"prices"` lines, `ci_dispatch_azure_locked`, `ci_dispatch_price_age_seconds`, `ci_dispatch_sweeper_last_run_timestamp` (the last succeeded run). One group whose egress reads keep failing holds every paid class (Paid classes, the Ready check). In `dry-run` it's a rollback trigger |
+| `CIDispatchJobWaiting` | A job has waited too long: `ci_dispatch_oldest_waiting_seconds{class,reason}` | Read that metric by `reason`. `not-ready` with `ci_dispatch_azure_unavailable` at 1 is an Azure outage the breaker is riding out: wait, and watch `ci_dispatch_azure_breaker_transitions_total`. `launch-failing`: fix the cause and release it (Releasing a held job) |
 | `CIDispatchEgressCapHit` | The dispatcher deleted a group at the 10 GB egress cap in the last hour | The `reaped` line's `key` names the job. The owner paid the bytes; ask whether the job meant to send them |
 | `CIDispatchAzureFailing` | Azure calls keep failing for 30 min, with no lock | The common cause: an expired or rotated client secret, with an AADSTS code in the log. Rotate (The Azure credential), else wait out an Azure outage |
 
@@ -631,6 +696,45 @@ token and both have restarted, the Usage tab reads "usage unavailable" and job p
 4. Restart Forgejo with the same commit or the next: bump `realliance/templates-rev` in
    `cluster/applications/forgejo-release.yaml` (1 to 3 minutes of downtime, so no Actions job may
    run). Then the Usage tab under Settings, Actions shows meters again.
+
+### The control token (`CI_DISPATCH_CONTROL_TOKEN`)
+
+The bearer token of the control route. Secret `ci-dispatch-control`, key `control-token`, source
+`cluster/ci-dispatch/dispatcher/control-token.secret.yaml`, read through `control_token_file`. It
+follows the same one-line, no-whitespace rule, and the process reads it once, at start.
+
+Forgejo holds a second copy, from v15.0.11-realliance.7: `CONTROL_TOKEN=<token>` in the same
+`realliance.ci_usage` section, source `cluster/forgejo/ci-usage.secret.yaml`, with `CONTROL_URL` set
+in `[realliance.ci_usage]`. Until both hold the new token and both have restarted, a Retry from
+Forgejo fails and a release by curl needs the new token.
+
+1. A new token in sso-secrets, checked by counts only: the two counts must read 1 and 0.
+
+   ```bash
+   cd ~/Repos/realliance-sso-secrets
+   openssl rand -hex 32 | { read -r t && [ -n "$t" ] && sed -i '/^CI_DISPATCH_CONTROL_TOKEN=/d' forge/secrets.env \
+     && printf 'CI_DISPATCH_CONTROL_TOKEN=%s\n' "$t" >> forge/secrets.env; }
+   grep '^CI_DISPATCH_CONTROL_TOKEN=' forge/secrets.env | cut -d= -f2- | wc -l
+   grep '^CI_DISPATCH_CONTROL_TOKEN=' forge/secrets.env | cut -d= -f2- | LC_ALL=C grep -c '[^[:graph:]]'
+   git commit -S -am "forge: rotate the ci-dispatch control token" && git push
+   ```
+
+2. Copy it into the dispatcher source, and into the Forgejo source once realliance.7 runs, then
+   reseal both. In the Forgejo file, edit only the `CONTROL_TOKEN=` line of the
+   `realliance.ci_usage` value and never the usage token's `TOKEN=` line.
+
+   ```bash
+   f=cluster/ci-dispatch/dispatcher/control-token
+   T=$(grep '^CI_DISPATCH_CONTROL_TOKEN=' ~/Repos/realliance-sso-secrets/forge/secrets.env | cut -d= -f2-) \
+     yq -i '.stringData."control-token" = strenv(T)' $f.secret.yaml
+   rm $f.yaml && bash -O globstar ./sign.sh && git diff --no-textconv --stat -- ':!*.secret.*'
+   ```
+
+3. The dispatcher restarts with the commit, and the old token stops working. Check the new one: a
+   release call (Releasing a held job) on a key with no hold answers 200 `not-held` with the new token.
+4. From realliance.7, restart Forgejo as for the usage token (bump `realliance/templates-rev` in
+   `cluster/applications/forgejo-release.yaml`; 1 to 3 minutes of downtime, so no Actions job may
+   run). Then a Retry reaches the dispatcher again.
 
 ### The `galaxy-ci-dispatch` runner secret (`RUNNER_CI_DISPATCH_SECRET`)
 
@@ -890,6 +994,9 @@ git -C ~/Repos/ci-dispatch ls-tree --name-only "$REL" internal/aci/testdata/poli
   signed commit. For the paid classes, pause `small` and `medium` the same way.
 - **A bad config or image:** revert the commit and push, which is a deploy. If the rollout stalled on
   a pod that never got `Ready`, delete `ci-dispatch-0` by hand once the revert has synced.
+- **Below v0.5.0.** v0.5.0 moves the ledger to schema v3, and v0.4.0 refuses it as newer. Either
+  pause the paid classes and keep v0.5.0, or restore the pre-upgrade nightly snapshot
+  (`/data/snapshots/ledger-*.db`) by Restoring the ledger, and lose every launch since.
 - **Below v0.4.0.** v0.3.1 (`sha-f415caa`) opens the same ledger and `config.yaml`, so its pin is a
   clean rollback while `ci.yaml` has no `org_defaults`. Once it does, v0.3.1 rejects both the head and
   the stored copy, and runs on the built-in limits, `tiny` only, until an Owner signs a `ci.yaml`

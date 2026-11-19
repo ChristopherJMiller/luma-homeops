@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Unit-test ci-dispatch's alerts, phase 1's eight, v0.4.0's org list, phase 2's seven and v0.5.0's
-# CIDispatchJobWaiting (cluster/ci-dispatch/dispatcher/prometheusrule.yaml), with promtool, against the cases in
-# cluster/ci-dispatch/dispatcher/alerts_test.yaml: each alert fires on its trigger and stays quiet on
-# its healthy twin. The rules file is linted first (promtool --lint-fatal: a name with two rules needs
-# a label that tells them apart: `reason` for CIDispatchLaunchFailing and CISweeperStale, `level` for
-# CIDispatchSpendHigh).
+# Unit-test ci-dispatch's alerts, phase 1's eight, v0.4.0's org list, phase 2's seven and
+# v0.5.0's CIDispatchJobWaiting (cluster/ci-dispatch/dispatcher/prometheusrule.yaml), with promtool,
+# against the cases in cluster/ci-dispatch/dispatcher/alerts_test.yaml: each alert fires on its
+# trigger and stays quiet on its healthy twin. The rules file is linted first (promtool
+# --lint-fatal: a name with two rules needs a label that tells them apart: `reason` for
+# CIDispatchLaunchFailing and CISweeperStale, `level` for CIDispatchSpendHigh).
 # Offline: no cluster access.
 #
 #   nix shell --inputs-from . nixpkgs#prometheus.cli nixpkgs#yq-go --command scripts/test-ci-dispatch-alerts.sh

@@ -1,8 +1,8 @@
 ---
 # promtool tests for prometheusrule.yaml, run by scripts/test-ci-dispatch-alerts.sh. Not a manifest,
-# so kustomization.yaml does not list it. One firing and one quiet case per alert (phase 1's eight,
-# v0.4.0's CIDispatchOrgListStale, phase 2's seven, v0.5.0's CIDispatchJobWaiting); the summaries are copied from the rules, so a
-# reworded alert fails here until this file follows.
+# so kustomization.yaml does not list it. One firing and one quiet case per alert (phase 1's
+# eight, v0.4.0's CIDispatchOrgListStale, phase 2's seven, v0.5.0's CIDispatchJobWaiting). The
+# summaries are copied from the rules, so a reworded alert fails here until this file follows.
 rule_files: [rules.yaml]
 evaluation_interval: 1m
 tests:
@@ -51,7 +51,7 @@ tests:
       - series: 'ci_dispatch_holds{namespace="ci-dispatch",class="tiny",reason="launch-failing"}'
         values: '0x2 1x20'
     alert_rule_test:
-      # True from 2m; the 5m hold puts the alert at 7m.
+      # True from 3m; the 5m hold puts the alert at 8m.
       - {eval_time: 5m, alertname: CIDispatchLaunchFailing, exp_alerts: []}
       - eval_time: 10m
         alertname: CIDispatchLaunchFailing
