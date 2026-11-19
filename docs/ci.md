@@ -501,7 +501,7 @@ weekdays).
 | `CISweeperStale`, `reason: absent` | No sweeper timestamp for 30 min: the watcher can't read the run history, or the dispatcher isn't running | `CIDispatchStale` covers a missing dispatcher. Expect it during a break-glass longer than 30 min, or a node loss: silence it then |
 | `CIDispatchDrift` | The ledger and Azure differ by over 10 % for a closed day or period | The month-end drift check. The gauge holds the ratio, so the alert repeats every 30 min until the next one: silence it once read |
 | `CIDispatchPaidNotReady` | A paid class in `dry-run` or `on` not ready for 30 min (the `class` label), a deny that refuses only PUTs included | The log's `"api":"azure"` and `"api":"prices"` lines, `ci_dispatch_azure_locked`, `ci_dispatch_price_age_seconds`, `ci_dispatch_sweeper_last_run_timestamp` (the last succeeded run). One group whose egress reads keep failing holds every paid class (Paid classes, the Ready check). In `dry-run` it's a rollback trigger |
-| `CIDispatchJobWaiting` | A job has waited too long: `ci_dispatch_oldest_waiting_seconds{class,reason}` | Read that metric by `reason`. `not-ready` with `ci_dispatch_azure_unavailable` at 1 is an Azure outage the breaker is riding out: wait, and watch `ci_dispatch_azure_breaker_transitions_total`. `launch-failing`: fix the cause and release it (Releasing a held job) |
+| `CIDispatchJobWaiting` | A class has waited over 30 min for `launch-failing`, `backoff` or `not-ready` and launched nothing in that time. It reads the maximum over 15 min, so a probe tick doesn't reset it. A queue behind owner or class limits doesn't count: `ci_dispatch_oldest_waiting_seconds{class,reason}` | Read that metric by `reason`. `not-ready` with `ci_dispatch_azure_unavailable` at 1 is an Azure outage the breaker is riding out: wait, and watch `ci_dispatch_azure_breaker_transitions_total`. `launch-failing`: fix the cause and release it (Releasing a held job) |
 | `CIDispatchEgressCapHit` | The dispatcher deleted a group at the 10 GB egress cap in the last hour | The `reaped` line's `key` names the job. The owner paid the bytes; ask whether the job meant to send them |
 | `CIDispatchAzureFailing` | Azure calls keep failing for 30 min, with no lock | The common cause: an expired or rotated client secret, with an AADSTS code in the log. Rotate (The Azure credential), else wait out an Azure outage |
 
@@ -997,9 +997,18 @@ git -C ~/Repos/ci-dispatch ls-tree --name-only "$REL" internal/aci/testdata/poli
   signed commit. For the paid classes, pause `small` and `medium` the same way.
 - **A bad config or image:** revert the commit and push, which is a deploy. If the rollout stalled on
   a pod that never got `Ready`, delete `ci-dispatch-0` by hand once the revert has synced.
-- **Below v0.5.0.** v0.5.0 moves the ledger to schema v3, and v0.4.0 refuses it as newer. Either
-  pause the paid classes and keep v0.5.0, or restore the pre-upgrade nightly snapshot
-  (`/data/snapshots/ledger-*.db`) following Restoring the ledger, and lose every launch since.
+- **Below v0.5.0.** v0.5.0 moves the ledger to schema v3 at start, and v0.4.0 refuses a v3 ledger, so
+  reverting the pin alone leaves a crash loop and CI down, `tiny` included. Fix forward when you can.
+  To go back to v0.4.0, first downgrade the ledger to v2 with the dispatcher stopped:
+  `DROP TABLE releases; DROP TABLE absorbed; UPDATE meta SET schema_version = 2;`. Schema v3 only
+  added those two tables, so this loses release history and booked late-group cents, nothing else.
+  Stop the dispatcher as Restoring the ledger does (steps 1 and 2: STOP for Chris, pause both Argo
+  apps, scale to 0, wait for the pod to go). Run the SQL on `ledger.db` in the `data` volume, the
+  volume the `ledger-restore` pod mounts at `/data`, and delete any `ledger.db-wal` and
+  `ledger.db-shm` the stopped pod left only after the SQL ran clean. Then revert the pin and
+  `ci.yaml` together in git, every commit of the v0.5.0 deploy, and patch `applications` back as
+  step 5 does. The fallback is the pre-upgrade nightly snapshot (`/data/snapshots/ledger-*.db`),
+  restored by the whole of Restoring the ledger, which loses every launch since.
 - **Below v0.4.0.** v0.3.1 (`sha-f415caa`) opens the same ledger and `config.yaml`, so its pin is a
   clean rollback while `ci.yaml` has no `org_defaults`. Once it does, v0.3.1 rejects both the head and
   the stored copy, and runs on the built-in limits, `tiny` only, until an Owner signs a `ci.yaml`
