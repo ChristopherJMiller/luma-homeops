@@ -255,6 +255,12 @@ spec:
               ACCOUNT_LINKING: disabled
               USERNAME: nickname # Keycloak sends no nickname; goth falls back to preferred_username
               REGISTER_EMAIL_CONFIRM: false # Keycloak verified the address
+            oauth2:
+              # Forgejo keeps one grant per user per OAuth app, and its code default (true; the example
+              # ini says false) makes refresh tokens single-use, so one machine's `fj` refresh logged the
+              # person's other machines out. Reusable tokens still expire after 30 days unused; revoke a
+              # leaked one under Settings > Applications. Chris 2026-11-19.
+              INVALIDATE_REFRESH_TOKENS: false
             session:
               PROVIDER: db
               SESSION_LIFE_TIME: 604800 # 7 days

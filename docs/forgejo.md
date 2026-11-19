@@ -309,7 +309,10 @@ edits. Without it Forgejo refuses *every* merge into a branch that requires sign
 **`fj` (forgejo-cli) login:** `fj -H git.realliance.net auth login` signs in through the SSO in a
 browser. It needs the public OAuth app "forgejo-cli (fj)" (owned by `forgejo-admin`, redirect
 `http://127.0.0.1:26218/`) and this line in `~/.config/forgejo-cli/client_ids`:
-`git.realliance.net 41ec7227-eca9-435c-a904-1785bcae60b9` (a public client id, not a secret). The provider cannot import orgs, so
+`git.realliance.net 41ec7227-eca9-435c-a904-1785bcae60b9` (a public client id, not a secret). Log in
+once per machine; they all stay signed in, because refresh tokens are reusable
+(`[oauth2] INVALIDATE_REFRESH_TOKENS = false`). With Forgejo's default, every machine shares one grant
+and each refresh logs the others out ("token was already used"). The provider cannot import orgs, so
 orgs are always created by that repo. Personal and everyday repos are created freely.
 
 `realliance-ops/forge` is mirrored to `github.com/realliance/forge` (private) by a Forgejo SSH push
