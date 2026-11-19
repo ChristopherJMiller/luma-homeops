@@ -70,13 +70,16 @@ V020_IMAGE = (
 # and 7). v0.3.1 (tag v0.3.1 = main f415caa: v0.3.0, phase 2's paid release, plus the egress-read fix
 # found in Task 21) is the rollback, sha-f415caa@sha256:4f3517443b8c…, until ci.yaml carries
 # org_defaults, which v0.3.1 refuses.
+# v0.5.0: tag v0.5.0 (signed) = main 2677cb2, the stale-job hardening (plan 1 of the stale-jobs
+# spec). It moves the ledger to schema v3, which v0.4.0 (sha-19a65ae@sha256:38196d752769…) refuses,
+# so going back means the ledger downgrade in docs/ci.md first.
 # Before v0.3.0 the StatefulSet pinned PENDING_IMAGE, a digest no registry can serve (review M2), only on
 # the branch RELEASE_PENDING named. A new pin is a reviewed commit that changes RELEASE_IMAGE too.
 PENDING_IMAGE = f"{IMAGE}:sha-PENDING@sha256:{'0' * 64}"
 RELEASE_PENDING = REPO / "cluster/ci-dispatch/dispatcher/.release-pending"
 RELEASE_IMAGE = (
-    "git.realliance.net/realliance-ops/ci-dispatch:sha-19a65ae"
-    "@sha256:38196d7527696cc43afe14725bc625ee556ed568a26f73416696c8a2d09acee9"
+    "git.realliance.net/realliance-ops/ci-dispatch:sha-2677cb2"
+    "@sha256:963c70a06dd0414f5d0e08d3223a355992d0126fdbacdcf2a8cffaff13b370c2"
 )
 # ci-dispatch v0.1.0's shutdown (internal/loop, cmd/ci-dispatch): the step in flight, then the servers.
 SHUTDOWN_GRACE_SECONDS = 20

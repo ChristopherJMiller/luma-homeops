@@ -62,16 +62,16 @@ spec:
           type: RuntimeDefault
       containers:
         - name: ci-dispatch
-          # v0.4.0: tag v0.4.0 (signed) = main 19a65ae, built by ci-dispatch's CI as an OCI manifest,
-          # amd64: v0.3.1 plus org_defaults (an org, or an owner it can't place, gets org_defaults; a
-          # user on its own repo gets defaults), read from /admin/orgs and /repositories/<id>, and the
-          # gauge behind CIDispatchOrgListStale. Same ledger schema (v2) and config.yaml as v0.3.1, so
-          # the rollback is the v0.3.1 pin, sha-f415caa@sha256:4f3517443b8c…, until ci.yaml carries
-          # org_defaults, which v0.3.1 refuses (docs/ci.md, Rollback). config.yaml's azure and paid
-          # sections need v0.3.x or later: v0.2.0 and v0.1.0 refuse them and exit. A new image never
-          # deploys itself: .renovaterc.json never automerges this image, so its PR is the alarm.
+          # v0.5.0: tag v0.5.0 (signed) = main 2677cb2, built by ci-dispatch's CI as an OCI manifest,
+          # amd64: v0.4.0 plus the stale-job hardening (Azure trouble is not a try, the paid-class
+          # breaker, 60 s creates off the step, held-job release on the control route and one
+          # automatic paid round, late-group compute booked globally). It moves the ledger to schema
+          # v3 at start, and v0.4.0 refuses both a v3 ledger and config.yaml's control keys, so the
+          # way back to the v0.4.0 pin, sha-19a65ae@sha256:38196d752769…, is the ledger downgrade
+          # first, then the whole deploy reverted (docs/ci.md, Rollback, Below v0.5.0). A new image
+          # never deploys itself: .renovaterc.json never automerges this image, so its PR is the alarm.
           # Re-pin by hand after review, with the test's RELEASE_IMAGE.
-          image: git.realliance.net/realliance-ops/ci-dispatch:sha-19a65ae@sha256:38196d7527696cc43afe14725bc625ee556ed568a26f73416696c8a2d09acee9
+          image: git.realliance.net/realliance-ops/ci-dispatch:sha-2677cb2@sha256:963c70a06dd0414f5d0e08d3223a355992d0126fdbacdcf2a8cffaff13b370c2
           args:
             - --config=/etc/ci-dispatch/config/config.yaml
           env:
