@@ -3,8 +3,8 @@
 # refused. It becomes the hash-suffixed ConfigMap ci-dispatch-config, so any change here restarts
 # the pod. Public: no secret, no Azure id (tenant, client, subscription) and no hidden org, team or
 # group name. The three tokens are files under /etc/ci-dispatch/secrets (SealedSecrets
-# forgejo-token.yaml, usage-token.yaml and control-token.yaml); the Azure credential is four files under
-# /etc/ci-dispatch/azure (SealedSecret azure-credentials.yaml).
+# forgejo-token.yaml, usage-token.yaml and control-token.yaml); the Azure credential is four files
+# under /etc/ci-dispatch/azure (SealedSecret azure-credentials.yaml).
 #
 # Move a class from dry-run to on only by editing `classes` here, once its dry-run checks pass
 # (docs/ci.md): a day of the decision log for tiny, the probes for small and medium. dry-run

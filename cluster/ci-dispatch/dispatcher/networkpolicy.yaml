@@ -4,7 +4,8 @@
 # In:
 #   - Prometheus (namespace prometheus) scraping /metrics on TCP 8080;
 #   - Forgejo's pods (the fork's CI Usage tab and held-job note, [realliance.ci_usage] in
-#     forgejo-release.yaml) calling the usage API on TCP 8081 and the control route on TCP 8082, through the Service ci-dispatch.
+#     forgejo-release.yaml) calling the usage API on TCP 8081 and the control route on TCP 8082,
+#     through the Service ci-dispatch.
 # kubelet's probes come from root on the node, which the enforcer exempts (NetworkPolicy spec
 # section 3.4).
 # Out:

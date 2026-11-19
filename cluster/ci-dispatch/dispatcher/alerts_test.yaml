@@ -1,7 +1,7 @@
 ---
 # promtool tests for prometheusrule.yaml, run by scripts/test-ci-dispatch-alerts.sh. Not a manifest,
 # so kustomization.yaml does not list it. One firing and one quiet case per alert (phase 1's eight,
-# v0.4.0's CIDispatchOrgListStale, phase 2's seven); the summaries are copied from the rules, so a
+# v0.4.0's CIDispatchOrgListStale, phase 2's seven, v0.5.0's CIDispatchJobWaiting); the summaries are copied from the rules, so a
 # reworded alert fails here until this file follows.
 rule_files: [rules.yaml]
 evaluation_interval: 1m
@@ -51,8 +51,9 @@ tests:
       - series: 'ci_dispatch_holds{namespace="ci-dispatch",class="tiny",reason="launch-failing"}'
         values: '0x2 1x20'
     alert_rule_test:
-      - {eval_time: 1m, alertname: CIDispatchLaunchFailing, exp_alerts: []}
-      - eval_time: 5m
+      # True from 2m; the 5m hold puts the alert at 7m.
+      - {eval_time: 5m, alertname: CIDispatchLaunchFailing, exp_alerts: []}
+      - eval_time: 10m
         alertname: CIDispatchLaunchFailing
         exp_alerts:
           - exp_labels: {severity: warning, reason: held}
@@ -60,6 +61,45 @@ tests:
               summary: "ci-dispatch holds a job as launch-failing: three launches did not produce a runner (docs/ci.md)"
               description: "A job is held as launch-failing after three launches produced no runner. Check events in ci-tiny and the netpol-gate log, then have the member rerun the job."
               runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
+  - name: CIDispatchJobWaiting fires when a class has waited over 30 minutes with no launch
+    interval: 1m
+    input_series:
+      # The oldest wait grows 100 s a minute: over 1800 from 19m. Launches stay flat.
+      - series: 'ci_dispatch_oldest_waiting_seconds{namespace="ci-dispatch",class="small",reason="not-ready"}'
+        values: '0+100x40'
+      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="small",backend="aci",outcome="launched"}'
+        values: '5x40'
+    alert_rule_test:
+      - {eval_time: 23m, alertname: CIDispatchJobWaiting, exp_alerts: []}
+      - eval_time: 25m
+        alertname: CIDispatchJobWaiting
+        exp_alerts:
+          - exp_labels: {severity: warning, class: small}
+            exp_annotations:
+              summary: "CI jobs in small have waited over 30 minutes with no launch"
+              description: "The oldest waiting job in this class has waited over 30 minutes for a reason of launch-failing, backoff, not-ready, owner-busy or class-full, and the class has launched nothing in that time. A queue that keeps launching stays quiet. Budget holds are CIDispatchSpendHigh's."
+              runbook_url: "https://github.com/ChristopherJMiller/luma-homeops/blob/main/docs/ci.md#alerts"
+  - name: CIDispatchJobWaiting is quiet while the class keeps launching
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_oldest_waiting_seconds{namespace="ci-dispatch",class="small",reason="not-ready"}'
+        values: '0+100x40'
+      # One more launch every 10 minutes.
+      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="small",backend="aci",outcome="launched"}'
+        values: '0x9 1x10 2x10 3x10 4x10'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: CIDispatchJobWaiting, exp_alerts: []}
+      - {eval_time: 38m, alertname: CIDispatchJobWaiting, exp_alerts: []}
+  - name: CIDispatchJobWaiting is quiet for a budget hold
+    interval: 1m
+    input_series:
+      - series: 'ci_dispatch_oldest_waiting_seconds{namespace="ci-dispatch",class="small",reason="no-budget"}'
+        values: '0+100x40'
+      - series: 'ci_dispatch_launches_total{namespace="ci-dispatch",class="small",backend="aci",outcome="launched"}'
+        values: '5x40'
+    alert_rule_test:
+      - {eval_time: 30m, alertname: CIDispatchJobWaiting, exp_alerts: []}
+      - {eval_time: 38m, alertname: CIDispatchJobWaiting, exp_alerts: []}
   - name: CIDispatchLaunchFailing fires on launch errors that persist for 15 minutes
     interval: 1m
     input_series:

@@ -13,7 +13,7 @@ check() { # receiver labels...
     echo "ok   $* -> $want"
   else echo "FAIL $* -> expected $want"; fail=1; fi
 }
-for a in CIDispatchSpendHigh CIDispatchLocked CIDispatchOrphanCompute CIDispatchDrift CIDispatchPaidNotReady CISweeperStale; do
+for a in CIDispatchSpendHigh CIDispatchLocked CIDispatchOrphanCompute CIDispatchDrift CIDispatchPaidNotReady CIDispatchJobWaiting CISweeperStale; do
   for s in warning critical; do check critical-alerts "alertname=$a" "severity=$s"; done
 done
 check homelab-default alertname=SomeOtherThing severity=warning

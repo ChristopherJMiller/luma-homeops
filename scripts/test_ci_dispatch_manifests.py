@@ -117,6 +117,7 @@ ALERTS = {
     "CIDispatchEgressCapHit": "warning",
     "CIDispatchAzureFailing": "warning",
     "CIDispatchOrgListStale": "warning",
+    "CIDispatchJobWaiting": "warning",
 }
 # The alerts with two rules, and the label that tells their rules apart (promtool --lint-fatal).
 TWO_RULES = {
@@ -130,6 +131,16 @@ TWO_RULES = {
 ORG_LIST_RULES = {
     ("CIDispatchOrgListStale", "stale"): ("ci_dispatch_org_list_age_seconds > 3600", "15m"),
     ("CIDispatchOrgListStale", "absent"): ("absent(ci_dispatch_org_list_age_seconds)", "30m"),
+}
+# v0.5.0's rules (the stale-jobs plan, Task 3): a 5 min hold on the held LaunchFailing rule, and
+# a class whose oldest waiting job has waited over 30 minutes for a stall reason with no launch.
+V050_RULES = {
+    ("CIDispatchLaunchFailing", "held"): ('max(ci_dispatch_holds{reason="launch-failing"}) > 0', "5m"),
+    ("CIDispatchJobWaiting", None): (
+        'max by (class) (ci_dispatch_oldest_waiting_seconds{reason=~"launch-failing|backoff|not-ready|owner-busy|class-full"}) > 1800'
+        ' unless on (class) sum by (class) (increase(ci_dispatch_launches_total{outcome="launched"}[30m])) > 0',
+        "5m",
+    ),
 }
 # Phase 2's rules, exactly (Task 18 Step 2), keyed by name and, for a pair, the telling label.
 # SpendHigh's denominator drops a zero cap (review M1): the built-in limits carry a 0 cap, and
@@ -372,7 +383,7 @@ def test_dispatcher_pod(dispatcher):
     assert len(cas) == 1 and cas[0]["name"] == "kube-root-ca.crt"
     assert cas[0]["items"] == [{"key": "ca.crt", "path": "ca.crt"}]
 
-    # Both secrets as 0400 files.
+    # The three tokens as 0400 files.
     proj = vols["secrets"]["projected"]
     assert proj["defaultMode"] == 0o400
     secrets = {s["secret"]["name"]: [(i["key"], i["path"]) for i in s["secret"]["items"]] for s in proj["sources"]}
@@ -852,7 +863,7 @@ def test_monitoring(dispatcher):
     for name, (label, values) in TWO_RULES.items():
         pair = [r for r in rules if r["alert"] == name]
         assert sorted(r["labels"][label] for r in pair) == values, name
-    for (name, tell), (expr, for_) in {**PHASE2_RULES, **ORG_LIST_RULES}.items():
+    for (name, tell), (expr, for_) in {**PHASE2_RULES, **ORG_LIST_RULES, **V050_RULES}.items():
         label = TWO_RULES[name][0] if name in TWO_RULES else None
         (r,) = [r for r in rules if r["alert"] == name and (label is None or r["labels"][label] == tell)]
         assert r["expr"].strip() == expr, (name, tell)
