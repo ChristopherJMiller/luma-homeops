@@ -101,11 +101,15 @@ breaker (2) makes reaching 20 take hours.
 
 After an `unavailable` failure the Azure backend opens. Every paid class waits as `not-ready` (a
 log detail says Azure is unavailable) for 1, 2, 5, then 10 min, capped at 10. When the wait ends,
-one launch goes through: the oldest waiting paid job. A successful create closes the breaker and
-the queue launches as usual; a failure reopens it at the next step. Only a successful create
-closes it, because on 2026-11-17 reads kept working while creates failed.
+one launch goes through: the first paid job in the gate's fair-share order, the order every
+launch uses (amended 2026-11-18; the spec first said the oldest waiting job, and a probe-only
+ordering wasn't worth its own path in the gate). A successful create closes the breaker and the
+queue launches as usual. Any other answer re-arms the wait, and an Azure-side failure also
+lengthens it. Only a successful create closes it, because on 2026-11-17 reads kept working
+while creates failed.
 
-A gauge exposes the breaker state and a counter its transitions. `CIDispatchPaidNotReady` already
+A gauge exposes the breaker state and a counter its transitions
+(`ci_dispatch_azure_breaker_transitions_total{to="open|closed"}`). `CIDispatchPaidNotReady` already
 fires after 30 min not ready.
 
 ### 3. Creates leave the step and get 60 s
