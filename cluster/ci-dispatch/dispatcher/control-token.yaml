@@ -1,0 +1,14 @@
+---
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: ci-dispatch-control
+  namespace: ci-dispatch
+spec:
+  encryptedData:
+    control-token: AgCKnqaLqjAdmDKFvV0jwMJvIzewOnKAaxyUHtPBonSY1fkHj/wDEnnBuhx+YGpnXQKcmrQ7ljnPnOzYku4x90xgRTJGyDoEVPB7PD0a5o/uKVhn8ejStbbw2Ppa/WLY8KlNeue8+kIAJmzyo3gflaCst1lec96w386g3rO9tZuFim4KHcWVu+anQhooQb3cv5NR9OsYYhQccI84il3HhAJOO96VcwWBXltfHxguQG5gJQwYiUeYJ4r80Orm14P0WuvOB71ElSAWJw3QPgBJ1LuzX8lOgxRdVeJZZhq5K3jabjFsVEwbcKhXLMbtkFq+MhRtyyQx/xXOl972+tIjnNpSPIiXgM8KcHJkTtdun71NC9gME/lzBHLRvJKX31S0nMG20joG3lQ5POIM594WGuDJYKiVRmKRLZ6AuH+zaX/L966me856qfh7/mm4DSLVmz0CPoTTdIV+LULBTJI0uDpU99aFqRCcDCky1VgIbK50KKRL3Z2z/HCgCxwMWA0G0S0s7vSsqxVorKi14qiRcy28f9iuSWX0vk4Thoxt9fHZcqoY/sFiMmMk0ti1GpcmYsZ+PjW+wKWKWFH5d3aoCH4E3gRkVVVngyzlA8VmYCuE0zp9gzTC5jjFey+mNgb0rMiG6DMpUsTBtFfd0jjjI4cGxycEWtN+pwP7CSj6u2aTF4HQqWAgu4nE2fyV6HxmXB4bYOlWTHQSYnrqRaLVHR/kCB/x+vbUgDrnjLhkr+FpGTNL1Morboc2MNiO42AUfg6mEOirX7Ne04M8BvYQjs8j
+  template:
+    metadata:
+      name: ci-dispatch-control
+      namespace: ci-dispatch
+    type: Opaque

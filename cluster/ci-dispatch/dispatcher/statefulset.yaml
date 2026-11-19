@@ -86,6 +86,8 @@ spec:
               containerPort: 8080
             - name: usage
               containerPort: 8081
+            - name: control
+              containerPort: 8082
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -174,6 +176,11 @@ spec:
                   items:
                     - key: usage-token
                       path: usage-token
+              - secret:
+                  name: ci-dispatch-control # SealedSecret control-token.yaml
+                  items:
+                    - key: control-token
+                      path: control-token
         # Phase 2 (E9): the service principal realliance-ci-dispatch, one file per key, read once at
         # start by azure.LoadCredentials. 0440 under fsGroup 65532; its canonical copy is
         # CI_DISPATCH_AZURE_* in sso-secrets, and rotation is docs/ci.md's (180-day client secret).

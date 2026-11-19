@@ -1,5 +1,6 @@
 ---
 # http: /metrics and /healthz (the scrape). usage: the usage API, bearer token (ci-dispatch-usage).
+# control: the control route, bearer token (ci-dispatch-control).
 apiVersion: v1
 kind: Service
 metadata:
@@ -16,3 +17,6 @@ spec:
     - name: usage
       port: 8081
       targetPort: usage
+    - name: control
+      port: 8082
+      targetPort: control

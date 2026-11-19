@@ -340,7 +340,7 @@ def test_dispatcher_pod(dispatcher):
     assert env["GOMEMLIMIT"] == "192MiB"
     assert env["TMPDIR"] == "/tmp"
     assert c["args"] == ["--config=/etc/ci-dispatch/config/config.yaml"]
-    assert {p["name"]: p["containerPort"] for p in c["ports"]} == {"http": 8080, "usage": 8081}
+    assert {p["name"]: p["containerPort"] for p in c["ports"]} == {"http": 8080, "usage": 8081, "control": 8082}
     for probe in ("startupProbe", "livenessProbe"):
         assert c[probe]["httpGet"] == {"path": "/healthz", "port": "http"}, probe
     # /healthz reads 200 while Start is in flight, so the startup probe passes once main listens
@@ -379,6 +379,7 @@ def test_dispatcher_pod(dispatcher):
     assert secrets == {
         "ci-dispatch-forgejo": [("forgejo-token", "forgejo-token")],
         "ci-dispatch-usage": [("usage-token", "usage-token")],
+        "ci-dispatch-control": [("control-token", "control-token")],
     }
 
 
@@ -522,6 +523,7 @@ def test_config_values(dispatcher):
     for key in (
         cfg["forgejo"]["token_file"],
         cfg["usage_token_file"],
+        cfg["control_token_file"],
         cfg["inventory"]["keyring"],
         cfg["inventory"]["fingerprints"],
         cfg["kube"]["token_file"],
@@ -531,6 +533,8 @@ def test_config_values(dispatcher):
         cfg["azure"]["files"],
     ):
         assert any(key == m or key.startswith(m + "/") for m in mounts), f"{key} is not under any mount"
+    assert cfg["control_listen"] == ":8082"
+    assert cfg["control_token_file"] == "/etc/ci-dispatch/secrets/control-token"
     assert cfg["ledger"].startswith("/data/") and cfg["snapshots"].startswith("/data/")
     # terminationGracePeriodSeconds 30 assumes the default 20 s step budget; every Azure call runs under it.
     assert _seconds(cfg.get("step_budget", "20s")) <= SHUTDOWN_GRACE_SECONDS
@@ -686,9 +690,9 @@ DISPATCHER_INGRESS = [
         "from": [{"namespaceSelector": {"matchLabels": {"kubernetes.io/metadata.name": "prometheus"}}}],
         "ports": [{"protocol": "TCP", "port": 8080}],
     },
-    {  # the fork's CI Usage tab ([realliance.ci_usage]): Forgejo's own pods, the usage port only
+    {  # the fork's CI Usage tab ([realliance.ci_usage]) and the control route: Forgejo's own pods, those two ports only
         "from": [FORGEJO_PODS],
-        "ports": [{"protocol": "TCP", "port": 8081}],
+        "ports": [{"protocol": "TCP", "port": 8081}, {"protocol": "TCP", "port": 8082}],
     },
 ]
 
@@ -789,7 +793,7 @@ def test_dispatcher_policy(dispatcher):
     # The fork's CI Usage tab: Forgejo's pods, both selectors in one peer (so not the whole namespace,
     # not the keep-warm or backup pods), on the usage port only.
     assert usage["from"] == [FORGEJO_PODS]
-    assert ports(usage) == {("TCP", 8081)}
+    assert ports(usage) == {("TCP", 8081), ("TCP", 8082)}
     egress = pol["spec"]["egress"]
     assert len(egress) == 3
     forgejo = next(r for r in egress if "podSelector" in r["to"][0])
@@ -833,7 +837,7 @@ def test_monitoring(dispatcher):
     assert len(keep) == 1 and keep[0]["regex"].split("|")[0] == "ci_dispatch_.*"
     assert sm["spec"]["selector"]["matchLabels"] == {"app.kubernetes.io/name": "ci-dispatch"}
     svc = one(dispatcher, "Service", "ci-dispatch")
-    assert {p["name"]: p["port"] for p in svc["spec"]["ports"]} == {"http": 8080, "usage": 8081}
+    assert {p["name"]: p["port"] for p in svc["spec"]["ports"]} == {"http": 8080, "usage": 8081, "control": 8082}
     assert svc["spec"]["selector"] == {"app.kubernetes.io/name": "ci-dispatch"}
 
     rule = one(dispatcher, "PrometheusRule", "ci-dispatch-alerts")
@@ -926,6 +930,7 @@ def test_no_plain_secrets(whole):
     expected = {
         "ci-dispatch-forgejo": {"forgejo-token"},
         "ci-dispatch-usage": {"usage-token"},
+        "ci-dispatch-control": {"control-token"},
         "ci-dispatch-azure": set(AZURE_KEYS),
         "restic-config": restic_keys,  # the config tier's repo, the source's keys exactly
     }

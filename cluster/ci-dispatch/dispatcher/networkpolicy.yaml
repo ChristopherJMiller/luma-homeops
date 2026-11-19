@@ -4,7 +4,7 @@
 # In:
 #   - Prometheus (namespace prometheus) scraping /metrics on TCP 8080;
 #   - Forgejo's pods (the fork's CI Usage tab and held-job note, [realliance.ci_usage] in
-#     forgejo-release.yaml) calling the usage API on TCP 8081, through the Service ci-dispatch.
+#     forgejo-release.yaml) calling the usage API on TCP 8081 and the control route on TCP 8082, through the Service ci-dispatch.
 # kubelet's probes come from root on the node, which the enforcer exempts (NetworkPolicy spec
 # section 3.4).
 # Out:
@@ -34,8 +34,8 @@ spec:
               kubernetes.io/metadata.name: prometheus
       ports:
         - {protocol: TCP, port: 8080}
-    # The usage API: Forgejo's own pods only (not the keep-warm or backup pods), on the usage port
-    # only. The bearer token still guards every request.
+    # The usage API and the control route: Forgejo's own pods only (not the keep-warm or backup
+    # pods), on the usage and control ports only. The bearer tokens still guard every request.
     - from:
         - namespaceSelector:
             matchLabels:
@@ -46,6 +46,7 @@ spec:
               app.kubernetes.io/instance: forgejo
       ports:
         - {protocol: TCP, port: 8081}
+        - {protocol: TCP, port: 8082}
   egress:
     # Forgejo's API: the pods behind forgejo-http, on their container port. Jobs, runner
     # registration, the inventory's ci.yaml and its commit signatures all go through it.
