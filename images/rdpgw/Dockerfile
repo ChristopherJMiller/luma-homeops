@@ -30,7 +30,7 @@
 # Builder: golang 1.26.9-trixie, the forgejo-runner pin (pushed 2026-10-10, past
 # the 2-week rule; 1.26.10 and 1.26.11 are too new). Not alpine: the fetch
 # needs git. Runtime: distroless static nonroot, the pages-relay pin.
-FROM golang:1.26.9-trixie@sha256:f06b7122f888680048afb247c4e5f49c0069eb6c4c1ccae0f3f4834527a8d22c AS build
+FROM golang:1.27.4-trixie@sha256:f18c3d73a184fb0582828510722e723b63a93f7188d11dd223d9be6f6880e65d AS build
 
 ENV RDPGW_COMMIT=80612a977d05d9cb4d2c339b8f1f306a3593195f \
     CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS= GOWORK=off
