@@ -216,13 +216,15 @@ every group's recent egress rate.
 
 ### Paid limits and the caps owner
 
-Change them in `ci.yaml` (Changing a limit). The code of v0.3.0 holds the ceilings; `ci.yaml`
-may lower them, never raise them.
+Change them in `ci.yaml` (Changing a limit). The code holds the ceilings; `ci.yaml` may lower
+them, never raise them. The hourly one is $0.72 from the first ci-dispatch release after v0.5.0
+(Chris, 2026-11-23), and $0.48 before it: a `ci.yaml` above $0.48 reads `untrusted` on an older
+pin, so the forge change merges only after the re-pin.
 
 | Limit | Ceiling in code | `ci.yaml` |
 |---|---|---|
 | `global.paid_usd_per_period`, all owners in a UTC calendar month | $80 | $80 |
-| `global.paid_usd_per_hour`, the burn: compute plus egress | $0.48: 4 `small` or 2 `medium` at once | $0.48 |
+| `global.paid_usd_per_hour`, the burn: compute plus egress | $0.72: 3 `medium` or 6 `small` at once | $0.72 |
 | `paid_usd_per_period` of one owner | $80 | $10 by default; `realliance` (52) $30; `forgejo-admin` (1) $0.15 |
 | `paid_concurrent` of one owner | 20 | 2 by default |
 
@@ -231,8 +233,9 @@ may lower them, never raise them.
 - **The caps owner** is `forgejo-admin` (id 1), the owner of the paid acceptance suite's jobs. $0.15
   fits one `small` reservation ($0.078), not two, and never a `medium`, so the suite proves the money
   gate at almost no cost. Keep it at $0.15.
-- Azure's own limits never read `ci.yaml`: the sweeper's $0.60 an hour and the $85 budget
-  (`azure/ci/README.md`).
+- Azure's own limits never read `ci.yaml`: the sweeper's $0.84 an hour and the $85 budget
+  (`azure/ci/README.md`). Raise the dispatcher's hourly ceiling only after the sweeper's line,
+  Chris's apply: a sweeper still at $0.60 locks under three `medium` jobs.
 
 ### Reading paid spend
 
@@ -293,7 +296,7 @@ runner pods.
 | `defaults.tiny_concurrent`, `owners.<name>.tiny_concurrent` | `tiny` jobs at once for one owner | 3 |
 | `defaults.tiny_minutes_per_day`, `owners.<name>.tiny_minutes_per_day` | `tiny` minutes a UTC day | 1440 |
 | `global.tiny_concurrent` | `tiny` pods at once, all owners | 3 (the pod quota) |
-| `paid_usd_per_period`, `paid_concurrent` (defaults, owners), `global.paid_usd_per_period`, `global.paid_usd_per_hour` | Paid classes (Paid limits and the caps owner) | $80 a period, 20 at once, $0.48 an hour |
+| `paid_usd_per_period`, `paid_concurrent` (defaults, owners), `global.paid_usd_per_period`, `global.paid_usd_per_hour` | Paid classes (Paid limits and the caps owner) | $80 a period, 20 at once, $0.72 an hour |
 | `org_defaults`, with the per-owner keys of `defaults` | The limits of an owner with no `owners:` entry that isn't a user running a job on its own repo: an org, or an owner the dispatcher can't place. A key it leaves out reads paid 0 or the `tiny` value of `defaults` (v0.4.0) | as for `defaults` |
 | `classes` | Turns a class off for everyone | none |
 | `owners.<name>: {id: N, …}`, `deny: [{name, id}]` | Overrides and denies | none |
@@ -543,8 +546,8 @@ paid jobs waiting `not-ready`, and the sweeper's emails. `tiny` carries on.
 
    Then the dispatcher's side: `kubectl -n ci-dispatch logs ci-dispatch-0 | grep '"api":"azure"'`, and
    the history of `ci_dispatch_burn_usd_per_hour`, `ci_dispatch_orphans{kind="group"}` and
-   `ci_dispatch_reaped_total{reason="egress-cap"}`. A burn under $0.48 while the sweeper saw over
-   $0.60 points at egress, or at groups the dispatcher never listed.
+   `ci_dispatch_reaped_total{reason="egress-cap"}`. A burn under $0.72 while the sweeper saw over
+   $0.84 points at egress, or at groups the dispatcher never listed.
 2. **Fix the cause,** and pause the paid classes in the ConfigMap until it's fixed: `small: "off"`
    and `medium: "off"` in `config.yaml` (Pausing `small` and `medium`), a deploy that restarts the
    pod.
@@ -958,7 +961,8 @@ git -C ~/Repos/ci-dispatch ls-tree --name-only "$REL" internal/aci/testdata/poli
 2. **The constants** (F19): the shape prices, 117_000 and 233_000 micro-dollars an hour and 1_000_000
    for any other shape, and the egress cap and price, 10_000_000_000 bytes and 87_000 a GB, must be
    equal in `internal/prices`, `internal/limits` and `azure/ci/fence.json`. The same goes for the $80
-   period cap, `limits.CeilingPeriod` and `paid_cap_usd`.
+   period cap, `limits.CeilingPeriod` and `paid_cap_usd`. `limits.CeilingHour` (720_000) stays
+   under the sweeper's `ceiling_micro_per_hour` (840_000), and the other-shape price over both.
 3. **The config** (F9): `internal/config/testdata/site-config.yaml` equals
    `cluster/ci-dispatch/dispatcher/config.yaml`, apart from the class image digest.
 
@@ -985,7 +989,7 @@ git -C ~/Repos/ci-dispatch ls-tree --name-only "$REL" internal/aci/testdata/poli
 - **A compromised dispatcher can outrun the egress backstops** (Chris accepted it, 2026-11-05, over a
   VNet and NAT gateway at about $32 a month). The sweeper's egress and rate rules never see groups
   that live shorter than one sweep, 10 min. Then only the $85 budget bounds them, 8 to 48 h late, and
-  egress can cost more than the $0.60 an hour the spec's worst case assumes.
+  egress can cost more than the $0.84 an hour the spec's worst case assumes.
 - **A charge can be off once, by up to 20 min,** in three crash or failed-read windows of
   milliseconds: a held launch settles `lost` (about 3 min charged, a try counted); a job resumed
   just before a crash settles `restart` (0 charged though member code ran); an expiry reap on a tick

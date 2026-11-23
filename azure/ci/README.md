@@ -48,7 +48,7 @@ What `tf.sh` does to output:
 
 - **locks first** when the CI budget's spend reaches $85, or a lock is already in place or pending;
 - otherwise deletes any container group older than 90 minutes, and any at or over the 10 GB egress cap, and adds up the burn: each group's shape price plus its egress rate;
-- **locks** when that burn is over $0.60 an hour for a second sweep in a row. The tag `ci-sweeper-over-at` holds the previous sweep's scheduled slot, so a slow or queued run still counts.
+- **locks** when that burn is over $0.84 an hour for a second sweep in a row. The tag `ci-sweeper-over-at` holds the previous sweep's scheduled slot, so a slow or queued run still counts.
 
 Locking deletes the dispatcher's role assignment first, then every container group. The tag `ci-sweeper-lock` remembers the lock by the deleted assignment's `createdOn`. Every sweep retries the delete until the assignment is gone, and keeps compute at zero after that. Only a newer assignment ends the lock, and only an apply can create one. The sweeper then removes the tag itself.
 
@@ -70,7 +70,8 @@ A budget lock holds until the month rolls over or Chris raises the budget: while
 
 Notes:
 
-- **The dispatcher's own gate is $0.48 an hour** (4 `small` or 2 `medium` jobs; Chris, 2026-11-06). The sweeper's $0.60 counts compute plus egress, which leaves about $0.12 an hour, about 380 KB/s across all groups, for traffic before two sweeps lock.
+- **The dispatcher's own gate is $0.72 an hour** (3 `medium` or 6 `small` jobs; Chris, 2026-11-23, up from $0.48). The sweeper's $0.84 counts compute plus egress, which leaves about $0.12 an hour, about 380 KB/s across all groups, for traffic before two sweeps lock. $0.84 is the most the spec's 48 h worst case for a compromised dispatcher allows under the $150 credit (the spec's 2026-11-23 amendment): don't raise it without redoing that arithmetic.
+- **Raise the sweeper's line before the dispatcher's.** Apply this first: a sweeper at $0.60 locks under three `medium` jobs, and only an apply undoes a lock.
 - The egress term fails open. An unread metric (a 404 for a group deleted mid-sweep, say) adds nothing to the burn and skips the cap, and the run ends `Degraded`. Task 4 checks what a metric read returns for a deleted group.
 - **How the egress metric reads** (Tasks 4 and 5). `interval=FULL` gives one average over the span, and that average is per sample, about 2 a minute, not weighted by time. Sustained traffic reads high: average × age gave 1.28 to 1.33 times the bytes sent in Task 5's drill. A short burst, or anything in a group's first 90 s or so, which has no sample, can read low or 0: in Task 4, a 101 MB download that took 2.3 s, two minutes in, read 0 both ways. The metric also lags the wall clock by about 2 min: a group under 2 min old reads 0, and a sweep's 10-minute rate window misses its newest 2 minutes or so.
 - The shape price reads only CPU and memory, and ignores `gpu`, `sku` and `limits`. The `aci-shape` Policy denies all three today; widen the price if that rule ever changes.
