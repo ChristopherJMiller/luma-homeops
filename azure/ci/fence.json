@@ -26,7 +26,7 @@
   "sweeper": {
     "interval_minutes": 10,
     "max_age_minutes": 90,
-    "ceiling_micro_per_hour": 600000,
+    "ceiling_micro_per_hour": 840000,
     "repeat_window_minutes": 12,
     "action_timeout": "PT1M",
     "price_micro_per_hour": {"2/8": 117000, "4/16": 233000, "other": 1000000},

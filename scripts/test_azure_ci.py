@@ -742,7 +742,7 @@ BUDGET = f"{CI_ID}/providers/Microsoft.Consumption/budgets/realliance-ci"
 
 # The brief's sweeper block (plan Task 3, Interfaces).
 EXPECTED_SWEEPER = {
-    "interval_minutes": 10, "max_age_minutes": 90, "ceiling_micro_per_hour": 600000,
+    "interval_minutes": 10, "max_age_minutes": 90, "ceiling_micro_per_hour": 840000,
     "repeat_window_minutes": 12, "action_timeout": "PT1M",
     "price_micro_per_hour": {"2/8": 117000, "4/16": 233000, "other": 1000000},
     "delete_types": [CG],
@@ -1472,8 +1472,9 @@ def test_sweeper_values():
     f = fence()
     s = f["sweeper"]
     assert s == EXPECTED_SWEEPER
-    # $0.60 an hour, the spec's ceiling; two sweeps in a row fit the window, three don't.
-    assert s["ceiling_micro_per_hour"] == 600_000
+    # $0.84 an hour: the spec's $0.60, raised with the dispatcher's $0.72 (Chris, 2026-11-23); two sweeps in a
+    # row fit the window, three don't.
+    assert s["ceiling_micro_per_hour"] == 840_000
     assert s["interval_minutes"] < s["repeat_window_minutes"] < 2 * s["interval_minutes"]
     # One price per fence shape, plus the price of any other shape (F19: Task 6 pins the same literals).
     assert set(s["price_micro_per_hour"]) == {f"{x['cpu']}/{x['memory_gb']}" for x in f["shapes"]} | {"other"}
@@ -1818,7 +1819,7 @@ LOCK_VIEW = {
 TRIP = {"or": [
     {"equals": ["@actions('Early')?['outputs']", True]},
     {"and": [
-        {"greater": ["@variables('burn')", 600000]},
+        {"greater": ["@variables('burn')", 840000]},
         {"greaterOrEquals": ["@{coalesce(body('Read_tags')?['properties']?['tags']?['ci-sweeper-over-at'], '')}",
                              "@{formatDateTime(addMinutes(outputs('Slot'), -12), 'yyyy-MM-ddTHH:mm:ssZ')}"]},
     ]},
@@ -1854,13 +1855,13 @@ def test_lock_state_rules():
 
 
 def test_trip_rule():
-    """The early trips (budget spent, assignment gone, lock pending), or two sweeps over $0.60 an
+    """The early trips (budget spent, assignment gone, lock pending), or two sweeps over $0.84 an
     hour. The trip deletes the dispatcher's assignment first, unless it's already gone; then the
     groups and the lock tag, whatever that DELETE did. It ends Failed (Locked) or Cancelled
     (LockFailed) (F7, I1, M2)."""
     f = fence()
     assert (f["sweeper"]["ceiling_micro_per_hour"], f["sweeper"]["repeat_window_minutes"], f["budget_ci_usd"]) == (
-        600000, 12, 85)
+        840000, 12, 85)
     trip = find(definition(), "Trip")
     assert trip["type"] == "If" and trip["expression"] == TRIP
     assert trip["runAfter"] == {"Live_groups": EVERY}
@@ -1944,15 +1945,15 @@ LATER = ago(-5)  # an assignment Chris's apply made after the lock (5 min after 
 
 
 @pytest.mark.parametrize("kw,trips", [
-    ({"burn": 600001.0, "over": secs(ago(10))}, True),    # second over-ceiling sweep in a row
-    ({"burn": 600001.0, "over": secs(ago(12))}, True),    # the window's edge
-    ({"burn": 600001.0, "over": secs(ago(13))}, False),   # too old: this sweep is a first one
-    ({"burn": 600000.0, "over": secs(ago(10))}, False),   # at the ceiling is allowed
-    ({"burn": 600001.0}, False),                          # first over-ceiling sweep
+    ({"burn": 840001.0, "over": secs(ago(10))}, True),    # second over-ceiling sweep in a row
+    ({"burn": 840001.0, "over": secs(ago(12))}, True),    # the window's edge
+    ({"burn": 840001.0, "over": secs(ago(13))}, False),   # too old: this sweep is a first one
+    ({"burn": 840000.0, "over": secs(ago(10))}, False),   # at the ceiling is allowed
+    ({"burn": 840001.0}, False),                          # first over-ceiling sweep
     ({"burn": 5e7, "over": "garbage"}, True),             # a tag only Chris could write: compares, never throws
     # I2: a run that started 13 min after its slot still sees the previous slot's tag.
-    ({"burn": 600001.0, "over": secs(ago(10)), "now": ago(-13), "scheduled": NOW}, True),
-    ({"burn": 600001.0, "over": secs(ago(20)), "now": ago(-1), "scheduled": NOW}, False),
+    ({"burn": 840001.0, "over": secs(ago(10)), "now": ago(-13), "scheduled": NOW}, True),
+    ({"burn": 840001.0, "over": secs(ago(20)), "now": ago(-1), "scheduled": NOW}, False),
     ({"spend": 85}, True), ({"spend": 84.99}, False), ({"spend": "85.00"}, True),
     ({"lock_code": 404}, True),                           # already locked
     ({"lock_code": 403}, False),                          # can't read the assignment: not proof of a lock
@@ -2052,6 +2053,11 @@ def test_egress_rule():
 
 # --- the template, run ---
 
+def over() -> list:
+    """Four mediums, 932_000 an hour: over the $0.84 line, which three (699_000) stay under."""
+    return [medium(n) for n in "abcd"]
+
+
 def test_run_idle():
     result, arm = sweep()
     assert result == OK
@@ -2059,14 +2065,14 @@ def test_run_idle():
 
 
 def test_run_first_over_ceiling_sweep_marks_the_tag():
-    result, arm = sweep(medium("a"), medium("b"), medium("c"))  # 699_000
+    result, arm = sweep(*over())  # 932_000
     assert result == OK
     assert arm.deletes() == [] and arm.tag_writes() == [MARK]
 
 
 def test_run_second_over_ceiling_sweep_locks_first():
     """The drill (Task 5 Step 3): the assignment goes before any group (F7), and the run fails."""
-    groups = [medium(n) for n in ("a", "b", "c")]
+    groups = over()
     result, arm = sweep(*groups, tag=ago(10)[:19] + "Z")
     assert result == LOCKED
     assert arm.deletes() == [LOCK_ID] + [g.id for g in groups]
@@ -2077,7 +2083,7 @@ def test_run_second_over_ceiling_sweep_locks_first():
 @pytest.mark.parametrize("answer", [403, 409, 500, TIMEOUT])
 def test_run_failed_lock_still_deletes_every_group(answer):
     """F7: a failed or hung assignment DELETE never skips the group deletes, and the run says so."""
-    groups = [medium(n) for n in ("a", "b", "c")]
+    groups = over()
     result, arm = sweep(*groups, tag=ago(10)[:19] + "Z", codes={"lock-delete": answer})
     assert result == LOCK_FAILED
     assert arm.deletes() == [LOCK_ID] + [g.id for g in groups]
@@ -2090,7 +2096,7 @@ def test_run_lock_answered_404_is_locked():
 
 
 def test_run_failed_group_delete_after_the_lock_still_ends_locked():
-    groups = [medium(n) for n in ("a", "b", "c")]
+    groups = over()
     result, arm = sweep(*groups, tag=ago(10)[:19] + "Z", codes={("delete", "b"): 409, ("delete", "c"): TIMEOUT})
     assert result == LOCKED and arm.deletes() == [LOCK_ID] + [g.id for g in groups]
 
@@ -2111,7 +2117,7 @@ def test_run_already_locked_keeps_compute_at_zero():
 
 
 def test_run_stale_tag_is_rewritten():
-    result, arm = sweep(medium("a"), medium("b"), medium("c"), tag=ago(13)[:19] + "Z")
+    result, arm = sweep(*over(), tag=ago(13)[:19] + "Z")
     assert result == OK and arm.deletes() == [] and arm.tag_writes() == [MARK]
 
 
@@ -2154,13 +2160,13 @@ def test_run_egress_cap_then_age_kill_deletes_once():
 
 
 def test_run_egress_rate_counts_in_the_burn():
-    """117_000 + 2 MB/s × 3600 × 87_000 / 1e9 = 743_400 > 600_000: a hot uploader marks the tag, and
+    """117_000 + 3 MB/s × 3600 × 87_000 / 1e9 = 1_056_600 > 840_000: a hot uploader marks the tag, and
     on the next sweep locks, though its compute alone is far under the ceiling."""
-    g = small("uploader", rate=2_000_000.0)
+    g = small("uploader", rate=3_000_000.0)
     assert sweep(g)[1].tag_writes() == [MARK]
     result, arm = sweep(g, tag=ago(10)[:19] + "Z")
     assert result == LOCKED and arm.deletes() == [LOCK_ID, g.id]
-    assert sweep(small("quiet", rate=1_000_000.0))[1].tag_writes() == []  # 430_200
+    assert sweep(small("quiet", rate=2_000_000.0))[1].tag_writes() == []  # 743_400
 
 
 @pytest.mark.parametrize("codes", [{("metrics", "b"): 500}, {("metrics", "b"): TIMEOUT}])
@@ -2219,7 +2225,7 @@ def test_run_delete_answered_404_is_fine():
 
 
 def test_run_tag_write_failure_is_degraded():
-    result, _ = sweep(medium("a"), medium("b"), medium("c"), codes={"tag-write": 500})
+    result, _ = sweep(*over(), codes={"tag-write": 500})
     assert result == DEGRADED
 
 
@@ -2239,7 +2245,7 @@ def test_sweeps_failed_lock_retries_until_restored():
     """I1: the sweeper remembers a decided lock. The rate trip's DELETE fails, so the run ends LockFailed and the
     tag aims at that instance. Every later sweep retries first; once gone, every sweep keeps compute at
     zero without a DELETE; a newer instance (Chris's apply) clears it, and nothing else does."""
-    groups = [medium(n) for n in ("a", "b", "c")]
+    groups = over()
     arm = FakeArm(groups, tag=secs(ago(10)), codes={"lock-delete": 500})
     assert again(arm) == LOCK_FAILED
     assert arm.writes()[0] == ("DELETE", LOCK_ID) and arm.groups == [] and arm.assignment
@@ -2320,7 +2326,7 @@ def test_sweeps_restore_while_the_budget_is_spent_relocks_the_new_instance():
 def test_sweeps_slow_runs_keep_the_rate_trip():
     """I2: the rate tag holds the slot. A first sweep that ran 13 min late writes its slot, and the
     next slot's sweep, also late, still trips."""
-    groups = [medium(n) for n in ("a", "b", "c")]
+    groups = over()
     arm = FakeArm(groups, now=ago(-13))
     assert again(arm, scheduled=NOW) == OK and arm.tag_writes() == [MARK]
     arm.advance()
@@ -2606,7 +2612,7 @@ def test_readme_names_the_tf_sh_rules():
     # the month, the shape price ignores gpu/sku/limits, and the dispatcher's lower hourly gate.
     assert "## The sweeper" in text and "Locked" in text and "Degraded" in text and "LockFailed" in text
     for note in ("check that the next sweep ends `Succeeded`", "fails open", "until the month rolls over",
-                 "`gpu`", "$0.48 an hour", "ci-sweeper-lock"):
+                 "`gpu`", "$0.72 an hour", "ci-sweeper-lock"):
         assert note in text, note
 
 

@@ -7,6 +7,23 @@
 > - the Spot probe runs in a throwaway resource group, not the CI group;
 > - the dispatcher's Role also holds the Job `patch` verb, to resume a suspended Job.
 
+> **Amendment (2026-11-23, the hourly lines).** The text below keeps the design's $0.60 an hour.
+> Since then:
+>
+> - the dispatcher's hourly ceiling went to $0.48 on 2026-11-06 (phase 2 plan, I3), then to **$0.72**
+>   on 2026-11-23 *(Chris)*: 3 `medium` or 6 `small` at once, so a conduit game release runs its
+>   build jobs in parallel (its `release.yml` peaks at 3 `medium`). No other paid job fits beside
+>   those three;
+> - the sweeper's line moved from $0.60 to **$0.84**, compute plus egress, which keeps the same $0.12
+>   an hour of egress headroom over a full dispatcher. Its price for any other shape stays $1 an
+>   hour, over both lines;
+> - **$0.84 keeps the second row of Budget enforcement under the $150 credit**, and is the most that
+>   does: a compromised dispatcher that stays under the line until the $85 budget acts, 8 to 48 h
+>   late, spends at most $85 + 48 h × $0.84 = $125.32, about $149.73 with logging, state, the
+>   sweeper and the cache host ($24.41, phase 2 plan). The line allows at most (150 − 85 − 24.41) /
+>   48, about $0.845. A higher line would let that case reach the spending limit, which stops
+>   everything in the subscription until the month rolls over.
+
 - **Date:** 2026-11-04.
 - **Status:** draft for Chris's review. Nothing built.
 - **Research:** `.superpowers/runners-research/findings.md` and
