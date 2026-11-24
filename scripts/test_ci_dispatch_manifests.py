@@ -78,8 +78,8 @@ V020_IMAGE = (
 PENDING_IMAGE = f"{IMAGE}:sha-PENDING@sha256:{'0' * 64}"
 RELEASE_PENDING = REPO / "cluster/ci-dispatch/dispatcher/.release-pending"
 RELEASE_IMAGE = (
-    "git.realliance.net/realliance-ops/ci-dispatch:sha-2677cb2"
-    "@sha256:963c70a06dd0414f5d0e08d3223a355992d0126fdbacdcf2a8cffaff13b370c2"
+    "git.realliance.net/realliance-ops/ci-dispatch:sha-7a47adf"
+    "@sha256:91b11f2a445046c1dc15773aada618905740edbab2194b069c05e705b7be7bfd"
 )
 # ci-dispatch v0.1.0's shutdown (internal/loop, cmd/ci-dispatch): the step in flight, then the servers.
 SHUTDOWN_GRACE_SECONDS = 20
