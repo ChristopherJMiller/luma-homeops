@@ -11,8 +11,15 @@ metadata:
     app.kubernetes.io/name: valkey
 spec:
   replicas: 1
+  # RollingUpdate, not Recreate: Recreate waits for the old pod to be gone, and
+  # a pod on a dead node never is. On 2026-11-19 a digest bump left valkey at
+  # 0/1 for four days behind a pod stuck Terminating on top, and login 500'd.
+  # Two empty valkeys side by side for a moment cost nothing.
   strategy:
-    type: Recreate
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app.kubernetes.io/name: valkey
