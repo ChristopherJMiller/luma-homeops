@@ -130,6 +130,26 @@ end, no crash/OOM/tuner conflict/node outage — so the EPG slot for that airing
 was short. Check `GET /media/subscriptions/scheduled` (`beginsAt`/`endsAt`)
 before a game you care about; a 2.5–3 h slot is normal.
 
+## spelunkr-iptv (Live TV tuner)
+
+`cluster/media/spelunkr-iptv.yaml`, in the `media` Argo app. It acts as an
+HDHomeRun tuner and turns spelunkr.tv's 24/7 Internet Archive channels into
+MPEG-TS streams, with an XMLTV guide and channel logos. Source:
+`git.realliance.net/chris/spelunkr-iptv`. Its README lists every endpoint
+and setting.
+
+- `BASE_URL` is `http://spelunkr-iptv.media.svc.cluster.local:5004`, and the
+  service builds every stream URL in the lineup from it. That works because
+  `mm-plex` uses `ClusterFirst` DNS and doesn't use hostNetwork.
+- In Plex it's a second DVR, next to the OTA one: enter the address
+  manually, then pick XMLTV from `<BASE_URL>/guide.xml`.
+- The Deployment pins the image as `tag@digest`. Re-pin it by hand.
+- spelunkr.tv is a small operation, so keep this to one replica (two
+  tuners) and no load tests. A cold start fetches about 40 files a second
+  apart, so readiness takes about a minute, and the 64Mi `spelunkr-iptv-cache`
+  PVC spares the next start that fetch. If it crash-loops, scale to 0 and
+  investigate. Don't let it keep restarting.
+
 ## Gotchas
 
 - An *arr silently ignores download-client field names it doesn't know

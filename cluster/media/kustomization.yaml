@@ -23,6 +23,7 @@ resources:
   - ombi-ingress.yaml
   - maintainerr-ingress.yaml
   - webdav.yaml
+  - spelunkr-iptv.yaml
 patches:
   - target: {kind: SealedSecret, name: patroni-restapi}
     patch: |- # fail-closed dependency of every Spilo pod (D7): never prune it
