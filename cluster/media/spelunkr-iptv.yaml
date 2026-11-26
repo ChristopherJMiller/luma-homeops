@@ -26,7 +26,9 @@ metadata:
   name: spelunkr-iptv
   labels: {app: spelunkr-iptv}
 spec:
-  replicas: 1 # tuners are in-memory; one replica keeps TUNER_COUNT meaningful
+  # 0 while the e14297f06639 image fails exec (/spelunkr-iptv is 0700 root,
+  # the container runs as nonroot). Back to 1 with a fixed image pin.
+  replicas: 0 # tuners are in-memory; one replica keeps TUNER_COUNT meaningful
   strategy: {type: Recreate}
   selector:
     matchLabels: {app: spelunkr-iptv}
