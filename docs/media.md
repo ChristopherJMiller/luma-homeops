@@ -141,8 +141,21 @@ and setting.
 - `BASE_URL` is `http://spelunkr-iptv.media.svc.cluster.local:5004`, and the
   service builds every stream URL in the lineup from it. That works because
   `mm-plex` uses `ClusterFirst` DNS and doesn't use hostNetwork.
-- In Plex it's a second DVR, next to the OTA one: enter the address
-  manually, then pick XMLTV from `<BASE_URL>/guide.xml`.
+- In Plex it's DVR 5 (device 4, titled "Spelunkr") and separate from OTA DVR 2
+  (HDHomeRun `.58`, postcode 98102, guide "Local Broadcast Listings (99 channels)").
+  DVR 5's guide is the XMLTV lineup
+  `lineup://tv.plex.providers.epg.xmltv/<url-encoded guide.xml URL>#Spelunkr`,
+  and channels map 1:1 by number.
+- **The Plex DVR wizard is a trap here.** It offers postcode cable guides
+  and attaches the new tuner to the existing OTA DVR. On 2026-11-25 that
+  added four cable guides to DVR 2 and renamed the HDHomeRun "Charter
+  Spectrum Manatee County". The OTA channel map stayed on local
+  listings. The fix went through the API with the server token: `DELETE
+  /livetv/dvrs/2/lineups?lineup=…` per stray guide, `PUT
+  /media/grabbers/devices/1?title=…`, then `PUT
+  /media/grabbers/devices/4/channelmap` (key = number) and `POST
+  /livetv/dvrs?device=<uuid>&lineup=<xmltv lineup>`. In the UI, pick
+  the XMLTV link at the guide step, not a suggested lineup.
 - The Deployment pins the image as `tag@digest`. Re-pin it by hand.
 - spelunkr.tv is a small operation, so keep this to one replica (two
   tuners) and no load tests. A cold start fetches about 40 files a second
