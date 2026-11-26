@@ -52,6 +52,12 @@ spec:
             # How Plex reaches this service; stream URLs in the lineup are built from it.
             - {name: BASE_URL, value: "http://spelunkr-iptv.media.svc.cluster.local:5004"}
             - {name: TUNER_COUNT, value: "2"}
+            # Cuts stream at playback speed and the next one is only requested when the
+            # current one ends, so LEAD_MS is the cushion archive.org gets at every seam
+            # (and Plex's head start on tune-in). Default 3 s; 10 s stays inside the
+            # 64-chunk (~2 MiB) viewer buffer. 600 s cuts halve the seams within a programme.
+            - {name: LEAD_MS, value: "10000"}
+            - {name: CUT_SECS, value: "600"}
             - {name: CACHE_DIR, value: /cache}
             # The work is network I/O; two runtime threads are plenty.
             - {name: TOKIO_WORKER_THREADS, value: "2"}
