@@ -26,9 +26,7 @@ metadata:
   name: spelunkr-iptv
   labels: {app: spelunkr-iptv}
 spec:
-  # 0 while the e14297f06639 image fails exec (/spelunkr-iptv is 0700 root,
-  # the container runs as nonroot). Back to 1 with a fixed image pin.
-  replicas: 0 # tuners are in-memory; one replica keeps TUNER_COUNT meaningful
+  replicas: 1 # tuners are in-memory; one replica keeps TUNER_COUNT meaningful
   strategy: {type: Recreate}
   selector:
     matchLabels: {app: spelunkr-iptv}
@@ -45,8 +43,8 @@ spec:
         seccompProfile: {type: RuntimeDefault}
       containers:
         - name: spelunkr-iptv
-          # Pinned to the e14297f build (channel logos); bump tag and digest together.
-          image: git.realliance.net/chris/spelunkr-iptv:e14297f06639@sha256:b85f5a56ba818f141845695416f34bec9b4c8bb0d0d6a6d9b09ff437141fdcd6
+          # Pinned to the ce21334 build (binary 0755 in the crane layer); bump tag and digest together.
+          image: git.realliance.net/chris/spelunkr-iptv:ce21334b4e4a@sha256:f5075bb2bb9ba21d82eeb19ad10b73164e4d7bf06b1f164c858bdf7fbd5ef7f5
           imagePullPolicy: IfNotPresent
           ports:
             - {name: http, containerPort: 5004}
