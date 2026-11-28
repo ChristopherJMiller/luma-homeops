@@ -39,7 +39,7 @@ spec:
         - name: git-pages
           # Pinned to the 0.10.1 OCI index digest. Renovate never automerges it
           # (.renovaterc.json): pre-1.0, read every changelog in the range.
-          image: codeberg.org/git-pages/git-pages:0.10.1@sha256:882733e3fc4b5cde8cb3f83b786f8b85854c9ad951662b64fca23cbd34f79dc9
+          image: codeberg.org/git-pages/git-pages:0.10.2@sha256:8876d2f0cd9a4de95688dada633d206af067df85c80ec611b5cf7f861f58b973
           command: ["/bin/git-pages", "-config", "/etc/git-pages/config.toml"]
           envFrom:
             - secretRef:

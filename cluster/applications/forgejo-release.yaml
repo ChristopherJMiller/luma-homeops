@@ -27,7 +27,7 @@ spec:
   source:
     repoURL: code.forgejo.org/forgejo-helm # OCI; repository entry in cluster/argo-cd/values.yaml
     chart: forgejo
-    targetRevision: 17.3.2 # appVersion 15.0.11 (LTS). 17.x/18.x of FORGEJO are the short track.
+    targetRevision: 17.3.3 # appVersion 15.0.11 (LTS). 17.x/18.x of FORGEJO are the short track.
     helm:
       releaseName: forgejo
       valuesObject:
