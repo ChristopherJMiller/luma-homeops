@@ -12,7 +12,7 @@
 # cluster/applications/postgres-operator.yaml). A base bump fails the checksum
 # below until dump.sh is re-ported from the new upstream file.
 
-FROM registry.opensource.zalan.do/acid/logical-backup:v1.11.0@sha256:635346ca458a88c5ffeb02090b8ad882cb5442fff00b60ff7ee56535cd2a32f6 AS upstream
+FROM registry.opensource.zalan.do/acid/logical-backup:v1.15.0@sha256:94c73e8054ebdda9612afae32e153331f4d5054af079ce275a1b8210901d6bea AS upstream
 RUN echo "f32ff06f6d3eaa81458cee3b6f1a65ac94a650d8d667ce67d02ae8e8141b5c5d  /dump.sh" | sha256sum -c -
 
 # Build gate: the real dump.sh against a stubbed API, Postgres and S3, with the
