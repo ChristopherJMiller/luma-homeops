@@ -1,0 +1,94 @@
+{{- /*
+  Dex page header, overriding the image's (mounted over
+  /srv/dex/web/templates/header.html; frontend.dir points Dex at that dir, see
+  config.secret.yaml). Every Dex page opens with this and closes with
+  footer.html, so the look lives here: the same palette and card as the
+  oauth2-proxy error page (cluster/oauth2-proxy/templates/error.html), light or
+  dark with the device, a house mark instead of the Dex logo, and no "galaxy".
+  The people who see it are family members signing in, not operators.
+
+  The image's main.css and dark theme still load first, so pages we have not
+  restyled (approval, password, device, oob — none in use today) keep working;
+  the rules below override what they share.
+*/ -}}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Sign in · Miller family sites</title>
+    <link href="{{ url .ReqPath "static/main.css" }}" rel="stylesheet">
+    <link href="{{ url .ReqPath "theme/styles.css" }}" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237aa2f7' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 10.5 12 3l9 7.5'/%3E%3Cpath d='M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5'/%3E%3C/svg%3E">
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #0f1117; --panel: #161923; --fg: #e6e8ef; --muted: #9aa1b4;
+        --accent: #7aa2f7; --on-accent: #0f1117; --border: #242838;
+        --btn: #1d2130; --btn-hover: #252a3b;
+      }
+      @media (prefers-color-scheme: light) {
+        :root {
+          --bg: #f4f5f9; --panel: #ffffff; --fg: #1a1c23; --muted: #5a6072;
+          --accent: #3457b2; --on-accent: #ffffff; --border: #e3e6ef;
+          --btn: #ffffff; --btn-hover: #f4f6fb;
+        }
+      }
+      body.theme-body {
+        background: var(--bg); color: var(--fg);
+        font: 17px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        padding: 3rem 1rem 4rem;
+      }
+      .family-brand {
+        display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+        color: var(--accent); font-weight: 700; font-size: 1.05rem; letter-spacing: 0.01em;
+        margin-bottom: 1.5rem;
+      }
+      .family-brand svg { width: 30px; height: 30px; }
+      .dex-container { max-width: 27rem; margin: 0 auto; color: var(--fg); text-align: left; }
+      .theme-panel {
+        background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+        border-radius: 14px; padding: 2rem 1.75rem; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+      }
+      .theme-heading, .family-title {
+        color: var(--fg); font-size: 1.6rem; font-weight: 700; line-height: 1.25; margin: 0 0 0.5rem;
+      }
+      .theme-panel p { margin: 0 0 1rem; }
+      .family-lede { color: var(--muted); }
+      .theme-panel a { color: var(--accent); }
+      .theme-panel a.family-button {
+        display: flex; align-items: center; justify-content: center; gap: 0.75rem;
+        width: 100%; min-height: 3.25rem; padding: 0.7rem 1rem; margin: 0 0 0.75rem;
+        background: var(--btn); color: var(--fg); border: 1px solid var(--border);
+        border-radius: 10px; font-weight: 600; font-size: 1.05rem; text-decoration: none;
+      }
+      .theme-panel a.family-button:hover { background: var(--btn-hover); }
+      .theme-panel a.family-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+      .family-button__icon {
+        width: 22px; height: 22px; flex: none; background-color: transparent;
+        background-size: contain; background-position: center; background-repeat: no-repeat;
+      }
+      .theme-panel p.family-note { color: var(--muted); font-size: 0.9rem; margin-top: 1.25rem; }
+      .theme-panel p.family-code {
+        color: var(--muted); font-size: 0.75rem; font-family: ui-monospace, monospace;
+        border-top: 1px solid var(--border); padding-top: 0.75rem; margin: 1.25rem 0 0;
+        overflow-wrap: anywhere;
+      }
+      .family-help { text-align: center; color: var(--muted); font-size: 0.9rem; margin-top: 1.5rem; }
+      .family-help a { color: var(--accent); }
+      /* Shared bits of the stock pages that are not restyled above. */
+      .theme-form-input { background: var(--bg); color: var(--fg); border-color: var(--border); }
+      .theme-form-label, .dex-subtle-text { color: var(--muted); }
+      .dex-btn.theme-btn--success, .dex-btn.theme-btn--primary { background: var(--accent); color: var(--on-accent); }
+      .dex-btn.theme-btn-provider { background: var(--btn); color: var(--fg); border: 1px solid var(--border); }
+    </style>
+  </head>
+
+  <body class="theme-body">
+    <header class="family-brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
+      <span>Miller family sites</span>
+    </header>
+
+    <div class="dex-container">

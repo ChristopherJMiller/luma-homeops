@@ -127,9 +127,9 @@ oauth2-proxy (tier) ──▶ Dex ──▶ Google
 ```
 
 Dex holds no users and no passwords — it brokers only. Its login page is a
-connector chooser ("Log in with Google" / "Log in with Microsoft"), themeable
-via `frontend.issuer` / `logoURL` / `theme`. State lives in Kubernetes CRDs,
-so there is no database to run or back up.
+connector chooser; its pages are our own templates, written for family (see
+"Error pages"). State lives in Kubernetes CRDs, so there is no database to run
+or back up.
 
 - Config: `cluster/dex/config.secret.yaml` (a Secret: it carries both upstream
   client secrets and the per-tier static-client secrets).
@@ -176,9 +176,14 @@ obvious button back into it:
 Site names live in two places, keep them in step: `SITES` in the oauth2-proxy
 template (keyed by host) and the button list in the Dex one. **Add a site to
 both when gating a new family app.** A site missing from `SITES` still works,
-it just goes unnamed. Dex's own chooser reads "Log in to the Miller family
-sites" (`frontend.issuer` in `cluster/dex/config.secret.yaml`; display only, the
-token issuer is the top-level `issuer:`).
+it just goes unnamed.
+
+Dex's chooser ("Sign in … Continue with Google / Microsoft") and every other
+Dex page share `cluster/dex/templates/header.html` and `footer.html`: the
+same palette as the oauth2-proxy page, a house mark, "Miller family sites",
+never "galaxy" or the Dex logo. Each of the four files is mounted over the
+image's copy, so **diff them against the image's on a Dex bump**; the other
+stock pages (approval, password, device) are unused and only restyled.
 
 oauth2-proxy hands a template only a status and a generic message, so the page
 picks its scenario by matching v7.13.0's exact message strings, listed in the

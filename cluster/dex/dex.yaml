@@ -96,11 +96,25 @@ spec:
             # "cannot create temp file: ... read-only file system".
             - name: tmp
               mountPath: /tmp
-            # One file over the image's web dir, which frontend.dir points at
-            # (config.secret.yaml). The rest of /srv/dex/web stays the image's,
-            # so a Dex bump keeps its own header, theme and login templates. If
-            # an image ever stops shipping /srv/dex/web, Dex fails to start and
-            # the rollout stalls on the old pods; drop frontend.dir to recover.
+            # Our family-facing pages, file by file over the image's web dir,
+            # which frontend.dir points at (config.secret.yaml). Everything
+            # else in /srv/dex/web (static, themes, the other templates) stays
+            # the image's. On a Dex bump, diff the image's header/footer/login/
+            # error.html against ours. If an image ever stops shipping
+            # /srv/dex/web, Dex fails to start and the rollout stalls on the old
+            # pods; drop frontend.dir to recover.
+            - name: templates
+              mountPath: /srv/dex/web/templates/header.html
+              subPath: header.html
+              readOnly: true
+            - name: templates
+              mountPath: /srv/dex/web/templates/footer.html
+              subPath: footer.html
+              readOnly: true
+            - name: templates
+              mountPath: /srv/dex/web/templates/login.html
+              subPath: login.html
+              readOnly: true
             - name: templates
               mountPath: /srv/dex/web/templates/error.html
               subPath: error.html

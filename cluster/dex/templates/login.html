@@ -1,0 +1,22 @@
+{{- /*
+  The connector chooser every family sign-in passes through. Overrides the
+  image's login.html; styling is in header.html. Dex hands this .Connectors
+  (ID, Name, URL, Type), sorted by name; the icon reuses the image's own
+  static/img/<type>-icon.svg through main.css's dex-btn-icon--<type> classes.
+*/ -}}
+{{ template "header.html" . }}
+
+<div class="theme-panel">
+  <h1 class="family-title">Sign in</h1>
+  <p class="family-lede">Use the Google or Microsoft account Chris added for you.</p>
+  {{- range $c := .Connectors }}
+  <a class="family-button" href="{{ $c.URL }}" target="_self">
+    <span class="family-button__icon dex-btn-icon--{{ $c.Type }}"></span>
+    <span>Continue with {{ $c.Name }}</span>
+  </a>
+  {{- end }}
+  <p class="family-note">Not sure which? It's the one with the email address you
+  gave Chris.</p>
+</div>
+
+{{ template "footer.html" . }}
