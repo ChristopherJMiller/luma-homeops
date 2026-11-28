@@ -1,0 +1,147 @@
+{{- /*
+  oauth2-proxy error page, shared by every tier (admin, family, family-rs).
+  Mounted at /templates and loaded with --custom-templates-dir; sign_in.html is
+  absent on purpose — --skip-provider-button means nobody ever sees it.
+
+  oauth2-proxy gives a template only a status code and a generic message (the
+  real reason is in its log), so the scenario is told apart by matching the
+  exact message strings in v7.13.0's oauthproxy.go. A Renovate bump that
+  rewords them drops that page to the "something went wrong" branch, which
+  is still a usable page. Re-check the strings when bumping:
+    replay    "Login Failed: Unable to find a valid CSRF token. Please try again."
+              The callback came back after its flow had already finished: Back
+              during sign-in, two tabs, or a PWA service worker replaying it.
+    denied    the 403 default, "You do not have permission to access this
+              resource." In practice: signed in fine, address not on the list.
+    cancelled "Login Failed: The upstream identity provider returned an error…"
+*/ -}}
+{{- $kind := "other" -}}
+{{- if eq .Message "Login Failed: Unable to find a valid CSRF token. Please try again." -}}
+  {{- $kind = "replay" -}}
+{{- else if eq .Message "You do not have permission to access this resource." -}}
+  {{- $kind = "denied" -}}
+{{- else if eq (printf "%.62s" .Message) "Login Failed: The upstream identity provider returned an error" -}}
+  {{- $kind = "cancelled" -}}
+{{- end -}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>{{ if eq $kind "replay" }}Already signed in{{ else if eq $kind "denied" }}No access{{ else if eq $kind "cancelled" }}Sign-in cancelled{{ else }}Sign-in problem{{ end }} · galaxy</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0f1117; --panel: #161923; --fg: #e6e8ef; --muted: #9aa1b4;
+    --accent: #7aa2f7; --on-accent: #0f1117; --border: #242838;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #fbfbfd; --panel: #ffffff; --fg: #1a1c23; --muted: #5a6072;
+      --accent: #3457b2; --on-accent: #ffffff; --border: #e3e6ef;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 3rem 1rem 4rem;
+  }
+  main {
+    max-width: 34rem; margin: 0 auto; background: var(--panel);
+    border: 1px solid var(--border); border-radius: 12px; padding: 1.75rem 1.5rem;
+  }
+  .mark {
+    font-size: 0.8rem; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--accent); font-weight: 600;
+  }
+  h1 { font-size: 1.5rem; line-height: 1.25; margin: 0.4rem 0 0.75rem; }
+  p { margin: 0 0 1rem; }
+  .lede { color: var(--muted); }
+  a { color: var(--accent); }
+  .button {
+    display: inline-block; background: var(--accent); color: var(--on-accent);
+    text-decoration: none; font-weight: 600; border-radius: 8px;
+    padding: 0.6rem 1.2rem; margin: 0.25rem 0 1rem;
+  }
+  .button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
+  .small { color: var(--muted); font-size: 0.875rem; }
+  .code {
+    color: var(--muted); font-size: 0.8rem; margin: 1.25rem 0 0; padding-top: 1rem;
+    border-top: 1px solid var(--border); font-family: ui-monospace, monospace;
+    overflow-wrap: anywhere;
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="mark">galaxy</div>
+{{- if eq $kind "replay" }}
+  <h1>You're probably already signed in</h1>
+  <p class="lede">That sign-in link had already been used. Pressing Back while
+  signing in, or signing in from two tabs at once, does this. Nothing is wrong
+  with your account.</p>
+  <a class="button" id="continue" href="{{ .Redirect }}">Continue</a>
+  <p class="small" id="auto" hidden>Taking you back now…</p>
+{{- else if eq $kind "denied" }}
+  <h1>This account isn't on the list</h1>
+  <p class="lede">You signed in, but the account you used doesn't have access
+  here.</p>
+  <p>If you have another Google or Microsoft account, try that one. Otherwise,
+  ask Chris to add the address you used:
+  <a href="mailto:support@chrismiller.xyz">support@chrismiller.xyz</a>.</p>
+  <a class="button" id="retry" href="{{ .ProxyPrefix }}/sign_in?rd={{ .Redirect }}">Try another account</a>
+  <p class="small">If it signs you straight back in with the same account, open
+  the link in a private window instead.</p>
+{{- else if eq $kind "cancelled" }}
+  <h1>Sign-in was cancelled</h1>
+  <p class="lede">Google or Microsoft stopped the sign-in before it finished.
+  Pressing Cancel, or declining a permission prompt, does this.</p>
+  <a class="button" id="retry" href="{{ .ProxyPrefix }}/sign_in?rd={{ .Redirect }}">Try again</a>
+{{- else }}
+  <h1>Something went wrong signing you in</h1>
+  <p class="lede">Try again. If it keeps happening, tell Chris
+  (<a href="mailto:support@chrismiller.xyz">support@chrismiller.xyz</a>) and
+  include the line at the bottom of this page.</p>
+  <a class="button" id="retry" href="{{ .ProxyPrefix }}/sign_in?rd={{ .Redirect }}">Try again</a>
+{{- end }}
+  <p class="code">Error {{ .StatusCode }}{{ with .RequestID }} · request {{ . }}{{ end }}</p>
+</main>
+<script>
+// The server only knows a fallback "/" here: on a callback, the page the person
+// was opening is inside `state` ("<nonce>:<url>"). Recover it so the buttons
+// lead back to the app rather than to the bare auth host. Only absolute https
+// URLs on our own domains count. Anything else keeps the server's links (no open
+// redirect via a crafted state).
+(function () {
+  var target = null;
+  try {
+    var state = new URLSearchParams(location.search).get("state") || "";
+    var raw = state.slice(state.indexOf(":") + 1);
+    if (/^https:\/\//.test(raw)) {
+      var u = new URL(raw);
+      if (/(^|\.)(chrismiller\.xyz|werethemille\.rs)$/.test(u.hostname)) target = u.href;
+    }
+  } catch (e) {}
+  if (!target) return;
+
+  var retry = document.getElementById("retry");
+  if (retry) retry.href = {{ .ProxyPrefix }} + "/sign_in?rd=" + encodeURIComponent(target);
+
+  var cont = document.getElementById("continue");
+  if (!cont) return;
+  cont.href = target;
+  // A replayed callback almost always means the session already exists, so go
+  // straight back, replacing this entry so Back cannot replay it again. Once
+  // per two minutes: if sign-in is genuinely broken, stop here instead of looping.
+  var key = "galaxy-auth-continue", now = Date.now(), last = 0;
+  try { last = Number(sessionStorage.getItem(key)) || 0; } catch (e) {}
+  if (now - last < 120000) return;
+  try { sessionStorage.setItem(key, String(now)); } catch (e) {}
+  document.getElementById("auto").hidden = false;
+  setTimeout(function () { location.replace(target); }, 1500);
+})();
+</script>
+</body>
+</html>

@@ -6,3 +6,10 @@ resources:
   - grpc-tls.yaml
   - config.yaml
   - servicemonitor.yaml
+# Our error page, mounted over the image's own (see templates/error.html). Hashed
+# name so an edit rolls Dex, which reads templates only at startup.
+configMapGenerator:
+  - name: dex-templates
+    namespace: dex # no kustomization-wide namespace here; without it the name ref to dex.yaml is not rewritten
+    files:
+      - templates/error.html

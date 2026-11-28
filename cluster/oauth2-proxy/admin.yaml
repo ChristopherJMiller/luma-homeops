@@ -89,6 +89,10 @@ spec:
             - --silence-ping-logging=true
             # Prometheus metrics; scraped via the ServiceMonitor in servicemonitors.yaml.
             - --metrics-address=0.0.0.0:44180
+            # Our error page (templates/error.html, shared by every tier) instead of
+            # the stock "403 Forbidden": it tells a person whether they are simply
+            # not on the list, replayed a finished sign-in, or hit a real fault.
+            - --custom-templates-dir=/templates
           env:
             - name: OAUTH2_PROXY_CLIENT_SECRET
               valueFrom:
@@ -108,6 +112,9 @@ spec:
           volumeMounts:
             - name: emails
               mountPath: /etc/oauth2-proxy
+              readOnly: true
+            - name: templates
+              mountPath: /templates
               readOnly: true
           livenessProbe:
             httpGet:
@@ -133,6 +140,9 @@ spec:
             items:
               - key: emails
                 path: emails
+        - name: templates
+          configMap:
+            name: oauth2-proxy-templates
 ---
 apiVersion: v1
 kind: Service

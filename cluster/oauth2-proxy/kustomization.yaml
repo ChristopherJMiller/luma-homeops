@@ -13,3 +13,10 @@ resources:
   - middlewares.yaml
   - mcp-jwt-auth.yaml
   - servicemonitors.yaml
+# The error page every tier serves (templates/error.html). Hashed name: editing
+# the page renames the ConfigMap, which rolls all three Deployments — oauth2-proxy
+# reads templates only at startup.
+configMapGenerator:
+  - name: oauth2-proxy-templates
+    files:
+      - templates/error.html

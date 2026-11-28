@@ -1,0 +1,39 @@
+{{- /*
+  Dex error page. Overrides ONE file of the image's web dir: mounted over
+  /srv/dex/web/templates/error.html, with frontend.dir pointing Dex at that
+  dir (config.secret.yaml) instead of its embedded copy. Everything else
+  (header/footer, theme, static) stays the image's own.
+
+  Dex passes ErrType (the status text, for example "Bad Request") and ErrMsg (a fixed
+  string from server/handlers.go). The "expired" set below is the stale or
+  missing auth request: the browser came back to Dex after that sign-in had
+  already finished or timed out (Back during sign-in, an old tab). It used to
+  render as a bare "Bad Request / Requested resource does not exist."
+*/ -}}
+{{ template "header.html" . }}
+{{- $expired := or (eq .ErrMsg "Requested resource does not exist.") (eq .ErrMsg "Requested resource does not exist") (eq .ErrMsg "User session error.") (eq .ErrMsg "User session has expired.") }}
+<style>
+  .galaxy-error { max-width: 30rem; margin: 0 auto; text-align: left; line-height: 1.6; }
+  .galaxy-error p { margin: 0 0 1rem; }
+  .galaxy-error a { color: inherit; }
+  .galaxy-error__code {
+    opacity: 0.65; font-size: 0.8rem; font-family: ui-monospace, monospace;
+    border-top: 1px solid rgba(127, 127, 127, 0.3); padding-top: 0.75rem; margin-top: 1.25rem;
+  }
+</style>
+<div class="theme-panel galaxy-error">
+{{- if $expired }}
+  <h2 class="theme-heading">This sign-in page has expired</h2>
+  <p>The sign-in it belonged to has already finished or timed out. Pressing
+  Back while signing in, or leaving the page open a long time, does this.</p>
+  <p>Go back to the site you were opening and reload it. If you're already
+  signed in, it opens; if not, it asks you to sign in again.</p>
+{{- else }}
+  <h2 class="theme-heading">Sign-in didn't work</h2>
+  <p>Go back to the site you were opening and try again. If it keeps happening,
+  tell Chris (<a href="mailto:support@chrismiller.xyz">support@chrismiller.xyz</a>)
+  and include the line below.</p>
+{{- end }}
+  <p class="galaxy-error__code">{{ .ErrType }}: {{ .ErrMsg }}</p>
+</div>
+{{ template "footer.html" . }}

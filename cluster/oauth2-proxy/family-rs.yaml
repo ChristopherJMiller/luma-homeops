@@ -99,6 +99,7 @@ spec:
             - --upstream=static://202
             - --silence-ping-logging=true
             - --metrics-address=0.0.0.0:44180
+            - --custom-templates-dir=/templates
           env:
             - name: OAUTH2_PROXY_CLIENT_SECRET
               valueFrom:
@@ -118,6 +119,9 @@ spec:
           volumeMounts:
             - name: emails
               mountPath: /etc/oauth2-proxy
+              readOnly: true
+            - name: templates
+              mountPath: /templates
               readOnly: true
           livenessProbe:
             httpGet:
@@ -143,6 +147,9 @@ spec:
             items:
               - key: emails
                 path: emails
+        - name: templates
+          configMap:
+            name: oauth2-proxy-templates
 ---
 apiVersion: v1
 kind: Service
