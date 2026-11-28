@@ -1,7 +1,11 @@
 {{- /*
   oauth2-proxy error page, shared by every tier (admin, family, family-rs).
   Mounted at /templates and loaded with --custom-templates-dir; sign_in.html is
-  absent on purpose — --skip-provider-button means nobody ever sees it.
+  absent on purpose: --skip-provider-button means nobody ever sees it.
+
+  Written for family members who have never heard of "galaxy": the page names
+  the site they were opening (SITES in the script, keyed by host) and always
+  offers one obvious button back into it.
 
   oauth2-proxy gives a template only a status code and a generic message (the
   real reason is in its log), so the scenario is told apart by matching the
@@ -14,7 +18,18 @@
     denied    the 403 default, "You do not have permission to access this
               resource." In practice: signed in fine, address not on the list.
     cancelled "Login Failed: The upstream identity provider returned an error…"
+  A 500 on /oauth2/callback gets the replay copy too, switched in by the script
+  at the bottom (only it knows the path). There it is nearly always the code
+  exchange failing: Dex refusing a code that was already used, or one from a
+  crossed flow (two tabs sharing one CSRF cookie). Same remedy as a replay.
 */ -}}
+{{- define "galaxy-replay" }}
+  <h1>Let's get you back in</h1>
+  <p class="lede">This sign-in page was already used, which happens if you
+  press Back or sign in twice. Nothing is wrong with your account.</p>
+  <a class="button" id="continue" href="{{ .Redirect }}">Continue to <span data-site>the site</span></a>
+  <p class="small" id="auto" hidden>Taking you there now…</p>
+{{- end -}}
 {{- $kind := "other" -}}
 {{- if eq .Message "Login Failed: Unable to find a valid CSRF token. Please try again." -}}
   {{- $kind = "replay" -}}
@@ -29,7 +44,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>{{ if eq $kind "replay" }}Already signed in{{ else if eq $kind "denied" }}No access{{ else if eq $kind "cancelled" }}Sign-in cancelled{{ else }}Sign-in problem{{ end }} · galaxy</title>
+<title>{{ if eq $kind "replay" }}Let's get you back in{{ else if eq $kind "denied" }}No access yet{{ else if eq $kind "cancelled" }}Sign-in cancelled{{ else }}Sign-in problem{{ end }}</title>
 <style>
   :root {
     color-scheme: light dark;
@@ -45,7 +60,7 @@
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--fg);
-    font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    font: 17px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     padding: 3rem 1rem 4rem;
   }
   main {
@@ -53,22 +68,22 @@
     border: 1px solid var(--border); border-radius: 12px; padding: 1.75rem 1.5rem;
   }
   .mark {
-    font-size: 0.8rem; letter-spacing: 0.14em; text-transform: uppercase;
-    color: var(--accent); font-weight: 600;
+    font-size: 0.85rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--accent); font-weight: 700;
   }
-  h1 { font-size: 1.5rem; line-height: 1.25; margin: 0.4rem 0 0.75rem; }
+  h1 { font-size: 1.6rem; line-height: 1.25; margin: 0.4rem 0 0.75rem; }
   p { margin: 0 0 1rem; }
   .lede { color: var(--muted); }
   a { color: var(--accent); }
   .button {
-    display: inline-block; background: var(--accent); color: var(--on-accent);
-    text-decoration: none; font-weight: 600; border-radius: 8px;
-    padding: 0.6rem 1.2rem; margin: 0.25rem 0 1rem;
+    display: block; text-align: center; background: var(--accent); color: var(--on-accent);
+    text-decoration: none; font-weight: 700; font-size: 1.05rem; border-radius: 10px;
+    padding: 0.85rem 1.2rem; margin: 0.5rem 0 1rem;
   }
   .button:focus-visible { outline: 2px solid var(--fg); outline-offset: 2px; }
-  .small { color: var(--muted); font-size: 0.875rem; }
+  .small { color: var(--muted); font-size: 0.9rem; }
   .code {
-    color: var(--muted); font-size: 0.8rem; margin: 1.25rem 0 0; padding-top: 1rem;
+    color: var(--muted); font-size: 0.75rem; margin: 1.25rem 0 0; padding-top: 1rem;
     border-top: 1px solid var(--border); font-family: ui-monospace, monospace;
     overflow-wrap: anywhere;
   }
@@ -76,45 +91,54 @@
 </head>
 <body>
 <main>
-  <div class="mark">galaxy</div>
+  <div class="mark" id="mark" hidden></div>
 {{- if eq $kind "replay" }}
-  <h1>You're probably already signed in</h1>
-  <p class="lede">That sign-in link had already been used. Pressing Back while
-  signing in, or signing in from two tabs at once, does this. Nothing is wrong
-  with your account.</p>
-  <a class="button" id="continue" href="{{ .Redirect }}">Continue</a>
-  <p class="small" id="auto" hidden>Taking you back now…</p>
+{{- template "galaxy-replay" . }}
 {{- else if eq $kind "denied" }}
-  <h1>This account isn't on the list</h1>
-  <p class="lede">You signed in, but the account you used doesn't have access
-  here.</p>
-  <p>If you have another Google or Microsoft account, try that one. Otherwise,
-  ask Chris to add the address you used:
-  <a href="mailto:support@chrismiller.xyz">support@chrismiller.xyz</a>.</p>
-  <a class="button" id="retry" href="{{ .ProxyPrefix }}/sign_in?rd={{ .Redirect }}">Try another account</a>
+  <h1>This account doesn't have access yet</h1>
+  <p class="lede">You signed in with an account that hasn't been added to
+  <span data-site>this site</span>.</p>
+  <p>Have another Google or Microsoft account? Try that one. Otherwise, ask
+  Chris to add the email address you just used
+  (<a href="mailto:support@chrismiller.xyz">support@chrismiller.xyz</a>).</p>
+  <a class="button" id="retry" href="{{ .ProxyPrefix }}/sign_in?rd={{ .Redirect }}">Try a different account</a>
   <p class="small">If it signs you straight back in with the same account, open
-  the link in a private window instead.</p>
+  the link in a private (incognito) window instead.</p>
 {{- else if eq $kind "cancelled" }}
   <h1>Sign-in was cancelled</h1>
-  <p class="lede">Google or Microsoft stopped the sign-in before it finished.
-  Pressing Cancel, or declining a permission prompt, does this.</p>
+  <p class="lede">Google or Microsoft stopped before the sign-in finished.
+  Nothing changed. You can try again.</p>
   <a class="button" id="retry" href="{{ .ProxyPrefix }}/sign_in?rd={{ .Redirect }}">Try again</a>
 {{- else }}
+  <div id="generic">
   <h1>Something went wrong signing you in</h1>
-  <p class="lede">Try again. If it keeps happening, tell Chris
+  <p class="lede">Please try again. If it keeps happening, let Chris know
   (<a href="mailto:support@chrismiller.xyz">support@chrismiller.xyz</a>) and
   include the line at the bottom of this page.</p>
   <a class="button" id="retry" href="{{ .ProxyPrefix }}/sign_in?rd={{ .Redirect }}">Try again</a>
+  </div>
+  {{- if eq .StatusCode 500 }}
+  <div id="replay" hidden>
+  {{- template "galaxy-replay" . }}
+  </div>
+  {{- end }}
 {{- end }}
   <p class="code">Error {{ .StatusCode }}{{ with .RequestID }} · request {{ . }}{{ end }}</p>
 </main>
 <script>
-// The server only knows a fallback "/" here: on a callback, the page the person
-// was opening is inside `state` ("<nonce>:<url>"). Recover it so the buttons
-// lead back to the app rather than to the bare auth host. Only absolute https
-// URLs on our own domains count. Anything else keeps the server's links (no open
-// redirect via a crafted state).
 (function () {
+  // What family members call each site. Keyed by host; a site missing here
+  // just goes unnamed ("this site"). Add one when gating a new family app.
+  var SITES = {
+    "family.werethemille.rs": "Family Genealogy",
+    "requests.chrismiller.xyz": "Movie & TV Requests",
+    "photos.chrismiller.xyz": "Family Photos"
+  };
+
+  // The server only knows a fallback "/" here: on a callback, the page the
+  // person was opening is inside `state` ("<nonce>:<url>"). Only absolute https
+  // URLs on our own domains count. Anything else keeps the server's links (no
+  // open redirect via a crafted state).
   var target = null;
   try {
     var state = new URLSearchParams(location.search).get("state") || "";
@@ -124,7 +148,29 @@
       if (/(^|\.)(chrismiller\.xyz|werethemille\.rs)$/.test(u.hostname)) target = u.href;
     }
   } catch (e) {}
+
+  var name = SITES[target ? new URL(target).hostname : ""] || SITES[location.hostname];
+  if (name) {
+    var mark = document.getElementById("mark");
+    mark.textContent = name;
+    mark.hidden = false;
+    document.querySelectorAll("[data-site]").forEach(function (el) { el.textContent = name; });
+    document.title += " · " + name;
+  }
   if (!target) return;
+
+  // The 500 page carries the replay copy, hidden. Show it on the callback (see
+  // the header comment); anywhere else drop it so its Continue stays inert.
+  var replay = document.getElementById("replay");
+  if (replay) {
+    if (location.pathname === {{ .ProxyPrefix }} + "/callback") {
+      document.getElementById("generic").remove();
+      replay.hidden = false;
+      document.title = "Let's get you back in" + (name ? " · " + name : "");
+    } else {
+      replay.remove();
+    }
+  }
 
   var retry = document.getElementById("retry");
   if (retry) retry.href = {{ .ProxyPrefix }} + "/sign_in?rd=" + encodeURIComponent(target);

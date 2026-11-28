@@ -164,12 +164,21 @@ register" (for Immich, `oauth.autoRegister: false`).
 
 ## Error pages
 
-Both hops serve our own error page, written for the person who hit it:
+Both hops serve our own error page, written for family members who have never
+heard of galaxy. Each names the site the person was opening and offers one
+obvious button back into it:
 
 | Page | Source | What it tells people |
 |---|---|---|
-| oauth2-proxy, every tier | `cluster/oauth2-proxy/templates/error.html` | **Not on the list**: try another account, or ask Chris. **Replayed sign-in** (the callback came back after its flow finished): says the person is probably signed in already, then continues to the app by itself, once. **Cancelled** at Google or Microsoft. Anything else: try again, with the request ID to quote. |
-| Dex | `cluster/dex/templates/error.html` | **Expired sign-in page** (the old bare "Bad Request / Requested resource does not exist."): go back to the site and reload. Anything else: try again. |
+| oauth2-proxy, every tier | `cluster/oauth2-proxy/templates/error.html` | **No access yet**: try a different account, or ask Chris. **Replayed sign-in** (the callback came back after its flow finished, or a 500 on the callback): a "Let's get you back in" page that continues to the site by itself, once. **Cancelled** at Google or Microsoft. Anything else: try again, with the request ID to quote. |
+| Dex | `cluster/dex/templates/error.html` | **Expired sign-in page** (the old bare "Bad Request / Requested resource does not exist."): "Where were you going?" and a button per family site. Anything else: the same buttons, to try again. |
+
+Site names live in two places, keep them in step: `SITES` in the oauth2-proxy
+template (keyed by host) and the button list in the Dex one. **Add a site to
+both when gating a new family app.** A site missing from `SITES` still works,
+it just goes unnamed. Dex's own chooser reads "Log in to the Miller family
+sites" (`frontend.issuer` in `cluster/dex/config.secret.yaml`; display only, the
+token issuer is the top-level `issuer:`).
 
 oauth2-proxy hands a template only a status and a generic message, so the page
 picks its scenario by matching v7.13.0's exact message strings, listed in the
@@ -177,9 +186,10 @@ template's header comment. **Re-check them on an oauth2-proxy bump.** Reworded
 strings degrade to the "something went wrong" page, not to a broken one. Dex
 reads its web dir from disk (`frontend.dir: /srv/dex/web`) so one file can be
 mounted over the image's. Preview a page live without breaking anything:
-`https://auth-family.chrismiller.xyz/oauth2/callback?code=x&state=x:https://galaxy.chrismiller.xyz/`
-(replayed sign-in; continues to galaxy.chrismiller.xyz after 1.5 s) and
-`https://dex.chrismiller.xyz/callback?state=x` (expired).
+`https://family.werethemille.rs/oauth2/callback?code=x&state=previewx:/`
+(replayed sign-in, stays put) and `https://dex.chrismiller.xyz/callback?state=x`
+(expired). A browser holding a leftover CSRF cookie for that tier sees the
+generic page on the first link instead: it gets as far as redeeming `code=x`.
 
 The replay is most common on Gramps Web (`family.werethemille.rs`): Back during
 sign-in, or its service worker re-requesting the callback, sends a used `state`

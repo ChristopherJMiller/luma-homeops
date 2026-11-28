@@ -9,30 +9,46 @@
   missing auth request: the browser came back to Dex after that sign-in had
   already finished or timed out (Back during sign-in, an old tab). It used to
   render as a bare "Bad Request / Requested resource does not exist."
+
+  Dex cannot tell which site the person came from, so the way back in is a
+  button per family site. Keep the list in step with SITES in
+  cluster/oauth2-proxy/templates/error.html.
 */ -}}
 {{ template "header.html" . }}
 {{- $expired := or (eq .ErrMsg "Requested resource does not exist.") (eq .ErrMsg "Requested resource does not exist") (eq .ErrMsg "User session error.") (eq .ErrMsg "User session has expired.") }}
 <style>
-  .galaxy-error { max-width: 30rem; margin: 0 auto; text-align: left; line-height: 1.6; }
+  .galaxy-error { max-width: 30rem; margin: 0 auto; text-align: left; line-height: 1.6; font-size: 16px; }
   .galaxy-error p { margin: 0 0 1rem; }
   .galaxy-error a { color: inherit; }
+  .galaxy-error .galaxy-error__site {
+    display: block; width: 100%; text-align: center; text-decoration: none;
+    padding: 10px 16px; margin: 0 0 10px; font-weight: 600;
+  }
+  .galaxy-error__small { opacity: 0.75; font-size: 0.9rem; }
   .galaxy-error__code {
-    opacity: 0.65; font-size: 0.8rem; font-family: ui-monospace, monospace;
+    opacity: 0.65; font-size: 0.75rem; font-family: ui-monospace, monospace;
     border-top: 1px solid rgba(127, 127, 127, 0.3); padding-top: 0.75rem; margin-top: 1.25rem;
   }
 </style>
 <div class="theme-panel galaxy-error">
 {{- if $expired }}
   <h2 class="theme-heading">This sign-in page has expired</h2>
-  <p>The sign-in it belonged to has already finished or timed out. Pressing
-  Back while signing in, or leaving the page open a long time, does this.</p>
-  <p>Go back to the site you were opening and reload it. If you're already
-  signed in, it opens; if not, it asks you to sign in again.</p>
+  <p>That's normal if you pressed Back or left the page open for a while.
+  Nothing is wrong with your account.</p>
+  <p>Where were you going?</p>
 {{- else }}
   <h2 class="theme-heading">Sign-in didn't work</h2>
-  <p>Go back to the site you were opening and try again. If it keeps happening,
-  tell Chris (<a href="mailto:support@chrismiller.xyz">support@chrismiller.xyz</a>)
-  and include the line below.</p>
+  <p>Please try again from the site you were opening:</p>
+{{- end }}
+  <a class="dex-btn theme-btn-provider galaxy-error__site" href="https://family.werethemille.rs/">Family Genealogy</a>
+  <a class="dex-btn theme-btn-provider galaxy-error__site" href="https://photos.chrismiller.xyz/">Family Photos</a>
+  <a class="dex-btn theme-btn-provider galaxy-error__site" href="https://requests.chrismiller.xyz/">Movie &amp; TV Requests</a>
+{{- if $expired }}
+  <p class="galaxy-error__small">It asks you to sign in again only if it needs to.</p>
+{{- else }}
+  <p class="galaxy-error__small">If it keeps happening, let Chris know
+  (<a href="mailto:support@chrismiller.xyz">support@chrismiller.xyz</a>) and
+  include the line below.</p>
 {{- end }}
   <p class="galaxy-error__code">{{ .ErrType }}: {{ .ErrMsg }}</p>
 </div>
